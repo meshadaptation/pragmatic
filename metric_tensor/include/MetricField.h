@@ -31,9 +31,13 @@
 #define METRICFIELD_H
 
 #include <iostream>
+#include <set>
+#include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
+
+#include "MetricTensor.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -69,8 +73,8 @@ template<typename real_t, typename index_t>
 
   /// Default destructor.
   ~MetricField(){
-    if(metric!=NULL)
-      delete [] metric;
+    if(_metric!=NULL)
+      delete [] _metric;
   }
   
   /*! Set the source mesh (2D triangular meshes).
@@ -86,7 +90,7 @@ template<typename real_t, typename index_t>
    */
   void set_mesh(int NNodes, int NElements, const index_t *ENList,
                 const real_t *x, const real_t *y, const index_t *node_distribution=NULL){
-    _ndim = 2;
+    _ndims = 2;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
@@ -110,7 +114,7 @@ template<typename real_t, typename index_t>
    */
   void set_mesh(int NNodes, int NElements, const index_t *ENList,
                 const real_t *x, const real_t *y, const real_t *z, const index_t *node_distribution=NULL){
-    _ndim = 3;
+    _ndims = 3;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
@@ -132,10 +136,11 @@ template<typename real_t, typename index_t>
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error.
    * @param psi is field while curvature is to be considered.
    * @param target_error is the target interpolation error.
-   * @param relative is true if interpolation error is relative, otherwise it is assumed to be an absolute error.
-   * @param sigma_psi should be set if a relative interpolation error is specified. It is the minimum value for psi used when applying the relative error.
+   * @param sigma_psi should be set if a relative interpolation error is specified. It is the minimum value for psi used when applying the relative error. If the argument is not specified or less than 0 then an absolute error is assumed.
    */
-  void add_field(const real_t *psi, const real_t target_error, bool relative, real_t sigma_psi){
+  void add_field(const real_t *psi, const real_t target_error, real_t sigma_psi=-1.0){
+    bool relative = sigma_psi>0.0;
+
     int ndims2 = _ndims*_ndims;
     
     real_t *Hessian = new real_t[_NNodes*ndims2];
@@ -156,13 +161,14 @@ template<typename real_t, typename index_t>
       }
     }
     
-    if(metric==NULL){
+    if(_metric==NULL){
       _metric = new MetricTensor<real_t>[_NNodes];
-      for(size_t i=0;i<_NNodes;i++)
+      for(size_t i=0;i<_NNodes;i++){
         _metric[i].set(_ndims, Hessian+i*ndims2);
+      }
     }else{
       for(size_t i=0;i<_NNodes;i++)
-        _metric[i].constrain(MetricTensor<real_t>(ndims, Hessian+i*ndims2));
+        _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
     }
     delete [] Hessian;
   }
@@ -191,7 +197,7 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<_ndims;i++)
       for(size_t j=0;j<_ndims;j++)
         if(i==j)
-          M[i*_ndims+j] = 1.0/(max_len*max_len);
+          M[i*_ndims+j] = 1.0/(min_len*min_len);
         else
           M[i*_ndims+j] = 0.0;
     
@@ -229,43 +235,34 @@ template<typename real_t, typename index_t>
       for(size_t i=0; i<_NElements; i++){
         for(size_t j=0;j<nloc;j++){
           for(size_t k=j+1;k<nloc;k++){
-            NNlist[_ENList[i*nloc+j]].insert(_ENList[i*nloc+k]);
-            NNlist[_ENList[i*nloc+k]].insert(_ENList[i*nloc+j]);
+            NNList[_ENList[i*nloc+j]].insert(_ENList[i*nloc+k]);
+            NNList[_ENList[i*nloc+k]].insert(_ENList[i*nloc+j]);
           }
         }
       }
     }
     
     // Calculate Hessian at each point.
-    int min_patch_size = (ndims==2)?6:10;
+    int min_patch_size = (_ndims==2)?6:10;
     for(size_t i=0; i<_NNodes; i++){
-      set<size_t> patch = NNList[i];
+      std::set<index_t> patch = NNList[i];
       
       if(patch.size()<min_patch_size){
-        set<size_t> front = NNList[i];
-        set<size_t> new_front;
-        while(patch.size()<min_patch_size){
-          for(set<size_t>::const_iterator it=front.begin();it!=front.end();it++){
-            if(patch.count(*it)==0){
-              new_front.insert(*it);
-              patch.insert(*it);
-            }
-          }
-          if(new_front.empty()){
-            cerr<<"WARNING: Small mesh patch detected.\n";  
-            break;
-          }
-          front.swap(new_front);
-          new_front.clear();
+        std::set<index_t> front = NNList[i];
+        for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
+          patch.insert(NNList[*it].begin(), NNList[*it].end());
+        }
+        if(patch.size()<min_patch_size){
+          cerr<<"WARNING: Small mesh patch detected.\n";  
         }
       }
-      
-      if(ndims==2){
+
+      if(_ndims==2){
         // Form quadratic system to be solved. The quadratic fit is:
         // P = 1 + x + y + x^2 + xy + y^2
         // A = P^TP
         real_t x=_x[i], y=_y[i], z=_z[i];
-        MatrixXf A = MatrixXf::Zero(6,6);
+        Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(6,6);
         
         A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=pow(x,2); A[4]+=x*y; A[5]+=pow(y,2);
         A[6]+=x; A[7]+=pow(x,2); A[8]+=x*y; A[9]+=pow(x,3); A[10]+=pow(x,2)*y; A[11]+=x*pow(y,2);
@@ -274,7 +271,7 @@ template<typename real_t, typename index_t>
         A[24]+=x*y; A[25]+=pow(x,2)*y; A[26]+=x*pow(y,2); A[27]+=pow(x,3)*y; A[28]+=pow(x,2)*pow(y,2); A[29]+=x*pow(y,3);
         A[30]+=pow(y,2); A[31]+=x*pow(y,2); A[32]+=pow(y,3); A[33]+=pow(x,2)*pow(y,2); A[34]+=x*pow(y,3); A[35]+=pow(y,4);
 
-        VectorXf b = VectorXf::Zero(6);
+        Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
         b[0]+=psi[i]*1;
         b[1]+=psi[i]*x;
         b[2]+=psi[i]*y;
@@ -282,7 +279,7 @@ template<typename real_t, typename index_t>
         b[4]+=psi[i]*x*y;
         b[5]+=psi[i]*pow(y,2);
 
-        for(set<size_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
+        for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
           x=_x[*n], y=_y[*n], z=_z[*n];
           
           A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=pow(x,2); A[4]+=x*y; A[5]+=pow(y,2);
@@ -292,7 +289,6 @@ template<typename real_t, typename index_t>
           A[24]+=x*y; A[25]+=pow(x,2)*y; A[26]+=x*pow(y,2); A[27]+=pow(x,3)*y; A[28]+=pow(x,2)*pow(y,2); A[29]+=x*pow(y,3);
           A[30]+=pow(y,2); A[31]+=x*pow(y,2); A[32]+=pow(y,3); A[33]+=pow(x,2)*pow(y,2); A[34]+=x*pow(y,3); A[35]+=pow(y,4);
           
-          VectorXf b = VectorXf::Zero(6);
           b[0]+=psi[*n]*1;
           b[1]+=psi[*n]*x;
           b[2]+=psi[*n]*y;
@@ -301,8 +297,8 @@ template<typename real_t, typename index_t>
           b[5]+=psi[*n]*pow(y,2);
         }
         
-        VectorXf x;
-        A.lu().solve(b, &x);
+        // Eigen::Matrix<real_t, Eigen::Dynamic, 1> coeffs; // 
+        A.ldlt().solveInPlace(b);
         
         Hessian[i*4  ] = b[3]*2.0; // d2/dx2
         Hessian[i*4+1] = b[4];     // d3/dxdy
@@ -323,3 +319,5 @@ template<typename real_t, typename index_t>
 #endif
   MetricTensor<real_t> *_metric;
 };
+
+#endif

@@ -26,8 +26,8 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
-#ifndef METRICFIELD_H
-#define METRICFIELD_H
+#ifndef METRICTENSOR_H
+#define METRICTENSOR_H
 
 #include <iostream>
 
@@ -93,25 +93,25 @@ class MetricTensor{
     // Make the tensor with the smallest aspect ratio the reference space Mr.
     const double *Mr=_metric, *Mi=metric._metric;
     if(_dimension==2){
-      Matrix<real_t, 2, 2> M1;
+      Eigen::Matrix<real_t, 2, 2> M1;
       M1 <<
         _metric[0], _metric[1],
         _metric[2], _metric[3];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver(M1);
+      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver1(M1);
 
-      Eigen::Matrix<double, 2, 1> evalues1 = solver.eigenvalues().real();
+      Eigen::Matrix<double, 2, 1> evalues1 = solver1.eigenvalues().real();
       
       double aspect_r = std::min(evalues1[0], evalues1[1]);
 
-      Matrix<real_t, 2, 2> M2;
+      Eigen::Matrix<real_t, 2, 2> M2;
       M2 <<
         metric._metric[0], metric._metric[1],
         metric._metric[2], metric._metric[3];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver(M2);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M2);
 
-      Eigen::Matrix<double, 2, 1> evalues2 = solver.eigenvalues().real();
+      Eigen::Matrix<double, 2, 1> evalues2 = solver2.eigenvalues().real();
       
       double aspect_i = std::min(evalues2[0], evalues2[1]);
       
@@ -120,41 +120,41 @@ class MetricTensor{
         Mr=metric._metric;
       }
     }else{
-      Matrix<real_t, 3, 3> M1;
+      Eigen::Matrix<real_t, 3, 3> M1;
       M1 <<
         _metric[0], _metric[1], _metric[2],
         _metric[3], _metric[4], _metric[5],
         _metric[6], _metric[7], _metric[8];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver(M1);
+      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver1(M1);
       
-      Eigen::Matrix<double, 3, 1> evalues1 = solver.eigenvalues().real();
+      Eigen::Matrix<double, 3, 1> evalues1 = solver1.eigenvalues().real();
       
       double aspect_r = std::min(std::min(evalues1[0], evalues1[1]), evalues1[2])/
         std::max(std::max(evalues1[0], evalues1[1]), evalues1[2]);
 
-      Matrix<real_t, 3, 3> M2;
+      Eigen::Matrix<real_t, 3, 3> M2;
       M2 <<
         metric._metric[0], metric._metric[1], metric._metric[2],
         metric._metric[3], metric._metric[4], metric._metric[5],
         metric._metric[6], metric._metric[7], metric._metric[8];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver(M2);
+      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver2(M2);
       
-      Eigen::Matrix<double, 3, 1> evalues2 = solver.eigenvalues().real();
+      Eigen::Matrix<double, 3, 1> evalues2 = solver2.eigenvalues().real();
       
       double aspect_i = std::min(std::min(evalues2[0], evalues2[1]), evalues2[2])/
         std::max(std::max(evalues2[0], evalues2[1]), evalues2[2]);
       
       if(aspect_i>aspect_r){
-        Mi=metric;
+        Mi=_metric;
         Mr=metric._metric;
       }
     }
     
     // Map Mi to the reference space where Mr==I
-    if(dimension==2){
-      Matrix<real_t, 2, 2> M1;
+    if(_dimension==2){
+      Eigen::Matrix<real_t, 2, 2> M1;
       M1 <<
         Mr[0], Mr[1],
         Mr[2], Mr[3];
@@ -165,7 +165,7 @@ class MetricTensor{
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
       
-      Matrix<real_t, 2, 2> M2;
+      Eigen::Matrix<real_t, 2, 2> M2;
       M2 <<
         Mi[0], Mi[1],
         Mi[2], Mi[3];
@@ -181,13 +181,13 @@ class MetricTensor{
         for(size_t i=0;i<2;i++)
           evalues[i] = std::min((double)1.0, fabs(evalues[i]));
 
-      Matrix<real_t, 2, 2> Mc = eigenvectors.transpose()*evalues.asDiagonal()*eigenvectors;
+      Eigen::Matrix<real_t, 2, 2> Mc = evectors.transpose()*evalues.asDiagonal()*evectors;
       Mc = F.transpose()*Mc*F;
       
-      for(size_t i=0;i<dimension*dimension;i++)
+      for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
     }else{
-      Matrix<real_t, 3, 3> M1;
+      Eigen::Matrix<real_t, 3, 3> M1;
       M1 <<
         Mr[0], Mr[1], Mr[2],
         Mr[3], Mr[4], Mr[5],
@@ -199,7 +199,7 @@ class MetricTensor{
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
       
-      Matrix<real_t, 3, 3> M2;
+      Eigen::Matrix<real_t, 3, 3> M2;
       M2 <<
         Mi[0], Mi[1], Mi[2],
         Mi[3], Mi[4], Mi[5],
@@ -217,14 +217,14 @@ class MetricTensor{
         for(size_t i=0;i<3;i++)
           evalues[i] = std::min((double)1.0, fabs(evalues[i]));
 
-      Matrix<real_t, 3, 3> Mc = eigenvectors.transpose()*evalues.asDiagonal()*eigenvectors;
+      Eigen::Matrix<real_t, 3, 3> Mc = evectors.transpose()*evalues.asDiagonal()*evectors;
       Mc = F.transpose()*Mc*F;
 
-      for(size_t i=0;i<dimension*dimension;i++)
+      for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
     }
     
-    return 0; 
+    return;
   }
   
   /*! Stream operator.
@@ -237,7 +237,7 @@ class MetricTensor{
    */
   void set(int dimension, const real_t *metric){
     _dimension = dimension;
-    metric = new real_t[_dimension*_dimension];
+    _metric = new real_t[_dimension*_dimension];
     for(size_t i=0;i<_dimension*_dimension;i++)
       _metric[i] = metric[i];
   }
@@ -250,8 +250,8 @@ class MetricTensor{
 template<typename real_t>
 std::ostream &operator<<(std::ostream& out, const MetricTensor<real_t>& in){
   const real_t *g = in.metric;
-  for(size_t i=0; i<dimension; i++){
-    for(size_t j=0; j<dimension; j++){
+  for(size_t i=0; i<in._dimension; i++){
+    for(size_t j=0; j<in._dimension; j++){
       out<<*g<<" "; g++;
     }
     out<<"\n";

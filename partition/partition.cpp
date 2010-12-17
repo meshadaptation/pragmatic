@@ -26,27 +26,11 @@
     USA
 */
 
-#include <cassert>
-#include <cstdlib>
-#include <iostream>
-#include <map>
-#include <vector>
-#include <set>
-
-#include <vtkType.h>
+#include "partition.h"
 
 using namespace std;
-
-extern "C" {
-  // Declarations needed from METIS
-  typedef int idxtype;
-  void METIS_PartGraphKway(int *,idxtype *,idxtype *,idxtype *,idxtype *,int *,int *,int *,
-                           int *,int *,idxtype *);
-  void METIS_PartGraphRecursive(int *,idxtype *,idxtype *,idxtype *,idxtype *,int *,int *,
-                                int *,int *,int *,idxtype *);
-}
   
-int partition(const vector< set<vtkIdType> > &graph, int npartitions, int partition_method, vector<int> &decomp){
+int partition(const vector< set<idxtype> > &graph, int npartitions, int partition_method, vector<int> &decomp){
   // If no partitioning method is set, choose a default.
   if(partition_method<0){
     if(npartitions<=8)
