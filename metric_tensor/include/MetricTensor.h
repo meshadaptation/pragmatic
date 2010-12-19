@@ -47,13 +47,19 @@ std::ostream& operator<<(std::ostream& out, const MetricTensor<real_t>& in);
 template<typename real_t>
 class MetricTensor{
  public:
-  /*! Empty constructor.
-   */
+  /// Default constructor.
   MetricTensor(){
     _dimension = 0;
     _metric = NULL;
   }
   
+  /// Default destructor.
+  ~MetricTensor(){
+    if(_metric != NULL){
+      delete [] _metric;
+    }
+  }
+
   /*! Constructor.
    * @param dimension of tensor.
    * @param metric points to the dimension*dimension tensor.
@@ -80,7 +86,16 @@ class MetricTensor{
       _metric[i] = metric._metric[i];
     return *this;
   }
-  
+
+  /*! Copy back the metric tensor field.
+   * @param metric is a pointer to the buffer where the metric field can be copied.
+   */
+  void get_metric(real_t *metric){
+    for(size_t i=0;i<_dimension*_dimension;i++){
+      metric[i] = _metric[i];
+    }
+  }
+
   /*! By default this calculates the superposition of two metrics where by default small
    * edge lengths are preserved. If the optional argument perserved_small_edges==false
    * then large edge lengths are perserved instead.
@@ -91,18 +106,18 @@ class MetricTensor{
     assert(_dimension==metric._dimension);
     
     // Make the tensor with the smallest aspect ratio the reference space Mr.
-    const double *Mr=_metric, *Mi=metric._metric;
+    const real_t *Mr=_metric, *Mi=metric._metric;
     if(_dimension==2){
       Eigen::Matrix<real_t, 2, 2> M1;
       M1 <<
         _metric[0], _metric[1],
         _metric[2], _metric[3];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver1(M1);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver1(M1);
 
-      Eigen::Matrix<double, 2, 1> evalues1 = solver1.eigenvalues().real();
+      Eigen::Matrix<real_t, 2, 1> evalues1 = solver1.eigenvalues().real();
       
-      double aspect_r = std::min(evalues1[0], evalues1[1]);
+      real_t aspect_r = std::min(evalues1[0], evalues1[1]);
 
       Eigen::Matrix<real_t, 2, 2> M2;
       M2 <<
@@ -111,9 +126,9 @@ class MetricTensor{
       
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M2);
 
-      Eigen::Matrix<double, 2, 1> evalues2 = solver2.eigenvalues().real();
+      Eigen::Matrix<real_t, 2, 1> evalues2 = solver2.eigenvalues().real();
       
-      double aspect_i = std::min(evalues2[0], evalues2[1]);
+      real_t aspect_i = std::min(evalues2[0], evalues2[1]);
       
       if(aspect_i>aspect_r){
         Mi=_metric;
@@ -126,11 +141,11 @@ class MetricTensor{
         _metric[3], _metric[4], _metric[5],
         _metric[6], _metric[7], _metric[8];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver1(M1);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver1(M1);
       
-      Eigen::Matrix<double, 3, 1> evalues1 = solver1.eigenvalues().real();
+      Eigen::Matrix<real_t, 3, 1> evalues1 = solver1.eigenvalues().real();
       
-      double aspect_r = std::min(std::min(evalues1[0], evalues1[1]), evalues1[2])/
+      real_t aspect_r = std::min(std::min(evalues1[0], evalues1[1]), evalues1[2])/
         std::max(std::max(evalues1[0], evalues1[1]), evalues1[2]);
 
       Eigen::Matrix<real_t, 3, 3> M2;
@@ -139,11 +154,11 @@ class MetricTensor{
         metric._metric[3], metric._metric[4], metric._metric[5],
         metric._metric[6], metric._metric[7], metric._metric[8];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver2(M2);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M2);
       
-      Eigen::Matrix<double, 3, 1> evalues2 = solver2.eigenvalues().real();
+      Eigen::Matrix<real_t, 3, 1> evalues2 = solver2.eigenvalues().real();
       
-      double aspect_i = std::min(std::min(evalues2[0], evalues2[1]), evalues2[2])/
+      real_t aspect_i = std::min(std::min(evalues2[0], evalues2[1]), evalues2[2])/
         std::max(std::max(evalues2[0], evalues2[1]), evalues2[2]);
       
       if(aspect_i>aspect_r){
@@ -159,9 +174,9 @@ class MetricTensor{
         Mr[0], Mr[1],
         Mr[2], Mr[3];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver(M1);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M1);
 
-      Eigen::Matrix<double, 2, 2> F =
+      Eigen::Matrix<real_t, 2, 2> F =
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
       
@@ -169,17 +184,17 @@ class MetricTensor{
       M2 <<
         Mi[0], Mi[1],
         Mi[2], Mi[3];
-      Eigen::Matrix<double, 2, 2> M = F.inverse().transpose()*M2*F.inverse();
+      Eigen::Matrix<real_t, 2, 2> M = F.inverse().transpose()*M2*F.inverse();
 
-      Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver2(M);      
-      Eigen::Matrix<double, 2, 1> evalues = solver2.eigenvalues().real();
-      Eigen::Matrix<double, 2, 2> evectors = solver2.eigenvectors().real();
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M);      
+      Eigen::Matrix<real_t, 2, 1> evalues = solver2.eigenvalues().real();
+      Eigen::Matrix<real_t, 2, 2> evectors = solver2.eigenvectors().real();
       if(perserved_small_edges)
         for(size_t i=0;i<2;i++)
-          evalues[i] = std::max((double)1.0, fabs(evalues[i]));
+          evalues[i] = std::max((real_t)1.0, fabs(evalues[i]));
       else
         for(size_t i=0;i<2;i++)
-          evalues[i] = std::min((double)1.0, fabs(evalues[i]));
+          evalues[i] = std::min((real_t)1.0, fabs(evalues[i]));
 
       Eigen::Matrix<real_t, 2, 2> Mc = evectors.transpose()*evalues.asDiagonal()*evectors;
       Mc = F.transpose()*Mc*F;
@@ -193,9 +208,9 @@ class MetricTensor{
         Mr[3], Mr[4], Mr[5],
         Mr[6], Mr[7], Mr[8];
       
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver(M1);
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M1);
       
-      Eigen::Matrix<double, 3, 3> F =
+      Eigen::Matrix<real_t, 3, 3> F =
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
       
@@ -204,18 +219,18 @@ class MetricTensor{
         Mi[0], Mi[1], Mi[2],
         Mi[3], Mi[4], Mi[5],
         Mi[6], Mi[7], Mi[8];
-      Eigen::Matrix<double, 3, 3> M = F.inverse().transpose()*M2*F.inverse();
+      Eigen::Matrix<real_t, 3, 3> M = F.inverse().transpose()*M2*F.inverse();
         
-      Eigen::EigenSolver< Eigen::Matrix<double, 3, 3> > solver2(M);      
-      Eigen::Matrix<double, 3, 1> evalues = solver2.eigenvalues().real();
-      Eigen::Matrix<double, 3, 3> evectors = solver2.eigenvectors().real();
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M);      
+      Eigen::Matrix<real_t, 3, 1> evalues = solver2.eigenvalues().real();
+      Eigen::Matrix<real_t, 3, 3> evectors = solver2.eigenvectors().real();
 
       if(perserved_small_edges)
         for(size_t i=0;i<3;i++)
-          evalues[i] = std::max((double)1.0, fabs(evalues[i]));
+          evalues[i] = std::max((real_t)1.0, fabs(evalues[i]));
       else
         for(size_t i=0;i<3;i++)
-          evalues[i] = std::min((double)1.0, fabs(evalues[i]));
+          evalues[i] = std::min((real_t)1.0, fabs(evalues[i]));
 
       Eigen::Matrix<real_t, 3, 3> Mc = evectors.transpose()*evalues.asDiagonal()*evectors;
       Mc = F.transpose()*Mc*F;

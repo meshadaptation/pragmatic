@@ -8,7 +8,7 @@ CXXFLAGS = $(CPPFLAGS) -g -O2 -Wno-deprecated
 
 LIBS = -lvtkIO
 
-TEST_BINARIES = test_hessian
+TEST_BINARIES = test_hessian_2d test_hessian_3d
 
 .SUFFIXES: .cpp .o
 
@@ -17,8 +17,11 @@ TEST_BINARIES = test_hessian
 
 default: $(TEST_BINARIES)
 
-test_hessian: test_hessian.cpp
-	$(CXX) $(CXXFLAGS) -o test_hessian test_hessian.cpp $(LIBS)
+test_hessian_2d: test_hessian_2d.cpp
+	$(CXX) $(CXXFLAGS) -o test_hessian_2d test_hessian_2d.cpp $(LIBS)
+
+test_hessian_3d: test_hessian_3d.cpp
+	$(CXX) $(CXXFLAGS) -o test_hessian_3d test_hessian_3d.cpp $(LIBS)
 
 clean:
 	rm -rf *.o $(TEST_BINARIES)
