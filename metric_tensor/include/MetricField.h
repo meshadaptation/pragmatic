@@ -30,7 +30,9 @@
 #ifndef METRICFIELD_H
 #define METRICFIELD_H
 
+#include <cmath>
 #include <iostream>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -60,6 +62,7 @@ template<typename real_t, typename index_t>
     _NNodes = 0;
     _NElements = 0;
     _ndims = 0;
+    nloc = 0;
     _ENList = NULL;
     _node_distribution = NULL;
     _x = NULL;
@@ -90,6 +93,7 @@ template<typename real_t, typename index_t>
    */
   void set_mesh(int NNodes, int NElements, const index_t *ENList,
                 const real_t *x, const real_t *y, const index_t *node_distribution=NULL){
+    nloc = 3;
     _ndims = 2;
     _NNodes = NNodes;
     _NElements = NElements;
@@ -98,6 +102,8 @@ template<typename real_t, typename index_t>
     _y = y;
     _z = NULL;
     _node_distribution = node_distribution;
+
+    find_surface();
   }
   
   /*! Set the source mesh (3D tetrahedral meshes).
@@ -114,6 +120,7 @@ template<typename real_t, typename index_t>
    */
   void set_mesh(int NNodes, int NElements, const index_t *ENList,
                 const real_t *x, const real_t *y, const real_t *z, const index_t *node_distribution=NULL){
+    nloc = 4;
     _ndims = 3;
     _NNodes = NNodes;
     _NElements = NElements;
@@ -122,6 +129,8 @@ template<typename real_t, typename index_t>
     _y = y;
     _z = z;
     _node_distribution = node_distribution;
+
+    find_surface();
   }
 
   /*! Copy back the metric tensor field.
@@ -233,6 +242,28 @@ template<typename real_t, typename index_t>
   void apply_nelements(real_t nelements);
 
  private:
+  /*! Detects the surface nodes of the domain.
+   */
+  void find_surface(){
+    std::set< std::set<index_t> > facets;
+    for(int i=0;i<_NElements;i++){
+      for(int j=0;j<nloc;j++){
+        std::set<index_t> facet;
+        for(int k=1;k<nloc;k++){
+          facet.insert(_ENList[i*nloc+(j+k)%nloc]);
+        }
+        if(facets.count(facet)){
+          facets.erase(facet);
+        }else{
+          facets.insert(facet);
+        }
+      }
+    }
+    
+    for(typename std::set<std::set<index_t> >::iterator it=facets.begin(); it!=facets.end(); ++it)
+      surface_nodes.insert(it->begin(), it->end());
+  }
+
   /*! Apply required number of elements.
    */
   void get_hessian(const real_t *psi, real_t *Hessian){
@@ -240,7 +271,6 @@ template<typename real_t, typename index_t>
     // Create node-node list
     if(NNList.empty()){
       NNList.resize(_NNodes);
-      size_t nloc = (_ndims==2)?3:4;
       for(size_t i=0; i<_NElements; i++){
         for(size_t j=0;j<nloc;j++){
           for(size_t k=j+1;k<nloc;k++){
@@ -256,7 +286,7 @@ template<typename real_t, typename index_t>
     for(size_t i=0; i<_NNodes; i++){
       std::set<index_t> patch = NNList[i];
 
-      if(patch.size()<min_patch_size){
+      if((patch.size()<min_patch_size)||(surface_nodes.count(i))){
         std::set<index_t> front = NNList[i];
         for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
           patch.insert(NNList[*it].begin(), NNList[*it].end());
@@ -345,13 +375,6 @@ template<typename real_t, typename index_t>
         
         Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
         A.lu().solve(b, &a);
-        
-        if((a[9]<0.99)&&(_z[i]==0.0)){
-          std::cout<<"A = \n"<<A<<std::endl
-                   <<"b = \n"<<b<<std::endl
-                   <<"a = \n"<<a<<std::endl
-                   <<"patch size = "<<patch.size();
-        }
 
         Hessian[i*9  ] = a[4]*2.0; // d2/dx2
         Hessian[i*9+1] = a[5];     // d2/dxdy
@@ -366,10 +389,11 @@ template<typename real_t, typename index_t>
     }
   }
   
-  int _NNodes, _NElements, _ndims;
+  int _NNodes, _NElements, _ndims, nloc;
   const index_t *_ENList, *_node_distribution;
   const real_t *_x, *_y, *_z;
   std::vector< std::set<index_t> > NNList;
+  std::set<index_t> surface_nodes;
 #ifdef HAVE_MPI
   const MPI_Comm *_mesh_comm;
 #endif
