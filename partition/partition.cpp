@@ -44,13 +44,13 @@ int partition(const vector< set<idxtype> > &graph, int npartitions, int partitio
   // Compress graph    
   vector<idxtype> xadj(nnodes+1), adjncy;
   int pos=0;
-  xadj[0]=1;
+  xadj[0]=0;
   for(int i=0;i<nnodes;i++){
     for(set<int>::iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
       adjncy.push_back(*jt);
       pos++;
     }
-    xadj[i+1] = pos+1;
+    xadj[i+1] = pos;
   }
   
   // Partition graph
@@ -66,4 +66,29 @@ int partition(const vector< set<idxtype> > &graph, int npartitions, int partitio
   }
   
   return edgecut;
+}
+
+int reorder(const vector< set<idxtype> > &graph, vector<int> &norder){
+  int nnodes = graph.size();
+  
+  // Compress graph
+  vector<idxtype> xadj(nnodes+1), adjncy;
+  int pos=0;
+  xadj[0]=0;
+  for(int i=0;i<nnodes;i++){
+    for(set<int>::iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
+      adjncy.push_back(*jt);
+      pos++;
+    }
+    xadj[i+1] = pos;
+  }
+  
+  // Partition graph
+  norder.resize(nnodes);
+  vector<int> inorder(nnodes);
+  int numflag=0, options[] = {0};
+  
+  METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
+  
+  return 0;
 }
