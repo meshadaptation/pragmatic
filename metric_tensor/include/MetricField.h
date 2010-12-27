@@ -40,7 +40,7 @@
 #include <Eigen/Dense>
 
 #include "MetricTensor.h"
-#include "partition.h"
+#include "Metis.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -283,7 +283,7 @@ template<typename real_t, typename index_t>
           }
         }
       }
-      reorder(NNList, norder);
+      Metis<index_t>::reorder(NNList, norder);
     }
 
     double start_tic = omp_get_wtime();
