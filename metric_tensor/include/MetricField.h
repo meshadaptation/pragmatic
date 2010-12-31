@@ -48,7 +48,6 @@
 
 #include <omp.h>
 
-#
 /*! \brief Constructs metric tensor field which encodes anisotropic
  *  edge size information.
  * 
@@ -107,6 +106,17 @@ template<typename real_t, typename index_t>
     _z = NULL;
     _node_distribution = node_distribution;
 
+    real_t bbox[] = {x[0], x[0], y[0], y[0]};
+    for(int i=1;i<_NNodes;i++){
+      bbox[0] = min(bbox[0], x[i]); bbox[1] = max(bbox[1], x[i]);
+      bbox[2] = min(bbox[2], y[i]); bbox[3] = max(bbox[3], y[i]);
+    }
+    _metric = new MetricTensor<real_t>[_NNodes];
+    real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0, 1.0/pow(bbox[3]-bbox[2], 2)};
+    for(size_t i=0;i<_NNodes;i++){
+      _metric[i].set(_ndims, m);
+    }
+
     find_surface();
   }
   
@@ -133,6 +143,20 @@ template<typename real_t, typename index_t>
     _y = y;
     _z = z;
     _node_distribution = node_distribution;
+
+    real_t bbox[] = {x[0], x[0], y[0], y[0], z[0], z[0]};
+    for(int i=1;i<_NNodes;i++){
+      bbox[0] = min(bbox[0], x[i]); bbox[1] = max(bbox[1], x[i]);
+      bbox[2] = min(bbox[2], y[i]); bbox[3] = max(bbox[3], y[i]);
+      bbox[4] = min(bbox[4], z[i]); bbox[5] = max(bbox[5], z[i]);
+    }
+    _metric = new MetricTensor<real_t>[_NNodes];
+    real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
+                  0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
+                  0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
+    for(size_t i=0;i<_NNodes;i++){
+      _metric[i].set(_ndims, m);
+    }
 
     find_surface();
   }
@@ -183,16 +207,9 @@ template<typename real_t, typename index_t>
       }
     }
     
-    if(_metric==NULL){
-      _metric = new MetricTensor<real_t>[_NNodes];
-      for(size_t i=0;i<_NNodes;i++){
-        _metric[i].set(_ndims, Hessian+i*ndims2);
-      }
-    }else{
-      for(size_t i=0;i<_NNodes;i++)
-        _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
+    for(size_t i=0;i<_NNodes;i++){
+      _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
     }
-    delete [] Hessian;
   }
   
   /*! Apply maximum edge length constraint.
@@ -399,7 +416,7 @@ template<typename real_t, typename index_t>
         }
       }
     }
-    std::cerr<<"loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+    std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
   }
   
   int _NNodes, _NElements, _ndims, nloc;
