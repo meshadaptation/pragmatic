@@ -2,13 +2,13 @@ SHELL = /bin/bash
 
 CXX = g++
 
-CPPFLAGS = -I/usr/include/vtk-5.4 -I../eigen-2.0 -I../metric_tensor/include -I../include
+CPPFLAGS = -I/usr/include/vtk-5.4 -I../eigen-2.0 -I../metric_tensor/include -I../include -I../smooth/include -I../functionals/include
 
-CXXFLAGS = $(CPPFLAGS) -g -O2 -Wno-deprecated -fopenmp
+CXXFLAGS = $(CPPFLAGS) -g -O1 -Wno-deprecated -fopenmp
 
 LIBS = -lvtkIO -lmetis
 
-TEST_BINARIES = test_hessian_2d test_hessian_3d
+TEST_BINARIES = test_hessian_2d test_hessian_3d test_smooth_2d
 
 .SUFFIXES: .cpp .o
 
@@ -22,6 +22,9 @@ test_hessian_2d: test_hessian_2d.cpp
 
 test_hessian_3d: test_hessian_3d.cpp
 	$(CXX) $(CXXFLAGS) -o test_hessian_3d test_hessian_3d.cpp $(LIBS)
+
+test_smooth_2d: test_smooth_2d.cpp
+	$(CXX) $(CXXFLAGS) -o test_smooth_2d test_smooth_2d.cpp $(LIBS)
 
 clean:
 	rm -rf *.o $(TEST_BINARIES)
