@@ -95,9 +95,6 @@ int main(int argc, char **argv){
     scalar->SetTuple1(i, coplanar_ids[i]);
   ug_out->GetCellData()->AddArray(scalar);
 
-  // Idea is when smoothing boundary nodes, just laplacian smooth with nodes on the
-  // boundary with the same id checking element quality
-
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName("test_surface_2d.vtu");
   writer->SetInput(ug_out);
