@@ -30,6 +30,9 @@
 #ifndef SURFACE_H
 #define SURFACE_H
 
+#include <vector>
+#include <set>
+
 /** This class is used to: identify the boundary of the domain;
     uniquely label connected co-linear patches of surface elements
     (these can be used to prevent adaptivity coarsening these patches
@@ -144,7 +147,7 @@ template<typename real_t, typename index_t>
  private:
   /// Detects the surface nodes of the domain.
   void find_surface(){
-    std::set< std::set<index_t> > facets;
+    std::map< std::set<index_t>, std::vector<int> > facets;
     for(int i=0;i<_NElements;i++){
       for(int j=0;j<nloc;j++){
         std::set<index_t> facet;
@@ -154,16 +157,39 @@ template<typename real_t, typename index_t>
         if(facets.count(facet)){
           facets.erase(facet);
         }else{
-          facets.insert(facet);
+          std::vector<int> element;
+          if(snloc==3){
+            if(j==0){
+              element.push_back(_ENList[i*nloc+1]);
+              element.push_back(_ENList[i*nloc+3]);
+              element.push_back(_ENList[i*nloc+2]);
+            }else if(j==1){
+              element.push_back(_ENList[i*nloc+2]);
+              element.push_back(_ENList[i*nloc+3]);
+              element.push_back(_ENList[i*nloc+0]);
+            }else if(j==2){
+              element.push_back(_ENList[i*nloc+0]);
+              element.push_back(_ENList[i*nloc+3]);
+              element.push_back(_ENList[i*nloc+1]);
+            }else if(j==3){
+              element.push_back(_ENList[i*nloc+0]);
+              element.push_back(_ENList[i*nloc+1]);
+              element.push_back(_ENList[i*nloc+2]);
+            }
+          }else{
+            element.push_back(_ENList[i*nloc+(j+1)%nloc]);
+            element.push_back(_ENList[i*nloc+(j+2)%nloc]);
+          }
+          facets[facet] = element;
         }
       }
     }
     
     NSElements = facets.size();
-    for(typename std::set<std::set<index_t> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
-      for(typename std::set<index_t>::const_iterator jt=it->begin(); jt!=it->end(); ++jt)
-        SENList.push_back(*jt);
-      surface_nodes.insert(it->begin(), it->end());
+    for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
+      // for(typename std::vector<index_t>::const_iterator jt=it->second.begin(); jt!=it->second.end(); ++jt)
+      SENList.insert(SENList.end(), it->second.begin(), it->second.end());
+      surface_nodes.insert(it->first.begin(), it->first.end());
     }
 
     calculate_coplanar_ids();
@@ -187,8 +213,6 @@ template<typename real_t, typename index_t>
         }else{
           normals[i*2+1] = sqrt(1 - pow(normals[i*2], 2));
         }
-        std::cout<<"normal "<<normals[i*2]<<", "<<normals[i*2+1]<<" :: "
-                 <<sqrt(pow(normals[i*2], 2)+pow(normals[i*2+1], 2))<<std::endl;
       }
     }else{
       for(size_t i=0;i<NSElements;i++){
