@@ -187,7 +187,6 @@ template<typename real_t, typename index_t>
     
     NSElements = facets.size();
     for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
-      // for(typename std::vector<index_t>::const_iterator jt=it->second.begin(); jt!=it->second.end(); ++jt)
       SENList.insert(SENList.end(), it->second.begin(), it->second.end());
       surface_nodes.insert(it->first.begin(), it->first.end());
     }
@@ -198,7 +197,6 @@ template<typename real_t, typename index_t>
   /// Calculate co-planar patches.
   void calculate_coplanar_ids(){
     // Calculate all element normals
-    size_t NSElements = SENList.size()/snloc;
     std::vector<real_t> normals(NSElements*_ndims);
     if(_ndims==2){
       for(size_t i=0;i<NSElements;i++){
@@ -245,7 +243,7 @@ template<typename real_t, typename index_t>
     
     std::vector<int> EEList(NSElements*snloc);
     for(size_t i=0;i<NSElements;i++){
-      if(snloc=2){
+      if(snloc==2){
         for(size_t j=0;j<2;j++){
           size_t nid=SENList[i*2+j];
           for(std::set<size_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
@@ -283,21 +281,18 @@ template<typename real_t, typename index_t>
     for(size_t pos = 0;pos<NSElements;){
       // Create a new starting point
       real_t *ref_normal=NULL;
-      for(size_t i=pos;i<NSElements;i++){{
-          if(coplanar_ids[i]==0){
-            // This is the first element in the new patch
-            pos = i;
-            coplanar_ids[pos] = current_id;
-            ref_normal = &(normals[pos*_ndims]);
-            break;
-          }
-        }
-        
-        // Jump out of this while loop if we are finished
-        if(i==NSElements)
+      for(size_t i=pos;i<NSElements;i++){
+        if(coplanar_ids[i]==0){
+          // This is the first element in the new patch
+          pos = i;
+          coplanar_ids[pos] = current_id;
+          ref_normal = &(normals[pos*_ndims]);
           break;
+        }
       }
-      
+      if(ref_normal==NULL)
+        break;
+
       // Initialise the front
       std::set<int> front;
       front.insert(pos);
@@ -310,11 +305,10 @@ template<typename real_t, typename index_t>
         // Check surrounding surface elements:      
         for(int i=0; i<snloc; i++){
           int sele2 = EEList[sele*snloc+i];
-          
           if(coplanar_ids[sele2]>0)
             continue;
           
-          double coplanar = 0;
+          double coplanar = 0.0;
           for(int d=0;d<_ndims;d++)
             coplanar += ref_normal[d]*normals[sele2*_ndims+d];
           

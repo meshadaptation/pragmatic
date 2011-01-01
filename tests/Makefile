@@ -8,7 +8,7 @@ CXXFLAGS = $(CPPFLAGS) -g -O1 -Wno-deprecated -fopenmp
 
 LIBS = -lvtkIO -lmetis
 
-TEST_BINARIES = test_surface_2d test_hessian_2d test_smooth_2d test_hessian_3d
+TEST_BINARIES = test_surface_2d test_hessian_2d test_smooth_2d test_surface_3d test_hessian_3d
 
 .SUFFIXES: .cpp .o
 
@@ -25,6 +25,9 @@ test_hessian_2d: test_hessian_2d.cpp
 
 test_smooth_2d: test_smooth_2d.cpp
 	$(CXX) $(CXXFLAGS) -o test_smooth_2d test_smooth_2d.cpp $(LIBS)
+
+test_surface_3d: test_surface_3d.cpp
+	$(CXX) $(CXXFLAGS) -o test_surface_3d test_surface_3d.cpp $(LIBS)
 
 test_hessian_3d: test_hessian_3d.cpp
 	$(CXX) $(CXXFLAGS) -o test_hessian_3d test_hessian_3d.cpp $(LIBS)
