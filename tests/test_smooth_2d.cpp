@@ -38,6 +38,7 @@
 
 #include "MetricField.h"
 #include "Smooth.h"
+#include "Surface.h"
 
 using namespace std;
 
@@ -68,28 +69,39 @@ int main(int argc, char **argv){
     }
   }
 
-  MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  Surface<double, int> surface;
+  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
   vector<double> psi(NNodes);
+  vector<double> metric(NNodes*4);
+  
+  MetricField<double, int> metric_field;
+  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
+  
   for(size_t i=0;i<NNodes;i++){
     double X = x[i]*2 - 1;
     double Y = y[i]*2 - 1;
     psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
   }
-  metric_field.add_field(&(psi[0]), 0.5, false);
-
-  vector<double> metric(NNodes*4);
+  metric_field.add_field(&(psi[0]), 0.6);
+  
   metric_field.get_metric(&(metric[0]));
-
+  
   Smooth<double, int> smooth;
-  smooth.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(metric[0]));
+  smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(metric[0]));
   
-  for(int i=0;i<100;i++){
+  for(int iter=0;iter<100;iter++){    
     int moves = smooth.smooth();
-    std::cout<<"iteration "<<i<<" moved "<<moves<<" nodes\n";
+    std::cout<<"iteration "<<iter<<" moved "<<moves<<" nodes\n";
   }
-  
+
+  // recalculate
+  for(size_t i=0;i<NNodes;i++){
+    double X = x[i]*2 - 1;
+    double Y = y[i]*2 - 1;
+    psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
+  }
+
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->DeepCopy(ug);
   

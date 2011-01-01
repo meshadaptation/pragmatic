@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "MetricField.h"
+#include "Surface.h"
 
 using namespace std;
 
@@ -67,14 +68,17 @@ int main(int argc, char **argv){
     }
   }
 
+  Surface<double, int> surface;
+  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+
   MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = x[i]*x[i]+y[i]*y[i];
   
-  metric_field.add_field(&(psi[0]), 1.0, false);
+  metric_field.add_field(&(psi[0]), 1.0);
 
   vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));

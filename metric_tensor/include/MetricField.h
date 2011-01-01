@@ -41,6 +41,7 @@
 
 #include "MetricTensor.h"
 #include "Metis.h"
+#include "Surface.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -75,6 +76,7 @@ template<typename real_t, typename index_t>
     _mesh_comm = NULL;
 #endif
     _metric = NULL;
+    _surface = NULL;
   }
 
   /// Default destructor.
@@ -94,13 +96,14 @@ template<typename real_t, typename index_t>
    *        assumed that each processes ownes n_i consecutive
    *        vertices of the mesh. Its contents are identical for every process.
    */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
+  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
                 const real_t *x, const real_t *y, const index_t *node_distribution=NULL){
     nloc = 3;
     _ndims = 2;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
+    _surface = surface;
     _x = x;
     _y = y;
     _z = NULL;
@@ -116,8 +119,6 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<_NNodes;i++){
       _metric[i].set(_ndims, m);
     }
-
-    find_surface();
   }
   
   /*! Set the source mesh (3D tetrahedral meshes).
@@ -132,13 +133,14 @@ template<typename real_t, typename index_t>
    *        assumed that each processes ownes n_i consecutive
    *        vertices of the mesh. Its contents are identical for every process.
    */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
+  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
                 const real_t *x, const real_t *y, const real_t *z, const index_t *node_distribution=NULL){
     nloc = 4;
     _ndims = 3;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
+    _surface = surface;
     _x = x;
     _y = y;
     _z = z;
@@ -157,8 +159,6 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<_NNodes;i++){
       _metric[i].set(_ndims, m);
     }
-
-    find_surface();
   }
 
   /*! Copy back the metric tensor field.
@@ -263,28 +263,6 @@ template<typename real_t, typename index_t>
   void apply_nelements(real_t nelements);
 
  private:
-  /*! Detects the surface nodes of the domain.
-   */
-  void find_surface(){
-    std::set< std::set<index_t> > facets;
-    for(int i=0;i<_NElements;i++){
-      for(int j=0;j<nloc;j++){
-        std::set<index_t> facet;
-        for(int k=1;k<nloc;k++){
-          facet.insert(_ENList[i*nloc+(j+k)%nloc]);
-        }
-        if(facets.count(facet)){
-          facets.erase(facet);
-        }else{
-          facets.insert(facet);
-        }
-      }
-    }
-    
-    for(typename std::set<std::set<index_t> >::iterator it=facets.begin(); it!=facets.end(); ++it)
-      surface_nodes.insert(it->begin(), it->end());
-  }
-
   /*! Apply required number of elements.
    */
   void get_hessian(const real_t *psi, real_t *Hessian){
@@ -314,7 +292,7 @@ template<typename real_t, typename index_t>
         size_t i=norder[ip];
         std::set<index_t> patch = NNList[i];
         
-        if((patch.size()<min_patch_size)||(surface_nodes.count(i))){
+        if((patch.size()<min_patch_size)||(_surface->contains_node(i))){
           std::set<index_t> front = NNList[i];
           for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
             patch.insert(NNList[*it].begin(), NNList[*it].end());
@@ -424,11 +402,11 @@ template<typename real_t, typename index_t>
   const real_t *_x, *_y, *_z;
   std::vector< std::set<index_t> > NNList;
   std::vector<int> norder;
-  std::set<index_t> surface_nodes;
 #ifdef HAVE_MPI
   const MPI_Comm *_mesh_comm;
 #endif
   MetricTensor<real_t> *_metric;
+  Surface<real_t, index_t> *_surface;
 };
 
 #endif

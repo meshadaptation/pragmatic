@@ -32,6 +32,7 @@
 
 #include <omp.h>
 #include "LipnikovFunctional.h"
+#include "Surface.h"
 
 /*! \brief Applies Laplacian smoothen in metric space.
  */
@@ -71,14 +72,14 @@ template<typename real_t, typename index_t>
    *        assumed that each processes ownes n_i consecutive
    *        vertices of the mesh. Its contents are identical for every process.
    */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
-                real_t *x, real_t *y, real_t *metric,
-                const index_t *node_distribution=NULL){
+  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
+                real_t *x, real_t *y, real_t *metric, const index_t *node_distribution=NULL){
     nloc = 3;
     _ndims = 2;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
+    _surface = surface;
     _x = x;
     _y = y;
     _z = NULL;
@@ -99,13 +100,14 @@ template<typename real_t, typename index_t>
    *        assumed that each processes ownes n_i consecutive
    *        vertices of the mesh. Its contents are identical for every process.
    */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
+  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
                 real_t *x, real_t *y, real_t *z, real_t *metric, const index_t *node_distribution=NULL){
     nloc = 4;
     _ndims = 3;
     _NNodes = NNodes;
     _NElements = NElements;
     _ENList = ENList;
+    _surface = surface;
     _x = x;
     _y = y;
     _z = z;
@@ -142,6 +144,9 @@ template<typename real_t, typename index_t>
       LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
 
       for(std::vector<int>::const_iterator it=norder.begin();it!=norder.end();++it){
+        if(_surface->contains_node(*it))
+          continue;
+
         if(_ndims==2){
           real_t worst_q = 1.0;
           for(typename std::set<index_t>::iterator ie=NEList[*it].begin();ie!=NEList[*it].end();++ie){
@@ -228,9 +233,10 @@ template<typename real_t, typename index_t>
             real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
             real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
 
-            if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<1.01*worst_q){
+            // if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<1.01*worst_q){
+            if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<=0){
               improvement=false;
-              break;
+              break; 
             }
           }
           if(improvement){
@@ -262,5 +268,6 @@ template<typename real_t, typename index_t>
   const MPI_Comm *_mesh_comm;
 #endif
   real_t *_metric;
+  Surface<real_t, index_t> *_surface;
 };
 #endif
