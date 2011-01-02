@@ -79,9 +79,21 @@ template<typename real_t, typename index_t>
   const int* get_facets(){
     return &(SENList[0]);
   }
+  
+  int get_coplanar_id(int eid){
+    return coplanar_ids[eid];
+  }
 
   const int* get_coplanar_ids(){
     return &(coplanar_ids[0]);
+  }
+
+  const real_t* get_normal(int eid){
+    return &(normals[eid*_ndims]);
+  }
+
+  std::set<size_t> get_surface_patch(int i){
+    return SNEList[i];
   }
 
   /*! Set the source mesh (2D triangular meshes).
@@ -197,20 +209,23 @@ template<typename real_t, typename index_t>
   /// Calculate co-planar patches.
   void calculate_coplanar_ids(){
     // Calculate all element normals
-    std::vector<real_t> normals(NSElements*_ndims);
+    normals.resize(NSElements*_ndims);
     if(_ndims==2){
       for(size_t i=0;i<NSElements;i++){
         normals[i*2] = sqrt(1 - pow((_x[SENList[2*i+1]] - _x[SENList[2*i]])
                                     /(_y[SENList[2*i+1]] - _y[SENList[2*i]]), 2));
         if(isnan(normals[i*2])){
           normals[i*2] = 0;
-          if(_x[SENList[2*i+1]] - _x[SENList[2*i]]>0)
-            normals[i*2+1] = -1;
-          else
-            normals[i*2+1] = 1;
+          normals[i*2+1] = 1;
         }else{
           normals[i*2+1] = sqrt(1 - pow(normals[i*2], 2));
         }
+        
+        if(_y[SENList[2*i+1]] - _y[SENList[2*i]]>0)
+          normals[i*2] *= -1;
+
+        if(_x[SENList[2*i]] - _x[SENList[2*i+1]]>0)
+          normals[i*2+1] *= -1;
       }
     }else{
       for(size_t i=0;i<NSElements;i++){
@@ -234,7 +249,6 @@ template<typename real_t, typename index_t>
     }
     
     // Create EEList for surface
-    std::map< int, std::set<size_t> > SNEList;
     for(size_t i=0;i<NSElements;i++){
       for(size_t j=0;j<snloc;j++){
         SNEList[SENList[snloc*i+j]].insert(i);
@@ -280,7 +294,7 @@ template<typename real_t, typename index_t>
     size_t current_id = 1;
     for(size_t pos = 0;pos<NSElements;){
       // Create a new starting point
-      real_t *ref_normal=NULL;
+      const real_t *ref_normal=NULL;
       for(size_t i=pos;i<NSElements;i++){
         if(coplanar_ids[i]==0){
           // This is the first element in the new patch
@@ -327,9 +341,11 @@ template<typename real_t, typename index_t>
   const index_t *_ENList, *_node_distribution;
   const real_t *_x, *_y, *_z;
   std::vector< std::set<index_t> > NNList;
+  std::map< int, std::set<size_t> > SNEList;
   std::vector<int> norder;
   std::set<index_t> surface_nodes;
   std::vector<int> SENList, coplanar_ids;
+  std::vector<real_t> normals;
   real_t COPLANAR_MAGIC_NUMBER;
 
 #ifdef HAVE_MPI

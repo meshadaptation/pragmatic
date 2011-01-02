@@ -95,6 +95,16 @@ int main(int argc, char **argv){
     scalar->SetTuple1(i, coplanar_ids[i]);
   ug_out->GetCellData()->AddArray(scalar);
 
+  vtkDoubleArray *normal = vtkDoubleArray::New();
+  normal->SetNumberOfComponents(3);
+  normal->SetNumberOfTuples(NSElements);
+  normal->SetName("normals");
+  for(size_t i=0;i<NSElements;i++){
+    const double *n = surface.get_normal(i);
+    normal->SetTuple3(i, n[0], n[1], 0.0);
+  }
+  ug_out->GetCellData()->AddArray(normal);
+
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName("test_surface_2d.vtu");
   writer->SetInput(ug_out);
