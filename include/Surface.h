@@ -211,7 +211,7 @@ template<typename real_t, typename index_t>
     // Calculate all element normals
     normals.resize(NSElements*_ndims);
     if(_ndims==2){
-      for(size_t i=0;i<NSElements;i++){
+      for(int i=0;i<NSElements;i++){
         normals[i*2] = sqrt(1 - pow((_x[SENList[2*i+1]] - _x[SENList[2*i]])
                                     /(_y[SENList[2*i+1]] - _y[SENList[2*i]]), 2));
         if(isnan(normals[i*2])){
@@ -228,7 +228,7 @@ template<typename real_t, typename index_t>
           normals[i*2+1] *= -1;
       }
     }else{
-      for(size_t i=0;i<NSElements;i++){
+      for(int i=0;i<NSElements;i++){
         real_t x1 = _x[SENList[3*i+1]] - _x[SENList[3*i]];
         real_t y1 = _y[SENList[3*i+1]] - _y[SENList[3*i]];
         real_t z1 = _z[SENList[3*i+1]] - _z[SENList[3*i]];
@@ -249,19 +249,19 @@ template<typename real_t, typename index_t>
     }
     
     // Create EEList for surface
-    for(size_t i=0;i<NSElements;i++){
-      for(size_t j=0;j<snloc;j++){
+    for(int i=0;i<NSElements;i++){
+      for(int j=0;j<snloc;j++){
         SNEList[SENList[snloc*i+j]].insert(i);
       }
     }
     
     std::vector<int> EEList(NSElements*snloc);
-    for(size_t i=0;i<NSElements;i++){
+    for(int i=0;i<NSElements;i++){
       if(snloc==2){
-        for(size_t j=0;j<2;j++){
-          size_t nid=SENList[i*2+j];
+        for(int j=0;j<2;j++){
+          int nid=SENList[i*2+j];
           for(std::set<size_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
-            if((*it)==i){
+            if((int)(*it)==i){
               continue;
             }else{
               EEList[i*2+j] = *it;
@@ -270,11 +270,11 @@ template<typename real_t, typename index_t>
           }
         }
       }else{
-        for(size_t j=0;j<3;j++){
-          size_t nid1=SENList[i*3+(j+1)%3];
-          size_t nid2=SENList[i*3+(j+2)%3];
+        for(int j=0;j<3;j++){
+          int nid1=SENList[i*3+(j+1)%3];
+          int nid2=SENList[i*3+(j+2)%3];
           for(std::set<size_t>::iterator it=SNEList[nid1].begin();it!=SNEList[nid1].end();++it){
-            if((*it)==i){
+            if((int)(*it)==i){
               continue;
             }       
             if(SNEList[nid2].find(*it)!=SNEList[nid2].end()){
@@ -291,11 +291,11 @@ template<typename real_t, typename index_t>
     for(std::vector<int>::iterator it=coplanar_ids.begin(); it!=coplanar_ids.end(); ++it)
       *it = 0;
   
-    size_t current_id = 1;
-    for(size_t pos = 0;pos<NSElements;){
+    int current_id = 1;
+    for(int pos = 0;pos<NSElements;){
       // Create a new starting point
       const real_t *ref_normal=NULL;
-      for(size_t i=pos;i<NSElements;i++){
+      for(int i=pos;i<NSElements;i++){
         if(coplanar_ids[i]==0){
           // This is the first element in the new patch
           pos = i;

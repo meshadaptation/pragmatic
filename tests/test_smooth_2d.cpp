@@ -53,7 +53,7 @@ int main(int argc, char **argv){
   int NElements = ug->GetNumberOfCells();
 
   vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
     x[i] = r[0];
@@ -62,7 +62,7 @@ int main(int argc, char **argv){
   }
 
   vector<int> ENList;
-  for(size_t i=0;i<NElements;i++){
+  for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
     for(size_t j=0;j<3;j++){
       ENList.push_back(cell->GetPointId(j));
@@ -78,13 +78,15 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field;
   metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
   
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     double X = x[i]*2 - 1;
     double Y = y[i]*2 - 1;
     psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
   }
   metric_field.add_field(&(psi[0]), 0.6);
-  
+
+  metric_field.apply_nelements(NElements);
+
   metric_field.get_metric(&(metric[0]));
   
   Smooth<double, int> smooth;
@@ -103,7 +105,7 @@ int main(int argc, char **argv){
   }
 
   // recalculate
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     double X = x[i]*2 - 1;
     double Y = y[i]*2 - 1;
     psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
@@ -112,7 +114,7 @@ int main(int argc, char **argv){
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->DeepCopy(ug);
   
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     ug_out->GetPoints()->SetPoint(i, x[i], y[i], z[i]);
   }
 
@@ -120,7 +122,7 @@ int main(int argc, char **argv){
   mfield->SetNumberOfComponents(4);
   mfield->SetNumberOfTuples(NNodes);
   mfield->SetName("Metric");
-  for(size_t i=0;i<NNodes;i++)
+  for(int i=0;i<NNodes;i++)
     mfield->SetTuple4(i, metric[i*4], metric[i*4+1], metric[i*4+2], metric[i*4+3]);
   ug_out->GetPointData()->AddArray(mfield);
 
@@ -128,7 +130,7 @@ int main(int argc, char **argv){
   scalar->SetNumberOfComponents(1);
   scalar->SetNumberOfTuples(NNodes);
   scalar->SetName("psi");
-  for(size_t i=0;i<NNodes;i++)
+  for(int i=0;i<NNodes;i++)
     scalar->SetTuple1(i, psi[i]);
   ug_out->GetPointData()->AddArray(scalar);
 

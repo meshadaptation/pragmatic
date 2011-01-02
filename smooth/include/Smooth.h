@@ -120,10 +120,10 @@ template<typename real_t, typename index_t>
     if(NNList.empty()){
       NNList.resize(_NNodes);
       NEList.resize(_NNodes);
-      for(size_t i=0; i<_NElements; i++){
-        for(size_t j=0;j<nloc;j++){
+      for(int i=0; i<_NElements; i++){
+        for(int j=0;j<nloc;j++){
           NEList[_ENList[i*nloc+j]].insert(i);
-          for(size_t k=j+1;k<nloc;k++){
+          for(int k=j+1;k<nloc;k++){
             NNList[_ENList[i*nloc+j]].insert(_ENList[i*nloc+k]);
             NNList[_ENList[i*nloc+k]].insert(_ENList[i*nloc+j]);
           }
@@ -263,7 +263,6 @@ template<typename real_t, typename index_t>
             }
           }
           if(improvement){
-            real_t dx=sqrt((_x[*it]-p[0])*(_x[*it]-p[0])+(_y[*it]-p[1])*(_y[*it]-p[1]));
             _x[*it] = p[0];
             _y[*it] = p[1];
             _metric[(*it)*4  ] = mp[0];

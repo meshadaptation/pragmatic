@@ -52,7 +52,7 @@ int main(int argc, char **argv){
   int NElements = ug->GetNumberOfCells();
 
   vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
     x[i] = r[0];
@@ -61,9 +61,9 @@ int main(int argc, char **argv){
   }
 
   vector<int> ENList;
-  for(size_t i=0;i<NElements;i++){
+  for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(size_t j=0;j<4;j++){
+    for(int j=0;j<4;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
@@ -76,7 +76,7 @@ int main(int argc, char **argv){
 
   vector<double> psi(NNodes);
   
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     psi[i] = x[i]*x[i]+y[i]*y[i]+z[i]*z[i];
   }
   metric_field.add_field(&(psi[0]), 1.0);
@@ -91,7 +91,7 @@ int main(int argc, char **argv){
   mfield->SetNumberOfComponents(9);
   mfield->SetNumberOfTuples(NNodes);
   mfield->SetName("Metric");
-  for(size_t i=0;i<NNodes;i++)
+  for(int i=0;i<NNodes;i++)
     mfield->SetTuple9(i,
                       metric[i*9],   metric[i*9+1], metric[i*9+2],
                       metric[i*9+3], metric[i*9+4], metric[i*9+5],
@@ -102,7 +102,7 @@ int main(int argc, char **argv){
   scalar->SetNumberOfComponents(1);
   scalar->SetNumberOfTuples(NNodes);
   scalar->SetName("psi");
-  for(size_t i=0;i<NNodes;i++)
+  for(int i=0;i<NNodes;i++)
     scalar->SetTuple1(i, psi[i]);
   ug_out->GetPointData()->AddArray(scalar);
 

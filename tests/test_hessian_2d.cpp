@@ -48,8 +48,8 @@ int main(int argc, char **argv){
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
 
-  int NNodes = ug->GetNumberOfPoints();
-  int NElements = ug->GetNumberOfCells();
+  size_t NNodes = ug->GetNumberOfPoints();
+  size_t NElements = ug->GetNumberOfCells();
 
   vector<double> x(NNodes),  y(NNodes), z(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -79,6 +79,8 @@ int main(int argc, char **argv){
     psi[i] = x[i]*x[i]+y[i]*y[i];
   
   metric_field.add_field(&(psi[0]), 1.0);
+
+  metric_field.apply_nelements(NElements);
 
   vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));

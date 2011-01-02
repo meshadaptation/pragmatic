@@ -95,6 +95,11 @@ class MetricTensor{
       metric[i] = _metric[i];
   }
 
+  /// Give const pointer to metric tensor.
+  const real_t* get_metric(){
+    return _metric;
+  }
+
   /*! By default this calculates the superposition of two metrics where by default small
    * edge lengths are preserved. If the optional argument perserved_small_edges==false
    * then large edge lengths are perserved instead.
@@ -258,7 +263,12 @@ class MetricTensor{
     for(size_t i=0;i<_dimension*_dimension;i++)
       _metric[i] = metric[i];
   }
-  
+
+  void scale(real_t scale_factor){
+    for(size_t i=0;i<_dimension*_dimension;i++)
+      _metric[i] *= scale_factor;
+  }
+
  private:
   real_t *_metric;
   size_t _dimension;
@@ -266,7 +276,7 @@ class MetricTensor{
 
 template<typename real_t>
 std::ostream &operator<<(std::ostream& out, const MetricTensor<real_t>& in){
-  const real_t *g = in.metric;
+  const real_t *g = in._metric;
   for(size_t i=0; i<in._dimension; i++){
     for(size_t j=0; j<in._dimension; j++){
       out<<*g<<" "; g++;

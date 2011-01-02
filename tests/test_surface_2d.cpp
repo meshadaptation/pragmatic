@@ -54,7 +54,7 @@ int main(int argc, char **argv){
   int NElements = ug->GetNumberOfCells();
 
   vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(size_t i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
     x[i] = r[0];
@@ -63,9 +63,9 @@ int main(int argc, char **argv){
   }
 
   vector<int> ENList;
-  for(size_t i=0;i<NElements;i++){
+  for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(size_t j=0;j<3;j++){
+    for(int j=0;j<3;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
@@ -79,7 +79,7 @@ int main(int argc, char **argv){
   // Need to get out the facets
   int NSElements = surface.get_number_facets();
   const int *facets = surface.get_facets();
-  for(size_t i=0;i<NSElements;i++){
+  for(int i=0;i<NSElements;i++){
     vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
     ug_out->InsertNextCell(VTK_LINE, 2, pts);
   }
@@ -91,7 +91,7 @@ int main(int argc, char **argv){
   scalar->SetNumberOfComponents(1);
   scalar->SetNumberOfTuples(NSElements);
   scalar->SetName("coplanar_ids");
-  for(size_t i=0;i<NSElements;i++)
+  for(int i=0;i<NSElements;i++)
     scalar->SetTuple1(i, coplanar_ids[i]);
   ug_out->GetCellData()->AddArray(scalar);
 
@@ -99,7 +99,7 @@ int main(int argc, char **argv){
   normal->SetNumberOfComponents(3);
   normal->SetNumberOfTuples(NSElements);
   normal->SetName("normals");
-  for(size_t i=0;i<NSElements;i++){
+  for(int i=0;i<NSElements;i++){
     const double *n = surface.get_normal(i);
     normal->SetTuple3(i, n[0], n[1], 0.0);
   }

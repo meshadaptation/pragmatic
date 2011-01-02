@@ -116,7 +116,7 @@ template<typename real_t, typename index_t>
     }
     _metric = new MetricTensor<real_t>[_NNodes];
     real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0, 1.0/pow(bbox[3]-bbox[2], 2)};
-    for(size_t i=0;i<_NNodes;i++){
+    for(int i=0;i<_NNodes;i++){
       _metric[i].set(_ndims, m);
     }
   }
@@ -156,7 +156,7 @@ template<typename real_t, typename index_t>
     real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
                   0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
                   0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
-    for(size_t i=0;i<_NNodes;i++){
+    for(int i=0;i<_NNodes;i++){
       _metric[i].set(_ndims, m);
     }
   }
@@ -165,7 +165,7 @@ template<typename real_t, typename index_t>
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
   void get_metric(real_t *metric){
-    for(size_t i=0;i<_NNodes;i++){
+    for(int i=0;i<_NNodes;i++){
       _metric[i].get_metric(metric+i*_ndims*_ndims);
     }
   }
@@ -194,20 +194,20 @@ template<typename real_t, typename index_t>
     get_hessian(psi, Hessian);
     
     if(relative){
-      for(size_t i=0;i<_NNodes;i++){
+      for(int i=0;i<_NNodes;i++){
         real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
-        for(size_t j=0;j<ndims2;j++)
+        for(int j=0;j<ndims2;j++)
           Hessian[i*ndims2+j]*=eta;
       }
     }else{
-      for(size_t i=0;i<_NNodes;i++){
+      for(int i=0;i<_NNodes;i++){
         real_t eta = 1.0/target_error;
-        for(size_t j=0;j<ndims2;j++)
+        for(int j=0;j<ndims2;j++)
           Hessian[i*ndims2+j]*=eta;
       }
     }
     
-    for(size_t i=0;i<_NNodes;i++){
+    for(int i=0;i<_NNodes;i++){
       _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
     }
   }
@@ -216,8 +216,8 @@ template<typename real_t, typename index_t>
    */
   void apply_max_edge_length(real_t max_len){
     real_t M[_ndims*_ndims];
-    for(size_t i=0;i<_ndims;i++)
-      for(size_t j=0;j<_ndims;j++)
+    for(int i=0;i<_ndims;i++)
+      for(int j=0;j<_ndims;j++)
         if(i==j)
           M[i*_ndims+j] = 1.0/(max_len*max_len);
         else
@@ -233,8 +233,8 @@ template<typename real_t, typename index_t>
    */
   void apply_min_edge_length(real_t min_len){
     real_t M[_ndims*_ndims];
-    for(size_t i=0;i<_ndims;i++)
-      for(size_t j=0;j<_ndims;j++)
+    for(int i=0;i<_ndims;i++)
+      for(int j=0;j<_ndims;j++)
         if(i==j)
           M[i*_ndims+j] = 1.0/(min_len*min_len);
         else
@@ -242,7 +242,7 @@ template<typename real_t, typename index_t>
     
     MetricTensor<real_t> constraint(_ndims, M);
     
-    for(size_t i=0;i<_NNodes;i++)
+    for(int i=0;i<_NNodes;i++)
       _metric[i].constrain(constraint, false);
   }
   
@@ -260,7 +260,52 @@ template<typename real_t, typename index_t>
 
   /*! Apply required number of elements.
    */
-  void apply_nelements(real_t nelements);
+  void apply_nelements(real_t nelements){
+    real_t scale_factor = sqrt(nelements/predict_nelements());
+    
+    for(int i=0;i<_NNodes;i++)
+      _metric[i].scale(scale_factor);
+  }
+
+  /*! Predict the number of elements when mesh satisifies metric tensor field.
+   */
+  real_t predict_nelements(){
+    real_t predicted=0;
+
+    if(_ndims==2){
+      real_t total_area_metric = 0.0;
+      for(int i=0;i<_NElements;i++){
+        // Heron's formula for area
+        const index_t *n=_ENList+nloc*i;
+        real_t a = sqrt(pow(_x[n[0]]-_x[n[1]], 2)+pow(_y[n[0]]-_y[n[1]], 2));
+        real_t b = sqrt(pow(_x[n[2]]-_x[n[1]], 2)+pow(_y[n[2]]-_y[n[1]], 2));
+        real_t c = sqrt(pow(_x[n[0]]-_x[n[2]], 2)+pow(_y[n[0]]-_y[n[2]], 2));
+        real_t s = 0.5*(a + b + c);
+        
+        real_t area = sqrt(s*(s - a)*(s - b)*(s - c));
+
+        const real_t *m0=_metric[n[0]].get_metric();
+        const real_t *m1=_metric[n[1]].get_metric();
+        const real_t *m2=_metric[n[2]].get_metric();
+
+        real_t m00 = (m0[0]+m1[0]+m2[0])/3;
+        real_t m01 = (m0[1]+m1[1]+m2[1])/3;
+        real_t m11 = (m0[3]+m1[3]+m2[3])/3;
+
+        real_t det = m00*m11-m01*m01;
+        total_area_metric += area*det;
+      }
+
+      // Ideal area of triangle in metric space.
+      double ideal_area = sqrt(3.0)/4.0;
+      
+      predicted = total_area_metric/ideal_area;
+    }else{
+      std::cerr<<__FILE__<<", "<<__LINE__<<" not yet implemented\n";
+    }
+
+    return predicted;
+  }
 
  private:
   /*! Apply required number of elements.
@@ -270,9 +315,9 @@ template<typename real_t, typename index_t>
     // Create node-node list
     if(NNList.empty()){
       NNList.resize(_NNodes);
-      for(size_t i=0; i<_NElements; i++){
-        for(size_t j=0;j<nloc;j++){
-          for(size_t k=j+1;k<nloc;k++){
+      for(int i=0; i<_NElements; i++){
+        for(int j=0;j<nloc;j++){
+          for(int k=j+1;k<nloc;k++){
             NNList[_ENList[i*nloc+j]].insert(_ENList[i*nloc+k]);
             NNList[_ENList[i*nloc+k]].insert(_ENList[i*nloc+j]);
           }
@@ -286,9 +331,9 @@ template<typename real_t, typename index_t>
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
-      int min_patch_size = (_ndims==2)?6:10;
+      size_t min_patch_size = (_ndims==2)?6:10;
 #pragma omp for schedule(static)
-      for(size_t ip=0; ip<_NNodes; ip++){
+      for(int ip=0; ip<_NNodes; ip++){
         size_t i=norder[ip];
         std::set<index_t> patch = NNList[i];
         
