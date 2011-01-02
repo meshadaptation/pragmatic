@@ -90,9 +90,16 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth;
   smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(metric[0]));
   
-  for(int iter=0;iter<100;iter++){    
-    int moves = smooth.smooth();
-    std::cout<<"iteration "<<iter<<" moved "<<moves<<" nodes\n";
+  int moves = smooth.smooth();
+  int initial_moves = moves;
+  for(int iter=1;iter<1000;iter++){    
+    int prev_moves = moves;
+    moves = smooth.smooth();
+
+    int diff = abs(prev_moves-moves);
+
+    if((diff==0)&&(moves<0.1*initial_moves))
+      break;
   }
 
   // recalculate

@@ -144,17 +144,24 @@ template<typename real_t, typename index_t>
       LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
 
       for(std::vector<int>::const_iterator it=norder.begin();it!=norder.end();++it){
-        if(_surface->contains_node(*it))
-          continue;
-
         if(_ndims==2){
-          real_t worst_q = 1.0;
-          for(typename std::set<index_t>::iterator ie=NEList[*it].begin();ie!=NEList[*it].end();++ie){
-            const index_t *n=_ENList+(*ie)*3;
-            real_t x0[] = {_x[n[0]], _y[n[0]]};
-            real_t x1[] = {_x[n[1]], _y[n[1]]};
-            real_t x2[] = {_x[n[2]], _y[n[2]]};
-            worst_q = min(functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4), worst_q);
+          real_t worst_q;
+          {
+            typename std::set<index_t>::iterator ie=NEList[*it].begin();
+            {
+              const index_t *n=_ENList+(*ie)*3;
+              real_t x0[] = {_x[n[0]], _y[n[0]]};
+              real_t x1[] = {_x[n[1]], _y[n[1]]};
+              real_t x2[] = {_x[n[2]], _y[n[2]]};
+              worst_q = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+            }
+            for(;ie!=NEList[*it].end();++ie){
+              const index_t *n=_ENList+(*ie)*3;
+              real_t x0[] = {_x[n[0]], _y[n[0]]};
+              real_t x1[] = {_x[n[1]], _y[n[1]]};
+              real_t x2[] = {_x[n[2]], _y[n[2]]};
+              worst_q = min(functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4), worst_q);
+            }
           }
           real_t A00=0, A01=0, A11=0, q0=0, q1=0;
           for(std::set<int>::const_iterator il=NNList[*it].begin();il!=NNList[*it].end();++il){
@@ -174,6 +181,23 @@ template<typename real_t, typename index_t>
                         A01*q1/((pow(A01, 2)/A00 - A11)*A00),
                         A01*q0/((pow(A01, 2)/A00 - A11)*A00) - q1/(pow(A01, 2)/A00 - A11)};
           
+          if(_surface->contains_node(*it)){
+            // If this node is on the surface then we have to project
+            // this position back onto the surface.
+            std::set<size_t> patch = _surface->get_surface_patch(*it);
+            std::set<int> coids;
+            for(std::set<size_t>::const_iterator e=patch.begin();e!=patch.end();++e)
+              coids.insert(_surface->get_coplanar_id(*e));
+            
+            // Test if this is a corner node, in which case it cannot be moved.
+            if(coids.size()>1)
+              continue;
+            
+            const real_t *normal = _surface->get_normal(*patch.begin());
+            p[0] -= (p[0]-_x[*it])*fabs(normal[0]);
+            p[1] -= (p[1]-_y[*it])*fabs(normal[1]);
+          }
+
           // Interpolate metric at this new position.
           real_t mp[4], l[3];
           int best_e=*NEList[*it].begin();
@@ -233,8 +257,7 @@ template<typename real_t, typename index_t>
             real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
             real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
 
-            // if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<1.01*worst_q){
-            if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<=0){
+            if(functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4)<worst_q){
               improvement=false;
               break; 
             }
