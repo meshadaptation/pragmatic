@@ -42,6 +42,7 @@
 #include "MetricTensor.h"
 #include "Metis.h"
 #include "Surface.h"
+#include "LipnikovFunctional.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -156,6 +157,7 @@ template<typename real_t, typename index_t>
     real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
                   0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
                   0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
+
     for(int i=0;i<_NNodes;i++){
       _metric[i].set(_ndims, m);
     }
@@ -207,11 +209,18 @@ template<typename real_t, typename index_t>
       }
     }
     
-    for(int i=0;i<_NNodes;i++){
-      _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int ip=0;ip<_NNodes;ip++){
+        size_t i=norder[ip];
+        _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
+      }
     }
+
+    delete [] Hessian;
   }
-  
+
   /*! Apply maximum edge length constraint.
    */
   void apply_max_edge_length(real_t max_len){
@@ -272,18 +281,23 @@ template<typename real_t, typename index_t>
   real_t predict_nelements(){
     real_t predicted=0;
 
+    if(_NElements<1)
+      return predicted;
+
     if(_ndims==2){
+      real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
+      real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]]};
+      real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]]};
+      LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
+
       real_t total_area_metric = 0.0;
       for(int i=0;i<_NElements;i++){
-        // Heron's formula for area
         const index_t *n=_ENList+nloc*i;
-        real_t a = sqrt(pow(_x[n[0]]-_x[n[1]], 2)+pow(_y[n[0]]-_y[n[1]], 2));
-        real_t b = sqrt(pow(_x[n[2]]-_x[n[1]], 2)+pow(_y[n[2]]-_y[n[1]], 2));
-        real_t c = sqrt(pow(_x[n[0]]-_x[n[2]], 2)+pow(_y[n[0]]-_y[n[2]], 2));
-        real_t s = 0.5*(a + b + c);
+        real_t x0[] = {_x[n[0]], _y[n[0]]};
+        real_t x1[] = {_x[n[1]], _y[n[1]]};
+        real_t x2[] = {_x[n[2]], _y[n[2]]};
+        real_t area = functional.area(x0, x1, x2);
         
-        real_t area = sqrt(s*(s - a)*(s - b)*(s - c));
-
         const real_t *m0=_metric[n[0]].get_metric();
         const real_t *m1=_metric[n[1]].get_metric();
         const real_t *m2=_metric[n[2]].get_metric();
@@ -301,7 +315,42 @@ template<typename real_t, typename index_t>
       
       predicted = total_area_metric/ideal_area;
     }else{
-      std::cerr<<__FILE__<<", "<<__LINE__<<" not yet implemented\n";
+      real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]], _z[_ENList[0]]};
+      real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
+      real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
+      real_t refx3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
+      LipnikovFunctional<real_t> functional(refx0, refx1, refx2, refx3);
+      
+      real_t total_volume_metric = 0.0;
+      for(int i=0;i<_NElements;i++){
+        const index_t *n=_ENList+nloc*i;
+        real_t x0[] = {_x[_ENList[0]], _y[_ENList[0]], _z[_ENList[0]]};
+        real_t x1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
+        real_t x2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
+        real_t x3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
+        real_t volume = functional.volume(x0, x1, x2, x3);
+        
+        const real_t *m0=_metric[n[0]].get_metric();
+        const real_t *m1=_metric[n[1]].get_metric();
+        const real_t *m2=_metric[n[2]].get_metric();
+        const real_t *m3=_metric[n[3]].get_metric();
+
+        real_t m00 = (m0[0]+m1[0]+m2[0]+m3[0])/4;
+        real_t m01 = (m0[1]+m1[1]+m2[1]+m3[1])/4;
+        real_t m02 = (m0[2]+m1[2]+m2[2]+m3[2])/4;
+        real_t m11 = (m0[4]+m1[4]+m2[4]+m3[4])/4;
+        real_t m12 = (m0[5]+m1[5]+m2[5]+m3[5])/4;
+        real_t m22 = (m0[8]+m1[8]+m2[8]+m3[8])/4;
+
+
+        real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
+        total_volume_metric += volume*det;
+      }
+
+      // Ideal volume of triangle in metric space.
+      double ideal_volume = 1.0/sqrt(72.0);
+      
+      predicted = total_volume_metric/ideal_volume;
     }
 
     return predicted;
@@ -331,7 +380,7 @@ template<typename real_t, typename index_t>
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
-      size_t min_patch_size = (_ndims==2)?6:10;
+      size_t min_patch_size = (_ndims==2)?7:11; // number of parameters + 1
 #pragma omp for schedule(static)
       for(int ip=0; ip<_NNodes; ip++){
         size_t i=norder[ip];
