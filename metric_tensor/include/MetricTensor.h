@@ -196,8 +196,6 @@ class MetricTensor{
       Eigen::Matrix<real_t, 2, 1> evalues = solver2.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 2, 2> evectors = solver2.eigenvectors().real();
 
-      Eigen::Matrix<real_t, 2, 2> Mtemp = evectors.transpose()*evalues.asDiagonal()*evectors;
-
       if(perserved_small_edges)
         for(size_t i=0;i<2;i++)
           evalues[i] = std::max((real_t)1.0, evalues[i]);
