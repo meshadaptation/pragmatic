@@ -130,11 +130,6 @@ class LipnikovFunctional{
     real_t F = pow(f * (2.0 - f), 3);
     real_t quality = pow(6.0, 4)*sqrt(2.0) * v_m * F / (l*l*l);
 
-    std::cout<<"volume ="<<v<<std::endl
-             <<"m = "<<m00<<" "<<m01<<" "<<m02<<" "<<m11<<" "<<m12<<" "<<m22<<std::endl
-             <<"l = "<<l<<std::endl
-             <<"v_m ="<<v_m<<std::endl
-             <<"quality ="<<quality<<std::endl;
     return quality;
   }
 
