@@ -78,40 +78,37 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field;
   metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]));
   
-  for(int i=0;i<NNodes;i++){
-    double X = x[i]*2 - 1;
-    double Y = y[i]*2 - 1;
-    psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
-  }
+  for(int i=0;i<NNodes;i++)
+    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i]+z[i]*z[i]*z[i];
+
   metric_field.add_field(&(psi[0]), 0.6);
 
   metric_field.apply_nelements(NElements);
 
   metric_field.get_metric(&(metric[0]));
 
-  /*
   Smooth<double, int> smooth;
   smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]), &(metric[0]));
   
-  int moves = smooth.smooth();
-  int initial_moves = moves;
-  for(int iter=1;iter<1000;iter++){    
-    int prev_moves = moves;
-    moves = smooth.smooth();
+  for(int iter=0;iter<100;iter++)   
+    smooth.smooth();
 
-    int diff = abs(prev_moves-moves);
-
-    if((diff==0)&&(moves<0.1*initial_moves))
+  double rms = smooth.smooth(true);
+  double initial_rms = rms;
+  for(int iter=1;iter<200;iter++){    
+    double prev_rms = rms;
+    rms = smooth.smooth(true);
+    
+    double diff = prev_rms-rms;
+    std::cout<<"iter "<<iter<<", rms = "<<rms<<", diff from previous = "<<diff<<std::endl;
+    
+    if(rms<0.01*initial_rms)
       break;
   }
-  */
 
   // recalculate
-  for(int i=0;i<NNodes;i++){
-    double X = x[i]*2 - 1;
-    double Y = y[i]*2 - 1;
-    psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
-  }
+  for(int i=0;i<NNodes;i++)
+    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i]+z[i]*z[i]*z[i];
 
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->DeepCopy(ug);
