@@ -134,8 +134,6 @@ template<typename real_t, typename index_t>
       Metis<index_t>::reorder(NNList, norder);
     }
 
-    double start_tic = omp_get_wtime();
-
     if(_ndims==2){
       // Smoothing loop.
       real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
@@ -296,6 +294,9 @@ template<typename real_t, typename index_t>
         }
 
         if(improvement){
+          if(!qconstrain)
+            rms = pow(_x[*it]-p[0], 2) + pow(_y[*it]-p[1], 2);
+          
           _x[*it] = p[0];
           _y[*it] = p[1];
           _metric[(*it)*4  ] = mp[0];
@@ -508,6 +509,9 @@ template<typename real_t, typename index_t>
             rms += pow(min_q_new-min_q, 2);
         }
         if(improvement){
+          if(!qconstrain)
+            rms = pow(_x[*it]-p[0], 2) + pow(_y[*it]-p[1], 2) + pow(_z[*it]-p[2], 2);
+
           _x[*it] = p[0];
           _y[*it] = p[1];
           _z[*it] = p[2];
@@ -518,7 +522,6 @@ template<typename real_t, typename index_t>
       }
     }
 
-    std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
     return sqrt(rms);
   }
 

@@ -90,21 +90,29 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth;
   smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]), &(metric[0]));
   
-  for(int iter=0;iter<100;iter++)   
-    smooth.smooth();
-
-  double rms = smooth.smooth(true);
-  double initial_rms = rms;
-  for(int iter=1;iter<200;iter++){    
-    double prev_rms = rms;
-    rms = smooth.smooth(true);
+  double start_tic = omp_get_wtime();
+  double initial_rms = smooth.smooth();
+  for(int iter=1;iter<500;iter++){    
+    double rms = smooth.smooth();
     
-    double diff = prev_rms-rms;
-    std::cout<<"iter "<<iter<<", rms = "<<rms<<", diff from previous = "<<diff<<std::endl;
-    
-    if(rms<0.01*initial_rms)
+    if(rms<0.05*initial_rms){
+      std::cout<<"Terminating at iteration "<<iter<<", rms = "<<rms<<std::endl;
       break;
+    }
   }
+  std::cerr<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  
+  start_tic = omp_get_wtime();
+  initial_rms = smooth.smooth(true);
+  for(int iter=1;iter<500;iter++){    
+    double rms = smooth.smooth(true);
+        
+    if(rms<0.05*initial_rms){
+      std::cout<<"Terminating at iteration "<<iter<<", rms = "<<rms<<std::endl;
+      break;
+    }
+  }
+  std::cerr<<"Quality constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   // recalculate
   for(int i=0;i<NNodes;i++)
