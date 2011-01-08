@@ -144,12 +144,10 @@ template<typename real_t, typename index_t>
     std::vector<index_t> colour(_NNodes, 0);
     if(omp_get_max_threads()>1)
       Colour<index_t>::greedy(NNList, &(colour[0]));
-    std::cerr<<"nthreads = "<<omp_get_max_threads()<<std::endl;
+    
     for(std::vector<int>::const_iterator it=norder.begin();it!=norder.end();++it)
       colour_sets[colour[*it]].push_back(*it);
-    
-  for(typename std::map<int, std::deque<index_t> >::const_iterator ic=colour_sets.begin();ic!=colour_sets.end();++ic)
-    std::cout<<"colour = "<<ic->first<<", size = "<<ic->second.size()<<std::endl;
+
     return;
   }
 
