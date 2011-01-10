@@ -49,7 +49,8 @@ extern "C" {
   
 }
 
-/*! Class provides a specialised interface to some METIS functionality.
+/*! \brief Class provides a specialised interface to some METIS
+ *   functionality.
  */
 template<typename index_t>
 class Metis{

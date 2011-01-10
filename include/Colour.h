@@ -34,7 +34,7 @@
 #include <set>
 #include <vector>
 
-/*! Class contains various methods for colouring undirected graphs.
+/*! \brief Class contains various methods for colouring undirected graphs.
  */
 template<typename index_t>
 class Colour{

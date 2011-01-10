@@ -36,22 +36,24 @@
 #include <set>
 #include <cmath>
 
-/*! \brief Evaluates Lipnikov functional. The 2D description for the
-     functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov,
-     An Adaptive Algorithm for Quasioptimal Mesh Generation,
-     Computational Mathematics and Mathematical Physics, Vol. 39,
-     No. 9, 1999, pp. 1468 - 1486. The functional for 3D was taken
-     from: A. Agouzal, K Lipnikov, Yu. Vassilevski, Adaptive
-     generation of quasi-optimal tetrahedral meshes, East-West
-     J. Numer. Math., Vol. 7, No. 4, pp. 223-244 (1999). 
-
-     TODO: These are not the original references for the expressions -
-     need to look them up.
-
-     The constructers for this class requires a reference element so
-     that the orientation convention can be established. After the
-     orientation has been established a negative area or volume
-     indicated an inverted element.
+/*! \brief Calculates element statistics and quality.
+ *
+ * Evaluates Lipnikov functional. The 2D description for the
+ * functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov, An
+ * Adaptive Algorithm for Quasioptimal Mesh Generation, Computational
+ * Mathematics and Mathematical Physics, Vol. 39, No. 9, 1999,
+ * pp. 1468 - 1486. The functional for 3D was taken from: A. Agouzal,
+ * K Lipnikov, Yu. Vassilevski, Adaptive generation of quasi-optimal
+ * tetrahedral meshes, East-West J. Numer. Math., Vol. 7, No. 4,
+ * pp. 223-244 (1999).
+ *
+ * TODO: These are not the original references for the expressions -
+ * need to look them up.
+ *
+ * The constructers for this class requires a reference element so
+ * that the orientation convention can be established. After the
+ * orientation has been established a negative area or volume
+ * indicated an inverted element.
  */
 template<typename real_t>
 class LipnikovFunctional{

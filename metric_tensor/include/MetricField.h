@@ -50,8 +50,8 @@
 
 #include <omp.h>
 
-/*! Constructs metric tensor field which encodes anisotropic edge size
- *  information.
+/*! \brief Constructs metric tensor field which encodes anisotropic
+ *  edge size information.
  * 
  * Use this class to create a metric tensor field using desired error
  * tolerences and curvature of linear fields subject to a set of constraints.

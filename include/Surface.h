@@ -33,14 +33,16 @@
 #include <vector>
 #include <set>
 
-/** This class is used to: identify the boundary of the domain;
-    uniquely label connected co-linear patches of surface elements
-    (these can be used to prevent adaptivity coarsening these patches
-    and smoothening out features); evaluate a characteristic length
-    scale for these patches (these "constraints" can be added to the
-    metric tensor field before gradation is applied in order to get
-    good quality elements near the geometry).
-*/
+/*! \brief Manages surface information and classification.
+ *
+ * This class is used to: identify the boundary of the domain;
+ * uniquely label connected co-linear patches of surface elements
+ * (these can be used to prevent adaptivity coarsening these patches
+ * and smoothening out features); evaluate a characteristic length
+ * scale for these patches (these "constraints" can be added to the
+ * metric tensor field before gradation is applied in order to get
+ * good quality elements near the geometry).
+ */
 
 template<typename real_t, typename index_t>
   class Surface{
