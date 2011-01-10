@@ -49,12 +49,15 @@ extern "C" {
   
 }
 
-/*! \brief Provides a specialised interface to METIS.
+/*! Class provides a specialised interface to some METIS functionality.
  */
 template<typename index_t>
 class Metis{
  public:
-  /// Calculate a partitioning for a graph.
+  /*! Calculate a partitioning for a graph.
+   * @param graph is the undirected graph to be partitioned.
+   * @param decomp is an array storing the partition each node in the graph is assigned to.
+   */
   static int partition(const std::vector< std::set<index_t> > &graph, int npartitions, std::vector<int> &decomp){
     int nnodes = graph.size();
     
@@ -85,6 +88,10 @@ class Metis{
     return edgecut;
   }
 
+  /*! Calculate a node renumbering.
+   * @param graph is the undirected graph to be partitioned.
+   * @param decomp is an array storing the partition each node in the graph is assigned to.
+   */
   static int reorder(const std::vector< std::set<index_t> > &graph, std::vector<int> &norder){
     int nnodes = graph.size();
     
