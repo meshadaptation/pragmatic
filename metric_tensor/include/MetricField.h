@@ -50,8 +50,8 @@
 
 #include <omp.h>
 
-/*! \brief Constructs metric tensor field which encodes anisotropic
- *  edge size information.
+/*! Constructs metric tensor field which encodes anisotropic edge size
+ *  information.
  * 
  * Use this class to create a metric tensor field using desired error
  * tolerences and curvature of linear fields subject to a set of constraints.
@@ -62,7 +62,8 @@ template<typename real_t, typename index_t>
   class MetricField{
  public:
   
-  /// Default constructor.
+  /*! Default constructor.
+   */
   MetricField(){
     _NNodes = 0;
     _NElements = 0;
@@ -80,7 +81,8 @@ template<typename real_t, typename index_t>
     _surface = NULL;
   }
 
-  /// Default destructor.
+  /*! Default destructor.
+   */
   ~MetricField(){
     if(_metric!=NULL)
       delete [] _metric;
@@ -222,6 +224,7 @@ template<typename real_t, typename index_t>
   }
 
   /*! Apply maximum edge length constraint.
+   * @param max_len specifies the maximum allowed edge length.
    */
   void apply_max_edge_length(real_t max_len){
     real_t M[_ndims*_ndims];
@@ -239,6 +242,7 @@ template<typename real_t, typename index_t>
   }
   
   /*! Apply minimum edge length constraint.
+   * @param min_len specifies the minimum allowed edge length.
    */
   void apply_min_edge_length(real_t min_len){
     real_t M[_ndims*_ndims];
@@ -256,18 +260,40 @@ template<typename real_t, typename index_t>
   }
   
   /*! Apply maximum aspect ratio constraint.
+   * @param max_aspect_ratio maximum aspect ratio for elements.
    */
-  void apply_max_aspect_ratio(real_t max_aspect_ratio);
+  void apply_max_aspect_ratio(real_t max_aspect_ratio){
+    std::cerr<<"ERROR: Not yet implemented\n";
+  }
 
   /*! Apply maximum number of elements constraint.
+   * @param max_nelements the maximum number of elements desired.
    */
-  void apply_max_nelements(real_t max_nelements);
+  void apply_max_nelements(real_t max_nelements){
+    int predicted = predict_nelements();
+    if(predicted>max_nelements){
+      real_t scale_factor = sqrt(max_nelements/predicted);
+      
+      for(int i=0;i<_NNodes;i++)
+        _metric[i].scale(scale_factor);
+    }
+  }
 
   /*! Apply minimum number of elements constraint.
+   * @param min_nelements the minimum number of elements desired.
    */
-  void apply_min_nelements(real_t min_nelements);
+  void apply_min_nelements(real_t min_nelements){
+    int predicted = predict_nelements();
+    if(predicted<min_nelements){
+      real_t scale_factor = sqrt(min_nelements/predicted);
+      
+      for(int i=0;i<_NNodes;i++)
+        _metric[i].scale(scale_factor);
+    }
+  }
 
   /*! Apply required number of elements.
+   * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){
     real_t scale_factor = sqrt(nelements/predict_nelements());
@@ -358,6 +384,8 @@ template<typename real_t, typename index_t>
 
  private:
   /*! Apply required number of elements.
+   * @param psi is the node wise field variable.
+   * @param Hessian is the location where the Hessian of psi is copied.
    */
   void get_hessian(const real_t *psi, real_t *Hessian){
     
@@ -375,8 +403,6 @@ template<typename real_t, typename index_t>
       Metis<index_t>::reorder(NNList, norder);
     }
 
-    double start_tic = omp_get_wtime();
-    
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
@@ -488,7 +514,6 @@ template<typename real_t, typename index_t>
         }
       }
     }
-    std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
   }
   
   int _NNodes, _NElements, _ndims, nloc;
