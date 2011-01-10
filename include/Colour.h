@@ -34,10 +34,15 @@
 #include <set>
 #include <vector>
 
+/*! Class contains various methods for colouring undirected graphs.
+ */
 template<typename index_t>
 class Colour{
  public:
-  /// This routine colours a undirected graph using the greedy approach.
+  /*! This routine colours a undirected graph using the greedy colouring algorithm.
+   * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
+   * @param colour array that the node colouring is copied into.
+   */
   static void greedy(std::vector< std::set<index_t> > &NNList, index_t *colour){
     size_t NNodes = NNList.size();
 
