@@ -36,11 +36,31 @@
 #include <set>
 #include <cmath>
 
-/*! \brief Evaluates Lipnikov functional.
+/*! \brief Evaluates Lipnikov functional. The 2D description for the
+     functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov,
+     An Adaptive Algorithm for Quasioptimal Mesh Generation,
+     Computational Mathematics and Mathematical Physics, Vol. 39,
+     No. 9, 1999, pp. 1468 - 1486. The functional for 3D was taken
+     from: A. Agouzal, K Lipnikov, Yu. Vassilevski, Adaptive
+     generation of quasi-optimal tetrahedral meshes, East-West
+     J. Numer. Math., Vol. 7, No. 4, pp. 223-244 (1999). 
+
+     TODO: These are not the original references for the expressions -
+     need to look them up.
+
+     The constructers for this class requires a reference element so
+     that the orientation convention can be established. After the
+     orientation has been established a negative area or volume
+     indicated an inverted element.
  */
 template<typename real_t>
 class LipnikovFunctional{
  public:
+  /*! Constructor for 2D triangular elements.
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   */
   LipnikovFunctional(const real_t *x0, const real_t *x1, const real_t *x2){
     orientation = 1;
 
@@ -51,6 +71,12 @@ class LipnikovFunctional{
       orientation = 1;
   }
 
+  /*! Constructor for 3D tetrahedral elements.
+   * @param x0 pointer to 3D position for first point in triangle.
+   * @param x1 pointer to 3D position for second point in triangle.
+   * @param x2 pointer to 3D position for third point in triangle.
+   * @param x3 pointer to 3D position for forth point in triangle.
+   */
   LipnikovFunctional(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
     orientation = 1;
 
@@ -61,17 +87,33 @@ class LipnikovFunctional{
       orientation = 1;
   }
 
-  // Calculate area.
+  /*! Calculate area of 2D triangle.
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   */
   real_t area(const real_t *x0, const real_t *x1, const real_t *x2){
     return orientation*0.5*((x0[1] - x2[1])*(x0[0] - x1[0]) - (x0[1] - x1[1])*(x0[0] - x2[0]));
   }
 
-  // Calculate volume.
+  /*! Calculate volume of tetrahedron.
+   * @param x0 pointer to 3D position for first point in triangle.
+   * @param x1 pointer to 3D position for second point in triangle.
+   * @param x2 pointer to 3D position for third point in triangle.
+   * @param x3 pointer to 3D position for forth point in triangle.
+   */
   real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
     return orientation*(-(x0[0] - x3[0])*((x0[2] - x2[2])*(x0[1] - x1[1]) - (x0[2] - x1[2])*(x0[1] - x2[1])) + (x0[0] - x2[0])*((x0[2] - x3[2])*(x0[1] - x1[1]) - (x0[2] - x1[2])*(x0[1] - x3[1])) - (x0[0] - x1[0])*((x0[2] - x3[2])*(x0[1] - x2[1]) - (x0[2] - x2[2])*(x0[1] - x3[1])))/6;
   }
   
-  /// 2D
+  /*! Calculates quality functional for 2D triangular element.
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   * @param m0 2x2 metric tensor for first point.
+   * @param m1 2x2 metric tensor for second point.
+   * @param m2 2x2 metric tensor for third point.
+   */
   real_t calculate(const real_t *x0, const real_t *x1, const real_t *x2,
                    const real_t *m0, const real_t *m1, const real_t *m2){
     // Metric tensor
@@ -102,7 +144,16 @@ class LipnikovFunctional{
     return quality;
   }
 
-  /// 3D
+  /*! Calculates quality functional for 3D tetrahedral element.
+   * @param x0 pointer to 3D position for first point in tetrahedral.
+   * @param x1 pointer to 3D position for second point in tetrahedral.
+   * @param x2 pointer to 3D position for third point in tetrahedral.
+   * @param x3 pointer to 3D position for third point in tetrahedral.
+   * @param m0 3x3 metric tensor for first point.
+   * @param m1 3x3 metric tensor for second point.
+   * @param m2 3x3 metric tensor for third point.
+   * @param m3 3x3 metric tensor for forth point.
+   */
   real_t calculate(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                    const real_t *m0, const real_t *m1, const real_t *m2, const real_t *m3){
     // Metric tensor
