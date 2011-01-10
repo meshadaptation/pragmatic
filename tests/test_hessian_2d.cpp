@@ -36,6 +36,8 @@
 #include <iostream>
 #include <vector>
 
+#include <omp.h>
+
 #include "MetricField.h"
 #include "Surface.h"
 
@@ -78,9 +80,10 @@ int main(int argc, char **argv){
   for(size_t i=0;i<NNodes;i++)
     psi[i] = x[i]*x[i]+y[i]*y[i];
   
+  double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
-
   metric_field.apply_nelements(NElements);
+  std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));
