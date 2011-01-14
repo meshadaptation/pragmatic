@@ -4,7 +4,7 @@ CXX = g++
 
 CPPFLAGS = -I/usr/include/vtk-5.4 -I../eigen-2.0 -I../metric_tensor/include -I../include -I../smooth/include -I../functionals/include
 
-CXXFLAGS = $(CPPFLAGS) -g -O3 -Wall -Wno-deprecated -fopenmp
+CXXFLAGS = $(CPPFLAGS) -O3 -Wall -mtune=native -ffast-math -fexpensive-optimizations -Wno-deprecated -fopenmp
 
 LIBS = -lvtkIO -lmetis
 
