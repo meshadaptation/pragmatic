@@ -13,7 +13,6 @@ do
     for((i=1;i<=max_threads;i++))
     do
         echo "Running trial $n on $i threads."
-	echo "OMP_NUM_THREADS=$i ${benchmark} ${input} 2>&1 >> ${output}"
-        OMP_NUM_THREADS=$i ${benchmark} ${input} 2>&1 >> ${output}
+        OMP_NUM_THREADS=$i ${benchmark} ${input} &>> ${output}
     done
 done
