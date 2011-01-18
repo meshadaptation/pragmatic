@@ -36,17 +36,14 @@
 #include <iostream>
 #include <vector>
 
-#include <omp.h>
-
 #include "MetricField.h"
-#include "Smooth.h"
 #include "Surface.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName(argv[1]);
+  reader->SetFileName("../data/box20x20x20.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -66,76 +63,41 @@ int main(int argc, char **argv){
   vector<int> ENList;
   for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(size_t j=0;j<3;j++){
+    for(int j=0;j<4;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
 
   Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
-  vector<double> metric(NNodes*4);
-  
   MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
+  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]));
 
-  vector<double> psi(NNodes);  
-  for(int i=0;i<NNodes;i++){
-    /// double X = x[i]*2 - 1;
-    // double Y = y[i]*2 - 1;
-    // psi[i] = Y*X*X+Y*Y*Y+tanh(10*(sin(5*Y)-2*X));
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i];
-  }
-  metric_field.add_field(&(psi[0]), 0.6);
-
+  vector<double> psi(NNodes);
+  for(int i=0;i<NNodes;i++)
+    psi[i] = x[i]*x[i]+y[i]*y[i]+z[i]*z[i];
+  
+  double start_tic = omp_get_wtime();
+  metric_field.add_field(&(psi[0]), 1.0);
   metric_field.apply_nelements(NElements);
+  std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
+  vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));
   
-  Smooth<double, int> smooth;
-  smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(metric[0]));
-
-  double start_tic = omp_get_wtime();
-  double initial_rms = smooth.smooth();
-  for(int iter=1;iter<500;iter++){    
-    double rms = smooth.smooth();
-    
-    if(rms<0.05*initial_rms){
-      std::cout<<"Terminating at iteration "<<iter<<", rms = "<<rms<<std::endl;
-      break;
-    }
-  }
-  std::cerr<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  start_tic = omp_get_wtime();
-  initial_rms = smooth.smooth(true);
-  for(int iter=1;iter<500;iter++){    
-    double rms = smooth.smooth(true);
-        
-    if(rms<0.05*initial_rms){
-      std::cout<<"Terminating at iteration "<<iter<<", rms = "<<rms<<std::endl;
-      break;
-    }
-  }
-  std::cerr<<"Quality constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  // recalculate
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i];
-
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->DeepCopy(ug);
   
-  for(int i=0;i<NNodes;i++){
-    ug_out->GetPoints()->SetPoint(i, x[i], y[i], z[i]);
-  }
-
   vtkDoubleArray *mfield = vtkDoubleArray::New();
-  mfield->SetNumberOfComponents(4);
+  mfield->SetNumberOfComponents(9);
   mfield->SetNumberOfTuples(NNodes);
   mfield->SetName("Metric");
   for(int i=0;i<NNodes;i++)
-    mfield->SetTuple4(i, metric[i*4], metric[i*4+1], metric[i*4+2], metric[i*4+3]);
+    mfield->SetTuple9(i,
+                      metric[i*9],   metric[i*9+1], metric[i*9+2],
+                      metric[i*9+3], metric[i*9+4], metric[i*9+5],
+                      metric[i*9+6], metric[i*9+7], metric[i*9+8]);
   ug_out->GetPointData()->AddArray(mfield);
 
   vtkDoubleArray *scalar = vtkDoubleArray::New();
@@ -147,7 +109,7 @@ int main(int argc, char **argv){
   ug_out->GetPointData()->AddArray(scalar);
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("test_smooth_2d.vtu");
+  writer->SetFileName("../data/test_hessian_3d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
 

@@ -31,7 +31,9 @@
 #include <vtkXMLUnstructuredGridWriter.h>
 #include <vtkCell.h>
 #include <vtkDoubleArray.h>
+#include <vtkIntArray.h>
 #include <vtkPointData.h>
+#include <vtkCellData.h>
 
 #include <iostream>
 #include <vector>
@@ -43,7 +45,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName(argv[1]);
+  reader->SetFileName("../data/box20x20.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -63,53 +65,48 @@ int main(int argc, char **argv){
   vector<int> ENList;
   for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(int j=0;j<4;j++){
+    for(int j=0;j<3;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
 
   Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
-  MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]));
-
-  vector<double> psi(NNodes);
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]+y[i]*y[i]+z[i]*z[i];
-  
-  double start_tic = omp_get_wtime();
-  metric_field.add_field(&(psi[0]), 1.0);
-  metric_field.apply_nelements(NElements);
-  std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  vector<double> metric(NNodes*9);
-  metric_field.get_metric(&(metric[0]));
-  
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
-  ug_out->DeepCopy(ug);
-  
-  vtkDoubleArray *mfield = vtkDoubleArray::New();
-  mfield->SetNumberOfComponents(9);
-  mfield->SetNumberOfTuples(NNodes);
-  mfield->SetName("Metric");
-  for(int i=0;i<NNodes;i++)
-    mfield->SetTuple9(i,
-                      metric[i*9],   metric[i*9+1], metric[i*9+2],
-                      metric[i*9+3], metric[i*9+4], metric[i*9+5],
-                      metric[i*9+6], metric[i*9+7], metric[i*9+8]);
-  ug_out->GetPointData()->AddArray(mfield);
+  ug_out->SetPoints(ug->GetPoints());
 
-  vtkDoubleArray *scalar = vtkDoubleArray::New();
+  // Need to get out the facets
+  int NSElements = surface.get_number_facets();
+  const int *facets = surface.get_facets();
+  for(int i=0;i<NSElements;i++){
+    vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
+    ug_out->InsertNextCell(VTK_LINE, 2, pts);
+  }
+
+  // Need the facet ID's
+  const int *coplanar_ids = surface.get_coplanar_ids();
+
+  vtkIntArray *scalar = vtkIntArray::New();
   scalar->SetNumberOfComponents(1);
-  scalar->SetNumberOfTuples(NNodes);
-  scalar->SetName("psi");
-  for(int i=0;i<NNodes;i++)
-    scalar->SetTuple1(i, psi[i]);
-  ug_out->GetPointData()->AddArray(scalar);
+  scalar->SetNumberOfTuples(NSElements);
+  scalar->SetName("coplanar_ids");
+  for(int i=0;i<NSElements;i++)
+    scalar->SetTuple1(i, coplanar_ids[i]);
+  ug_out->GetCellData()->AddArray(scalar);
+
+  vtkDoubleArray *normal = vtkDoubleArray::New();
+  normal->SetNumberOfComponents(3);
+  normal->SetNumberOfTuples(NSElements);
+  normal->SetName("normals");
+  for(int i=0;i<NSElements;i++){
+    const double *n = surface.get_normal(i);
+    normal->SetTuple3(i, n[0], n[1], 0.0);
+  }
+  ug_out->GetCellData()->AddArray(normal);
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("test_hessian_3d.vtu");
+  writer->SetFileName("../data/test_surface_2d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
 

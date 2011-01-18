@@ -44,7 +44,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName(argv[1]);
+  reader->SetFileName("../data/box20x20x20.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -147,7 +147,7 @@ int main(int argc, char **argv){
   scalar->Delete();
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("test_smooth_3d.vtu");
+  writer->SetFileName("../data/test_smooth_3d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
 

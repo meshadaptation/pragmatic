@@ -45,7 +45,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName(argv[1]);
+  reader->SetFileName("../data/box20x20.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -108,7 +108,7 @@ int main(int argc, char **argv){
   ug_out->GetPointData()->AddArray(scalar);
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("test_hessian_2d.vtu");
+  writer->SetFileName("../data/test_hessian_2d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
 

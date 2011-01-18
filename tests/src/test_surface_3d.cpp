@@ -45,7 +45,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName(argv[1]);
+  reader->SetFileName("../data/box20x20x20.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -65,13 +65,13 @@ int main(int argc, char **argv){
   vector<int> ENList;
   for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(int j=0;j<3;j++){
+    for(int j=0;j<4;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
 
   Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->SetPoints(ug->GetPoints());
@@ -80,8 +80,8 @@ int main(int argc, char **argv){
   int NSElements = surface.get_number_facets();
   const int *facets = surface.get_facets();
   for(int i=0;i<NSElements;i++){
-    vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
-    ug_out->InsertNextCell(VTK_LINE, 2, pts);
+    vtkIdType pts[] = {facets[i*3], facets[i*3+1], facets[i*3+2]};
+    ug_out->InsertNextCell(VTK_TRIANGLE, 3, pts);
   }
 
   // Need the facet ID's
@@ -101,12 +101,12 @@ int main(int argc, char **argv){
   normal->SetName("normals");
   for(int i=0;i<NSElements;i++){
     const double *n = surface.get_normal(i);
-    normal->SetTuple3(i, n[0], n[1], 0.0);
+    normal->SetTuple3(i, n[0], n[1], n[2]);
   }
   ug_out->GetCellData()->AddArray(normal);
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("test_surface_2d.vtu");
+  writer->SetFileName("../data/test_surface_3d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
 
