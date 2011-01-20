@@ -95,9 +95,31 @@ int main(int argc, char **argv){
   mfield->SetNumberOfComponents(4);
   mfield->SetNumberOfTuples(NNodes);
   mfield->SetName("Metric");
-  for(size_t i=0;i<NNodes;i++)
+
+  double rms[] = {0., 0., 0., 0.};
+  for(size_t i=0;i<NNodes;i++){
+    rms[0] += pow(18.61209-metric[i*4  ], 2); rms[1] += pow(metric[i*4+1], 2);
+    rms[2] += pow(metric[i*4+2], 2); rms[3] += pow(18.61209-metric[i*4+3], 2);
     mfield->SetTuple4(i, metric[i*4], metric[i*4+1], metric[i*4+2], metric[i*4+3]);
+  }
   ug_out->GetPointData()->AddArray(mfield);
+
+  for(size_t i=0;i<4;i++){
+    rms[i] = sqrt(rms[i]/NNodes);
+  }
+
+  double expected_rms[] = {4.0481e-06, 0.0138284,
+                           0.0138284, 0.000158496};  
+
+  double max_rel_rms = fabs((expected_rms[0] - rms[0])/expected_rms[0]);
+  for(size_t i=1;i<4;i++)
+    max_rel_rms = std::max(max_rel_rms, fabs((expected_rms[i] - rms[i])/expected_rms[i]));
+  
+  if(max_rel_rms>1.0e-5)
+    std::cout<<"fail\n";
+  else
+    std::cout<<"pass\n";
+
 
   vtkDoubleArray *scalar = vtkDoubleArray::New();
   scalar->SetNumberOfComponents(1);

@@ -93,12 +93,38 @@ int main(int argc, char **argv){
   mfield->SetNumberOfComponents(9);
   mfield->SetNumberOfTuples(NNodes);
   mfield->SetName("Metric");
-  for(int i=0;i<NNodes;i++)
+  double rms[] = {0., 0., 0.,
+                  0., 0., 0.,
+                  0., 0., 0.};
+  for(int i=0;i<NNodes;i++){
+    rms[0] += pow(53.18291-metric[i*9  ], 2); rms[1] += pow(metric[i*9+1], 2); rms[2] += pow(metric[i*9+2], 2);
+    rms[3] += pow(metric[i*9+3], 2); rms[4] += pow(53.18291-metric[i*9+4], 2); rms[5] += pow(metric[i*9+5], 2);
+    rms[6] += pow(metric[i*9+6], 2); rms[7] += pow(metric[i*9+7], 2); rms[8] += pow(53.18291-metric[i*9+8], 2);
+
     mfield->SetTuple9(i,
                       metric[i*9],   metric[i*9+1], metric[i*9+2],
                       metric[i*9+3], metric[i*9+4], metric[i*9+5],
                       metric[i*9+6], metric[i*9+7], metric[i*9+8]);
+  }
   ug_out->GetPointData()->AddArray(mfield);
+
+  for(size_t i=0;i<9;i++){
+    rms[i] = sqrt(rms[i]/NNodes);
+  }
+    
+  double expected_rms[] = {2.4806e-06, 0.0822415, 0.0128743,
+                           0.0822415, 0.0119905, 0.0872842,
+                           0.0128743, 0.0872842, 0.0074606};
+
+  double max_rel_rms = fabs((expected_rms[0] - rms[0])/expected_rms[0]);
+  for(size_t i=1;i<9;i++)
+    max_rel_rms = std::max(max_rel_rms, fabs((expected_rms[i] - rms[i])/expected_rms[i]));
+  
+  std::cout<<max_rel_rms<<std::endl;
+  if(max_rel_rms>1.0e-5)
+    std::cout<<"fail\n";
+  else
+    std::cout<<"pass\n";
 
   vtkDoubleArray *scalar = vtkDoubleArray::New();
   scalar->SetNumberOfComponents(1);
