@@ -43,6 +43,10 @@
 
 using namespace std;
 
+/* Tests
+   1. Assert number of coplanar id's is 4.
+ */
+
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
   reader->SetFileName("../data/box20x20.vtu");
@@ -91,8 +95,11 @@ int main(int argc, char **argv){
   scalar->SetNumberOfComponents(1);
   scalar->SetNumberOfTuples(NSElements);
   scalar->SetName("coplanar_ids");
-  for(int i=0;i<NSElements;i++)
+  std::set<int> unique_ids;
+  for(int i=0;i<NSElements;i++){
+    unique_ids.insert(coplanar_ids[i]);
     scalar->SetTuple1(i, coplanar_ids[i]);
+  }
   ug_out->GetCellData()->AddArray(scalar);
 
   vtkDoubleArray *normal = vtkDoubleArray::New();
@@ -109,6 +116,11 @@ int main(int argc, char **argv){
   writer->SetFileName("../data/test_surface_2d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
+
+  if(unique_ids.size()==4)
+    std::cout<<"pass\n";
+  else
+    std::cout<<"fail\n";
 
   return 0;
 }
