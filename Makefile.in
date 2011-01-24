@@ -1,0 +1,10 @@
+SHELL = /bin/bash
+
+CPPFLAGS = -I./eigen-2.0
+
+
+default: doxygen
+
+doxygen:
+	doxygen Doxyfile
+
