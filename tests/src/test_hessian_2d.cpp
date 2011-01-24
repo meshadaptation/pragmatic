@@ -104,18 +104,15 @@ int main(int argc, char **argv){
   }
   ug_out->GetPointData()->AddArray(mfield);
 
+  double max_rms = 0;
   for(size_t i=0;i<4;i++){
     rms[i] = sqrt(rms[i]/NNodes);
+    max_rms = std::max(max_rms, rms[i]);
   }
-
-  double expected_rms[] = {4.0481e-06, 0.0138284,
-                           0.0138284, 0.000158496};  
-
-  double max_rel_rms = fabs((expected_rms[0] - rms[0])/expected_rms[0]);
-  for(size_t i=1;i<4;i++)
-    max_rel_rms = std::max(max_rel_rms, fabs((expected_rms[i] - rms[i])/expected_rms[i]));
   
-  if(max_rel_rms>1.0e-5)
+  std::cout<<"max % error = "<<max_rms<<std::endl;
+
+  if(max_rms>1.0e-1)
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";
