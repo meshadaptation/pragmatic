@@ -92,7 +92,7 @@ template<typename real_t, typename index_t>
     _metric = metric;
     _node_distribution = node_distribution;
 
-    init_cache()
+    init_cache();
   }
   
   /*! Set the source mesh (3D tetrahedral meshes).
