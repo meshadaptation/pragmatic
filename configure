@@ -668,6 +668,7 @@ enable_option_checking
 enable_openmp
 enable_debugging
 enable_gprof
+enable_vtk
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1298,6 +1299,7 @@ Optional Features:
   --disable-openmp        do not use OpenMP
   --enable-debugging      turns on debugging flags
   --enable-gprof          enables profiling with gprof
+  --enable-vtk            Only use to disable vtk
 
 Some influential environment variables:
   CXX         C++ compiler command
@@ -2251,7 +2253,7 @@ case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
 
 
 # Override autoconf defaults for CXXFLAGS before searching for compiler
-CXXFLAGS="${CXXFLAGS:""}"
+CXXFLAGS="${CXXFLAGS:''}"
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -2760,7 +2762,7 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
-CPPFLAGS="${CPPFLAGS:""}"
+CPPFLAGS="${CPPFLAGS:''}"
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -3798,7 +3800,7 @@ if test "${enable_gprof+set}" = set; then :
 fi
 
 
-if test "$ac_compiler_gnu" = yes ; then
+if test "$CXX" = "g++" ; then
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
@@ -3807,6 +3809,17 @@ if test "$ac_compiler_gnu" = yes ; then
         LDFLAGS="-pg -g $LDFLAGS"
     else
         CXXFLAGS="-O3 -mtune=native -fexpensive-optimizations $CXXFLAGS"
+        CPPFLAGS="$CPPFLAGS -DNDEBUG"
+    fi
+elif test "$CXX" = "icpc" ; then
+    if test "$enable_debugging" = "yes" ; then
+        CXXFLAGS="-g -O0 $CXXFLAGS"
+        LDFLAGS="-g $LDFLAGS"
+    elif test "$enable_gprof" = "yes" ; then
+        CXXFLAGS="-p -g -O2 $CXXFLAGS"
+        LDFLAGS="-p -g $LDFLAGS"
+    else
+        CXXFLAGS="-O2 $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 fi
@@ -3930,15 +3943,26 @@ _ACEOF
 fi
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: Checking for VTK automagic." >&5
+vtk_header_relative_path=""
+# Check whether --enable-vtk was given.
+if test "${enable_vtk+set}" = set; then :
+  enableval=$enable_vtk;
+fi
+
+# various synonyms accepted for disabling VTK
+if test "$with_vtk" = no ; then enable_vtk=no; fi
+if test "$with_VTK" = no ; then enable_vtk=no; fi
+if test "$enable_VTK" = no ; then enable_vtk=no; fi
+if test "$enable_vtk" != "no" ; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: Checking for VTK automagic." >&5
 $as_echo "$as_me: Checking for VTK automagic." >&6;}
-ac_ext=cpp
+    ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
 #include <vtkVersion.h>
@@ -3948,8 +3972,8 @@ int
 main ()
 {
 
-                    vtkVersion::GetVTKMajorVersion();
-                    vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
+                        vtkVersion::GetVTKMajorVersion();
+                        vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
 
   ;
   return 0;
@@ -3958,26 +3982,26 @@ main ()
 _ACEOF
 if ac_fn_cxx_try_link "$LINENO"; then :
 
-        { $as_echo "$as_me:${as_lineno-$LINENO}: VTK automagic works." >&5
+            { $as_echo "$as_me:${as_lineno-$LINENO}: VTK automagic works." >&5
 $as_echo "$as_me: VTK automagic works." >&6;}
-	CPPFLAGS="$CPPFLAGS -DHAVE_VTK"
-        VTK=yes
-        search_for_vtk=no
+	    CPPFLAGS="$CPPFLAGS -DHAVE_VTK"
+            VTK=yes
+            search_for_vtk=no
 
 else
 
-        { $as_echo "$as_me:${as_lineno-$LINENO}: No VTK automagic" >&5
+            { $as_echo "$as_me:${as_lineno-$LINENO}: No VTK automagic" >&5
 $as_echo "$as_me: No VTK automagic" >&6;}
-	search_for_vtk=yes
+	    search_for_vtk=yes
 
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 
-if test "x$search_for_vtk" == "xyes" ; then
-    # Usually the location of the libraries is not a mystery. The
-    # header files are another matter.
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -ldl" >&5
+    if test "x$search_for_vtk" == "xyes" ; then
+        # Usually the location of the libraries is not a mystery. The
+        # header files are another matter.
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -ldl" >&5
 $as_echo_n "checking for main in -ldl... " >&6; }
 if test "${ac_cv_lib_dl_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4016,7 +4040,46 @@ _ACEOF
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkCommon" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtksys" >&5
+$as_echo_n "checking for main in -lvtksys... " >&6; }
+if test "${ac_cv_lib_vtksys_main+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lvtksys  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+int
+main ()
+{
+return main ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_vtksys_main=yes
+else
+  ac_cv_lib_vtksys_main=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtksys_main" >&5
+$as_echo "$ac_cv_lib_vtksys_main" >&6; }
+if test "x$ac_cv_lib_vtksys_main" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBVTKSYS 1
+_ACEOF
+
+  LIBS="-lvtksys $LIBS"
+
+fi
+
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkCommon" >&5
 $as_echo_n "checking for main in -lvtkCommon... " >&6; }
 if test "${ac_cv_lib_vtkCommon_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4055,9 +4118,9 @@ _ACEOF
 
 else
   if test "x$VTK_LIBS" != "x" ; then
-    LIBS="$LIBS -L$VTK_LIBS"
-    unset ac_cv_lib_vtkCommon_main
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkCommon" >&5
+                LIBS="$LIBS -L$VTK_LIBS"
+                unset ac_cv_lib_vtkCommon_main
+                { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkCommon" >&5
 $as_echo_n "checking for main in -lvtkCommon... " >&6; }
 if test "${ac_cv_lib_vtkCommon_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4096,19 +4159,19 @@ _ACEOF
 
 else
 
-            as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-            exit -1
+                      as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
+                      exit -1
 
 fi
 
-else
-    as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-    exit -1
-fi
+             else
+                as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
+                exit -1
+             fi
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkzlib" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkzlib" >&5
 $as_echo_n "checking for main in -lvtkzlib... " >&6; }
 if test "${ac_cv_lib_vtkzlib_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4147,7 +4210,7 @@ _ACEOF
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkexpat" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkexpat" >&5
 $as_echo_n "checking for main in -lvtkexpat... " >&6; }
 if test "${ac_cv_lib_vtkexpat_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4186,7 +4249,7 @@ _ACEOF
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkFiltering" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkFiltering" >&5
 $as_echo_n "checking for main in -lvtkFiltering... " >&6; }
 if test "${ac_cv_lib_vtkFiltering_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4225,7 +4288,7 @@ _ACEOF
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkGraphics" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkGraphics" >&5
 $as_echo_n "checking for main in -lvtkGraphics... " >&6; }
 if test "${ac_cv_lib_vtkGraphics_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4264,7 +4327,7 @@ _ACEOF
 
 fi
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkIO" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lvtkIO" >&5
 $as_echo_n "checking for main in -lvtkIO... " >&6; }
 if test "${ac_cv_lib_vtkIO_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4304,13 +4367,13 @@ _ACEOF
 fi
 
 
-    # check at the usual places:
-    for i in $(ls -d /usr/include/vtk-*) $VTK_INCLUDE; do
-        if test -r $i/vtkCellData.h; then
-            CPPFLAGS="-I$i $CPPFLAGS"
-        fi
-    done
-    ac_ext=cpp
+        # check at the usual places:
+        for i in $(ls -d /usr/include/vtk*) $VTK_INCLUDE; do
+            if test -r $i/vtkCellData.h; then
+                CPPFLAGS="-I$i $CPPFLAGS"
+            fi
+        done
+        ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
@@ -4706,19 +4769,19 @@ done
 ac_fn_cxx_check_header_mongrel "$LINENO" "vtkCellData.h" "ac_cv_header_vtkCellData_h" "$ac_includes_default"
 if test "x$ac_cv_header_vtkCellData_h" = x""yes; then :
   CPPFLAGS="$CPPFLAGS -DHAVE_VTK=1"
-            VTK=yes
+                VTK=yes
 
 else
   ac_fn_cxx_check_header_mongrel "$LINENO" "vtk-5.0/vtkCellData.h" "ac_cv_header_vtk_5_0_vtkCellData_h" "$ac_includes_default"
 if test "x$ac_cv_header_vtk_5_0_vtkCellData_h" = x""yes; then :
   CPPFLAGS="$CPPFLAGS -DHAVE_VTK=1"
-                    VTK=yes
-                    vtk_header_relative_path="vtk-5.0/"
+                        VTK=yes
+                        vtk_header_relative_path="vtk-5.0/"
 
 else
 
-                    as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-                    exit -1
+                        as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
+                        exit -1
 
 fi
 
@@ -4727,13 +4790,14 @@ fi
 fi
 
 
+    fi
 fi
-
 cat > include/vtk.h <<EOF
 #ifndef VTK_H
 #define VTK_H
 
 #ifdef HAVE_VTK
+#include <${vtk_header_relative_path}vtkBMPWriter.h>
 #include <${vtk_header_relative_path}vtkCellData.h>
 #include <${vtk_header_relative_path}vtkCellDataToPointData.h>
 #include <${vtk_header_relative_path}vtkCellDerivatives.h>
@@ -4756,7 +4820,6 @@ cat > include/vtk.h <<EOF
 #include <${vtk_header_relative_path}vtkPointLocator.h>
 #include <${vtk_header_relative_path}vtkPolyData.h>
 #include <${vtk_header_relative_path}vtkShortArray.h>
-#include <${vtk_header_relative_path}vtkSTLWriter.h>
 #include <${vtk_header_relative_path}vtkStructuredGrid.h>
 #include <${vtk_header_relative_path}vtkTetra.h>
 #include <${vtk_header_relative_path}vtkUnsignedCharArray.h>
@@ -4780,8 +4843,6 @@ typedef float vtkFloatingPointType;
 #endif
 #endif
 EOF
-
-
 
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
