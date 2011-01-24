@@ -17,10 +17,11 @@ TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
 default: test
 
 test: $(TEST_BIN)
-      python ./unittest bin
+	python ./unittest bin
 
 bin/%: src/%.cpp
-       $(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
 
 clean:
 	rm -rf *.o $(TEST_BIN)
+
