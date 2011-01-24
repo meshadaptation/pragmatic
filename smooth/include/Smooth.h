@@ -153,6 +153,7 @@ template<typename real_t, typename index_t>
 
   real_t smooth(bool qconstrain=false){
     real_t rms=0;
+    int ncolours = colour_sets.size();
 
     if(_ndims==2){
       // Smoothing loop.
@@ -161,13 +162,14 @@ template<typename real_t, typename index_t>
       real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]]};
       LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
       
-      for(typename std::map<int, std::deque<index_t> >::const_iterator ic=colour_sets.begin();ic!=colour_sets.end();++ic){
-        size_t node_set_size = ic->second.size();
+      for(int colour=0; colour<ncolours; colour++){
 #pragma omp parallel
         {
-#pragma omp for schedule(static)
-          for(size_t cn=0;cn<node_set_size;cn++){
-            index_t node = ic->second[cn];
+          int node_set_size = colour_sets[colour].size();
+          
+#pragma omp for schedule(static) reduction(+:rms)
+          for(int cn=0;cn<node_set_size;cn++){
+            index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
             if(qconstrain){
               typename std::set<index_t>::iterator ie=NEList[node].begin();
@@ -211,18 +213,26 @@ template<typename real_t, typename index_t>
             if(_surface->contains_node(node)){
               // If this node is on the surface then we have to project
               // this position back onto the surface.
-              std::set<size_t> patch = _surface->get_surface_patch(node);
-              std::set<int> coids;
-              for(std::set<size_t>::const_iterator e=patch.begin();e!=patch.end();++e)
-                coids.insert(_surface->get_coplanar_id(*e));
+              std::set<size_t> *patch;
+              patch = new std::set<size_t>;
+              *patch = _surface->get_surface_patch(node);
+
+              std::set<int> *coids;
+              coids = new std::set<int>;
+
+              for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
+                coids->insert(_surface->get_coplanar_id(*e));
             
               // Test if this is a corner node, in which case it cannot be moved.
-              if(coids.size()>1)
+              if(coids->size()>1)
                 continue;
             
-              const real_t *normal = _surface->get_normal(*patch.begin());
+              const real_t *normal = _surface->get_normal(*patch->begin());
               p[0] -= (p[0]-_x[node])*fabs(normal[0]);
               p[1] -= (p[1]-_y[node])*fabs(normal[1]);
+
+              delete patch;
+              delete coids;
             }
           
             // Interpolate metric at this new position.
@@ -341,13 +351,13 @@ template<typename real_t, typename index_t>
       real_t refx3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
       LipnikovFunctional<real_t> functional(refx0, refx1, refx2, refx3);
       
-      for(typename std::map<int, std::deque<index_t> >::const_iterator ic=colour_sets.begin();ic!=colour_sets.end();++ic){
-        size_t node_set_size = ic->second.size();
+      for(int colour=0; colour<ncolours; colour++){
 #pragma omp parallel
         {
-#pragma omp for schedule(static)
-          for(size_t cn=0;cn<node_set_size;cn++){
-            index_t node = ic->second[cn];
+          int node_set_size = colour_sets[colour].size();
+#pragma omp for schedule(static) reduction(+:rms)
+          for(int cn=0;cn<node_set_size;cn++){
+            index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
             if(qconstrain){
               typename std::set<index_t>::iterator ie=NEList[node].begin();
@@ -402,23 +412,31 @@ template<typename real_t, typename index_t>
             if(_surface->contains_node(node)){
               // If this node is on the surface then we have to project
               // this position back onto the surface.
-              std::set<size_t> patch = _surface->get_surface_patch(node);
-              std::map<int, std::set<int> > coids;
-              for(std::set<size_t>::const_iterator e=patch.begin();e!=patch.end();++e)
-                coids[_surface->get_coplanar_id(*e)].insert(*e);
+              std::set<size_t> *patch;
+              patch = new std::set<size_t>;
+              *patch = _surface->get_surface_patch(node);
+
+              std::map<int, std::set<int> > *coids;
+              coids = new std::map<int, std::set<int> >;
+
+              for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
+                (*coids)[_surface->get_coplanar_id(*e)].insert(*e);
             
               // Test if this is a corner node, or edge node in which case it cannot be moved.
-              if(coids.size()>2)
+              if(coids->size()>2)
                 continue;
             
-              for(std::map<int, std::set<int> >::const_iterator ic=coids.begin();ic!=coids.end();++ic){
+              for(std::map<int, std::set<int> >::const_iterator ic=coids->begin();ic!=coids->end();++ic){
                 const real_t *normal = _surface->get_normal(*(ic->second.begin()));
                 p[0] -= (p[0]-_x[node])*fabs(normal[0]);
                 p[1] -= (p[1]-_y[node])*fabs(normal[1]);
                 p[2] -= (p[2]-_z[node])*fabs(normal[2]);
               }
+
+              delete patch;
+              delete coids;
             }
-          
+
             // Interpolate metric at this new position.
             real_t mp[9], l[4];
             int best_e=*NEList[node].begin();
