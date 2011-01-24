@@ -6,33 +6,21 @@ CXXFLAGS = -I/apps/vtk/5.0.2/include/vtk-5.0 -I/apps/parmetis/3.1/include -I../e
 
 LIBS = -L/apps/vtk/5.0.2/lib -L/apps/parmetis/3.1/lib -lguide -liomp5 -lpthread -L/usr/X11R6/lib64/ -lvtkIO -lvtkCommon -lvtkFiltering -lvtkIO -lmetis -lvtkexpat -lvtkpng -lvtkjpeg -lvtkMPEG2Encode -lvtktiff -lvtkzlib -lvtkDICOMParser
 
-TEST_BINARIES = test_surface_2d test_hessian_2d test_smooth_2d \
-test_surface_3d test_hessian_3d test_smooth_3d
+TEST_SRC = $(wildcard src/*.cpp)
+TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
 
 .SUFFIXES: .cpp .o
 
 .cpp.o:
 	$(CXX) $(CXXFLAGS) -c $<
 
-default: $(TEST_BINARIES)
+default: test
 
-test_surface_2d: test_surface_2d.cpp
-	$(CXX) $(CXXFLAGS) -o test_surface_2d test_surface_2d.cpp $(LIBS)
+test: $(TEST_BIN)
+      python ./unittest bin
 
-test_hessian_2d: test_hessian_2d.cpp
-	$(CXX) $(CXXFLAGS) -o test_hessian_2d test_hessian_2d.cpp $(LIBS)
-
-test_smooth_2d: test_smooth_2d.cpp
-	$(CXX) $(CXXFLAGS) -o test_smooth_2d test_smooth_2d.cpp $(LIBS)
-
-test_surface_3d: test_surface_3d.cpp
-	$(CXX) $(CXXFLAGS) -o test_surface_3d test_surface_3d.cpp $(LIBS)
-
-test_hessian_3d: test_hessian_3d.cpp
-	$(CXX) $(CXXFLAGS) -o test_hessian_3d test_hessian_3d.cpp $(LIBS)
-
-test_smooth_3d: test_smooth_3d.cpp
-	$(CXX) $(CXXFLAGS) -o test_smooth_3d test_smooth_3d.cpp $(LIBS)
+bin/%: src/%.cpp
+       $(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
 
 clean:
-	rm -rf *.o $(TEST_BINARIES)
+        rm -rf *.o $(TEST_BIN)
