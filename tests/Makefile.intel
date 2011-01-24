@@ -1,0 +1,38 @@
+SHELL = /bin/bash
+
+CXX = icpc
+
+CXXFLAGS = -I/apps/vtk/5.0.2/include/vtk-5.0 -I/apps/parmetis/3.1/include -I../eigen-2.0 -I../metric_tensor/include -I../include -I../smooth/include -I../functionals/include -O2 -openmp -Wno-deprecated
+
+LIBS = -L/apps/vtk/5.0.2/lib -L/apps/parmetis/3.1/lib -lguide -liomp5 -lpthread -L/usr/X11R6/lib64/ -lvtkIO -lvtkCommon -lvtkFiltering -lvtkIO -lmetis -lvtkexpat -lvtkpng -lvtkjpeg -lvtkMPEG2Encode -lvtktiff -lvtkzlib -lvtkDICOMParser
+
+TEST_BINARIES = test_surface_2d test_hessian_2d test_smooth_2d \
+test_surface_3d test_hessian_3d test_smooth_3d
+
+.SUFFIXES: .cpp .o
+
+.cpp.o:
+	$(CXX) $(CXXFLAGS) -c $<
+
+default: $(TEST_BINARIES)
+
+test_surface_2d: test_surface_2d.cpp
+	$(CXX) $(CXXFLAGS) -o test_surface_2d test_surface_2d.cpp $(LIBS)
+
+test_hessian_2d: test_hessian_2d.cpp
+	$(CXX) $(CXXFLAGS) -o test_hessian_2d test_hessian_2d.cpp $(LIBS)
+
+test_smooth_2d: test_smooth_2d.cpp
+	$(CXX) $(CXXFLAGS) -o test_smooth_2d test_smooth_2d.cpp $(LIBS)
+
+test_surface_3d: test_surface_3d.cpp
+	$(CXX) $(CXXFLAGS) -o test_surface_3d test_surface_3d.cpp $(LIBS)
+
+test_hessian_3d: test_hessian_3d.cpp
+	$(CXX) $(CXXFLAGS) -o test_hessian_3d test_hessian_3d.cpp $(LIBS)
+
+test_smooth_3d: test_smooth_3d.cpp
+	$(CXX) $(CXXFLAGS) -o test_smooth_3d test_smooth_3d.cpp $(LIBS)
+
+clean:
+	rm -rf *.o $(TEST_BINARIES)
