@@ -19,7 +19,7 @@ class UnitTest:
     def run(self):
         os.chdir(self.dir)
 #        self.log("chdir " + self.dir)
-#        self.log("running")
+        self.log("running")
         f = os.popen(self.exe)
         self.output = f.read()
         os.chdir(self.cwd)
@@ -88,7 +88,7 @@ class UnitTestHarness:
               print "    Failure: non-zero exit code from test"
               failcount += 1
               if not test.exe in failtests:
-	        failtests.append(test.exe)
+                failtests.append(test.exe)
 
             passcount += P
             warncount += W
@@ -96,6 +96,10 @@ class UnitTestHarness:
 
         print "  RESULTS"
         print "    Passes:   %d" % passcount
+        if len(warntests) == 0:
+            print "    Warnings: %d" % warncount
+        else:
+            print "    Warnings: %d; tests = %s" % (warncount, warntests)
         if len(failtests) == 0:
             print "    Failures: %d" % failcount
         else:

@@ -1,10 +1,21 @@
 SHELL = /bin/bash
 
 CPPFLAGS = -I./eigen-2.0
+MAKE = make -s
 
-
-default: doxygen
+default: doxygen test
 
 doxygen:
-	doxygen Doxyfile
+	@echo "  DOXYGEN Doxyfile"
+	@doxygen Doxyfile > doxygen.log
+
+test:
+	@echo "  TEST"
+	@(cd tests && $(MAKE) test)
+
+clean:
+	@echo "  CLEAN docs"
+	@rm -rf docs
+	@echo "  CLEAN tests"
+	@(cd tests && $(MAKE) clean)
 
