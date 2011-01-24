@@ -216,23 +216,26 @@ template<typename real_t, typename index_t>
               std::set<size_t> *patch;
               patch = new std::set<size_t>;
               *patch = _surface->get_surface_patch(node);
-
+              
               std::set<int> *coids;
               coids = new std::set<int>;
-
+              
               for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
                 coids->insert(_surface->get_coplanar_id(*e));
-            
-              // Test if this is a corner node, in which case it cannot be moved.
-              if(coids->size()>1)
-                continue;
-            
-              const real_t *normal = _surface->get_normal(*patch->begin());
-              p[0] -= (p[0]-_x[node])*fabs(normal[0]);
-              p[1] -= (p[1]-_y[node])*fabs(normal[1]);
-
-              delete patch;
+              
+              if(coids->size()<2){
+                const real_t *normal = _surface->get_normal(*patch->begin());
+                p[0] -= (p[0]-_x[node])*fabs(normal[0]);
+                p[1] -= (p[1]-_y[node])*fabs(normal[1]);
+              }
+              
               delete coids;
+              delete patch;
+              
+              if(coids->size()>1){
+                // Test if this is a corner node, in which case it cannot be moved.
+                continue;
+              }
             }
           
             // Interpolate metric at this new position.
@@ -421,20 +424,21 @@ template<typename real_t, typename index_t>
 
               for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
                 (*coids)[_surface->get_coplanar_id(*e)].insert(*e);
-            
+
+              if(coids->size()<3)
+                for(std::map<int, std::set<int> >::const_iterator ic=coids->begin();ic!=coids->end();++ic){
+                  const real_t *normal = _surface->get_normal(*(ic->second.begin()));
+                  p[0] -= (p[0]-_x[node])*fabs(normal[0]);
+                  p[1] -= (p[1]-_y[node])*fabs(normal[1]);
+                  p[2] -= (p[2]-_z[node])*fabs(normal[2]);
+                }
+              
+              delete patch;
+              delete coids;
+              
               // Test if this is a corner node, or edge node in which case it cannot be moved.
               if(coids->size()>2)
                 continue;
-            
-              for(std::map<int, std::set<int> >::const_iterator ic=coids->begin();ic!=coids->end();++ic){
-                const real_t *normal = _surface->get_normal(*(ic->second.begin()));
-                p[0] -= (p[0]-_x[node])*fabs(normal[0]);
-                p[1] -= (p[1]-_y[node])*fabs(normal[1]);
-                p[2] -= (p[2]-_z[node])*fabs(normal[2]);
-              }
-
-              delete patch;
-              delete coids;
             }
 
             // Interpolate metric at this new position.
