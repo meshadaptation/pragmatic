@@ -25,4 +25,4 @@ bin/%: src/%.cpp
 	@$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
 
 clean:
-	rm -rf *.o $(TEST_BIN)
+	rm -rf *.o $(TEST_BIN) bin/test*
