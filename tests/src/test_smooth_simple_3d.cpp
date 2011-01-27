@@ -143,7 +143,7 @@ int main(int argc, char **argv){
   ug_out->Delete();
   writer->Delete();
 
-  if(iter<120)
+  if(iter<140)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

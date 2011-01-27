@@ -139,7 +139,7 @@ int main(int argc, char **argv){
   writer->SetInput(ug_out);
   writer->Write();
   
-  if(iter<70)
+  if(iter<80)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
