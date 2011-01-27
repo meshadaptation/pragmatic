@@ -332,9 +332,9 @@ template<typename real_t, typename index_t>
 #pragma omp for schedule(static) reduction(+:qmean)
         for(int i=0;i<_NElements;i++){
           const int *n=_ENList+i*3;
-          real_t x0[] = {_x[n[0]], _y[n[0]], _z[n[0]]};
-          real_t x1[] = {_x[n[1]], _y[n[1]], _z[n[1]]};
-          real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
+          real_t x0[] = {_x[n[0]], _y[n[0]]};
+          real_t x1[] = {_x[n[1]], _y[n[1]]};
+          real_t x2[] = {_x[n[2]], _y[n[2]]};
           
           qvec[i] = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
