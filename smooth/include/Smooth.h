@@ -152,9 +152,11 @@ template<typename real_t, typename index_t>
   }
 
   real_t smooth(bool qconstrain=false){
-    real_t rms=0;
+    real_t qlinfinity = std::numeric_limits<real_t>::max();
+    real_t qmean = 0.0, qrms=0.0;
+    
     int ncolours = colour_sets.size();
-
+    
     if(_ndims==2){
       // Smoothing loop.
       real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
@@ -166,8 +168,7 @@ template<typename real_t, typename index_t>
 #pragma omp parallel
         {
           int node_set_size = colour_sets[colour].size();
-          
-#pragma omp for schedule(static) reduction(+:rms)
+#pragma omp for schedule(static)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
@@ -290,52 +291,29 @@ template<typename real_t, typename index_t>
             bool improvement = true;
             if(qconstrain){
               // Check if this positions improves the local mesh quality.
-              real_t min_q_new=0, mean_q_new=0;
-              {
-                typename std::set<index_t>::iterator ie=NEList[node].begin();
-                {
-                  const index_t *n=_ENList+(*ie)*nloc;
-                  int iloc = 0;
-                  while(n[iloc]!=(int)node){
-                    iloc++;
-                  }
-                  int loc1 = (iloc+1)%3;
-                  int loc2 = (iloc+2)%3;
-                
-                  real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
-                  real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
-                
-                  min_q_new = functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
-                  mean_q_new = min_q_new;
+              real_t min_q_new = std::numeric_limits<real_t>::max(), mean_q_new=0;
+              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+                const index_t *n=_ENList+(*ie)*nloc;
+                int iloc = 0;
+                while(n[iloc]!=(int)node){
+                  iloc++;
                 }
-                for(;ie!=NEList[node].end();++ie){
-                  const index_t *n=_ENList+(*ie)*nloc;
-                  int iloc = 0;
-                  while(n[iloc]!=(int)node){
-                    iloc++;
-                  }
-                  int loc1 = (iloc+1)%3;
-                  int loc2 = (iloc+2)%3;
+                int loc1 = (iloc+1)%3;
+                int loc2 = (iloc+2)%3;
                 
-                  real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
-                  real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
+                real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
+                real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
                 
-                  real_t q = functional.calculate(p, x1, x2, mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
-                  mean_q_new += q;
-                  min_q_new = min(min_q_new, q);
-                }
+                real_t q = functional.calculate(p, x1, x2, 
+                                                mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
+                mean_q_new += q;
+                min_q_new = min(min_q_new, q);
               }
               mean_q_new /= NEList[node].size();
-            
+              
               improvement = (mean_q_new>mean_q)||(min_q_new>min_q);
-              if(improvement)
-                rms += pow(min_q_new-min_q, 2);
-            }
-          
+            }  
             if(improvement){
-              if(!qconstrain)
-                rms = pow(_x[node]-p[0], 2) + pow(_y[node]-p[1], 2);
-            
               _x[node] = p[0];
               _y[node] = p[1];
               _metric[(node)*4  ] = mp[0];
@@ -344,6 +322,31 @@ template<typename real_t, typename index_t>
               _metric[(node)*4+3] = mp[3];
             }
           }
+        }
+      }
+
+      std::vector<real_t> qvec(_NElements);
+#pragma omp parallel
+      {
+        real_t lqlinfinity = std::numeric_limits<real_t>::max();
+#pragma omp for schedule(static) reduction(+:qmean)
+        for(int i=0;i<_NElements;i++){
+          const int *n=_ENList+i*3;
+          real_t x0[] = {_x[n[0]], _y[n[0]], _z[n[0]]};
+          real_t x1[] = {_x[n[1]], _y[n[1]], _z[n[1]]};
+          real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
+          
+          qvec[i] = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+          lqlinfinity = std::min(lqlinfinity, qvec[i]);
+          qmean += qvec[i]/_NElements;
+        }
+#pragma omp for schedule(static) reduction(+:qrms)
+        for(int i=0;i<_NElements;i++){
+          qrms += pow(qvec[i]-qmean, 2);
+        }
+#pragma omp critical 
+        {
+          qlinfinity = std::min(qlinfinity, lqlinfinity);
         }
       }
     }else{
@@ -358,7 +361,7 @@ template<typename real_t, typename index_t>
 #pragma omp parallel
         {
           int node_set_size = colour_sets[colour].size();
-#pragma omp for schedule(static) reduction(+:rms)
+#pragma omp for schedule(static)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
@@ -513,61 +516,34 @@ template<typename real_t, typename index_t>
             bool improvement=true;
             if(qconstrain){
               // Check if this positions improves the local mesh quality.
-              real_t min_q_new, mean_q_new;
-              {
-                typename std::set<index_t>::iterator ie=NEList[node].begin();
-                {
-                  const index_t *n=_ENList+(*ie)*nloc;
-                  real_t vectors[] = {_x[n[0]], _y[n[0]], _z[n[0]],
-                                      _x[n[1]], _y[n[1]], _z[n[1]],
-                                      _x[n[2]], _y[n[2]], _z[n[2]],
-                                      _x[n[3]], _y[n[3]], _z[n[3]]};
+              real_t min_q_new = std::numeric_limits<real_t>::max(), mean_q_new=0;
+              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+                const index_t *n=_ENList+(*ie)*nloc;
+                real_t vectors[] = {_x[n[0]], _y[n[0]], _z[n[0]],
+                                    _x[n[1]], _y[n[1]], _z[n[1]],
+                                    _x[n[2]], _y[n[2]], _z[n[2]],
+                                    _x[n[3]], _y[n[3]], _z[n[3]]};
                 
-                  real_t *r[4], *m[4];
-                  for(int iloc=0;iloc<4;iloc++)
-                    if(n[iloc]==(node)){
-                      r[iloc] = p;
-                      m[iloc] = mp;
-                    }else{
-                      r[iloc] = vectors+3*iloc;
-                      m[iloc] = _metric+n[iloc]*9;
-                    }
-                  min_q_new = functional.calculate(r[0], r[1], r[2], r[3],
-                                                   m[0], m[1], m[2], m[3]);
-                  mean_q_new = min_q_new;
-                }
-                for(;ie!=NEList[node].end();++ie){
-                  const index_t *n=_ENList+(*ie)*nloc;
-                  real_t vectors[] = {_x[n[0]], _y[n[0]], _z[n[0]],
-                                      _x[n[1]], _y[n[1]], _z[n[1]],
-                                      _x[n[2]], _y[n[2]], _z[n[2]],
-                                      _x[n[3]], _y[n[3]], _z[n[3]]};
-                
-                  real_t *r[4], *m[4];
-                  for(int iloc=0;iloc<4;iloc++)
-                    if(n[iloc]==(node)){
-                      r[iloc] = p;
-                      m[iloc] = mp;
-                    }else{
-                      r[iloc] = vectors+3*iloc;
-                      m[iloc] = _metric+n[iloc]*9;
-                    }
-                  real_t q = functional.calculate(r[0], r[1], r[2], r[3],
-                                                  m[0], m[1], m[2], m[3]);
-                  mean_q_new += q;
-                  min_q_new = min(min_q_new, q);
-                }
+                real_t *r[4], *m[4];
+                for(int iloc=0;iloc<4;iloc++)
+                  if(n[iloc]==(node)){
+                    r[iloc] = p;
+                    m[iloc] = mp;
+                  }else{
+                    r[iloc] = vectors+3*iloc;
+                    m[iloc] = _metric+n[iloc]*9;
+                  }
+                real_t q = functional.calculate(r[0], r[1], r[2], r[3],
+                                                m[0], m[1], m[2], m[3]);
+                mean_q_new += q;
+                min_q_new = min(min_q_new, q);
               }
+              
               mean_q_new /= NEList[node].size();
-            
+              
               improvement = (mean_q_new>mean_q)||(min_q_new>min_q);
-              if(improvement)
-                rms += pow(min_q_new-min_q, 2);
             }
             if(improvement){
-              if(!qconstrain)
-                rms = pow(_x[node]-p[0], 2) + pow(_y[node]-p[1], 2) + pow(_z[node]-p[2], 2);
-            
               _x[node] = p[0];
               _y[node] = p[1];
               _z[node] = p[2];
@@ -578,9 +554,39 @@ template<typename real_t, typename index_t>
           }
         }
       }
+      
+      std::vector<real_t> qvec(_NElements);
+#pragma omp parallel
+      {
+        real_t lqlinfinity = std::numeric_limits<real_t>::max();
+#pragma omp for schedule(static) reduction(+:qmean)
+        for(int i=0;i<_NElements;i++){
+          const int *n=_ENList+i*4;
+          real_t x0[] = {_x[n[0]], _y[n[0]], _z[n[0]]};
+          real_t x1[] = {_x[n[1]], _y[n[1]], _z[n[1]]};
+          real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
+          real_t x3[] = {_x[n[3]], _y[n[3]], _z[n[3]]};
+          
+          qvec[i] = functional.calculate(x0, x1, x2, x3,
+                                         _metric+n[0]*9, _metric+n[1]*9,
+                                         _metric+n[2]*9, _metric+n[3]*9);
+          lqlinfinity = std::min(lqlinfinity, qvec[i]);
+          qmean += qvec[i]/_NElements;
+        }
+#pragma omp for schedule(static) reduction(+:qrms)
+        for(int i=0;i<_NElements;i++){
+          qrms += pow(qvec[i]-qmean, 2);
+        }
+#pragma omp critical 
+        {
+          qlinfinity = std::min(qlinfinity, lqlinfinity);
+        }
+      }
     }
+    
+    qrms=sqrt(qrms/_NElements);
 
-    return sqrt(rms);
+    return qmean;
   }
 
  private:
