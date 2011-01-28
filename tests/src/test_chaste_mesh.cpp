@@ -44,7 +44,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName("/home/southern/Chaste/notforrelease/test/data/small_bidomain_slab.vtu");
+  reader->SetFileName("../data/small_bidomain_slab.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
@@ -80,7 +80,7 @@ int main(int argc, char **argv){
 
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray( "Vm" );
-  for (unsigned i = 0; i < NNodes; i++)
+  for (int i = 0; i < NNodes; i++)
   {
     psi[i] = p_scalars->GetTuple(i)[0];
   }
