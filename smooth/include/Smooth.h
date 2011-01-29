@@ -586,6 +586,7 @@ template<typename real_t, typename index_t>
     
     qrms=sqrt(qrms/_NElements);
 
+    std::cout<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
     return qmean;
   }
 

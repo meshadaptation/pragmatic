@@ -296,10 +296,15 @@ template<typename real_t, typename index_t>
    * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){
-    real_t scale_factor = sqrt(nelements/predict_nelements());
+    std::cerr << "Number of elements expected (start): " << predict_nelements() << std::endl;
+    real_t scale_factor = pow((nelements/predict_nelements()), ((real_t)2.0/_ndims));
+    std::cerr << "Scale factor: " << scale_factor << std::endl;
     
     for(int i=0;i<_NNodes;i++)
       _metric[i].scale(scale_factor);
+
+    std::cerr << "Number of elements desired: " << nelements << std::endl;
+    std::cerr << "Number of elements expected (end): " << predict_nelements() << std::endl;
   }
 
   /*! Predict the number of elements when mesh satisifies metric tensor field.
@@ -333,7 +338,7 @@ template<typename real_t, typename index_t>
         real_t m11 = (m0[3]+m1[3]+m2[3])/3;
 
         real_t det = m00*m11-m01*m01;
-        total_area_metric += area*det;
+        total_area_metric += area*sqrt(det);
       }
 
       // Ideal area of triangle in metric space.
@@ -370,7 +375,7 @@ template<typename real_t, typename index_t>
 
 
         real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
-        total_volume_metric += volume*det;
+        total_volume_metric += volume*sqrt(det);
       }
 
       // Ideal volume of triangle in metric space.

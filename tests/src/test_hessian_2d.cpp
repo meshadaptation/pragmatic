@@ -82,7 +82,6 @@ int main(int argc, char **argv){
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
-  metric_field.apply_nelements(NElements);
   std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*4);
@@ -98,8 +97,8 @@ int main(int argc, char **argv){
 
   double rms[] = {0., 0., 0., 0.};
   for(size_t i=0;i<NNodes;i++){
-    rms[0] += pow(18.61209-metric[i*4  ], 2); rms[1] += pow(metric[i*4+1], 2);
-    rms[2] += pow(metric[i*4+2], 2); rms[3] += pow(18.61209-metric[i*4+3], 2);
+    rms[0] += pow(2.0-metric[i*4  ], 2); rms[1] += pow(    metric[i*4+1], 2);
+    rms[2] += pow(    metric[i*4+2], 2); rms[3] += pow(2.0-metric[i*4+3], 2);
     mfield->SetTuple4(i, metric[i*4], metric[i*4+1], metric[i*4+2], metric[i*4+3]);
   }
   ug_out->GetPointData()->AddArray(mfield);
@@ -109,10 +108,8 @@ int main(int argc, char **argv){
     rms[i] = sqrt(rms[i]/NNodes);
     max_rms = std::max(max_rms, rms[i]);
   }
-  
-  std::cout<<"max % error = "<<max_rms<<std::endl;
 
-  if(max_rms>1.0e-1)
+  if(max_rms>0.005)
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";

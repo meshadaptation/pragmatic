@@ -80,7 +80,6 @@ int main(int argc, char **argv){
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
-  metric_field.apply_nelements(NElements);
   std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*9);
@@ -97,9 +96,17 @@ int main(int argc, char **argv){
                   0., 0., 0.,
                   0., 0., 0.};
   for(int i=0;i<NNodes;i++){
-    rms[0] += pow(53.18291-metric[i*9  ], 2); rms[1] += pow(metric[i*9+1], 2); rms[2] += pow(metric[i*9+2], 2);
-    rms[3] += pow(metric[i*9+3], 2); rms[4] += pow(53.18291-metric[i*9+4], 2); rms[5] += pow(metric[i*9+5], 2);
-    rms[6] += pow(metric[i*9+6], 2); rms[7] += pow(metric[i*9+7], 2); rms[8] += pow(53.18291-metric[i*9+8], 2);
+    rms[0] += pow(2.0-metric[i*9  ], 2);
+    rms[1] += pow(metric[i*9+1], 2);
+    rms[2] += pow(metric[i*9+2], 2);
+    
+    rms[3] += pow(metric[i*9+3], 2);
+    rms[4] += pow(2.0-metric[i*9+4], 2);
+    rms[5] += pow(metric[i*9+5], 2);
+    
+    rms[6] += pow(metric[i*9+6], 2);
+    rms[7] += pow(metric[i*9+7], 2);
+    rms[8] += pow(2.0-metric[i*9+8], 2);
 
     mfield->SetTuple9(i,
                       metric[i*9],   metric[i*9+1], metric[i*9+2],
@@ -113,10 +120,8 @@ int main(int argc, char **argv){
     rms[i] = sqrt(rms[i]/NNodes);
     max_rms = std::max(max_rms, rms[i]);
   }
-    
-  std::cout<<"max % error = "<<max_rms<<std::endl;
 
-  if(max_rms>2.6e-1)
+  if(max_rms>0.005)
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";

@@ -100,7 +100,7 @@ int main(int argc, char **argv){
   int iter=1;
   for(;iter<500;iter++){    
     double mean_quality = smooth.smooth();
-    double res = abs(mean_quality-prev_mean_quality);
+    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
     prev_mean_quality = mean_quality;
     if(res<1.0e-5)
       break;
@@ -138,7 +138,9 @@ int main(int argc, char **argv){
   writer->SetFileName("../data/test_smooth_simple_2d.vtu");
   writer->SetInput(ug_out);
   writer->Write();
-  
+
+  std::cout<<"iter "<<iter<<std::endl;
+
   if(iter<80)
     std::cout<<"pass"<<std::endl;
   else

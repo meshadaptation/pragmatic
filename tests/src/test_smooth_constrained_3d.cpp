@@ -95,7 +95,7 @@ int main(int argc, char **argv){
   int iter=1;
   for(;iter<500;iter++){    
     double mean_quality = smooth.smooth(true);
-    double res = abs(mean_quality-prev_mean_quality);
+    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
     prev_mean_quality = mean_quality;
     if(res<1.0e-5)
       break;
@@ -142,6 +142,8 @@ int main(int argc, char **argv){
   reader->Delete();
   ug_out->Delete();
   writer->Delete();
+
+  std::cout<<"iter "<<iter<<std::endl;
 
   if(iter<220)
     std::cout<<"pass"<<std::endl;
