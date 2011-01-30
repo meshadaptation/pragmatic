@@ -418,13 +418,23 @@ template<typename real_t, typename index_t>
         std::set<index_t> patch = NNList[i];
         
         if((patch.size()<min_patch_size)||(_surface->contains_node(i))){
-          std::set<index_t> front = NNList[i];
-          for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
-            patch.insert(NNList[*it].begin(), NNList[*it].end());
+          std::set<index_t> front = NNList[i], *new_front = new std::set<index_t>;
+          for(;;){
+            for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
+              for(typename std::set<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
+                if(patch.find(*jt)==patch.end()){
+                  new_front->insert(*jt);
+                  patch.insert(*jt);
+                }
+              }
+            }
+
+            if(patch.size()>=min_patch_size)
+              break;
+
+            front.swap(*new_front);
           }
-          if(patch.size()<min_patch_size){
-            cerr<<"WARNING: Small mesh patch detected.\n";  
-          }
+          delete new_front;
         }
         
         if(_ndims==2){
