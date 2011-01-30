@@ -36,7 +36,7 @@
 #include <vector>
 #include <deque>
 
-#include "LipnikovFunctional.h"
+#include "ElementProperty.h"
 #include "Surface.h"
 #include "Colour.h"
 
@@ -162,7 +162,7 @@ template<typename real_t, typename index_t>
       real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
       real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]]};
       real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]]};
-      LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
+      ElementProperty<real_t> property(refx0, refx1, refx2);
       
       for(int colour=0; colour<ncolours; colour++){
 #pragma omp parallel
@@ -179,7 +179,7 @@ template<typename real_t, typename index_t>
                 real_t x0[] = {_x[n[0]], _y[n[0]]};
                 real_t x1[] = {_x[n[1]], _y[n[1]]};
                 real_t x2[] = {_x[n[2]], _y[n[2]]};
-                min_q = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+                min_q = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
                 mean_q = min_q;
               }
               for(;ie!=NEList[node].end();++ie){
@@ -187,7 +187,7 @@ template<typename real_t, typename index_t>
                 real_t x0[] = {_x[n[0]], _y[n[0]]};
                 real_t x1[] = {_x[n[1]], _y[n[1]]};
                 real_t x2[] = {_x[n[2]], _y[n[2]]};
-                real_t q = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+                real_t q = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
                 min_q = min(q, min_q);
                 mean_q += q;
               }
@@ -251,9 +251,9 @@ template<typename real_t, typename index_t>
                 real_t x1[] = {_x[n[1]], _y[n[1]]};
                 real_t x2[] = {_x[n[2]], _y[n[2]]};
               
-                l[0] = functional.area(p,  x1, x2);
-                l[1] = functional.area(x0, p,  x2);
-                l[2] = functional.area(x0, x1, p);
+                l[0] = property.area(p,  x1, x2);
+                l[1] = property.area(x0, p,  x2);
+                l[2] = property.area(x0, x1, p);
               
                 real_t min_l = min(l[0], min(l[1], l[2]));
                 if(min_l>tol){
@@ -279,7 +279,7 @@ template<typename real_t, typename index_t>
               real_t x0[] = {_x[n[0]], _y[n[0]]};
               real_t x1[] = {_x[n[1]], _y[n[1]]};
               real_t x2[] = {_x[n[2]], _y[n[2]]};
-              real_t L = functional.area(x0, x1, x2);
+              real_t L = property.area(x0, x1, x2);
               if(L<0){
                 std::cerr<<"negative area :: "<<node<<", "<<L<<std::endl;
               }
@@ -304,8 +304,8 @@ template<typename real_t, typename index_t>
                 real_t x1[] = {_x[n[loc1]], _y[n[loc1]]};
                 real_t x2[] = {_x[n[loc2]], _y[n[loc2]]};
                 
-                real_t q = functional.calculate(p, x1, x2, 
-                                                mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
+                real_t q = property.lipnikov(p, x1, x2, 
+                                             mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
                 mean_q_new += q;
                 min_q_new = min(min_q_new, q);
               }
@@ -336,7 +336,7 @@ template<typename real_t, typename index_t>
           real_t x1[] = {_x[n[1]], _y[n[1]]};
           real_t x2[] = {_x[n[2]], _y[n[2]]};
           
-          qvec[i] = functional.calculate(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+          qvec[i] = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
           qmean += qvec[i]/_NElements;
         }
@@ -355,7 +355,7 @@ template<typename real_t, typename index_t>
       real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
       real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
       real_t refx3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
-      LipnikovFunctional<real_t> functional(refx0, refx1, refx2, refx3);
+      ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
       
       for(int colour=0; colour<ncolours; colour++){
 #pragma omp parallel
@@ -373,8 +373,8 @@ template<typename real_t, typename index_t>
                 real_t x1[] = {_x[n[1]], _y[n[1]], _z[n[1]]};
                 real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
                 real_t x3[] = {_x[n[3]], _y[n[3]], _z[n[3]]};
-                min_q = functional.calculate(x0, x1, x2, x3,
-                                             _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
+                min_q = property.lipnikov(x0, x1, x2, x3,
+                                          _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
                 mean_q = min_q;
               }
               for(;ie!=NEList[node].end();++ie){
@@ -383,8 +383,8 @@ template<typename real_t, typename index_t>
                 real_t x1[] = {_x[n[1]], _y[n[1]], _z[n[1]]};
                 real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
                 real_t x3[] = {_x[n[3]], _y[n[3]], _z[n[3]]};
-                real_t q = functional.calculate(x0, x1, x2, x3,
-                                                _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
+                real_t q = property.lipnikov(x0, x1, x2, x3,
+                                             _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
                 min_q = min(q, min_q);
                 mean_q += q;
               }
@@ -468,21 +468,21 @@ template<typename real_t, typename index_t>
                   }else{
                     r[iloc] = vectors+3*iloc;
                   }
-                real_t volume = functional.volume(r[0], r[1], r[2], r[3]);
+                real_t volume = property.volume(r[0], r[1], r[2], r[3]);
                 if(volume<0){
                   inverted = true;
                   break;
                 }
               
                 if(tol<0){
-                  real_t L = functional.volume(x0, x1, x2, x3);
+                  real_t L = property.volume(x0, x1, x2, x3);
                   if(L<0)
                     std::cerr<<"negative volume :: "<<node<<", "<<L<<std::endl;
                 
-                  l[0] = functional.volume(p,  x1, x2, x3)/L;
-                  l[1] = functional.volume(x0, p,  x2, x3)/L;
-                  l[2] = functional.volume(x0, x1, p,  x3)/L;
-                  l[3] = functional.volume(x0, x1, x2, p)/L;
+                  l[0] = property.volume(p,  x1, x2, x3)/L;
+                  l[1] = property.volume(x0, p,  x2, x3)/L;
+                  l[2] = property.volume(x0, x1, p,  x3)/L;
+                  l[3] = property.volume(x0, x1, x2, p)/L;
                 
                   real_t min_l = min(min(l[0], l[1]), min(l[2], l[3]));
                   if(min_l>tol){
@@ -533,8 +533,8 @@ template<typename real_t, typename index_t>
                     r[iloc] = vectors+3*iloc;
                     m[iloc] = _metric+n[iloc]*9;
                   }
-                real_t q = functional.calculate(r[0], r[1], r[2], r[3],
-                                                m[0], m[1], m[2], m[3]);
+                real_t q = property.lipnikov(r[0], r[1], r[2], r[3],
+                                             m[0], m[1], m[2], m[3]);
                 mean_q_new += q;
                 min_q_new = min(min_q_new, q);
               }
@@ -567,9 +567,9 @@ template<typename real_t, typename index_t>
           real_t x2[] = {_x[n[2]], _y[n[2]], _z[n[2]]};
           real_t x3[] = {_x[n[3]], _y[n[3]], _z[n[3]]};
           
-          qvec[i] = functional.calculate(x0, x1, x2, x3,
-                                         _metric+n[0]*9, _metric+n[1]*9,
-                                         _metric+n[2]*9, _metric+n[3]*9);
+          qvec[i] = property.lipnikov(x0, x1, x2, x3,
+                                      _metric+n[0]*9, _metric+n[1]*9,
+                                      _metric+n[2]*9, _metric+n[3]*9);
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
           qmean += qvec[i]/_NElements;
         }

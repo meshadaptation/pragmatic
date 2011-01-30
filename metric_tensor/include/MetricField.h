@@ -42,7 +42,7 @@
 #include "MetricTensor.h"
 #include "Metis.h"
 #include "Surface.h"
-#include "LipnikovFunctional.h"
+#include "ElementProperty.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -319,7 +319,7 @@ template<typename real_t, typename index_t>
       real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
       real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]]};
       real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]]};
-      LipnikovFunctional<real_t> functional(refx0, refx1, refx2);
+      ElementProperty<real_t> property(refx0, refx1, refx2);
 
       real_t total_area_metric = 0.0;
       for(int i=0;i<_NElements;i++){
@@ -327,7 +327,7 @@ template<typename real_t, typename index_t>
         real_t x0[] = {_x[n[0]], _y[n[0]]};
         real_t x1[] = {_x[n[1]], _y[n[1]]};
         real_t x2[] = {_x[n[2]], _y[n[2]]};
-        real_t area = functional.area(x0, x1, x2);
+        real_t area = property.area(x0, x1, x2);
         
         const real_t *m0=_metric[n[0]].get_metric();
         const real_t *m1=_metric[n[1]].get_metric();
@@ -350,7 +350,7 @@ template<typename real_t, typename index_t>
       real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
       real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
       real_t refx3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
-      LipnikovFunctional<real_t> functional(refx0, refx1, refx2, refx3);
+      ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
       
       real_t total_volume_metric = 0.0;
       for(int i=0;i<_NElements;i++){
@@ -359,7 +359,7 @@ template<typename real_t, typename index_t>
         real_t x1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
         real_t x2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
         real_t x3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
-        real_t volume = functional.volume(x0, x1, x2, x3);
+        real_t volume = property.volume(x0, x1, x2, x3);
         
         const real_t *m0=_metric[n[0]].get_metric();
         const real_t *m1=_metric[n[1]].get_metric();
