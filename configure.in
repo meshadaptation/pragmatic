@@ -91,6 +91,11 @@ AC_CHECK_LIB(stdc++,main,,)
 AC_CHECK_LIB(m,main,,)
 AC_CHECK_LIB(metis,main,,)
 
+# Zoltan
+if test "x$with_zoltan" != "xno"; then
+    ACX_zoltan([AC_MSG_NOTICE(["Zoltan found"])], [AC_MSG_WARN(["Zoltan not found"])])
+fi
+
 vtk_header_relative_path=""
 AC_ARG_ENABLE(vtk,[AC_HELP_STRING([--enable-vtk], [Only use to disable vtk])])
 # various synonyms accepted for disabling VTK
