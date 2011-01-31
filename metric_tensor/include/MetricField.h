@@ -269,42 +269,29 @@ template<typename real_t, typename index_t>
   /*! Apply maximum number of elements constraint.
    * @param max_nelements the maximum number of elements desired.
    */
-  void apply_max_nelements(real_t max_nelements){
+  void apply_max_nelements(real_t nelements){
     int predicted = predict_nelements();
-    if(predicted>max_nelements){
-      real_t scale_factor = sqrt(max_nelements/predicted);
-      
-      for(int i=0;i<_NNodes;i++)
-        _metric[i].scale(scale_factor);
-    }
+    if(predicted>nelements)
+      apply_nelements(nelements);
   }
 
   /*! Apply minimum number of elements constraint.
    * @param min_nelements the minimum number of elements desired.
    */
-  void apply_min_nelements(real_t min_nelements){
+  void apply_min_nelements(real_t nelements){
     int predicted = predict_nelements();
-    if(predicted<min_nelements){
-      real_t scale_factor = sqrt(min_nelements/predicted);
-      
-      for(int i=0;i<_NNodes;i++)
-        _metric[i].scale(scale_factor);
-    }
+    if(predicted<min_nelements)
+      apply_nelements(nelements);
   }
 
   /*! Apply required number of elements.
    * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){
-    std::cerr << "Number of elements expected (start): " << predict_nelements() << std::endl;
     real_t scale_factor = pow((nelements/predict_nelements()), ((real_t)2.0/_ndims));
-    std::cerr << "Scale factor: " << scale_factor << std::endl;
     
     for(int i=0;i<_NNodes;i++)
       _metric[i].scale(scale_factor);
-
-    std::cerr << "Number of elements desired: " << nelements << std::endl;
-    std::cerr << "Number of elements expected (end): " << predict_nelements() << std::endl;
   }
 
   /*! Predict the number of elements when mesh satisifies metric tensor field.
