@@ -97,7 +97,7 @@ int main(int argc, char **argv){
     double mean_quality = smooth.smooth();
     double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
     prev_mean_quality = mean_quality;
-    if(res<1.0e-5)
+    if(res<1.0e-4)
       break;
   }
   std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
