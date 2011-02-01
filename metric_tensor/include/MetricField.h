@@ -42,6 +42,7 @@
 #include "MetricTensor.h"
 #include "Metis.h"
 #include "Surface.h"
+#include "Mesh.h"
 #include "ElementProperty.h"
 
 #ifdef HAVE_MPI
@@ -64,124 +65,76 @@ template<typename real_t, typename index_t>
   
   /*! Default constructor.
    */
-  MetricField(){
-    _NNodes = 0;
-    _NElements = 0;
-    _ndims = 0;
-    nloc = 0;
-    _ENList = NULL;
-    _node_distribution = NULL;
-    _x = NULL;
-    _y = NULL;
-    _z = NULL;
+  MetricField(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+    _NNodes = mesh.get_number_nodes();
+    _NElements = mesh.get_number_elements();
+    _ndims = mesh.get_number_dimensions();
+    _nloc = (_ndims==2)?3:4;
+    _ENList = mesh.get_enlist();;
+    _coords = mesh.get_coords();
 #ifdef HAVE_MPI
-    _mesh_comm = NULL;
+    _mesh_comm = mesh.get_mpi_comm();
 #endif
-    _metric = NULL;
-    _surface = NULL;
-  }
+    _surface = &surface;
 
+    if(_ndims==2){
+      real_t bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
+      for(int i=1;i<_NNodes;i++){
+        bbox[0] = min(bbox[0], get_x(i)); bbox[1] = max(bbox[1], get_x(i));
+        bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
+      }
+      _metric = new MetricTensor<real_t>[_NNodes];
+      // Enforce first-touch policy
+#pragma omp parallel
+      {
+        real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0, 1.0/pow(bbox[3]-bbox[2], 2)};
+#pragma omp for schedule(static)
+        for(int i=0;i<_NNodes;i++){
+          _metric[i].set(_ndims, m);
+        }
+      }
+    }else{
+      real_t bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0), get_z(0), get_z(0)};
+      for(int i=1;i<_NNodes;i++){
+        bbox[0] = min(bbox[0], get_x(i)); bbox[1] = max(bbox[1], get_x(i));
+        bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
+        bbox[4] = min(bbox[4], get_z(i)); bbox[5] = max(bbox[5], get_z(i));
+      }
+      _metric = new MetricTensor<real_t>[_NNodes];
+      // Enforce first-touch policy
+#pragma omp parallel
+      {
+        real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
+                      0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
+                      0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
+#pragma omp for schedule(static)
+        for(int i=0;i<_NNodes;i++){
+          _metric[i].set(_ndims, m);
+        }
+      }
+    }
+  }
+  
   /*! Default destructor.
    */
   ~MetricField(){
     if(_metric!=NULL)
       delete [] _metric;
   }
-  
-  /*! Set the source mesh (2D triangular meshes).
-   * @param NNodes number of nodes in the local mesh.
-   * @param NElements number of nodes in the local mesh.
-   * @param ENList array storing the global node number for each element.
-   * @param x is the X coordinate.
-   * @param y is the Y coordinate.
-   * @param node_distribution gives the number of nodes owned
-   *        by each process when this is using MPI, where it is
-   *        assumed that each processes ownes n_i consecutive
-   *        vertices of the mesh. Its contents are identical for every process.
-   */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
-                const real_t *x, const real_t *y, const index_t *node_distribution=NULL){
-    nloc = 3;
-    _ndims = 2;
-    _NNodes = NNodes;
-    _NElements = NElements;
-    _ENList = ENList;
-    _surface = surface;
-    _x = x;
-    _y = y;
-    _z = NULL;
-    _node_distribution = node_distribution;
-
-    real_t bbox[] = {x[0], x[0], y[0], y[0]};
-    for(int i=1;i<_NNodes;i++){
-      bbox[0] = min(bbox[0], x[i]); bbox[1] = max(bbox[1], x[i]);
-      bbox[2] = min(bbox[2], y[i]); bbox[3] = max(bbox[3], y[i]);
-    }
-    _metric = new MetricTensor<real_t>[_NNodes];
-    real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0, 1.0/pow(bbox[3]-bbox[2], 2)};
-    for(int i=0;i<_NNodes;i++){
-      _metric[i].set(_ndims, m);
-    }
-  }
-  
-  /*! Set the source mesh (3D tetrahedral meshes).
-   * @param NNodes number of nodes in the local mesh.
-   * @param NElements number of nodes in the local mesh.
-   * @param ENList array storing the global node number for each element.
-   * @param x is the X coordinate.
-   * @param y is the Y coordinate.
-   * @param z is the Z coordinate.
-   * @param node_distribution gives the number of nodes owned
-   *        by each process when this is using MPI, where it is
-   *        assumed that each processes ownes n_i consecutive
-   *        vertices of the mesh. Its contents are identical for every process.
-   */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList, Surface<real_t, index_t> *surface,
-                const real_t *x, const real_t *y, const real_t *z, const index_t *node_distribution=NULL){
-    nloc = 4;
-    _ndims = 3;
-    _NNodes = NNodes;
-    _NElements = NElements;
-    _ENList = ENList;
-    _surface = surface;
-    _x = x;
-    _y = y;
-    _z = z;
-    _node_distribution = node_distribution;
-
-    real_t bbox[] = {x[0], x[0], y[0], y[0], z[0], z[0]};
-    for(int i=1;i<_NNodes;i++){
-      bbox[0] = min(bbox[0], x[i]); bbox[1] = max(bbox[1], x[i]);
-      bbox[2] = min(bbox[2], y[i]); bbox[3] = max(bbox[3], y[i]);
-      bbox[4] = min(bbox[4], z[i]); bbox[5] = max(bbox[5], z[i]);
-    }
-    _metric = new MetricTensor<real_t>[_NNodes];
-    real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
-                  0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
-                  0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
-
-    for(int i=0;i<_NNodes;i++){
-      _metric[i].set(_ndims, m);
-    }
-  }
 
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
   void get_metric(real_t *metric){
-    for(int i=0;i<_NNodes;i++){
-      _metric[i].get_metric(metric+i*_ndims*_ndims);
+    // Enforce first-touch policy
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        _metric[i].get_metric(metric+i*_ndims*_ndims);
+      }
     }
   }
-
-#ifdef HAVE_MPI
-  /*! Set the MPI communicator to be used.
-   * @param mesh_comm is the MPI communicator.
-   */
-  void set_mpi_communicator(const MPI_Comm *mesh_comm){
-    _mesh_comm = mesh_comm;
-  }
-#endif
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error.
    * @param psi is field while curvature is to be considered.
@@ -280,7 +233,7 @@ template<typename real_t, typename index_t>
    */
   void apply_min_nelements(real_t nelements){
     int predicted = predict_nelements();
-    if(predicted<min_nelements)
+    if(predicted<nelements)
       apply_nelements(nelements);
   }
 
@@ -303,17 +256,17 @@ template<typename real_t, typename index_t>
       return predicted;
 
     if(_ndims==2){
-      real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]]};
-      real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]]};
-      real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]]};
+      const real_t *refx0 = _coords + _ENList[0]*_ndims;
+      const real_t *refx1 = _coords + _ENList[1]*_ndims;
+      const real_t *refx2 = _coords + _ENList[2]*_ndims;
       ElementProperty<real_t> property(refx0, refx1, refx2);
 
       real_t total_area_metric = 0.0;
       for(int i=0;i<_NElements;i++){
-        const index_t *n=_ENList+nloc*i;
-        real_t x0[] = {_x[n[0]], _y[n[0]]};
-        real_t x1[] = {_x[n[1]], _y[n[1]]};
-        real_t x2[] = {_x[n[2]], _y[n[2]]};
+        const index_t *n=_ENList+_nloc*i;
+        const real_t *x0 = _coords + n[0]*_ndims;
+        const real_t *x1 = _coords + n[1]*_ndims;
+        const real_t *x2 = _coords + n[2]*_ndims;
         real_t area = property.area(x0, x1, x2);
         
         const real_t *m0=_metric[n[0]].get_metric();
@@ -333,19 +286,19 @@ template<typename real_t, typename index_t>
       
       predicted = total_area_metric/ideal_area;
     }else{
-      real_t refx0[] = {_x[_ENList[0]], _y[_ENList[0]], _z[_ENList[0]]};
-      real_t refx1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
-      real_t refx2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
-      real_t refx3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
+      const real_t *refx0 = _coords + _ENList[0]*_ndims;
+      const real_t *refx1 = _coords + _ENList[1]*_ndims;
+      const real_t *refx2 = _coords + _ENList[2]*_ndims;
+      const real_t *refx3 = _coords + _ENList[3]*_ndims;
       ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
       
       real_t total_volume_metric = 0.0;
       for(int i=0;i<_NElements;i++){
-        const index_t *n=_ENList+nloc*i;
-        real_t x0[] = {_x[_ENList[0]], _y[_ENList[0]], _z[_ENList[0]]};
-        real_t x1[] = {_x[_ENList[1]], _y[_ENList[1]], _z[_ENList[1]]};
-        real_t x2[] = {_x[_ENList[2]], _y[_ENList[2]], _z[_ENList[2]]};
-        real_t x3[] = {_x[_ENList[3]], _y[_ENList[3]], _z[_ENList[3]]};
+        const index_t *n=_ENList+_nloc*i;
+        const real_t *x0 = _coords + n[0]*_ndims;
+        const real_t *x1 = _coords + n[1]*_ndims;
+        const real_t *x2 = _coords + n[2]*_ndims;
+        const real_t *x3 = _coords + n[3]*_ndims;
         real_t volume = property.volume(x0, x1, x2, x3);
         
         const real_t *m0=_metric[n[0]].get_metric();
@@ -359,7 +312,6 @@ template<typename real_t, typename index_t>
         real_t m11 = (m0[4]+m1[4]+m2[4]+m3[4])/4;
         real_t m12 = (m0[5]+m1[5]+m2[5]+m3[5])/4;
         real_t m22 = (m0[8]+m1[8]+m2[8]+m3[8])/4;
-
 
         real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
         total_volume_metric += volume*sqrt(det);
@@ -385,10 +337,10 @@ template<typename real_t, typename index_t>
     if(NNList.empty()){
       NNList.resize(_NNodes);
       for(int i=0; i<_NElements; i++){
-        for(int j=0;j<nloc;j++){
-          for(int k=j+1;k<nloc;k++){
-            NNList[_ENList[i*nloc+j]].insert(_ENList[i*nloc+k]);
-            NNList[_ENList[i*nloc+k]].insert(_ENList[i*nloc+j]);
+        for(int j=0;j<_nloc;j++){
+          for(int k=j+1;k<_nloc;k++){
+            NNList[_ENList[i*_nloc+j]].insert(_ENList[i*_nloc+k]);
+            NNList[_ENList[i*_nloc+k]].insert(_ENList[i*_nloc+j]);
           }
         }
       }
@@ -428,7 +380,7 @@ template<typename real_t, typename index_t>
           // Form quadratic system to be solved. The quadratic fit is:
           // P = a0+a1x+a2y+a3xy+a4x^2+a5y^2
           // A = P^TP
-          double x=_x[i], y=_y[i];
+          double x=get_x(i), y=get_y(i);
           Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(6,6);
           
           A[0]+=pow(y,4); A[1]+=pow(x,2)*pow(y,2); A[2]+=x*pow(y,3); A[3]+=pow(y,3); A[4]+=x*pow(y,2); A[5]+=pow(y,2);
@@ -443,7 +395,7 @@ template<typename real_t, typename index_t>
           b[0]+=psi[i]*pow(y,2); b[1]+=psi[i]*pow(x,2); b[2]+=psi[i]*x*y; b[3]+=psi[i]*y; b[4]+=psi[i]*x; b[5]+=psi[i]*1;
           
           for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
-            x=_x[*n]; y=_y[*n];
+            x=get_x(*n); y=get_y(*n);
             
             A[0]+=pow(y,4); A[1]+=pow(x,2)*pow(y,2); A[2]+=x*pow(y,3); A[3]+=pow(y,3); A[4]+=x*pow(y,2); A[5]+=pow(y,2);
             A[6]+=pow(x,2)*pow(y,2); A[7]+=pow(x,4); A[8]+=pow(x,3)*y; A[9]+=pow(x,2)*y; A[10]+=pow(x,3); A[11]+=pow(x,2);
@@ -466,7 +418,7 @@ template<typename real_t, typename index_t>
           // Form quadratic system to be solved. The quadratic fit is:
           // P = 1 + x + y + z + x^2 + y^2 + z^2 + xy + xz + yz
           // A = P^TP
-          double x=_x[i], y=_y[i], z=_z[i];
+          double x=get_x(i), y=get_y(i), z=get_z(i);
           Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(10,10);
           
           A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=z; A[4]+=pow(x,2); A[5]+=x*y; A[6]+=x*z; A[7]+=pow(y,2); A[8]+=y*z; A[9]+=pow(z,2);
@@ -485,7 +437,7 @@ template<typename real_t, typename index_t>
           b[0]+=psi[i]*1; b[1]+=psi[i]*x; b[2]+=psi[i]*y; b[3]+=psi[i]*z; b[4]+=psi[i]*pow(x,2); b[5]+=psi[i]*x*y; b[6]+=psi[i]*x*z; b[7]+=psi[i]*pow(y,2); b[8]+=psi[i]*y*z; b[9]+=psi[i]*pow(z,2);
           
           for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
-            x=_x[*n]; y=_y[*n]; z=_z[*n];
+            x=get_x(*n); y=get_y(*n); z=get_z(*n);
             
             A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=z; A[4]+=pow(x,2); A[5]+=x*y; A[6]+=x*z; A[7]+=pow(y,2); A[8]+=y*z; A[9]+=pow(z,2);
             A[10]+=x; A[11]+=pow(x,2); A[12]+=x*y; A[13]+=x*z; A[14]+=pow(x,3); A[15]+=pow(x,2)*y; A[16]+=pow(x,2)*z; A[17]+=x*pow(y,2); A[18]+=x*y*z; A[19]+=x*pow(z,2);
@@ -517,14 +469,26 @@ template<typename real_t, typename index_t>
       }
     }
   }
+
+  inline real_t get_x(index_t nid){
+    return _coords[nid*_ndims];
+  }
+
+  inline real_t get_y(index_t nid){
+    return _coords[nid*_ndims+1];
+  }
+
+  inline real_t get_z(index_t nid){
+    return _coords[nid*_ndims+2];
+  }
   
-  int _NNodes, _NElements, _ndims, nloc;
-  const index_t *_ENList, *_node_distribution;
-  const real_t *_x, *_y, *_z;
+  int _NNodes, _NElements, _ndims, _nloc;
+  const index_t *_ENList;
+  const real_t *_coords;
   std::vector< std::set<index_t> > NNList;
   std::vector<int> norder;
 #ifdef HAVE_MPI
-  const MPI_Comm *_mesh_comm;
+  const MPI_Comm *_comm;
 #endif
   MetricTensor<real_t> *_metric;
   Surface<real_t, index_t> *_surface;

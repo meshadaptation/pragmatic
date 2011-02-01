@@ -70,11 +70,11 @@ int main(int argc, char **argv){
     }
   }
 
-  Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
-  MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
+  Surface<double, int> surface(mesh);
+
+  MetricField<double, int> metric_field(mesh, surface);
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)

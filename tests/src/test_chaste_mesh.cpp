@@ -69,15 +69,15 @@ int main(int argc, char **argv){
     }
   }
 
-  Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+  
+  Surface<double, int> surface(mesh);
+  
+  MetricField<double, int> metric_field(mesh, surface);
 
   vector<double> psi(NNodes);
   vector<double> metric(NNodes*9);
   
-  MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]));
-
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray( "Vm" );
   for (int i = 0; i < NNodes; i++)
@@ -91,8 +91,7 @@ int main(int argc, char **argv){
 
   metric_field.get_metric(&(metric[0]));
 
-  Smooth<double, int> smooth;
-  smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(z[0]), &(metric[0]));
+  Smooth<double, int> smooth(mesh, surface, &(metric[0]));
   
   double start_tic = omp_get_wtime();
   double initial_rms = smooth.smooth();

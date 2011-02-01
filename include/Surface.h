@@ -32,6 +32,9 @@
 
 #include <vector>
 #include <set>
+#include <map>
+
+#include "Mesh.h"
 
 /*! \brief Manages surface information and classification.
  *
@@ -49,21 +52,20 @@ template<typename real_t, typename index_t>
  public:
   
   /// Default constructor.
-  Surface(){
-    _NNodes = 0;
-    _NElements = 0;
-    _ndims = 0;
-    nloc = 0;
-    snloc = 0;
-    _ENList = NULL;
-    _node_distribution = NULL;
-    _x = NULL;
-    _y = NULL;
-    _z = NULL;
+  Surface(Mesh<real_t, index_t> &mesh){
+    _NNodes = mesh.get_number_nodes();
+    _NElements = mesh.get_number_elements();
+    _ndims = mesh.get_number_dimensions();
+    nloc = (_ndims==2)?3:4;
+    snloc = (_ndims==2)?2:3;
+    _ENList = mesh.get_enlist();;
+    _coords = mesh.get_coords();
 #ifdef HAVE_MPI
-    _mesh_comm = NULL;
+    _mesh_comm = mesh.get_mpi_comm();
 #endif
     set_coplanar_tolerance(0.9999999);
+
+    find_surface();
   }
   
   /// Default destructor.
@@ -96,61 +98,6 @@ template<typename real_t, typename index_t>
 
   std::set<size_t> get_surface_patch(int i){
     return SNEList[i];
-  }
-
-  /*! Set the source mesh (2D triangular meshes).
-   * @param NNodes number of nodes in the local mesh.
-   * @param NElements number of nodes in the local mesh.
-   * @param ENList array storing the global node number for each element.
-   * @param x is the X coordinate.
-   * @param y is the Y coordinate.
-   * @param node_distribution gives the number of nodes owned
-   *        by each process when this is using MPI, where it is
-   *        assumed that each processes ownes n_i consecutive
-   *        vertices of the mesh. Its contents are identical for every process.
-   */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
-                const real_t *x, const real_t *y, const index_t *node_distribution=NULL){
-    nloc = 3;
-    snloc = 2;
-    _ndims = 2;
-    _NNodes = NNodes;
-    _NElements = NElements;
-    _ENList = ENList;
-    _x = x;
-    _y = y;
-    _z = NULL;
-    _node_distribution = node_distribution;
-
-    find_surface();
-  }
-  
-  /*! Set the source mesh (3D tetrahedral meshes).
-   * @param NNodes number of nodes in the local mesh.
-   * @param NElements number of nodes in the local mesh.
-   * @param ENList array storing the global node number for each element.
-   * @param x is the X coordinate.
-   * @param y is the Y coordinate.
-   * @param z is the Z coordinate.
-   * @param node_distribution gives the number of nodes owned
-   *        by each process when this is using MPI, where it is
-   *        assumed that each processes ownes n_i consecutive
-   *        vertices of the mesh. Its contents are identical for every process.
-   */
-  void set_mesh(int NNodes, int NElements, const index_t *ENList,
-                const real_t *x, const real_t *y, const real_t *z, const index_t *node_distribution=NULL){
-    nloc = 4;
-    snloc = 3;
-    _ndims = 3;
-    _NNodes = NNodes;
-    _NElements = NElements;
-    _ENList = ENList;
-    _x = x;
-    _y = y;
-    _z = z;
-    _node_distribution = node_distribution;
-
-    find_surface();
   }
 
   /// Set dot product tolerence - used to decide if elements are co-planar
@@ -214,8 +161,8 @@ template<typename real_t, typename index_t>
     normals.resize(NSElements*_ndims);
     if(_ndims==2){
       for(int i=0;i<NSElements;i++){
-        normals[i*2] = sqrt(1 - pow((_x[SENList[2*i+1]] - _x[SENList[2*i]])
-                                    /(_y[SENList[2*i+1]] - _y[SENList[2*i]]), 2));
+        normals[i*2] = sqrt(1 - pow((get_x(SENList[2*i+1]) - get_x(SENList[2*i]))
+                                    /(get_y(SENList[2*i+1]) - get_y(SENList[2*i])), 2));
         if(isnan(normals[i*2])){
           normals[i*2] = 0;
           normals[i*2+1] = 1;
@@ -223,21 +170,21 @@ template<typename real_t, typename index_t>
           normals[i*2+1] = sqrt(1 - pow(normals[i*2], 2));
         }
         
-        if(_y[SENList[2*i+1]] - _y[SENList[2*i]]>0)
+        if(get_y(SENList[2*i+1]) - get_y(SENList[2*i])>0)
           normals[i*2] *= -1;
 
-        if(_x[SENList[2*i]] - _x[SENList[2*i+1]]>0)
+        if(get_x(SENList[2*i]) - get_x(SENList[2*i+1])>0)
           normals[i*2+1] *= -1;
       }
     }else{
       for(int i=0;i<NSElements;i++){
-        real_t x1 = _x[SENList[3*i+1]] - _x[SENList[3*i]];
-        real_t y1 = _y[SENList[3*i+1]] - _y[SENList[3*i]];
-        real_t z1 = _z[SENList[3*i+1]] - _z[SENList[3*i]];
+        real_t x1 = get_x(SENList[3*i+1]) - get_x(SENList[3*i]);
+        real_t y1 = get_y(SENList[3*i+1]) - get_y(SENList[3*i]);
+        real_t z1 = get_z(SENList[3*i+1]) - get_z(SENList[3*i]);
         
-        real_t x2 = _x[SENList[3*i+2]] - _x[SENList[3*i]];
-        real_t y2 = _y[SENList[3*i+2]] - _y[SENList[3*i]];
-        real_t z2 = _z[SENList[3*i+2]] - _z[SENList[3*i]];
+        real_t x2 = get_x(SENList[3*i+2]) - get_x(SENList[3*i]);
+        real_t y2 = get_y(SENList[3*i+2]) - get_y(SENList[3*i]);
+        real_t z2 = get_z(SENList[3*i+2]) - get_z(SENList[3*i]);
         
         normals[i*3  ] = y1*z2 - y2*z1;
         normals[i*3+1] =-x1*z2 + x2*z1;
@@ -339,11 +286,23 @@ template<typename real_t, typename index_t>
     }
   }
 
+  inline real_t get_x(index_t nid){
+    return _coords[nid*_ndims];
+  }
+
+  inline real_t get_y(index_t nid){
+    return _coords[nid*_ndims+1];
+  }
+
+  inline real_t get_z(index_t nid){
+    return _coords[nid*_ndims+2];
+  }
+
   int _NNodes, _NElements, NSElements, _ndims, nloc, snloc;
   const index_t *_ENList, *_node_distribution;
-  const real_t *_x, *_y, *_z;
+  const real_t *_coords;
   std::vector< std::set<index_t> > NNList;
-  std::map< int, std::set<size_t> > SNEList;
+  std::map<int, std::set<size_t> > SNEList;
   std::vector<int> norder;
   std::set<index_t> surface_nodes;
   std::vector<int> SENList, coplanar_ids;

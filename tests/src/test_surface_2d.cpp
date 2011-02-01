@@ -38,8 +38,8 @@
 #include <iostream>
 #include <vector>
 
-#include "MetricField.h"
 #include "Surface.h"
+#include "Mesh.h"
 
 using namespace std;
 
@@ -74,8 +74,9 @@ int main(int argc, char **argv){
     }
   }
 
-  Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+
+  Surface<double, int> surface(mesh);
 
   vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
   ug_out->SetPoints(ug->GetPoints());

@@ -71,26 +71,24 @@ int main(int argc, char **argv){
     }
   }
 
-  Surface<double, int> surface;
-  surface.set_mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
-  vector<double> metric(NNodes*4);
-  
-  MetricField<double, int> metric_field;
-  metric_field.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]));
+  Surface<double, int> surface(mesh);
+
+  MetricField<double, int> metric_field(mesh, surface);
 
   vector<double> psi(NNodes);  
-  for(int i=0;i<NNodes;i++){
+  for(int i=0;i<NNodes;i++)
     psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i];
-  }
+  
   metric_field.add_field(&(psi[0]), 0.6);
 
   metric_field.apply_nelements(NElements);
 
+  vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));
   
-  Smooth<double, int> smooth;
-  smooth.set_mesh(NNodes, NElements, &(ENList[0]), &surface, &(x[0]), &(y[0]), &(metric[0]));
+  Smooth<double, int> smooth(mesh, surface, &(metric[0]));
 
   double start_tic = omp_get_wtime();
   double prev_mean_quality = smooth.smooth(true);
@@ -112,7 +110,8 @@ int main(int argc, char **argv){
   ug_out->DeepCopy(ug);
   
   for(int i=0;i<NNodes;i++){
-    ug_out->GetPoints()->SetPoint(i, x[i], y[i], z[i]);
+    double *r = mesh.get_coords()+i*2;
+    ug_out->GetPoints()->SetPoint(i, r[0], r[1], 0.0);
   }
 
   vtkDoubleArray *mfield = vtkDoubleArray::New();
