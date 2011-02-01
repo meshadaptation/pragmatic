@@ -33,6 +33,10 @@
 #include <map>
 #include <set>
 #include <vector>
+#include "confdefs.h"
+#ifdef HAVE_ZOLTAN
+#include "zoltan_cpp.h"
+#endif
 
 /*! \brief Class contains various methods for colouring undirected graphs.
  */
@@ -52,7 +56,7 @@ class Colour{
       for(typename std::set<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it)
         if(*it<(int)node)
           used_colours.insert(colour[*it]);
-      
+
       for(index_t i=0;;i++)
         if(used_colours.count(i)==0){
           colour[node] = i;
