@@ -121,7 +121,7 @@ int main(int argc, char **argv){
     max_rms = std::max(max_rms, rms[i]);
   }
 
-  if(max_rms>0.005)
+  if(max_rms>0.01)
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";
