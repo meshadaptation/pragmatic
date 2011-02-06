@@ -150,22 +150,24 @@ template<typename real_t, typename index_t>
     
     get_hessian(psi, Hessian);
     
-    if(relative){
-      for(int i=0;i<_NNodes;i++){
-        real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
-        for(int j=0;j<ndims2;j++)
-          Hessian[i*ndims2+j]*=eta;
-      }
-    }else{
-      for(int i=0;i<_NNodes;i++){
-        real_t eta = 1.0/target_error;
-        for(int j=0;j<ndims2;j++)
-          Hessian[i*ndims2+j]*=eta;
-      }
-    }
-    
 #pragma omp parallel
     {
+      if(relative){
+#pragma omp for schedule(static)
+        for(int i=0;i<_NNodes;i++){
+          real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
+          for(int j=0;j<ndims2;j++)
+            Hessian[i*ndims2+j]*=eta;
+        }
+      }else{
+#pragma omp for schedule(static)
+        for(int i=0;i<_NNodes;i++){
+          real_t eta = 1.0/target_error;
+          for(int j=0;j<ndims2;j++)
+            Hessian[i*ndims2+j]*=eta;
+        }
+      }
+    
 #pragma omp for schedule(static)
       for(int ip=0;ip<_NNodes;ip++){
         size_t i=norder[ip];
