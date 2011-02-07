@@ -31,10 +31,13 @@
 #include <vtkXMLUnstructuredGridWriter.h>
 #include <vtkCell.h>
 #include <vtkDoubleArray.h>
+#include <vtkIntArray.h>
 #include <vtkPointData.h>
 
 #include <iostream>
 #include <vector>
+
+#include <omp.h>
 
 #include "MetricField.h"
 #include "Surface.h"
@@ -48,11 +51,11 @@ int main(int argc, char **argv){
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
 
-  int NNodes = ug->GetNumberOfPoints();
-  int NElements = ug->GetNumberOfCells();
+  size_t NNodes = ug->GetNumberOfPoints();
+  size_t NElements = ug->GetNumberOfCells();
 
   vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(int i=0;i<NNodes;i++){
+  for(size_t i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
     x[i] = r[0];
@@ -61,22 +64,27 @@ int main(int argc, char **argv){
   }
 
   vector<int> ENList;
-  for(int i=0;i<NElements;i++){
+  for(size_t i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
-    for(int j=0;j<4;j++){
+    for(size_t j=0;j<4;j++){
       ENList.push_back(cell->GetPointId(j));
     }
   }
+  reader->Delete();
 
   Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+
+  ENList.clear();
+  x.clear();
+  y.clear();
 
   Surface<double, int> surface(mesh);
 
   MetricField<double, int> metric_field(mesh, surface);
 
   vector<double> psi(NNodes);
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]+y[i]*y[i]+z[i]*z[i];
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(x[i], 2) + pow(y[i], 2) + pow(z[i], 2);
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
@@ -85,17 +93,10 @@ int main(int argc, char **argv){
   vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));
   
-  vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
-  ug_out->DeepCopy(ug);
-  
-  vtkDoubleArray *mfield = vtkDoubleArray::New();
-  mfield->SetNumberOfComponents(9);
-  mfield->SetNumberOfTuples(NNodes);
-  mfield->SetName("Metric");
   double rms[] = {0., 0., 0.,
                   0., 0., 0.,
                   0., 0., 0.};
-  for(int i=0;i<NNodes;i++){
+  for(size_t i=0;i<NNodes;i++){
     rms[0] += pow(2.0-metric[i*9  ], 2);
     rms[1] += pow(metric[i*9+1], 2);
     rms[2] += pow(metric[i*9+2], 2);
@@ -107,37 +108,79 @@ int main(int argc, char **argv){
     rms[6] += pow(metric[i*9+6], 2);
     rms[7] += pow(metric[i*9+7], 2);
     rms[8] += pow(2.0-metric[i*9+8], 2);
-
-    mfield->SetTuple9(i,
-                      metric[i*9],   metric[i*9+1], metric[i*9+2],
-                      metric[i*9+3], metric[i*9+4], metric[i*9+5],
-                      metric[i*9+6], metric[i*9+7], metric[i*9+8]);
   }
-  ug_out->GetPointData()->AddArray(mfield);
 
   double max_rms = 0;
   for(size_t i=0;i<9;i++){
     rms[i] = sqrt(rms[i]/NNodes);
     max_rms = std::max(max_rms, rms[i]);
   }
-
+  
   if(max_rms>0.01)
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";
+  
+  // Create VTU object to write out.
+  ug = vtkUnstructuredGrid::New();
+  
+  vtkPoints *vtk_points = vtkPoints::New();
+  vtk_points->SetNumberOfPoints(NNodes);
 
-  vtkDoubleArray *scalar = vtkDoubleArray::New();
-  scalar->SetNumberOfComponents(1);
-  scalar->SetNumberOfTuples(NNodes);
-  scalar->SetName("psi");
-  for(int i=0;i<NNodes;i++)
-    scalar->SetTuple1(i, psi[i]);
-  ug_out->GetPointData()->AddArray(scalar);
+  vtkDoubleArray *vtk_psi = vtkDoubleArray::New();
+  vtk_psi->SetNumberOfComponents(1);
+  vtk_psi->SetNumberOfTuples(NNodes);
+  vtk_psi->SetName("psi");
+
+  vtkIntArray *vtk_numbering = vtkIntArray::New();
+  vtk_numbering->SetNumberOfComponents(1);
+  vtk_numbering->SetNumberOfTuples(NNodes);
+  vtk_numbering->SetName("nid");
+  
+  vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
+  vtk_metric->SetNumberOfComponents(9);
+  vtk_metric->SetNumberOfTuples(NNodes);
+  vtk_metric->SetName("Metric");
+  
+  for(size_t i=0;i<NNodes;i++){
+    const double *r = mesh.get_coords()+i*3;
+    vtk_psi->SetTuple1(i, pow(r[0], 2)+pow(r[1], 2)+pow(r[2], 2));
+    vtk_numbering->SetTuple1(i, i);
+    vtk_points->SetPoint(i, r[0], r[1], r[2]);
+    vtk_metric->SetTuple9(i,
+                          metric[i*9],   metric[i*9+1], metric[i*9+2],
+                          metric[i*9+3], metric[i*9+4], metric[i*9+5],
+                          metric[i*9+6], metric[i*9+7], metric[i*9+8]);
+  }
+  
+  ug->SetPoints(vtk_points);
+  vtk_points->Delete();
+  
+  ug->GetPointData()->AddArray(vtk_psi);
+  vtk_psi->Delete();
+
+  ug->GetPointData()->AddArray(vtk_numbering);
+  vtk_numbering->Delete();
+  
+  ug->GetPointData()->AddArray(vtk_metric);
+  vtk_metric->Delete();
+
+  assert(NElements == (size_t)mesh.get_number_elements());
+  for(size_t i=0;i<NElements;i++){
+    vtkIdType pts[] = {mesh.get_enlist()[i*4],
+                       mesh.get_enlist()[i*4+1], 
+                       mesh.get_enlist()[i*4+2],
+                       mesh.get_enlist()[i*4+3]};
+    ug->InsertNextCell(VTK_TETRA, 4, pts);
+  }
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName("../data/test_hessian_3d.vtu");
-  writer->SetInput(ug_out);
+  writer->SetInput(ug);
   writer->Write();
+
+  writer->Delete();
+  ug->Delete();
 
   return 0;
 }

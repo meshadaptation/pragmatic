@@ -40,7 +40,6 @@
 #include <Eigen/Dense>
 
 #include "MetricTensor.h"
-#include "Metis.h"
 #include "Surface.h"
 #include "Mesh.h"
 #include "ElementProperty.h"
@@ -76,6 +75,7 @@ template<typename real_t, typename index_t>
     _mesh_comm = mesh.get_mpi_comm();
 #endif
     _surface = &surface;
+    _mesh = &mesh;
 
     if(_ndims==2){
       real_t bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
@@ -147,9 +147,17 @@ template<typename real_t, typename index_t>
     int ndims2 = _ndims*_ndims;
     
     real_t *Hessian = new real_t[_NNodes*ndims2];
-    
-    get_hessian(psi, Hessian);
-    
+    real_t *_psi = new real_t[_NNodes];
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        _psi[i] = psi[_mesh->new2old(i)];
+      }
+    }
+    get_hessian(_psi, Hessian);
+    delete [] _psi;
+
 #pragma omp parallel
     {
       if(relative){
@@ -158,6 +166,8 @@ template<typename real_t, typename index_t>
           real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
           for(int j=0;j<ndims2;j++)
             Hessian[i*ndims2+j]*=eta;
+
+      
         }
       }else{
 #pragma omp for schedule(static)
@@ -167,10 +177,9 @@ template<typename real_t, typename index_t>
             Hessian[i*ndims2+j]*=eta;
         }
       }
-    
+      
 #pragma omp for schedule(static)
-      for(int ip=0;ip<_NNodes;ip++){
-        size_t i=norder[ip];
+      for(int i=0;i<_NNodes;i++){
         _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
       }
     }
@@ -334,50 +343,17 @@ template<typename real_t, typename index_t>
    * @param Hessian is the location where the Hessian of psi is copied.
    */
   void get_hessian(const real_t *psi, real_t *Hessian){
-    
-    // Create node-node list
-    if(NNList.empty()){
-      NNList.resize(_NNodes);
-      for(int i=0; i<_NElements; i++){
-        for(int j=0;j<_nloc;j++){
-          for(int k=j+1;k<_nloc;k++){
-            NNList[_ENList[i*_nloc+j]].insert(_ENList[i*_nloc+k]);
-            NNList[_ENList[i*_nloc+k]].insert(_ENList[i*_nloc+j]);
-          }
-        }
-      }
-      Metis<index_t>::reorder(NNList, norder);
-    }
-
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
-      size_t min_patch_size = (_ndims==2)?7:11; // number of parameters + 1
+      size_t min_patch_size = (_ndims==2)?6:9; // number of parameters + 1
 #pragma omp for schedule(static)
-      for(int ip=0; ip<_NNodes; ip++){
-        size_t i=norder[ip];
-        std::set<index_t> patch = NNList[i];
-        
-        if((patch.size()<min_patch_size)||(_surface->contains_node(i))){
-          std::set<index_t> front = NNList[i], *new_front = new std::set<index_t>;
-          for(;;){
-            for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
-              for(typename std::set<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
-                if(patch.find(*jt)==patch.end()){
-                  new_front->insert(*jt);
-                  patch.insert(*jt);
-                }
-              }
-            }
+      for(int i=0; i<_NNodes; i++){
+        std::set<index_t> patch;
+        patch.insert(i);
+        size_t lmin_patch_size = _surface->contains_node(i)?min_patch_size*2:min_patch_size;
+        _mesh->get_node_patch(i, lmin_patch_size, patch);
 
-            if(patch.size()>=min_patch_size)
-              break;
-
-            front.swap(*new_front);
-          }
-          delete new_front;
-        }
-        
         if(_ndims==2){
           // Form quadratic system to be solved. The quadratic fit is:
           // P = a0+a1x+a2y+a3xy+a4x^2+a5y^2
@@ -487,13 +463,13 @@ template<typename real_t, typename index_t>
   int _NNodes, _NElements, _ndims, _nloc;
   const index_t *_ENList;
   const real_t *_coords;
-  std::vector< std::set<index_t> > NNList;
-  std::vector<int> norder;
+
 #ifdef HAVE_MPI
   const MPI_Comm *_comm;
 #endif
   MetricTensor<real_t> *_metric;
   Surface<real_t, index_t> *_surface;
+  Mesh<real_t, index_t> *_mesh;
 };
 
 #endif

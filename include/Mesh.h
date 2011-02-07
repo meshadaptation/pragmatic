@@ -30,8 +30,11 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include <deque>
 #include <vector>
 #include <set>
+
+#include "Metis.h"
 
 /*! \brief Manages mesh data.
  *
@@ -105,13 +108,52 @@ template<typename real_t, typename index_t>
   }
 
   /// Return a pointer to the element-node list.
-  index_t *get_enlist(){
+  const index_t *get_enlist(){
     return _ENList;
   }
-  
+
+  /// Return the node id's connected to the specified node_id
+  void get_node_patch(index_t nid, std::set<index_t> &patch){
+    for(typename std::vector<index_t>::const_iterator it=_NNList[nid];it!=_NNList[nid];it++)
+      patch.insert(*it);
+    return;
+  }
+
+  /// Grow a node patch around node id's until it reaches a minimum size.
+  void get_node_patch(index_t nid, int min_patch_size, std::set<index_t> &patch){
+    for(typename std::vector<index_t>::const_iterator it=_NNList[nid].begin();it!=_NNList[nid].end();it++)
+      patch.insert(*it);
+    
+    if(patch.size()<(size_t)min_patch_size){
+      std::set<index_t> front = patch, new_front;
+      for(;;){
+        for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
+          for(typename std::vector<index_t>::const_iterator jt=_NNList[*it].begin();jt!=_NNList[*it].end();jt++){
+            if(patch.find(*jt)==patch.end()){
+              new_front.insert(*jt);
+              patch.insert(*jt);
+            }
+          }
+        }
+        
+        if(patch.size()>=(size_t)min_patch_size)
+          break;
+        
+        front.swap(new_front);
+      }
+    }
+    
+    return;
+  }
+
   /// Return positions vector.
-  real_t *get_coords(){
+  const real_t *get_coords(){
     return _coords;
+  }
+
+  /// Return new local node number given on original node number.
+  int new2old(int nid){
+    return nid_new2old[nid];
   }
 
 #ifdef HAVE_MPI
@@ -123,6 +165,8 @@ template<typename real_t, typename index_t>
 
   /// Default destructor.
   ~Mesh(){
+    delete [] _ENList;
+    delete [] _coords;
   }
   
  private:
@@ -146,22 +190,64 @@ template<typename real_t, typename index_t>
     // Allocate space.
     _ENList = new index_t[_NElements*_nloc];
     _coords = new real_t[_NNodes*_ndims];
+    
+    // Create an optimised node ordering.
+    std::vector< std::set<index_t> > NNList(_NNodes);
+    for(int i=0; i<_NElements; i++){
+      for(int j=0;j<_nloc;j++){
+        for(int k=j+1;k<_nloc;k++){
+          NNList[ENList[i*_nloc+j]].insert(ENList[i*_nloc+k]);
+          NNList[ENList[i*_nloc+k]].insert(ENList[i*_nloc+j]);
+        }
+      }
+    }
 
+    Metis<index_t>::reorder(NNList, nid_new2old);
+
+    std::vector<index_t> nid_old2new(_NNodes);
+    for(int i=0;i<_NNodes;i++){
+      nid_old2new[nid_new2old[i]] = i;
+    }
+    
     // Enforce first-touch policy
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
       for(int i=0;i<_NElements;i++){
         for(int j=0;j<_nloc;j++){
-          _ENList[i*_nloc+j] = ENList[i*_nloc+j];
+          _ENList[i*_nloc+j] = nid_old2new[ENList[i*_nloc+j]];
         }
       }
 #pragma omp for schedule(static)
       for(int i=0;i<_NNodes;i++){
-        _coords[i*_ndims  ] = x[i];
-        _coords[i*_ndims+1] = y[i];
+        _coords[i*_ndims  ] = x[nid_new2old[i]];
+        _coords[i*_ndims+1] = y[nid_new2old[i]];
         if(_ndims==3)
-          _coords[i*_ndims+2] = z[i];
+          _coords[i*_ndims+2] = z[nid_new2old[i]];
+      }
+    }
+
+    // Create new NNList based on new numbering.
+    NNList.clear();
+    NNList.resize(_NNodes);
+    for(int i=0; i<_NElements; i++){
+      for(int j=0;j<_nloc;j++){
+        for(int k=j+1;k<_nloc;k++){
+          NNList[_ENList[i*_nloc+j]].insert(_ENList[i*_nloc+k]);
+          NNList[_ENList[i*_nloc+k]].insert(_ENList[i*_nloc+j]);
+        }
+      }
+    }
+
+    // Compress NNList enforcing first-touch policy
+    _NNList.resize(_NNodes);
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        for(typename std::set<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();it++){
+          _NNList[i].push_back(*it);
+        }
       }
     }
 
@@ -173,6 +259,8 @@ template<typename real_t, typename index_t>
   int _NNodes, _NElements, _ndims, _nloc;
   index_t *_ENList;
   real_t *_coords;
+  std::vector< std::vector<index_t> > _NNList;
+  std::vector<index_t> nid_new2old;
 #ifdef HAVE_MPI
   const MPI_Comm *_comm;
 #endif

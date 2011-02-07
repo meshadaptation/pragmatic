@@ -70,6 +70,7 @@ int main(int argc, char **argv){
       ENList.push_back(cell->GetPointId(j));
     }
   }
+  reader->Delete();
 
   Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
@@ -102,40 +103,47 @@ int main(int argc, char **argv){
   }
   std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
-  // recalculate
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i];
-
-  vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
-  ug_out->DeepCopy(ug);
+  // Create VTU object to write out.
+  ug = vtkUnstructuredGrid::New();
+  
+  vtkPoints *vtk_points = vtkPoints::New();
+  vtk_points->SetNumberOfPoints(NNodes);
+  
+  vtkDoubleArray *vtk_psi = vtkDoubleArray::New();
+  vtk_psi->SetNumberOfComponents(1);
+  vtk_psi->SetNumberOfTuples(NNodes);
+  vtk_psi->SetName("psi");
+  
+  vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
+  vtk_metric->SetNumberOfComponents(4);
+  vtk_metric->SetNumberOfTuples(NNodes);
+  vtk_metric->SetName("Metric");
   
   for(int i=0;i<NNodes;i++){
     double *r = mesh.get_coords()+i*2;
-    ug_out->GetPoints()->SetPoint(i, r[0], r[1], 0.0);
+    vtk_psi->SetTuple1(i, pow(r[0], 3)+pow(r[1], 3));
+    vtk_points->SetPoint(i, r[0], r[1], 0.0);
+    vtk_metric->SetTuple4(i,
+                          metric[i*4  ], metric[i*4+1],
+                          metric[i*4+2], metric[i*4+3]);
   }
-
-  vtkDoubleArray *mfield = vtkDoubleArray::New();
-  mfield->SetNumberOfComponents(4);
-  mfield->SetNumberOfTuples(NNodes);
-  mfield->SetName("Metric");
-  for(int i=0;i<NNodes;i++)
-    mfield->SetTuple4(i, metric[i*4], metric[i*4+1], metric[i*4+2], metric[i*4+3]);
-  ug_out->GetPointData()->AddArray(mfield);
-
-  vtkDoubleArray *scalar = vtkDoubleArray::New();
-  scalar->SetNumberOfComponents(1);
-  scalar->SetNumberOfTuples(NNodes);
-  scalar->SetName("psi");
-  for(int i=0;i<NNodes;i++)
-    scalar->SetTuple1(i, psi[i]);
-  ug_out->GetPointData()->AddArray(scalar);
-
+  
+  ug->SetPoints(vtk_points);
+  vtk_points->Delete();
+  
+  ug->GetPointData()->AddArray(vtk_psi);
+  vtk_psi->Delete();
+  
+  ug->GetPointData()->AddArray(vtk_metric);
+  vtk_metric->Delete();
+  
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName("../data/test_smooth_simple_2d.vtu");
-  writer->SetInput(ug_out);
+  writer->SetInput(ug);
   writer->Write();
 
-  std::cout<<"iter "<<iter<<std::endl;
+  writer->Delete();
+  ug->Delete();
 
   if(iter<80)
     std::cout<<"pass"<<std::endl;

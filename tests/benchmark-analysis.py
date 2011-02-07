@@ -16,8 +16,8 @@ opts, args = getopt.getopt(sys.argv[1:], 'p:t:b:')
 
 for o, a in opts:
     if o == '-p':
-        key, ocol = a.split(":")
-        column = int(ocol)
+      key, ocol = a.split(":")
+      column = int(ocol)
     elif o == '-t':
         ntrials = int(a)
     elif o == '-b':
