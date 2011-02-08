@@ -23,9 +23,9 @@ for cpu in cpus:
 module load intel-suite/11.1
 module load vtk
 
-cd $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR/bin
 
-log=%s.log
+log=../%s.log
 cat /proc/cpuinfo > $log
 
 for((n=0;n<%d;n++))
