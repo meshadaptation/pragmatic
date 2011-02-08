@@ -20,6 +20,8 @@ default: test
 test: $(TEST_BIN)
 	python ./unittest bin
 
+binaries: $(TEST_BIN)
+
 bin/%: src/%.cpp
 	@echo "    CXX $@"
 	@$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
