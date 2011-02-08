@@ -26,67 +26,45 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
-#include <vtkUnstructuredGrid.h>
-#include <vtkXMLUnstructuredGridReader.h>
-#include <vtkXMLUnstructuredGridWriter.h>
-#include <vtkCell.h>
-#include <vtkDoubleArray.h>
-#include <vtkPointData.h>
-
 #include <iostream>
 #include <vector>
 
-#include "MetricField.h"
-#include "Smooth.h"
+#include <omp.h>
+
+#include "Mesh.h"
 #include "Surface.h"
+#include "vtk_tools.h"
+#include "MetricField.h"
+
+#include "Smooth.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
-  vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName("../data/box20x20x20.vtu");
-  reader->Update();
+  Mesh<double, int> *mesh=NULL;
+  import_vtu("../data/box20x20.vtu", mesh);
 
-  vtkUnstructuredGrid *ug = reader->GetOutput();
+  Surface<double, int> surface(*mesh);
 
-  int NNodes = ug->GetNumberOfPoints();
-  int NElements = ug->GetNumberOfCells();
+  MetricField<double, int> metric_field(*mesh, surface);
 
-  vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(int i=0;i<NNodes;i++){
-    double r[3];
-    ug->GetPoints()->GetPoint(i, r);
-    x[i] = r[0];
-    y[i] = r[1];
-    z[i] = r[2];
-  }
-
-  vector<int> ENList;
-  for(int i=0;i<NElements;i++){
-    vtkCell *cell = ug->GetCell(i);
-    for(size_t j=0;j<4;j++){
-      ENList.push_back(cell->GetPointId(j));
-    }
-  }
-
-  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
-
-  Surface<double, int> surface(mesh);
-
-  MetricField<double, int> metric_field(mesh, surface);
+  size_t NNodes = mesh->get_number_nodes();
   
   vector<double> psi(NNodes);
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i]+z[i]*z[i]*z[i];
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) +
+      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
 
   metric_field.add_field(&(psi[0]), 0.6);
+
+  size_t NElements = mesh->get_number_elements();
 
   metric_field.apply_nelements(NElements);
 
   vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));
 
-  Smooth<double, int> smooth(mesh, surface, &(metric[0]));
+  Smooth<double, int> smooth(*mesh, surface, &(metric[0]));
   
   double start_tic = omp_get_wtime();
   double prev_mean_quality = smooth.smooth();
@@ -100,49 +78,12 @@ int main(int argc, char **argv){
   }
   std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
-  // recalculate
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i]+z[i]*z[i]*z[i];
-
-  vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
-  ug_out->DeepCopy(ug);
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) +
+      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
-  for(int i=0;i<NNodes;i++){
-    double *r = mesh.get_coords()+i*3;
-    ug_out->GetPoints()->SetPoint(i, r[0], r[1], r[2]);
-  }
-
-  vtkDoubleArray *mfield = vtkDoubleArray::New();
-  mfield->SetNumberOfComponents(9);
-  mfield->SetNumberOfTuples(NNodes);
-  mfield->SetName("Metric");
-  for(int i=0;i<NNodes;i++)
-    mfield->SetTuple9(i,
-                      metric[i*9  ], metric[i*9+1], metric[i*9+2], 
-                      metric[i*9+3], metric[i*9+4], metric[i*9+5],
-                      metric[i*9+6], metric[i*9+7], metric[i*9+8]);
-  ug_out->GetPointData()->AddArray(mfield);
-  mfield->Delete();
-
-  vtkDoubleArray *scalar = vtkDoubleArray::New();
-  scalar->SetNumberOfComponents(1);
-  scalar->SetNumberOfTuples(NNodes);
-  scalar->SetName("psi");
-  for(int i=0;i<NNodes;i++)
-    scalar->SetTuple1(i, psi[i]);
-  ug_out->GetPointData()->AddArray(scalar);
-  scalar->Delete();
-
-  vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("../data/test_smooth_simple_3d.vtu");
-  writer->SetInput(ug_out);
-  writer->Write();
-
-  reader->Delete();
-  ug_out->Delete();
-  writer->Delete();
-
-  std::cout<<"iter "<<iter<<std::endl;
+  export_vtu("../data/test_smooth_simple_3d.vtu", mesh, &(psi[0]), &(metric[0]));
+  delete mesh;
 
   if(iter<100)
     std::cout<<"pass"<<std::endl;

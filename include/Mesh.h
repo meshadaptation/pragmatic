@@ -93,23 +93,28 @@ template<typename real_t, typename index_t>
   }
   
   /// Return the number of nodes in the mesh.
-  int get_number_nodes(){
+  int get_number_nodes() const{
     return _NNodes;
   }
 
   /// Return the number of elements in the mesh.
-  int get_number_elements(){
+  int get_number_elements() const{
     return _NElements;
   }
 
   /// Return the number of spatial dimensions.
-  int get_number_dimensions(){
+  int get_number_dimensions() const{
     return _ndims;
   }
 
   /// Return a pointer to the element-node list.
-  const index_t *get_enlist(){
+  const index_t *get_enlist() const{
     return _ENList;
+  }
+
+  /// Return a pointer to the element-node list.
+  const index_t *get_enlist(size_t eid) const{
+    return _ENList + eid*_nloc;
   }
 
   /// Return the node id's connected to the specified node_id
@@ -147,8 +152,13 @@ template<typename real_t, typename index_t>
   }
 
   /// Return positions vector.
-  const real_t *get_coords(){
+  real_t *get_coords(){
     return _coords;
+  }
+
+  /// Return positions vector.
+  const real_t *get_coords(size_t nid) const{
+    return _coords + nid*_ndims;
   }
 
   /// Return new local node number given on original node number.

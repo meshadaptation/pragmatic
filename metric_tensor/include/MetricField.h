@@ -152,7 +152,7 @@ template<typename real_t, typename index_t>
     {
 #pragma omp for schedule(static)
       for(int i=0;i<_NNodes;i++){
-        _psi[i] = psi[_mesh->new2old(i)];
+        _psi[i] = psi[i];
       }
     }
     get_hessian(_psi, Hessian);

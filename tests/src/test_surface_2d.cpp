@@ -40,6 +40,7 @@
 
 #include "Surface.h"
 #include "Mesh.h"
+#include "vtk_tools.h"
 
 using namespace std;
 
@@ -48,45 +49,29 @@ using namespace std;
  */
 
 int main(int argc, char **argv){
-  vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName("../data/box20x20.vtu");
-  reader->Update();
+  Mesh<double, int> *mesh=NULL;
+  import_vtu("../data/box20x20.vtu", mesh);
+  
+  Surface<double, int> surface(*mesh);
 
-  vtkUnstructuredGrid *ug = reader->GetOutput();
+  vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
 
-  int NNodes = ug->GetNumberOfPoints();
-  int NElements = ug->GetNumberOfCells();
-
-  vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(int i=0;i<NNodes;i++){
-    double r[3];
-    ug->GetPoints()->GetPoint(i, r);
-    x[i] = r[0];
-    y[i] = r[1];
-    z[i] = r[2];
+  vtkPoints *vtk_points = vtkPoints::New();
+  size_t NNodes = mesh->get_number_nodes();
+  vtk_points->SetNumberOfPoints(NNodes);
+  for(size_t i=0;i<NNodes;i++){
+    const double *r = mesh->get_coords(i);
+    vtk_points->SetPoint(i, r[0], r[1], 0.0);
   }
-
-  vector<int> ENList;
-  for(int i=0;i<NElements;i++){
-    vtkCell *cell = ug->GetCell(i);
-    for(int j=0;j<3;j++){
-      ENList.push_back(cell->GetPointId(j));
-    }
-  }
-
-  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
-
-  Surface<double, int> surface(mesh);
-
-  vtkUnstructuredGrid *ug_out = vtkUnstructuredGrid::New();
-  ug_out->SetPoints(ug->GetPoints());
+  ug->SetPoints(ug->GetPoints());
+  vtk_points->Delete();
 
   // Need to get out the facets
   int NSElements = surface.get_number_facets();
   const int *facets = surface.get_facets();
   for(int i=0;i<NSElements;i++){
     vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
-    ug_out->InsertNextCell(VTK_LINE, 2, pts);
+    ug->InsertNextCell(VTK_LINE, 2, pts);
   }
 
   // Need the facet ID's
@@ -101,7 +86,8 @@ int main(int argc, char **argv){
     unique_ids.insert(coplanar_ids[i]);
     scalar->SetTuple1(i, coplanar_ids[i]);
   }
-  ug_out->GetCellData()->AddArray(scalar);
+  ug->GetCellData()->AddArray(scalar);
+  scalar->Delete();
 
   vtkDoubleArray *normal = vtkDoubleArray::New();
   normal->SetNumberOfComponents(3);
@@ -111,12 +97,18 @@ int main(int argc, char **argv){
     const double *n = surface.get_normal(i);
     normal->SetTuple3(i, n[0], n[1], 0.0);
   }
-  ug_out->GetCellData()->AddArray(normal);
+  ug->GetCellData()->AddArray(normal);
+  normal->Delete();
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName("../data/test_surface_2d.vtu");
-  writer->SetInput(ug_out);
+  writer->SetInput(ug);
   writer->Write();
+
+  writer->Delete();
+  ug->Delete();
+
+  delete mesh;
 
   if(unique_ids.size()==4)
     std::cout<<"pass\n";

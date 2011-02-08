@@ -26,70 +26,44 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
-#include <vtkUnstructuredGrid.h>
-#include <vtkXMLUnstructuredGridReader.h>
-#include <vtkXMLUnstructuredGridWriter.h>
-#include <vtkCell.h>
-#include <vtkDoubleArray.h>
-#include <vtkPointData.h>
-
 #include <iostream>
 #include <vector>
 
 #include <omp.h>
 
-#include "MetricField.h"
-#include "Smooth.h"
+#include "Mesh.h"
 #include "Surface.h"
+#include "vtk_tools.h"
+#include "MetricField.h"
+
+#include "Smooth.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
-  vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName("../data/box20x20.vtu");
-  reader->Update();
+  Mesh<double, int> *mesh=NULL;
+  import_vtu("../data/box20x20.vtu", mesh);
 
-  vtkUnstructuredGrid *ug = reader->GetOutput();
+  Surface<double, int> surface(*mesh);
 
-  int NNodes = ug->GetNumberOfPoints();
-  int NElements = ug->GetNumberOfCells();
+  MetricField<double, int> metric_field(*mesh, surface);
 
-  vector<double> x(NNodes),  y(NNodes), z(NNodes);
-  for(int i=0;i<NNodes;i++){
-    double r[3];
-    ug->GetPoints()->GetPoint(i, r);
-    x[i] = r[0];
-    y[i] = r[1];
-    z[i] = r[2];
-  }
+  size_t NNodes = mesh->get_number_nodes();
 
-  vector<int> ENList;
-  for(int i=0;i<NElements;i++){
-    vtkCell *cell = ug->GetCell(i);
-    for(size_t j=0;j<3;j++){
-      ENList.push_back(cell->GetPointId(j));
-    }
-  }
-  reader->Delete();
-
-  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
-
-  Surface<double, int> surface(mesh);
-
-  MetricField<double, int> metric_field(mesh, surface);
-
-  vector<double> psi(NNodes);  
-  for(int i=0;i<NNodes;i++)
-    psi[i] = x[i]*x[i]*x[i]+y[i]*y[i]*y[i];
+  vector<double> psi(NNodes);
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) + pow(mesh->get_coords(i)[1], 3);
   
   metric_field.add_field(&(psi[0]), 0.6);
+
+  size_t NElements = mesh->get_number_elements();
 
   metric_field.apply_nelements(NElements);
 
   vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));
   
-  Smooth<double, int> smooth(mesh, surface, &(metric[0]));
+  Smooth<double, int> smooth(*mesh, surface, &(metric[0]));
 
   double start_tic = omp_get_wtime();
   double prev_mean_quality = smooth.smooth();
@@ -103,47 +77,11 @@ int main(int argc, char **argv){
   }
   std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
-  // Create VTU object to write out.
-  ug = vtkUnstructuredGrid::New();
-  
-  vtkPoints *vtk_points = vtkPoints::New();
-  vtk_points->SetNumberOfPoints(NNodes);
-  
-  vtkDoubleArray *vtk_psi = vtkDoubleArray::New();
-  vtk_psi->SetNumberOfComponents(1);
-  vtk_psi->SetNumberOfTuples(NNodes);
-  vtk_psi->SetName("psi");
-  
-  vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
-  vtk_metric->SetNumberOfComponents(4);
-  vtk_metric->SetNumberOfTuples(NNodes);
-  vtk_metric->SetName("Metric");
-  
-  for(int i=0;i<NNodes;i++){
-    double *r = mesh.get_coords()+i*2;
-    vtk_psi->SetTuple1(i, pow(r[0], 3)+pow(r[1], 3));
-    vtk_points->SetPoint(i, r[0], r[1], 0.0);
-    vtk_metric->SetTuple4(i,
-                          metric[i*4  ], metric[i*4+1],
-                          metric[i*4+2], metric[i*4+3]);
-  }
-  
-  ug->SetPoints(vtk_points);
-  vtk_points->Delete();
-  
-  ug->GetPointData()->AddArray(vtk_psi);
-  vtk_psi->Delete();
-  
-  ug->GetPointData()->AddArray(vtk_metric);
-  vtk_metric->Delete();
-  
-  vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("../data/test_smooth_simple_2d.vtu");
-  writer->SetInput(ug);
-  writer->Write();
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) + pow(mesh->get_coords(i)[1], 3);
 
-  writer->Delete();
-  ug->Delete();
+  export_vtu("../data/test_smooth_simple_2d.vtu", mesh, &(psi[0]), &(metric[0]));
+  delete mesh;
 
   if(iter<80)
     std::cout<<"pass"<<std::endl;
