@@ -44,7 +44,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-  reader->SetFileName("../data/small_bidomain_slab.vtu");
+  reader->SetFileName("../data/coarse_slab0003.vtu");
   reader->Update();
 
   vtkUnstructuredGrid *ug = reader->GetOutput();
