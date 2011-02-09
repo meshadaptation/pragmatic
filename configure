@@ -669,6 +669,7 @@ enable_option_checking
 enable_openmp
 enable_debugging
 enable_gprof
+enable_zoltan
 with_zoltan
 enable_vtk
 '
@@ -1301,6 +1302,7 @@ Optional Features:
   --disable-openmp        do not use OpenMP
   --enable-debugging      turns on debugging flags
   --enable-gprof          enables profiling with gprof
+  --enable-zoltan         Enables Zoltan support
   --enable-vtk            Only use to disable vtk
 
 Optional Packages:
@@ -3951,7 +3953,12 @@ fi
 
 
 # Zoltan
-if test "x$with_zoltan" != "xno"; then
+# Check whether --enable-zoltan was given.
+if test "${enable_zoltan+set}" = set; then :
+  enableval=$enable_zoltan;
+fi
+
+if test "x$enable_zoltan" = "xyes"; then
 
 # Set variables...
 
