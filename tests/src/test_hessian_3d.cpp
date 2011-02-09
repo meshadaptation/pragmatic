@@ -57,7 +57,7 @@ int main(int argc, char **argv){
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
-  std::cerr<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));

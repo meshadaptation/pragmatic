@@ -106,7 +106,7 @@ int main(int argc, char **argv){
       break;
     std::cout<<"quality "<<iter<<" "<<mean_quality<<std::endl;
   }
-  std::cerr<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   if(iter<500)
     std::cout<<"pass\n";
@@ -123,7 +123,7 @@ int main(int argc, char **argv){
     if(res<1.0e-5)
       break;
   }
-  std::cerr<<"Constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   if(iter<500)
     std::cout<<"pass\n";

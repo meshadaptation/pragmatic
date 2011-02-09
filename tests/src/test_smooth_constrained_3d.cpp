@@ -76,7 +76,7 @@ int main(int argc, char **argv){
     if(res<1.0e-5)
       break;
   }
-  std::cerr<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
