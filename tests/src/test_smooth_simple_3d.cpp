@@ -42,7 +42,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  import_vtu("../data/box20x20x20.vtu", mesh);
 
   Surface<double, int> surface(*mesh);
 

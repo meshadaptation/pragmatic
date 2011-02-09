@@ -42,7 +42,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  import_vtu("../data/box20x20x20.vtu", mesh);
 
   Surface<double, int> surface(*mesh);
 
@@ -67,10 +67,10 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth(*mesh, surface, &(metric[0]));
   
   double start_tic = omp_get_wtime();
-  double prev_mean_quality = smooth.smooth();
+  double prev_mean_quality = smooth.smooth(true);
   int iter=1;
   for(;iter<500;iter++){
-    double mean_quality = smooth.smooth();
+    double mean_quality = smooth.smooth(true);
     double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
     prev_mean_quality = mean_quality;
     if(res<1.0e-5)

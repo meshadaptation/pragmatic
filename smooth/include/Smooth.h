@@ -40,6 +40,7 @@
 #include "Surface.h"
 #include "Mesh.h"
 #include "Colour.h"
+#include "MetricTensor.h"
 
 /*! \brief Applies Laplacian smoothen in metric space.
  */
@@ -226,11 +227,12 @@ template<typename real_t, typename index_t>
               if(L<0){
                 std::cerr<<"negative area :: "<<node<<", "<<L<<std::endl;
               }
-              for(size_t i=0;i<4;i++){
+              for(size_t i=0;i<4;i++)
                 mp[i] = (l[0]*_metric[n[0]*4+i]+l[1]*_metric[n[1]*4+i]+l[2]*_metric[n[2]*4+i])/L;
-              }
+              
+              MetricTensor<real_t>::positive_definiteness(2, mp);
             }
-          
+            
             bool improvement = true;
             if(qconstrain){
               // Check if this positions improves the local mesh quality.
@@ -380,11 +382,13 @@ template<typename real_t, typename index_t>
                   p[2] -= (p[2]-get_z(node))*fabs(normal[2]);
                 }
               
+              size_t coids_size = coids->size();
+              
               delete patch;
               delete coids;
               
               // Test if this is a corner node, or edge node in which case it cannot be moved.
-              if(coids->size()>2)
+              if(coids_size>2)
                 continue;
             }
 
@@ -413,7 +417,7 @@ template<typename real_t, typename index_t>
                     r[iloc] = vectors+3*iloc;
                   }
                 real_t volume = property.volume(r[0], r[1], r[2], r[3]);
-                if(volume<0){
+                if(volume<=0){
                   inverted = true;
                   break;
                 }
@@ -455,6 +459,8 @@ template<typename real_t, typename index_t>
                   l[1]*_metric[n[1]*9+i]+
                   l[2]*_metric[n[2]*9+i]+
                   l[3]*_metric[n[3]*9+i];
+              
+              MetricTensor<real_t>::positive_definiteness(3, mp);
             }
           
             bool improvement=true;
@@ -514,11 +520,13 @@ template<typename real_t, typename index_t>
           qvec[i] = property.lipnikov(x0, x1, x2, x3,
                                       _metric+n[0]*9, _metric+n[1]*9,
                                       _metric+n[2]*9, _metric+n[3]*9);
+
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
           qmean += qvec[i]/_NElements;
         }
 #pragma omp for schedule(static) reduction(+:qrms)
         for(int i=0;i<_NElements;i++){
+
           qrms += pow(qvec[i]-qmean, 2);
         }
 #pragma omp critical 
@@ -530,7 +538,7 @@ template<typename real_t, typename index_t>
     
     qrms=sqrt(qrms/_NElements);
 
-    // std::cout<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
+    // std::cout<<_NElements<<" "<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
     return qmean;
   }
 

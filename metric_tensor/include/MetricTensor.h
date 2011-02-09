@@ -100,6 +100,41 @@ class MetricTensor{
     return _metric;
   }
 
+  // Enforce positive definiteness
+  static void positive_definiteness(int dimension, real_t *metric){
+    if(dimension==2){
+      Eigen::Matrix<real_t, 2, 2> M;
+      M <<
+        metric[0], metric[1],
+        metric[2], metric[3];
+      
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
+      
+      Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
+      Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
+
+      Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      for(size_t i=0;i<4;i++)
+        metric[i] = Mp[i];
+    }else{
+      Eigen::Matrix<real_t, 3, 3> M;
+      M <<
+        metric[0], metric[1], metric[2],
+        metric[3], metric[4], metric[5],
+        metric[6], metric[7], metric[8];
+
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
+      
+      Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
+      Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
+
+      Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      for(size_t i=0;i<9;i++)
+        metric[i] = Mp[i];
+    }
+    return;
+  }
+
   /*! By default this calculates the superposition of two metrics where by default small
    * edge lengths are preserved. If the optional argument perserved_small_edges==false
    * then large edge lengths are perserved instead.
@@ -128,6 +163,10 @@ class MetricTensor{
       M2 <<
         metric._metric[0], metric._metric[1],
         metric._metric[2], metric._metric[3];
+      // The input matrix could be zero if there is zero curvature in the local solution.
+      if(M2.isZero())                                                                                                                         
+        return;
+
       
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M2);
 
@@ -142,10 +181,8 @@ class MetricTensor{
       }
     }else{
       Eigen::Matrix<real_t, 3, 3> M1;
-      M1 <<
-        _metric[0], _metric[1], _metric[2],
-        _metric[3], _metric[4], _metric[5],
-        _metric[6], _metric[7], _metric[8];
+      for(size_t i=0;i<9;i++)
+                M1[i] = _metric[i];
       
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver1(M1);
       
@@ -155,11 +192,13 @@ class MetricTensor{
         std::max(std::max(evalues1[0], evalues1[1]), evalues1[2]);
 
       Eigen::Matrix<real_t, 3, 3> M2;
-      M2 <<
-        metric._metric[0], metric._metric[1], metric._metric[2],
-        metric._metric[3], metric._metric[4], metric._metric[5],
-        metric._metric[6], metric._metric[7], metric._metric[8];
+      for(size_t i=0;i<9;i++)
+        M2[i] = metric._metric[i];
       
+      // The input matrix could be zero if there is zero curvature in the local solution.
+      if(M2.isZero())
+        return;
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M2);
       
       Eigen::Matrix<real_t, 3, 1> evalues2 = solver2.eigenvalues().real().cwise().abs();
