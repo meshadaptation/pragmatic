@@ -150,8 +150,10 @@ template<typename RhsDerived, typename ResultType>
 bool LDLT<MatrixType>
 ::solve(const MatrixBase<RhsDerived> &b, ResultType *result) const
 {
+#ifndef NDEBUG
   const int size = m_matrix.rows();
   ei_assert(size==b.rows() && "LLT::solve(): invalid number of rows of the right hand side matrix b");
+#endif
   *result = b;
   return solveInPlace(*result);
 }
@@ -169,8 +171,10 @@ template<typename MatrixType>
 template<typename Derived>
 bool LDLT<MatrixType>::solveInPlace(MatrixBase<Derived> &bAndX) const
 {
+#ifndef NDEBUG
   const int size = m_matrix.rows();
   ei_assert(size==bAndX.rows());
+#endif
   if (!m_isPositiveDefinite)
     return false;
   matrixL().solveTriangularInPlace(bAndX);
