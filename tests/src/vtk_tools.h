@@ -36,6 +36,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkIntArray.h>
 #include <vtkPointData.h>
+#include <vtkCellData.h>
 
 #include <vector>
 #include <string>
@@ -109,10 +110,10 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   vtk_psi->SetNumberOfTuples(NNodes);
   vtk_psi->SetName("psi");
 
-  vtkIntArray *vtk_numbering = vtkIntArray::New();
-  vtk_numbering->SetNumberOfComponents(1);
-  vtk_numbering->SetNumberOfTuples(NNodes);
-  vtk_numbering->SetName("nid");
+  vtkIntArray *vtk_node_numbering = vtkIntArray::New();
+  vtk_node_numbering->SetNumberOfComponents(1);
+  vtk_node_numbering->SetNumberOfTuples(NNodes);
+  vtk_node_numbering->SetName("nid");
   
   size_t ndims = mesh->get_number_dimensions();
 
@@ -127,7 +128,7 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   for(size_t i=0;i<NNodes;i++){
     const real_t *r = mesh->get_coords(i);
     vtk_psi->SetTuple1(i, psi[i]);
-    vtk_numbering->SetTuple1(i, i);
+    vtk_node_numbering->SetTuple1(i, i);
     if(ndims==2){
       vtk_points->SetPoint(i, r[0], r[1], 0.0);
       if(vtk_metric!=NULL)
@@ -150,8 +151,8 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   ug->GetPointData()->AddArray(vtk_psi);
   vtk_psi->Delete();
 
-  ug->GetPointData()->AddArray(vtk_numbering);
-  vtk_numbering->Delete();
+  ug->GetPointData()->AddArray(vtk_node_numbering);
+  vtk_node_numbering->Delete();
   
   if(vtk_metric!=NULL){
     ug->GetPointData()->AddArray(vtk_metric);
@@ -159,7 +160,14 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   }
 
   size_t NElements = mesh->get_number_elements();
+
+  vtkIntArray *vtk_cell_numbering = vtkIntArray::New();
+  vtk_cell_numbering->SetNumberOfComponents(1);
+  vtk_cell_numbering->SetNumberOfTuples(NElements);
+  vtk_cell_numbering->SetName("eid");
+  
   for(size_t i=0;i<NElements;i++){
+    vtk_cell_numbering->SetTuple1(i, i);
     if(ndims==2){
       vtkIdType pts[] = {mesh->get_enlist(i)[0],
                          mesh->get_enlist(i)[1], 
@@ -173,6 +181,9 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
       ug->InsertNextCell(VTK_TETRA, 4, pts);
     }
   }
+
+  ug->GetCellData()->AddArray(vtk_cell_numbering);
+  vtk_cell_numbering->Delete();
   
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName(filename);

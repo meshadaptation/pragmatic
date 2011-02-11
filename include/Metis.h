@@ -43,10 +43,10 @@ extern "C" {
                            int *,int *,idxtype *);
   void METIS_PartGraphRecursive(int *,idxtype *,idxtype *,idxtype *,idxtype *,int *,int *,
                                 int *,int *,int *,idxtype *);
-  void METIS_PartMeshDual(int *, int *, idxtype *, int *, int *, int *, int *,
-                          idxtype *, idxtype *);
   void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *);
-  
+  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, int *numflag, int *nparts, int *edgecut,
+                           idxtype *epart, idxtype *npart);
+
 }
 
 /*! \brief Class provides a specialised interface to some METIS
