@@ -206,82 +206,102 @@ template<typename real_t, typename index_t>
 
     // Partition the nodes and elements so that the mesh can be
     // topologically mapped to the computer node topology.
-    std::vector<idxtype> epart(NElements);
-    std::vector<idxtype> npart(NNodes);
-    int numflag = 0;
     int nparts = omp_get_max_threads();
-    int edgecut;
 
-    std::vector<idxtype> metis_ENList(_NElements*_nloc);
-    for(int i=0;i<NElements*_nloc;i++)
-      metis_ENList[i] = ENList[i];
-    METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
-                        &edgecut, &(epart[0]), &(npart[0]));
-    metis_ENList.clear();
-
-    // Create sets of nodes and elements in each partition
-    std::vector< std::deque<int> > nodes(nparts), elements(nparts);
-    for(int i=0;i<NNodes;i++)
-      nodes[npart[i]].push_back(i);
-    for(int i=0;i<NElements;i++)
-      elements[epart[i]].push_back(i);
-
-    std::vector< std::set<int> > edomains(nparts);
-    for(int i=0; i<_NElements; i++){
-      edomains[epart[i]].insert(i);
-    }
-
-    // Create element renumbering
-    std::deque<int> eid_new2old;
-    for(int i=0;i<nparts;i++){
-      for(std::set<int>::const_iterator it=edomains[i].begin();it!=edomains[i].end();++it){
-        eid_new2old.push_back(*it);
+    std::vector<int> eid_new2old;
+    if(nparts>1){
+      std::vector<idxtype> epart(NElements, 0);
+      std::vector<idxtype> npart(NNodes, 0);
+      int numflag = 0;
+      int edgecut;
+      
+      std::vector<idxtype> metis_ENList(_NElements*_nloc);
+      for(int i=0;i<NElements*_nloc;i++)
+        metis_ENList[i] = ENList[i];
+      METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
+                          &edgecut, &(epart[0]), &(npart[0]));
+      metis_ENList.clear();
+      
+      // Create sets of nodes and elements in each partition
+      std::vector< std::deque<int> > nodes(nparts), elements(nparts);
+      for(int i=0;i<NNodes;i++)
+        nodes[npart[i]].push_back(i);
+      for(int i=0;i<NElements;i++)
+        elements[epart[i]].push_back(i);
+      
+      std::vector< std::set<int> > edomains(nparts);
+      for(int i=0; i<_NElements; i++){
+        edomains[epart[i]].insert(i);
       }
-    }
-
-    // Create seperate graphs for each partition.
-    std::vector< std::map<index_t, std::set<index_t> > > pNNList(nparts);
-    for(int i=0; i<_NElements; i++){
-      for(int j=0;j<_nloc;j++){
-        int jnid = ENList[i*_nloc+j];
-        int jpart = npart[jnid];
-        for(int k=j+1;k<_nloc;k++){
-          int knid = ENList[i*_nloc+k];
-          int kpart = npart[knid];
-          if(jpart!=kpart)
-            continue;
-          pNNList[jpart][jnid].insert(knid);
-          pNNList[jpart][knid].insert(jnid);
+      
+      // Create element renumbering
+      for(int i=0;i<nparts;i++){
+        for(std::set<int>::const_iterator it=edomains[i].begin();it!=edomains[i].end();++it){
+          eid_new2old.push_back(*it);
         }
       }
-    }
-
-    // Renumber nodes within each partition.
-    for(int p=0;p<nparts;p++){
-      // Create mapping from node numbering to local thread partition numbering, and it's inverse.
-      std::map<index_t, index_t> nid2tnid;
-      std::deque<index_t> tnid2nid(pNNList[p].size());
-      index_t loc=0;
-      for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
-        tnid2nid[loc] = it->first;
-        nid2tnid[it->first] = loc++;
-      }
-
-      std::vector< std::set<index_t> > pgraph(nid2tnid.size());
-      for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
-        for(typename std::set<index_t>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
-          pgraph[nid2tnid[it->first]].insert(nid2tnid[*jt]);
+      
+      // Create seperate graphs for each partition.
+      std::vector< std::map<index_t, std::set<index_t> > > pNNList(nparts);
+      for(int i=0; i<_NElements; i++){
+        for(int j=0;j<_nloc;j++){
+          int jnid = ENList[i*_nloc+j];
+          int jpart = npart[jnid];
+          for(int k=j+1;k<_nloc;k++){
+            int knid = ENList[i*_nloc+k];
+            int kpart = npart[knid];
+            if(jpart!=kpart)
+              continue;
+            pNNList[jpart][jnid].insert(knid);
+            pNNList[jpart][knid].insert(jnid);
+          }
         }
       }
-
-      std::vector<int> porder;
-      Metis<index_t>::reorder(pgraph, porder);
-
-      for(typename std::vector<index_t>::const_iterator it=porder.begin();it!=porder.end();++it){
-        nid_new2old.push_back(tnid2nid[*it]);
+      
+      // Renumber nodes within each partition.
+      for(int p=0;p<nparts;p++){
+        // Create mapping from node numbering to local thread partition numbering, and it's inverse.
+        std::map<index_t, index_t> nid2tnid;
+        std::deque<index_t> tnid2nid(pNNList[p].size());
+        index_t loc=0;
+        for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
+          tnid2nid[loc] = it->first;
+          nid2tnid[it->first] = loc++;
+        }
+        
+        std::vector< std::set<index_t> > pgraph(nid2tnid.size());
+        for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
+          for(typename std::set<index_t>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
+            pgraph[nid2tnid[it->first]].insert(nid2tnid[*jt]);
+          }
+        }
+        
+        std::vector<int> porder;
+        Metis<index_t>::reorder(pgraph, porder);
+        
+        for(typename std::vector<index_t>::const_iterator it=porder.begin();it!=porder.end();++it){
+          nid_new2old.push_back(tnid2nid[*it]);
+        }
       }
+    }else{
+      // Create an optimised node ordering.
+      std::vector< std::set<index_t> > NNList(_NNodes);
+      for(int i=0; i<_NElements; i++){
+        for(int j=0;j<_nloc;j++){
+          for(int k=j+1;k<_nloc;k++){
+            NNList[ENList[i*_nloc+j]].insert(ENList[i*_nloc+k]);
+            NNList[ENList[i*_nloc+k]].insert(ENList[i*_nloc+j]);
+          }
+        }
+      }
+      
+      Metis<index_t>::reorder(NNList, nid_new2old);
+      
+      eid_new2old.resize(_NElements);
+      for(int e=0;e<_NElements;e++)
+        eid_new2old[e] = e;
     }
-
+    
     // Reverse mapping of renumbering.
     std::vector<index_t> nid_old2new(_NNodes);
     for(int i=0;i<_NNodes;i++){
