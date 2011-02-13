@@ -317,12 +317,19 @@ template<typename real_t, typename index_t>
           _ENList[i*_nloc+j] = nid_old2new[ENList[eid_new2old[i]*_nloc+j]];
         }
       }
+      if(_ndims==2){
 #pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
-        _coords[i*_ndims  ] = x[nid_new2old[i]];
-        _coords[i*_ndims+1] = y[nid_new2old[i]];
-        if(_ndims==3)
+        for(int i=0;i<_NNodes;i++){
+          _coords[i*_ndims  ] = x[nid_new2old[i]];
+          _coords[i*_ndims+1] = y[nid_new2old[i]];
+        }
+      }else{
+#pragma omp for schedule(static)
+        for(int i=0;i<_NNodes;i++){
+          _coords[i*_ndims  ] = x[nid_new2old[i]];
+          _coords[i*_ndims+1] = y[nid_new2old[i]];
           _coords[i*_ndims+2] = z[nid_new2old[i]];
+        }
       }
     }
 
