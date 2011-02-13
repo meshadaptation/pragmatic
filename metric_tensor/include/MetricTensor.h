@@ -141,8 +141,8 @@ class MetricTensor{
    * @param metric is a reference to a MetricTensor object.
    * @param perserved_small_edges when true causes small edge lengths to be preserved (default). Otherwise long edge are perserved.
    */
-  void constrain(const MetricTensor &metric, bool perserved_small_edges=true){
-    assert(_dimension==metric._dimension);
+  void constrain(const real_t *M, bool perserved_small_edges=true){
+    MetricTensor<real_t> metric(_dimension, M);
     
     // Make the tensor with the smallest aspect ratio the reference space Mr.
     const real_t *Mr=_metric, *Mi=metric._metric;

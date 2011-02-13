@@ -149,6 +149,9 @@ template<typename real_t, typename index_t>
     real_t *Hessian = new real_t[_NNodes*ndims2];
     real_t *_psi = new real_t[_NNodes];
 
+    // Number of points required for least squares fit.
+    const size_t min_patch_size = (_ndims==2)?6:9;
+
 #pragma omp parallel
     {
       // Enforce first touch
@@ -156,9 +159,6 @@ template<typename real_t, typename index_t>
       for(int i=0;i<_NNodes;i++){
         _psi[i] = psi[i];
       }
-      
-      // Number of points required for least squares fit.
-      size_t min_patch_size = (_ndims==2)?6:9;
 
       // Calculate Hessian at each point.
 #pragma omp for schedule(static)
@@ -280,7 +280,7 @@ template<typename real_t, typename index_t>
       // Merge this metric with the existing metric field.
 #pragma omp for schedule(static)
       for(int i=0;i<_NNodes;i++){
-        _metric[i].constrain(MetricTensor<real_t>(_ndims, Hessian+i*ndims2));
+        _metric[i].constrain(Hessian+i*ndims2);
       }
     }
 
