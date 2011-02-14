@@ -171,7 +171,7 @@ template<typename real_t, typename index_t>
 #ifdef HAVE_MPI
   /// Return mpi communicator
   const MPI_Comm * get_mpi_comm(){
-    return_comm;
+    return _comm;
   }
 #endif
 
