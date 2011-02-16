@@ -300,10 +300,8 @@ template<typename real_t, typename index_t>
         else
           M[i*_ndims+j] = 0.0;
     
-    MetricTensor<real_t> constraint(_ndims, M);
-    
     for(size_t i=0;i<_NNodes;i++)
-      _metric[i].constrain(constraint);
+      _metric[i].constrain(M);
   }
   
   /*! Apply minimum edge length constraint.
@@ -318,10 +316,8 @@ template<typename real_t, typename index_t>
         else
           M[i*_ndims+j] = 0.0;
     
-    MetricTensor<real_t> constraint(_ndims, M);
-    
     for(int i=0;i<_NNodes;i++)
-      _metric[i].constrain(constraint, false);
+      _metric[i].constrain(M, false);
   }
   
   /*! Apply maximum aspect ratio constraint.
