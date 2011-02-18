@@ -77,6 +77,8 @@ int main(int argc, char **argv){
   
   export_vtu("../data/test_hessian_2d.vtu", mesh, &(psi[0]), &(metric[0]));
   
+  delete mesh;
+
   if(max_rms>0.01)
     std::cout<<"fail\n";
   else
