@@ -164,10 +164,10 @@ template<typename real_t, typename index_t>
 #pragma omp for schedule(static)
       for(int i=0; i<_NNodes; i++){
         std::set<index_t> *patch = new std::set<index_t>;
-        patch->insert(i);
         size_t lmin_patch_size = _surface->contains_node(i)?min_patch_size*2:min_patch_size;
         _mesh->get_node_patch(i, lmin_patch_size, *patch);
-
+        patch->erase(i);
+        
         if(_ndims==2){
           // Form quadratic system to be solved. The quadratic fit is:
           // P = a0+a1x+a2y+a3xy+a4x^2+a5y^2
