@@ -114,7 +114,12 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   vtk_node_numbering->SetNumberOfComponents(1);
   vtk_node_numbering->SetNumberOfTuples(NNodes);
   vtk_node_numbering->SetName("nid");
-  
+
+  vtkIntArray *vtk_node_tpartition = vtkIntArray::New();
+  vtk_node_tpartition->SetNumberOfComponents(1);
+  vtk_node_tpartition->SetNumberOfTuples(NNodes);
+  vtk_node_tpartition->SetName("node_tpartition");
+
   size_t ndims = mesh->get_number_dimensions();
 
   vtkDoubleArray *vtk_metric = NULL;
@@ -129,6 +134,7 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
     const real_t *r = mesh->get_coords(i);
     vtk_psi->SetTuple1(i, psi[i]);
     vtk_node_numbering->SetTuple1(i, i);
+    vtk_node_tpartition->SetTuple1(i, mesh->get_node_towner(i));
     if(ndims==2){
       vtk_points->SetPoint(i, r[0], r[1], 0.0);
       if(vtk_metric!=NULL)
@@ -154,6 +160,9 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   ug->GetPointData()->AddArray(vtk_node_numbering);
   vtk_node_numbering->Delete();
   
+  ug->GetPointData()->AddArray(vtk_node_tpartition);
+  vtk_node_tpartition->Delete();
+
   if(vtk_metric!=NULL){
     ug->GetPointData()->AddArray(vtk_metric);
     vtk_metric->Delete();
@@ -166,8 +175,14 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   vtk_cell_numbering->SetNumberOfTuples(NElements);
   vtk_cell_numbering->SetName("eid");
   
+  vtkIntArray *vtk_cell_tpartition = vtkIntArray::New();
+  vtk_cell_tpartition->SetNumberOfComponents(1);
+  vtk_cell_tpartition->SetNumberOfTuples(NElements);
+  vtk_cell_tpartition->SetName("cell_partition");
+
   for(size_t i=0;i<NElements;i++){
     vtk_cell_numbering->SetTuple1(i, i);
+    vtk_cell_tpartition->SetTuple1(i, mesh->get_element_towner(i));
     if(ndims==2){
       vtkIdType pts[] = {mesh->get_enlist(i)[0],
                          mesh->get_enlist(i)[1], 
@@ -185,6 +200,9 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   ug->GetCellData()->AddArray(vtk_cell_numbering);
   vtk_cell_numbering->Delete();
   
+  ug->GetCellData()->AddArray(vtk_cell_tpartition);
+  vtk_cell_tpartition->Delete();
+    
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
   writer->SetFileName(filename);
   writer->SetInput(ug);

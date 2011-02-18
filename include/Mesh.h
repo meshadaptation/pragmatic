@@ -109,6 +109,20 @@ template<typename real_t, typename index_t>
     return _ndims;
   }
 
+  /// Return the thread that ownes the node.
+  int get_node_towner(int i) const{
+    if(node_towner.size())
+      return node_towner[i];
+    return 0;
+  }
+
+  /// Return the thread that ownes the element.
+  int get_element_towner(int i) const{
+    if(element_towner.size())
+      return element_towner[i];
+    return 0;
+  }
+
   /// Return a pointer to the element-node list.
   const index_t *get_enlist() const{
     return _ENList;
@@ -209,9 +223,8 @@ template<typename real_t, typename index_t>
     int nparts = omp_get_max_threads();
 
     std::vector<int> eid_new2old;
+    std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
     if(nparts>1){
-      std::vector<idxtype> epart(NElements, 0);
-      std::vector<idxtype> npart(NNodes, 0);
       int numflag = 0;
       int edgecut;
       
@@ -221,7 +234,7 @@ template<typename real_t, typename index_t>
       METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
                           &edgecut, &(epart[0]), &(npart[0]));
       metis_ENList.clear();
-      
+
       // Create sets of nodes and elements in each partition
       std::vector< std::deque<int> > nodes(nparts), elements(nparts);
       for(int i=0;i<NNodes;i++)
@@ -309,6 +322,8 @@ template<typename real_t, typename index_t>
     }
     
     // Enforce first-touch policy
+    element_towner.resize(_NElements);
+    node_towner.resize(_NNodes);
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -316,6 +331,7 @@ template<typename real_t, typename index_t>
         for(int j=0;j<_nloc;j++){
           _ENList[i*_nloc+j] = nid_old2new[ENList[eid_new2old[i]*_nloc+j]];
         }
+        element_towner[i] = epart[eid_new2old[i]];
       }
       if(_ndims==2){
 #pragma omp for schedule(static)
@@ -331,6 +347,8 @@ template<typename real_t, typename index_t>
           _coords[i*_ndims+2] = z[nid_new2old[i]];
         }
       }
+      for(int i=0;i<_NNodes;i++)
+        node_towner[i] = npart[nid_new2old[i]];
     }
 
     // Create new NNList based on new numbering.
@@ -366,6 +384,8 @@ template<typename real_t, typename index_t>
   real_t *_coords;
   std::vector< std::vector<index_t> > _NNList;
   std::vector<index_t> nid_new2old;
+  std::vector<int> element_towner, node_towner;
+
 #ifdef HAVE_MPI
   const MPI_Comm *_comm;
 #endif
