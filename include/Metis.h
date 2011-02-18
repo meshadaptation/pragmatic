@@ -38,15 +38,8 @@
 extern "C" {
   // Declarations needed from METIS
   typedef int idxtype;
-  
-  void METIS_PartGraphKway(int *,idxtype *,idxtype *,idxtype *,idxtype *,int *,int *,int *,
-                           int *,int *,idxtype *);
-  void METIS_PartGraphRecursive(int *,idxtype *,idxtype *,idxtype *,idxtype *,int *,int *,
-                                int *,int *,int *,idxtype *);
   void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *);
-  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, int *numflag, int *nparts, int *edgecut,
-                           idxtype *epart, idxtype *npart);
-
+  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, int *numflag, int *nparts, int *edgecut, idxtype *epart, idxtype *npart);
 }
 
 /*! \brief Class provides a specialised interface to some METIS
@@ -55,40 +48,6 @@ extern "C" {
 template<typename index_t>
 class Metis{
  public:
-  /*! Calculate a partitioning for a graph.
-   * @param graph is the undirected graph to be partitioned.
-   * @param decomp is an array storing the partition each node in the graph is assigned to.
-   */
-  static int partition(const std::vector< std::set<index_t> > &graph, int npartitions, std::vector<int> &decomp){
-    int nnodes = graph.size();
-    
-    // Compress graph    
-    std::vector<idxtype> xadj(nnodes+1), adjncy;
-    int pos=0;
-    xadj[0]=0;
-    for(int i=0;i<nnodes;i++){
-      for(std::set<int>::iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
-        adjncy.push_back(*jt);
-        pos++;
-      }
-      xadj[i+1] = pos;
-    }
-    
-    // Partition graph
-    decomp.resize(nnodes);
-    int wgtflag=0, numflag=0, options[] = {0}, edgecut=0;
-    
-    if(npartitions>8){
-      METIS_PartGraphKway(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &wgtflag, 
-                          &numflag, &npartitions, options, &edgecut, &(decomp[0]));
-    }else{
-      METIS_PartGraphRecursive(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &wgtflag, 
-                               &numflag, &npartitions, options, &edgecut, &(decomp[0]));
-    }
-    
-    return edgecut;
-  }
-
   /*! Calculate a node renumbering.
    * @param graph is the undirected graph to be partitioned.
    * @param decomp is an array storing the partition each node in the graph is assigned to.
