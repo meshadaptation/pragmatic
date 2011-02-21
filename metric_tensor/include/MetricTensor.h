@@ -1,6 +1,6 @@
 /*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -34,6 +34,13 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+extern"C"
+{
+//    void test_calling_fortran_function_(int int_to_c[]);
+
+    void dspev_(char*, char*, size_t*, double*, double*, double*, size_t*, double*, int*);
+}
+
 template<typename real_t>
 class MetricTensor;
 
@@ -41,7 +48,7 @@ template<typename real_t>
 std::ostream& operator<<(std::ostream& out, const MetricTensor<real_t>& in);
 
 /*! \brief Symmetric metic tensor class.
- * 
+ *
  * Use to store and operate on metric tensors.
  */
 template<typename real_t>
@@ -52,7 +59,7 @@ class MetricTensor{
     _dimension = 0;
     _metric = NULL;
   }
-  
+
   /// Default destructor.
   ~MetricTensor(){
     if(_metric != NULL){
@@ -100,6 +107,14 @@ class MetricTensor{
     return _metric;
   }
 
+  /*! Set the metric tensor field.
+   * @param metric is a pointer to the buffer where the metric field is to be copied from.
+   */
+  void set_metric(const real_t *metric){
+    for(size_t i=0;i<_dimension*_dimension;i++)
+      _metric[i] = metric[i];
+  }
+
   // Enforce positive definiteness
   static void positive_definiteness(int dimension, real_t *metric){
     if(dimension==2){
@@ -107,9 +122,9 @@ class MetricTensor{
       M <<
         metric[0], metric[1],
         metric[2], metric[3];
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
-      
+
       Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
 
@@ -124,7 +139,7 @@ class MetricTensor{
         metric[6], metric[7], metric[8];
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
-      
+
       Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
 
@@ -143,7 +158,7 @@ class MetricTensor{
    */
   void constrain(const real_t *M, bool perserved_small_edges=true){
     MetricTensor<real_t> metric(_dimension, M);
-    
+
     // Make the tensor with the smallest aspect ratio the reference space Mr.
     const real_t *Mr=_metric, *Mi=metric._metric;
     if(_dimension==2){
@@ -151,11 +166,11 @@ class MetricTensor{
       M1 <<
         _metric[0], _metric[1],
         _metric[2], _metric[3];
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver1(M1);
 
       Eigen::Matrix<real_t, 2, 1> evalues1 = solver1.eigenvalues().real().cwise().abs();
-      
+
       real_t aspect_r = std::min(evalues1[0], evalues1[1])/
         std::max(evalues1[0], evalues1[1]);
 
@@ -164,17 +179,17 @@ class MetricTensor{
         metric._metric[0], metric._metric[1],
         metric._metric[2], metric._metric[3];
       // The input matrix could be zero if there is zero curvature in the local solution.
-      if(M2.isZero())                                                                                                                         
+      if(M2.isZero())
         return;
 
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M2);
 
       Eigen::Matrix<real_t, 2, 1> evalues2 = solver2.eigenvalues().real().cwise().abs();
-      
+
       real_t aspect_i = std::min(evalues2[0], evalues2[1])/
         std::max(evalues2[0], evalues2[1]);
-      
+
       if(aspect_i>aspect_r){
         Mi=_metric;
         Mr=metric._metric;
@@ -183,55 +198,55 @@ class MetricTensor{
       Eigen::Matrix<real_t, 3, 3> M1;
       for(size_t i=0;i<9;i++)
                 M1[i] = _metric[i];
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver1(M1);
-      
+
       Eigen::Matrix<real_t, 3, 1> evalues1 = solver1.eigenvalues().real().cwise().abs();
-      
+
       real_t aspect_r = std::min(std::min(evalues1[0], evalues1[1]), evalues1[2])/
         std::max(std::max(evalues1[0], evalues1[1]), evalues1[2]);
 
       Eigen::Matrix<real_t, 3, 3> M2;
       for(size_t i=0;i<9;i++)
         M2[i] = metric._metric[i];
-      
+
       // The input matrix could be zero if there is zero curvature in the local solution.
       if(M2.isZero())
         return;
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M2);
-      
+
       Eigen::Matrix<real_t, 3, 1> evalues2 = solver2.eigenvalues().real().cwise().abs();
-      
+
       real_t aspect_i = std::min(std::min(evalues2[0], evalues2[1]), evalues2[2])/
         std::max(std::max(evalues2[0], evalues2[1]), evalues2[2]);
-      
+
       if(aspect_i>aspect_r){
         Mi=_metric;
         Mr=metric._metric;
       }
     }
-    
+
     // Map Mi to the reference space where Mr==I
     if(_dimension==2){
       Eigen::Matrix<real_t, 2, 2> M1;
       M1 <<
         Mr[0], Mr[1],
         Mr[2], Mr[3];
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M1);
 
       Eigen::Matrix<real_t, 2, 2> F =
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
-      
+
       Eigen::Matrix<real_t, 2, 2> M2;
       M2 <<
         Mi[0], Mi[1],
         Mi[2], Mi[3];
       Eigen::Matrix<real_t, 2, 2> M = F.inverse().transpose()*M2*F.inverse();
-        
-      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M);      
+
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M);
       Eigen::Matrix<real_t, 2, 1> evalues = solver2.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 2, 2> evectors = solver2.eigenvectors().real();
 
@@ -243,7 +258,7 @@ class MetricTensor{
           evalues[i] = std::min((real_t)1.0, evalues[i]);
 
       Eigen::Matrix<real_t, 2, 2> Mc = F.transpose()*evectors.transpose()*evalues.asDiagonal()*evectors*F;
-      
+
       for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
     }else{
@@ -252,21 +267,21 @@ class MetricTensor{
         Mr[0], Mr[1], Mr[2],
         Mr[3], Mr[4], Mr[5],
         Mr[6], Mr[7], Mr[8];
-      
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M1);
-      
+
       Eigen::Matrix<real_t, 3, 3> F =
         solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
         solver.eigenvectors().real();
-      
+
       Eigen::Matrix<real_t, 3, 3> M2;
       M2 <<
         Mi[0], Mi[1], Mi[2],
         Mi[3], Mi[4], Mi[5],
         Mi[6], Mi[7], Mi[8];
       Eigen::Matrix<real_t, 3, 3> M = F.inverse().transpose()*M2*F.inverse();
-        
-      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M);      
+
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver2(M);
       Eigen::Matrix<real_t, 3, 1> evalues = solver2.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 3, 3> evectors = solver2.eigenvectors().real();
 
@@ -282,10 +297,10 @@ class MetricTensor{
       for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
     }
-    
+
     return;
   }
-  
+
   /*! Stream operator.
    */
   friend std::ostream &operator<< <>(std::ostream& out, const MetricTensor<real_t>& metric);
@@ -304,6 +319,140 @@ class MetricTensor{
   void scale(real_t scale_factor){
     for(size_t i=0;i<_dimension*_dimension;i++)
       _metric[i] *= scale_factor;
+  }
+
+  double average_length() const
+  {
+    double D[_dimension], V[_dimension*_dimension];
+    eigen_decomp(D, V);
+
+    double sum = D[0];
+    for(size_t i=1; i<_dimension; i++)
+      sum+=D[i];
+    double average = sum/_dimension;
+
+    return sqrt(1.0/average);
+  }
+
+  int eigen_decomp(double *eigenvalues, double *eigenvectors) const
+  {
+    char jobz = 'V';
+    char uplo = 'U';
+    size_t t_size = _dimension*_dimension - 0.5*_dimension*(_dimension-1);
+    double ap[t_size];      // dspev takes the matrix in triangular form as an input argument
+
+    if( _dimension == 2 )
+    {
+        ap[0] = _metric[0];
+        ap[1] = _metric[1];
+        ap[2] = _metric[3];
+    }
+    else if ( _dimension == 3 )
+    {
+        ap[0] = _metric[0];
+        ap[1] = _metric[1];
+        ap[2] = _metric[2];
+        ap[3] = _metric[4];
+        ap[4] = _metric[5];
+        ap[5] = _metric[8];
+    }
+    else
+    {
+        std::cerr<<"ERROR: unsupported dimension: " << _dimension << " (must be 2 or 3)" << endl;
+    }
+
+    double work[_dimension*_dimension];
+    int info = blas_spev(jobz, uplo, _dimension, ap, eigenvalues, eigenvectors, _dimension, work);
+
+    if(info<0){
+      cerr<<"Failed in eigenvalue decomposition. Argument "<<abs(info)<<" was foobar\n";
+    }else if(info>0){
+      cerr<<"Failed in eigenvalue decomposition. The algorithm  failed  to  converge; "
+          <<info<<" off-diagonal elements of an intermediate tridiagonal form did not "
+          <<"converge to zero.\n";
+      for(size_t i=0; i<(_dimension*_dimension); i++)
+        cerr<<"metric = "<<_metric[i]<<"\t";
+      cerr<<endl;
+    }
+
+    for(size_t i=0; i<_dimension; i++)
+      eigenvalues[i] = fabs(eigenvalues[i]);
+
+    return info;
+  }
+
+  int eigen_undecomp(const double *D, const double *V){
+    // Insure eigenvalues are positive
+    double eigenvalues[_dimension];
+    for(size_t i=0;i<_dimension;i++)
+      eigenvalues[i] = fabs(D[i]);
+
+    for(size_t i=0; i<_dimension; i++)
+    {
+      for(size_t j=0; j<_dimension; j++)
+      {
+        int ii = lookup(i,j);
+        _metric[ii] = 0.0;
+        for(size_t k=0;k<_dimension;k++)
+          _metric[ii]+=eigenvalues[k]*V[k*_dimension+i]*V[k*_dimension+j];
+      }
+    }
+
+    return 0;
+  }
+
+  int blas_spev(char jobz, char uplo, size_t N, double ap[],
+                double eigenvalues[],  double eigenvectors[],
+                size_t ldz,  double work[]) const{
+
+    int info;
+    dspev_(&jobz, &uplo, &N, ap, eigenvalues, eigenvectors, &ldz, work, &info);
+    return info;
+  }
+
+  int lookup(size_t i, size_t j) const{
+    assert(i>=0); assert(i<_dimension);
+    assert(j>=0); assert(j<_dimension);
+    if(_dimension==2)
+    {
+      switch(i)
+      {
+      case(0):
+        switch(j)
+        {
+        case(0): return 0;
+        case(1): return 1;
+        }
+      case(1):
+        switch(j)
+        {
+        case(0): return 1;
+        case(1): return 2;
+        }
+      }
+    }
+    else
+    {
+      switch(i)
+      {
+      case(0):
+        switch(j)
+        {
+        case(0): return 0;
+        case(1): return 1;
+        case(2): return 3;
+        }
+      case(1):
+        switch(j)
+        {
+        case(0): return 1;
+        case(1): return 2;
+        case(2): return 4;
+        }
+      case(2): return 3+j;
+      }
+    }
+    return -1;
   }
 
  private:
