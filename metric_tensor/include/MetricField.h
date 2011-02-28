@@ -168,7 +168,7 @@ template<typename real_t, typename index_t>
         size_t lmin_patch_size = _surface->contains_node(i)?min_patch_size*2:min_patch_size;
         _mesh->get_node_patch(i, lmin_patch_size, *patch);
         patch->erase(i);
-        
+
         if(_ndims==2){
           // Form quadratic system to be solved. The quadratic fit is:
           // P = a0+a1x+a2y+a3xy+a4x^2+a5y^2
@@ -299,7 +299,8 @@ template<typename real_t, typename index_t>
       {
         const index_t *n=_ENList+_nloc*e;           // indices for element e start at _ENList[ nloc*e ]
         for(index_t i=0; i<3; i++){
-          for(index_t j=i+1; j<3; j++){
+          for(index_t j=i+1; j<3; j++)
+          {
             NNList[n[i]].insert(n[j]);
             NNList[n[j]].insert(n[i]);
           }
@@ -323,7 +324,6 @@ template<typename real_t, typename index_t>
       }
     }
 
-//    vtkDataArray *m = ug->GetPointData()->GetArray("metric");
     double log_gradation = log(gradation);
 
     // This is used to ensure we don't revisit parts of the mesh that
@@ -459,27 +459,27 @@ template<typename real_t, typename index_t>
             }
 
             // todo: hangs if this is uncommented - need to get it working...
-//            // Reform metrics if modified
-//            if(add_p)
-//            {
-//              front.insert(p);
-//
-//              Mp.eigen_undecomp(&(Dp[0]), &(Vp[0]));
-////              Mp.get_metric2(&(Tp[0]));
-////              m->SetTuple(p, &(Tp[0]));
-//              _metric[p].set_metric( Mp.get_metric() );
-//              hits.insert(p);
-//            }
-//            if(add_q)
-//            {
-//              front.insert(q);
-//
-//              Mq.eigen_undecomp(&(Dq[0]), &(Vq[0]));
-////              Mq.get_metric2(&(Tq[0]));
-////              m->SetTuple(q, &(Tq[0]));
-//              _metric[q].set_metric( Mq.get_metric() );
-//              hits.insert(p);
-//            }
+            // Reform metrics if modified
+            if(add_p)
+            {
+              front.insert(p);
+
+              Mp.eigen_undecomp(&(Dp[0]), &(Vp[0]));
+//              Mp.get_metric2(&(Tp[0]));
+//              m->SetTuple(p, &(Tp[0]));
+              _metric[p].set_metric( Mp.get_metric() );
+              hits.insert(p);
+            }
+            if(add_q)
+            {
+              front.insert(q);
+
+              Mq.eigen_undecomp(&(Dq[0]), &(Vq[0]));
+//              Mq.get_metric2(&(Tq[0]));
+//              m->SetTuple(q, &(Tq[0]));
+              _metric[q].set_metric( Mq.get_metric() );
+              hits.insert(p);
+            }
           }
         }
       }

@@ -334,51 +334,52 @@ class MetricTensor{
     return sqrt(1.0/average);
   }
 
-  int eigen_decomp(double *eigenvalues, double *eigenvectors) const
+  void eigen_decomp(double *eigenvalues, double *eigenvectors) const
   {
-    char jobz = 'V';
-    char uplo = 'U';
-    size_t t_size = _dimension*_dimension - 0.5*_dimension*(_dimension-1);
-    double ap[t_size];      // dspev takes the matrix in triangular form as an input argument
+    if(_dimension==2)
+    {
+        Eigen::Matrix<real_t, 2, 2> M;
+        M <<
+          _metric[0], _metric[1],
+          _metric[2], _metric[3];
 
-    if( _dimension == 2 )
-    {
-        ap[0] = _metric[0];
-        ap[1] = _metric[1];
-        ap[2] = _metric[3];
+        Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
+
+        Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
+
+        for (size_t i=0;i<2;i++)
+            eigenvalues[i] = evalues[i];
+
+        Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose();
+        for(size_t i=0;i<4;i++)
+            eigenvectors[i] = Mp[i];
     }
-    else if ( _dimension == 3 )
+    else if (_dimension==3)
     {
-        ap[0] = _metric[0];
-        ap[1] = _metric[1];
-        ap[2] = _metric[2];
-        ap[3] = _metric[4];
-        ap[4] = _metric[5];
-        ap[5] = _metric[8];
+        Eigen::Matrix<real_t, 3, 3> M;
+        M <<
+          _metric[0], _metric[1], _metric[2],
+          _metric[3], _metric[4], _metric[5],
+          _metric[6], _metric[7], _metric[8];
+
+        Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
+
+        Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
+
+        for (size_t i=0;i<3;i++)
+            eigenvalues[i] = evalues[i];
+
+        Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose();
+        for(size_t i=0;i<9;i++)
+          eigenvectors[i] = Mp[i];
     }
     else
     {
         std::cerr<<"ERROR: unsupported dimension: " << _dimension << " (must be 2 or 3)" << endl;
     }
 
-    double work[_dimension*_dimension];
-    int info = blas_spev(jobz, uplo, _dimension, ap, eigenvalues, eigenvectors, _dimension, work);
-
-    if(info<0){
-      cerr<<"Failed in eigenvalue decomposition. Argument "<<abs(info)<<" was foobar\n";
-    }else if(info>0){
-      cerr<<"Failed in eigenvalue decomposition. The algorithm  failed  to  converge; "
-          <<info<<" off-diagonal elements of an intermediate tridiagonal form did not "
-          <<"converge to zero.\n";
-      for(size_t i=0; i<(_dimension*_dimension); i++)
-        cerr<<"metric = "<<_metric[i]<<"\t";
-      cerr<<endl;
-    }
-
-    for(size_t i=0; i<_dimension; i++)
-      eigenvalues[i] = fabs(eigenvalues[i]);
-
-    return info;
   }
 
   int eigen_undecomp(const double *D, const double *V){
@@ -399,15 +400,6 @@ class MetricTensor{
     }
 
     return 0;
-  }
-
-  int blas_spev(char jobz, char uplo, size_t N, double ap[],
-                double eigenvalues[],  double eigenvectors[],
-                size_t ldz,  double work[]) const{
-
-    int info;
-    dspev_(&jobz, &uplo, &N, ap, eigenvalues, eigenvectors, &ldz, work, &info);
-    return info;
   }
 
   int lookup(size_t i, size_t j) const{
