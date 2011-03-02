@@ -36,6 +36,10 @@
 
 #include <omp.h>
 
+#ifdef HAVE_LIBNUMA
+#include <numa.h>
+#endif
+
 #include "Metis.h"
 
 /*! \brief Manages mesh data.
@@ -219,8 +223,14 @@ template<typename real_t, typename index_t>
     _coords = new real_t[_NNodes*_ndims];
 
     // Partition the nodes and elements so that the mesh can be
-    // topologically mapped to the computer node topology.
+    // topologically mapped to the computer node topology. If we have
+    // NUMA library dev support then we use the number of memory
+    // nodes. Otherwise, play it save and use the number of threads.
+#ifdef HAVE_LIBNUMA
+    int nparts =numa_max_node()+1;
+#else
     int nparts = omp_get_max_threads();
+#endif
 
     std::vector<int> eid_new2old;
     std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
