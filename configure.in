@@ -87,26 +87,6 @@ elif test "$CXX" = "icpc" ; then
     fi
 fi
 
-# Find a library which will give us blas and lapack routines
-AC_LANG_PUSH([C++])
-found_blas="no"
-if test \( "$CXX" = "icpc" \)
-then
-    AC_MSG_NOTICE([Appear to be using Intel compiler suite. Check if MKL is also available.])
-    for i in `echo $LD_LIBRARY_PATH | sed -e 's/:/ /g'`
-    do
-        echo "looking in $i"
-        if test \( -f $i/libmkl.a \) -o \( -f $i/libmkl.so \)
-        then
-            AC_MSG_NOTICE([Will look in $i for MKL.])
-            LIBS="$LIBS -L$i"
-            LAPACK_LIBS="-L$i $LAPACK_LIBS"
-        fi
-    done
-fi
-ACX_BLAS([found_blas="yes"],[found_blas="no"])
-AC_LANG_POP([C++])
-
 AC_CHECK_LIB(stdc++,main,,) 
 AC_CHECK_LIB(m,main,,)
 AC_CHECK_LIB(metis,main,,)
