@@ -77,7 +77,6 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field(mesh, surface);
 
   vector<double> psi(NNodes);
-  vector<double> metric(NNodes*9);
 
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray("Vm");
@@ -91,10 +90,9 @@ int main(int argc, char **argv){
 
   //metric_field.apply_gradation(1.3);
   metric_field.apply_nelements(NElements);
+  metric_field.update_mesh();
 
-  metric_field.get_metric(&(metric[0]));
-
-  Smooth<double, int> smooth(mesh, surface, &(metric[0]));
+  Smooth<double, int> smooth(mesh, surface);
 
   double start_tic = omp_get_wtime();
   double prev_mean_quality = smooth.smooth();
@@ -150,6 +148,8 @@ int main(int argc, char **argv){
   vtk_metric->SetNumberOfTuples(NNodes);
   vtk_metric->SetName("Metric");
 
+  vector<double> metric(NNodes*9);
+  metric_field.get_metric(&(metric[0]));
   for(int i=0;i<NNodes;i++){
     const double *r = mesh.get_coords(i);
     vtk_numbering->SetTuple1(i, i);

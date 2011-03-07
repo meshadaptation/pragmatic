@@ -60,11 +60,9 @@ int main(int argc, char **argv){
   size_t NElements = mesh->get_number_elements();
 
   metric_field.apply_nelements(NElements);
+  metric_field.update_mesh();
 
-  vector<double> metric(NNodes*9);
-  metric_field.get_metric(&(metric[0]));
-
-  Smooth<double, int> smooth(*mesh, surface, &(metric[0]));
+  Smooth<double, int> smooth(*mesh, surface);
   
   double start_tic = omp_get_wtime();
   double prev_mean_quality = smooth.smooth(true);
@@ -82,7 +80,8 @@ int main(int argc, char **argv){
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
-  export_vtu("../data/test_smooth_constrained_3d.vtu", mesh, &(psi[0]), &(metric[0]));
+  mesh->calc_edge_lengths();
+  export_vtu("../data/test_smooth_constrained_3d.vtu", mesh, &(psi[0]));
   delete mesh;
 
   if(iter<220)

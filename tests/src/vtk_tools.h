@@ -97,7 +97,7 @@ void import_vtu(const char *filename, Mesh<real_t, index_t>* &mesh){
 }
 
 template<typename real_t, typename index_t>
-void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const real_t *psi, const real_t *metric){
+void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const real_t *psi){
   // Create VTU object to write out.
   vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
   
@@ -123,11 +123,20 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   size_t ndims = mesh->get_number_dimensions();
 
   vtkDoubleArray *vtk_metric = NULL;
+  vtkDoubleArray *vtk_edge_length = NULL;
+  const real_t *metric=NULL;
+  if(mesh->metric.size()>0)
+    metric = &(mesh->metric[0]);
   if(metric!=NULL){
     vtk_metric = vtkDoubleArray::New();
     vtk_metric->SetNumberOfComponents(ndims*ndims);
     vtk_metric->SetNumberOfTuples(NNodes);
     vtk_metric->SetName("Metric");
+
+    vtk_edge_length = vtkDoubleArray::New();
+    vtk_edge_length->SetNumberOfComponents(1);
+    vtk_edge_length->SetNumberOfTuples(NNodes);
+    vtk_edge_length->SetName("mean_edge_length");
   }
 
   for(size_t i=0;i<NNodes;i++){
@@ -149,6 +158,16 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
                               metric[i*9+3], metric[i*9+4], metric[i*9+5],
                               metric[i*9+6], metric[i*9+7], metric[i*9+8]); 
     }
+    if(vtk_edge_length!=NULL){
+      int nedges=mesh->NNList[i].size();
+      real_t mean_edge_length=0;
+      for(typename std::set<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+        Edge<real_t, index_t> edge(i, *it);
+        mean_edge_length+=mesh->Edges.find(edge)->get_length();
+      }
+      mean_edge_length/=nedges;
+      vtk_edge_length->SetTuple1(i, mean_edge_length);
+    }
   }
   
   ug->SetPoints(vtk_points);
@@ -166,6 +185,11 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   if(vtk_metric!=NULL){
     ug->GetPointData()->AddArray(vtk_metric);
     vtk_metric->Delete();
+  }
+
+  if(vtk_edge_length!=NULL){
+    ug->GetPointData()->AddArray(vtk_edge_length);
+    vtk_edge_length->Delete();
   }
 
   size_t NElements = mesh->get_number_elements();

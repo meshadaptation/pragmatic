@@ -137,6 +137,23 @@ template<typename real_t, typename index_t>
     }
   }
 
+  /// Update the metric field on the mesh.
+  void update_mesh(){
+    _mesh->metric.clear();
+    _mesh->metric.resize(_NNodes*_ndims*_ndims);
+    
+    // Enforce first-touch policy
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        _metric[i].get_metric(&(_mesh->metric[i*_ndims*_ndims]));
+      }
+    }
+
+    _mesh->calc_edge_lengths();
+  }
+
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error.
    * @param psi is field while curvature is to be considered.
    * @param target_error is the target interpolation error.
@@ -164,10 +181,9 @@ template<typename real_t, typename index_t>
       // Calculate Hessian at each point.
 #pragma omp for schedule(static)
       for(int i=0; i<_NNodes; i++){
-        std::set<index_t> *patch = new std::set<index_t>;
         size_t lmin_patch_size = _surface->contains_node(i)?min_patch_size*2:min_patch_size;
-        _mesh->get_node_patch(i, lmin_patch_size, *patch);
-        patch->erase(i);
+        std::set<index_t> patch = _mesh->get_node_patch(i, lmin_patch_size);
+        patch.erase(i);
 
         if(_ndims==2){
           // Form quadratic system to be solved. The quadratic fit is:
@@ -187,7 +203,7 @@ template<typename real_t, typename index_t>
 
           b[0]+=psi[i]*pow(y,2); b[1]+=psi[i]*pow(x,2); b[2]+=psi[i]*x*y; b[3]+=psi[i]*y; b[4]+=psi[i]*x; b[5]+=psi[i]*1;
 
-          for(typename std::set<index_t>::const_iterator n=patch->begin(); n!=patch->end(); n++){
+          for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
             x=get_x(*n); y=get_y(*n);
 
             A[0]+=pow(y,4); A[1]+=pow(x,2)*pow(y,2); A[2]+=x*pow(y,3); A[3]+=pow(y,3); A[4]+=x*pow(y,2); A[5]+=pow(y,2);
@@ -229,7 +245,7 @@ template<typename real_t, typename index_t>
 
           b[0]+=psi[i]*1; b[1]+=psi[i]*x; b[2]+=psi[i]*y; b[3]+=psi[i]*z; b[4]+=psi[i]*pow(x,2); b[5]+=psi[i]*x*y; b[6]+=psi[i]*x*z; b[7]+=psi[i]*pow(y,2); b[8]+=psi[i]*y*z; b[9]+=psi[i]*pow(z,2);
 
-          for(typename std::set<index_t>::const_iterator n=patch->begin(); n!=patch->end(); n++){
+          for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
             x=get_x(*n); y=get_y(*n); z=get_z(*n);
 
             A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=z; A[4]+=pow(x,2); A[5]+=x*y; A[6]+=x*z; A[7]+=pow(y,2); A[8]+=y*z; A[9]+=pow(z,2);
@@ -259,7 +275,6 @@ template<typename real_t, typename index_t>
           Hessian[i*9+7] = a[8];     // d2/dzdy
           Hessian[i*9+8] = a[9]*2.0; // d2/dz2
         }
-        delete patch;
       }
 
       if(relative){

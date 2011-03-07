@@ -48,7 +48,7 @@ template<typename real_t, typename index_t>
   class Smooth{
  public:
   /// Default constructor.
-  Smooth(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface, real_t *metric){
+  Smooth(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _ndims = mesh.get_number_dimensions();
@@ -56,12 +56,10 @@ template<typename real_t, typename index_t>
     _ENList = mesh.get_enlist();;
     _coords = mesh.get_coords();
 #ifdef HAVE_MPI
-    _mesh_comm = mesh.get_mpi_comm();
+    msh_comm = mesh.get_mpi_comm();
 #endif
     _surface = &surface;
-    
-    _metric = metric;
-
+    msh = &mesh;
     init_cache();
   }
 
@@ -70,27 +68,12 @@ template<typename real_t, typename index_t>
   }
   
   void init_cache(){
-    // Create node-node list
-    if(NNList.empty()){
-      NNList.resize(_NNodes);
-      NEList.resize(_NNodes);
-      for(int i=0; i<_NElements; i++){
-        for(int j=0;j<_nloc;j++){
-          NEList[_ENList[i*_nloc+j]].insert(i);
-          for(int k=j+1;k<_nloc;k++){
-            NNList[_ENList[i*_nloc+j]].insert(_ENList[i*_nloc+k]);
-            NNList[_ENList[i*_nloc+k]].insert(_ENList[i*_nloc+j]);
-          }
-        }
-      }
-      Metis<index_t>::reorder(NNList, norder);
-    }
     std::vector<index_t> colour(_NNodes, 0);
     if(omp_get_max_threads()>1)
-      Colour<index_t>::greedy(NNList, &(colour[0]));
+      Colour<index_t>::greedy(msh->NNList, &(colour[0]));
     
-    for(std::vector<int>::const_iterator it=norder.begin();it!=norder.end();++it)
-      colour_sets[colour[*it]].push_back(*it);
+    for(int i=0;i<_NNodes;i++)
+      colour_sets[colour[i]].push_back(i);
 
     return;
   }
@@ -100,7 +83,7 @@ template<typename real_t, typename index_t>
     real_t qmean = 0.0, qrms=0.0;
     
     int ncolours = colour_sets.size();
-    
+
     if(_ndims==2){
       // Smoothing loop.
       const real_t *refx0 = _coords + _ENList[0]*_ndims;
@@ -117,31 +100,37 @@ template<typename real_t, typename index_t>
             index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
             if(qconstrain){
-              typename std::set<index_t>::iterator ie=NEList[node].begin();
+              typename std::set<index_t>::iterator ie=msh->NEList[node].begin();
               {
                 const index_t *n=_ENList+(*ie)*3;
                 real_t *x0 = _coords + n[0]*_ndims;
                 real_t *x1 = _coords + n[1]*_ndims;
                 real_t *x2 = _coords + n[2]*_ndims;
-                min_q = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+                min_q = property.lipnikov(x0, x1, x2, 
+                                          &(msh->metric[n[0]*4]),
+                                          &(msh->metric[n[1]*4]),
+                                          &(msh->metric[n[2]*4]));
                 mean_q = min_q;
               }
-              for(;ie!=NEList[node].end();++ie){
+              for(;ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*3;
                 real_t *x0 = _coords + n[0]*_ndims;
                 real_t *x1 = _coords + n[1]*_ndims;
                 real_t *x2 = _coords + n[2]*_ndims;
-                real_t q = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+                real_t q = property.lipnikov(x0, x1, x2,
+                                             &(msh->metric[n[0]*4]),
+                                             &(msh->metric[n[1]*4]),
+                                             &(msh->metric[n[2]*4]));
                 min_q = min(q, min_q);
                 mean_q += q;
               }
-              mean_q/=NEList[node].size();
+              mean_q/=msh->NEList[node].size();
             }
             real_t A00=0, A01=0, A11=0, q0=0, q1=0;
-            for(std::set<int>::const_iterator il=NNList[node].begin();il!=NNList[node].end();++il){
-              real_t ml00 = 0.5*(_metric[node*4  ] + _metric[*il*4  ]);
-              real_t ml01 = 0.5*(_metric[node*4+1] + _metric[*il*4+1]);
-              real_t ml11 = 0.5*(_metric[node*4+3] + _metric[*il*4+3]);
+            for(std::set<int>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
+              real_t ml00 = 0.5*(msh->metric[node*4  ] + msh->metric[*il*4  ]);
+              real_t ml01 = 0.5*(msh->metric[node*4+1] + msh->metric[*il*4+1]);
+              real_t ml11 = 0.5*(msh->metric[node*4+3] + msh->metric[*il*4+3]);
               
               q0 += ml00*get_x(*il) + ml01*get_y(*il);
               q1 += ml01*get_x(*il) + ml11*get_y(*il);
@@ -185,10 +174,10 @@ template<typename real_t, typename index_t>
           
             // Interpolate metric at this new position.
             real_t mp[4], l[3];
-            int best_e=*NEList[node].begin();
+            int best_e=*msh->NEList[node].begin();
             for(size_t b=0;b<5;b++){
               real_t tol=-1;
-              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+              for(typename std::set<index_t>::iterator ie=msh->NEList[node].begin();ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*3;
               
                 real_t *x0 = _coords + n[0]*_ndims;
@@ -228,7 +217,9 @@ template<typename real_t, typename index_t>
                 std::cerr<<"negative area :: "<<node<<", "<<L<<std::endl;
               }
               for(size_t i=0;i<4;i++)
-                mp[i] = (l[0]*_metric[n[0]*4+i]+l[1]*_metric[n[1]*4+i]+l[2]*_metric[n[2]*4+i])/L;
+                mp[i] = (l[0]*msh->metric[n[0]*4+i]+
+                         l[1]*msh->metric[n[1]*4+i]+
+                         l[2]*msh->metric[n[2]*4+i])/L;
               
               MetricTensor<real_t>::positive_definiteness(2, mp);
             }
@@ -237,7 +228,7 @@ template<typename real_t, typename index_t>
             if(qconstrain){
               // Check if this positions improves the local mesh quality.
               real_t min_q_new = std::numeric_limits<real_t>::max(), mean_q_new=0;
-              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+              for(typename std::set<index_t>::iterator ie=msh->NEList[node].begin();ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*_nloc;
                 int iloc = 0;
                 while(n[iloc]!=(int)node){
@@ -250,11 +241,13 @@ template<typename real_t, typename index_t>
                 const real_t *x2 = _coords + n[loc2]*_ndims;
                 
                 real_t q = property.lipnikov(p, x1, x2, 
-                                             mp, _metric+n[loc1]*4, _metric+n[loc2]*4);
+                                             mp,
+                                             &(msh->metric[n[loc1]*4]),
+                                             &(msh->metric[n[loc2]*4]));
                 mean_q_new += q;
                 min_q_new = min(min_q_new, q);
               }
-              mean_q_new /= NEList[node].size();
+              mean_q_new /= msh->NEList[node].size();
               
               improvement = (mean_q_new>mean_q)||(min_q_new>min_q);
             }  
@@ -262,10 +255,10 @@ template<typename real_t, typename index_t>
               for(int j=0;j<_ndims;j++)
                 _coords[node*_ndims+j] = p[j];
                 
-              _metric[(node)*4  ] = mp[0];
-              _metric[(node)*4+1] = mp[1];
-              _metric[(node)*4+2] = mp[1];
-              _metric[(node)*4+3] = mp[3];
+              msh->metric[(node)*4  ] = mp[0];
+              msh->metric[(node)*4+1] = mp[1];
+              msh->metric[(node)*4+2] = mp[1];
+              msh->metric[(node)*4+3] = mp[3];
             }
           }
         }
@@ -282,7 +275,10 @@ template<typename real_t, typename index_t>
           const real_t *x1 = _coords + n[1]*_ndims;
           const real_t *x2 = _coords + n[2]*_ndims;
           
-          qvec[i] = property.lipnikov(x0, x1, x2, _metric+n[0]*4, _metric+n[1]*4, _metric+n[2]*4);
+          qvec[i] = property.lipnikov(x0, x1, x2,
+                                      &(msh->metric[n[0]*4]),
+                                      &(msh->metric[n[1]*4]),
+                                      &(msh->metric[n[2]*4]));
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
           qmean += qvec[i]/_NElements;
         }
@@ -312,7 +308,7 @@ template<typename real_t, typename index_t>
             index_t node = colour_sets[colour][cn];
             real_t min_q=0, mean_q=0;
             if(qconstrain){
-              typename std::set<index_t>::iterator ie=NEList[node].begin();
+              typename std::set<index_t>::iterator ie=msh->NEList[node].begin();
               {
                 const index_t *n=_ENList+(*ie)*4;
                 real_t *x0 = _coords + n[0]*_ndims;
@@ -320,30 +316,36 @@ template<typename real_t, typename index_t>
                 real_t *x2 = _coords + n[2]*_ndims;
                 real_t *x3 = _coords + n[3]*_ndims;
                 min_q = property.lipnikov(x0, x1, x2, x3,
-                                          _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
+                                          &(msh->metric[n[0]*9]),
+                                          &(msh->metric[n[1]*9]),
+                                          &(msh->metric[n[2]*9]),
+                                          &(msh->metric[n[3]*9]));
                 mean_q = min_q;
               }
-              for(;ie!=NEList[node].end();++ie){
+              for(;ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*4;
                 real_t *x0 = _coords + n[0]*_ndims;
                 real_t *x1 = _coords + n[1]*_ndims;
                 real_t *x2 = _coords + n[2]*_ndims;
                 real_t *x3 = _coords + n[3]*_ndims;
                 real_t q = property.lipnikov(x0, x1, x2, x3,
-                                             _metric+n[0]*9, _metric+n[1]*9, _metric+n[2]*9, _metric+n[3]*9);
+                                             &(msh->metric[n[0]*9]),
+                                             &(msh->metric[n[1]*9]),
+                                             &(msh->metric[n[2]*9]),
+                                             &(msh->metric[n[3]*9]));
                 min_q = min(q, min_q);
                 mean_q += q;
               }
-              mean_q/=NEList[node].size();
+              mean_q/=msh->NEList[node].size();
             }
             real_t A00=0, A01=0, A02=0, A11=0, A12=0, A22=0, q0=0, q1=0, q2=0;
-            for(std::set<int>::const_iterator il=NNList[node].begin();il!=NNList[node].end();++il){
-              real_t ml00 = 0.5*(_metric[node*9  ] + _metric[*il*9  ]);
-              real_t ml01 = 0.5*(_metric[node*9+1] + _metric[*il*9+1]);
-              real_t ml02 = 0.5*(_metric[node*9+2] + _metric[*il*9+2]);
-              real_t ml11 = 0.5*(_metric[node*9+4] + _metric[*il*9+4]);
-              real_t ml12 = 0.5*(_metric[node*9+5] + _metric[*il*9+5]);
-              real_t ml22 = 0.5*(_metric[node*9+8] + _metric[*il*9+8]);
+            for(std::set<int>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
+              real_t ml00 = 0.5*(msh->metric[node*9  ] + msh->metric[*il*9  ]);
+              real_t ml01 = 0.5*(msh->metric[node*9+1] + msh->metric[*il*9+1]);
+              real_t ml02 = 0.5*(msh->metric[node*9+2] + msh->metric[*il*9+2]);
+              real_t ml11 = 0.5*(msh->metric[node*9+4] + msh->metric[*il*9+4]);
+              real_t ml12 = 0.5*(msh->metric[node*9+5] + msh->metric[*il*9+5]);
+              real_t ml22 = 0.5*(msh->metric[node*9+8] + msh->metric[*il*9+8]);
             
               q0 += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
               q1 += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
@@ -394,11 +396,11 @@ template<typename real_t, typename index_t>
 
             // Interpolate metric at this new position.
             real_t mp[9], l[4];
-            int best_e=*NEList[node].begin();
+            int best_e=*msh->NEList[node].begin();
             bool inverted=false;
             for(size_t bisections=0;bisections<5;bisections++){ // 5 bisections along the search line
               real_t tol=-1;
-              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+              for(typename std::set<index_t>::iterator ie=msh->NEList[node].begin();ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*4;
                 real_t vectors[] = {get_x(n[0]), get_y(n[0]), get_z(n[0]),
                                     get_x(n[1]), get_y(n[1]), get_z(n[1]),
@@ -455,10 +457,10 @@ template<typename real_t, typename index_t>
               const index_t *n=_ENList+best_e*4;
               for(size_t i=0;i<9;i++)
                 mp[i] =
-                  l[0]*_metric[n[0]*9+i]+
-                  l[1]*_metric[n[1]*9+i]+
-                  l[2]*_metric[n[2]*9+i]+
-                  l[3]*_metric[n[3]*9+i];
+                  l[0]*msh->metric[n[0]*9+i]+
+                  l[1]*msh->metric[n[1]*9+i]+
+                  l[2]*msh->metric[n[2]*9+i]+
+                  l[3]*msh->metric[n[3]*9+i];
               
               MetricTensor<real_t>::positive_definiteness(3, mp);
             }
@@ -467,7 +469,7 @@ template<typename real_t, typename index_t>
             if(qconstrain){
               // Check if this positions improves the local mesh quality.
               real_t min_q_new = std::numeric_limits<real_t>::max(), mean_q_new=0;
-              for(typename std::set<index_t>::iterator ie=NEList[node].begin();ie!=NEList[node].end();++ie){
+              for(typename std::set<index_t>::iterator ie=msh->NEList[node].begin();ie!=msh->NEList[node].end();++ie){
                 const index_t *n=_ENList+(*ie)*_nloc;
                 real_t vectors[] = {get_x(n[0]), get_y(n[0]), get_z(n[0]),
                                     get_x(n[1]), get_y(n[1]), get_z(n[1]),
@@ -481,7 +483,7 @@ template<typename real_t, typename index_t>
                     m[iloc] = mp;
                   }else{
                     r[iloc] = vectors+3*iloc;
-                    m[iloc] = _metric+n[iloc]*9;
+                    m[iloc] = &(msh->metric[n[iloc]*9]);
                   }
                 real_t q = property.lipnikov(r[0], r[1], r[2], r[3],
                                              m[0], m[1], m[2], m[3]);
@@ -489,7 +491,7 @@ template<typename real_t, typename index_t>
                 min_q_new = min(min_q_new, q);
               }
               
-              mean_q_new /= NEList[node].size();
+              mean_q_new /= msh->NEList[node].size();
               
               improvement = (mean_q_new>mean_q)||(min_q_new>min_q);
             }
@@ -497,9 +499,9 @@ template<typename real_t, typename index_t>
               for(int j=0;j<_ndims;j++)
                 _coords[node*_ndims+j] = p[j];
 
-              _metric[(node)*9  ] = mp[0]; _metric[(node)*9+1] = mp[1]; _metric[(node)*9+2] = mp[2];
-              _metric[(node)*9+3] = mp[1]; _metric[(node)*9+4] = mp[4]; _metric[(node)*9+5] = mp[5];
-              _metric[(node)*9+6] = mp[2]; _metric[(node)*9+7] = mp[5]; _metric[(node)*9+8] = mp[8];
+              msh->metric[(node)*9  ] = mp[0]; msh->metric[(node)*9+1] = mp[1]; msh->metric[(node)*9+2] = mp[2];
+              msh->metric[(node)*9+3] = mp[1]; msh->metric[(node)*9+4] = mp[4]; msh->metric[(node)*9+5] = mp[5];
+              msh->metric[(node)*9+6] = mp[2]; msh->metric[(node)*9+7] = mp[5]; msh->metric[(node)*9+8] = mp[8];
             }
           }
         }
@@ -518,8 +520,10 @@ template<typename real_t, typename index_t>
           const real_t *x3 = _coords + n[3]*_ndims;
           
           qvec[i] = property.lipnikov(x0, x1, x2, x3,
-                                      _metric+n[0]*9, _metric+n[1]*9,
-                                      _metric+n[2]*9, _metric+n[3]*9);
+                                      &(msh->metric[n[0]*9]),
+                                      &(msh->metric[n[1]*9]),
+                                      &(msh->metric[n[2]*9]),
+                                      &(msh->metric[n[3]*9]));
 
           lqlinfinity = std::min(lqlinfinity, qvec[i]);
           qmean += qvec[i]/_NElements;
@@ -558,14 +562,11 @@ template<typename real_t, typename index_t>
   int _NNodes, _NElements, _ndims, _nloc;
   const index_t *_ENList, *_node_distribution;
   real_t *_coords;
-  std::vector< std::set<index_t> > NNList, NEList;
   std::vector<int> norder;
   std::set<index_t> surface_nodes;
   std::map<int, std::deque<index_t> > colour_sets;
-#ifdef HAVE_MPI
-  const MPI_Comm *_comm;
-#endif
-  real_t *_metric;
+
   Surface<real_t, index_t> *_surface;
+  Mesh<real_t, index_t> *msh;
 };
 #endif

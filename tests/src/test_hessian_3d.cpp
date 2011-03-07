@@ -57,6 +57,7 @@ int main(int argc, char **argv){
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
+  metric_field.update_mesh();
   std::cout<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*9);
@@ -94,7 +95,7 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 2) +
       pow(mesh->get_coords(i)[2], 2);
 
-  export_vtu("../data/test_hessian_3d.vtu", mesh, &(psi[0]), &(metric[0]));
+  export_vtu("../data/test_hessian_3d.vtu", mesh, &(psi[0]));
 
   delete mesh;
 
