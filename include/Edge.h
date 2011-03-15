@@ -36,17 +36,26 @@
  */
 template<typename real_t, typename index_t> class Edge{
  public:
+  /*! Constructor
+   * @param Node-Id 0
+   * @param Node-Id 1
+   */
   Edge(index_t nid0, index_t nid1){
     edge.first = std::min(nid0, nid1);
     edge.second = std::max(nid0, nid1);
   }
   
+  /*! Copy constructor
+   * @param in Edge object.
+   */
   Edge(const Edge& in){
     *this = in;
   }
   
+  /// Destructor
   ~Edge(){}
   
+  /// Assignment operator
   Edge& operator=(const Edge &in){
     edge = in.edge;
     length = in.length;
@@ -55,14 +64,17 @@ template<typename real_t, typename index_t> class Edge{
     return *this;
   }
   
+  /// Equality operator.
   bool operator==(const Edge& in) const{
     return this->edge == in.edge;
   }
 
+  /// Inequality operator.
   bool operator!=(const Edge& in) const{
     return this->edge != in.edge;
   }
 
+  /// Greater-than operator
   bool operator<(const Edge& in) const{
     return this->edge < in.edge;
   }
@@ -73,6 +85,7 @@ template<typename real_t, typename index_t> class Edge{
   }
 
   template<typename _real_t, typename _index_t> friend class Mesh;
+  template<typename _real_t, typename _index_t> friend class Coarsen;
 
  private:
 

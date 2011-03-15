@@ -140,19 +140,22 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return the node id's connected to the specified node_id
-  std::set<index_t> get_node_patch(index_t nid){
-    return NNList[nid];
+  std::set<index_t> get_node_patch(index_t nid) const{
+    std::set<index_t> patch;
+    for(typename std::deque<index_t>::const_iterator it=NNList[nid].begin();it!=NNList[nid].end();++it)
+      patch.insert(patch.end(), *it);
+    return patch;
   }
 
   /// Grow a node patch around node id's until it reaches a minimum size.
   std::set<index_t> get_node_patch(index_t nid, int min_patch_size){
-    std::set<index_t> patch = NNList[nid];
+    std::set<index_t> patch = get_node_patch(nid);
     
     if(patch.size()<(size_t)min_patch_size){
       std::set<index_t> front = patch, new_front;
       for(;;){
         for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
-          for(typename std::set<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
+          for(typename std::deque<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
             if(patch.find(*jt)==patch.end()){
               new_front.insert(*jt);
               patch.insert(*jt);
@@ -160,7 +163,7 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
         
-        if(patch.size()>=(size_t)min_patch_size)
+        if(patch.size()>=(size_t)std::min(min_patch_size, _NNodes))
           break;
         
         front.swap(new_front);
@@ -201,62 +204,59 @@ template<typename real_t, typename index_t> class Mesh{
   /// Calculates the edge lengths in metric space.
   void calc_edge_lengths(){
     assert(Edges.size());
-    if(_ndims==2){
-      for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();){
-        typename std::set< Edge<real_t, index_t> >::iterator current_edge = it++;
-        
-        Edge<real_t, index_t> edge = *current_edge;
-        Edges.erase(current_edge);
-
-        index_t nid0 = edge.edge.first;
-        index_t nid1 = edge.edge.second;
-        
-        real_t ml00 = (metric[nid0*_ndims*_ndims]+metric[nid1*_ndims*_ndims])*0.5;
-        real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
-        real_t ml11 = (metric[nid0*_ndims*_ndims+3]+metric[nid1*_ndims*_ndims+3])*0.5;
-        
-        real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
-        real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
-
-        edge.length =
-          sqrt((ml01*x + ml11*y)*y + 
-               (ml00*x + ml01*y)*x);
-        Edges.insert(edge);
-      }
-    }else{
-      for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();){
-        typename std::set< Edge<real_t, index_t> >::iterator current_edge = it++;
-        
-        Edge<real_t, index_t> edge = *current_edge;
-        Edges.erase(current_edge);
-        
-        index_t nid0 = edge.edge.first;
-        index_t nid1 = edge.edge.second;
-        
-        real_t ml00 = (metric[nid0*_ndims*_ndims  ]+metric[nid1*_ndims*_ndims  ])*0.5;
-        real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
-        real_t ml02 = (metric[nid0*_ndims*_ndims+2]+metric[nid1*_ndims*_ndims+2])*0.5;
-        
-        real_t ml11 = (metric[nid0*_ndims*_ndims+4]+metric[nid1*_ndims*_ndims+4])*0.5;
-        real_t ml12 = (metric[nid0*_ndims*_ndims+5]+metric[nid1*_ndims*_ndims+5])*0.5;
-        
-        real_t ml22 = (metric[nid0*_ndims*_ndims+8]+metric[nid1*_ndims*_ndims+8])*0.5;
-        
-        real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
-        real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
-        real_t z=_coords[nid1*_ndims+2]-_coords[nid0*_ndims+2];
-        
-        edge.length = sqrt((ml02*x + ml12*y + ml22*z)*z + 
-                           (ml01*x + ml11*y + ml12*z)*y + 
-                           (ml00*x + ml01*y + ml02*z)*x);
-        Edges.insert(edge);
-      }
+    
+    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();){
+      typename std::set< Edge<real_t, index_t> >::iterator current_edge = it++;
+      
+      Edge<real_t, index_t> edge = *current_edge;
+      Edges.erase(current_edge);
+      
+      index_t nid0 = edge.edge.first;
+      index_t nid1 = edge.edge.second;
+      
+      edge.length = calc_edge_length(nid0, nid1);
+      Edges.insert(edge);
     }
+  }
+
+  /// Calculates the edge lengths in metric space.
+  real_t calc_edge_length(index_t nid0, index_t nid1){
+    real_t length=-1.0;
+    if(_ndims==2){
+      real_t ml00 = (metric[nid0*_ndims*_ndims]+metric[nid1*_ndims*_ndims])*0.5;
+      real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
+      real_t ml11 = (metric[nid0*_ndims*_ndims+3]+metric[nid1*_ndims*_ndims+3])*0.5;
+      
+      real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
+      real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
+      
+      length = sqrt((ml01*x + ml11*y)*y + 
+                    (ml00*x + ml01*y)*x);
+    }else{
+      real_t ml00 = (metric[nid0*_ndims*_ndims  ]+metric[nid1*_ndims*_ndims  ])*0.5;
+      real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
+      real_t ml02 = (metric[nid0*_ndims*_ndims+2]+metric[nid1*_ndims*_ndims+2])*0.5;
+      
+      real_t ml11 = (metric[nid0*_ndims*_ndims+4]+metric[nid1*_ndims*_ndims+4])*0.5;
+      real_t ml12 = (metric[nid0*_ndims*_ndims+5]+metric[nid1*_ndims*_ndims+5])*0.5;
+      
+      real_t ml22 = (metric[nid0*_ndims*_ndims+8]+metric[nid1*_ndims*_ndims+8])*0.5;
+      
+      real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
+      real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
+      real_t z=_coords[nid1*_ndims+2]-_coords[nid0*_ndims+2];
+      
+      length = sqrt((ml02*x + ml12*y + ml22*z)*z + 
+                    (ml01*x + ml11*y + ml12*z)*y + 
+                    (ml00*x + ml01*y + ml02*z)*x);
+    }
+    return length;
   }
 
  private:
   template<typename _real_t, typename _index_t> friend class MetricField;
   template<typename _real_t, typename _index_t> friend class Smooth;
+  template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Mesh<_real_t, _index_t> *, const _real_t *);
 
   void _init(int NNodes, int NElements, const index_t *ENList,
@@ -366,19 +366,18 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
     }else{
-      NNList.clear();
-      NNList.resize(_NNodes);
+      std::vector< std::set<index_t> > lNNList(_NNodes);
       for(int i=0; i<_NElements; i++){
         for(int j=0;j<_nloc;j++){
           index_t nid_j = ENList[i*_nloc+j];
           for(int k=j+1;k<_nloc;k++){
             index_t nid_k = ENList[i*_nloc+k];
-            NNList[nid_j].insert(nid_k);
-            NNList[nid_k].insert(nid_j);
+            lNNList[nid_j].insert(nid_k);
+            lNNList[nid_k].insert(nid_j);
           }
         }
       }
-      Metis<index_t>::reorder(NNList, nid_new2old);
+      Metis<index_t>::reorder(lNNList, nid_new2old);
       
       eid_new2old.resize(_NElements);
       for(int e=0;e<_NElements;e++)
@@ -431,19 +430,20 @@ template<typename real_t, typename index_t> class Mesh{
   /// Create required adjancy lists.
   void create_adjancy(){
     // Create new NNList, NEList and edges
-    NNList.clear();
-    NNList.resize(_NNodes);
+    std::vector< std::set<index_t> > NNList_set(_NNodes);
     NEList.clear();
     NEList.resize(_NNodes);
     Edges.clear();
     for(int i=0; i<_NElements; i++){
       for(int j=0;j<_nloc;j++){
         index_t nid_j = _ENList[i*_nloc+j];
+        if(nid_j<0)
+          break;
         NEList[nid_j].insert(i);
         for(int k=j+1;k<_nloc;k++){
           index_t nid_k = _ENList[i*_nloc+k];
-          NNList[nid_j].insert(nid_k);
-          NNList[nid_k].insert(nid_j);
+          NNList_set[nid_j].insert(nid_k);
+          NNList_set[nid_k].insert(nid_j);
           
           Edge<real_t, index_t> edge(nid_j, nid_k);
           typename std::set< Edge<real_t, index_t> >::iterator edge_ptr = Edges.find(edge);
@@ -456,6 +456,15 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
     }
+    
+    // Compress NNList
+    NNList.clear();
+    NNList.resize(_NNodes);
+    for(int i=0;i<_NNodes;i++){
+      for(typename std::set<index_t>::const_iterator it=NNList_set[i].begin();it!=NNList_set[i].end();++it){
+        NNList[i].push_back(*it);
+      }
+    }
   }
 
   int _NNodes, _NElements, _ndims, _nloc;
@@ -466,9 +475,11 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<int> element_towner, node_towner;
 
   // Adjancy lists
-  std::vector< std::set<index_t> > NNList, NEList;
+  std::vector< std::set<index_t> > NEList;
+  std::vector< std::deque<index_t> > NNList;
   std::set< Edge<real_t, index_t> > Edges;
 
+  // Metric tensor field.
   std::vector<real_t> metric;
 
 #ifdef HAVE_MPI

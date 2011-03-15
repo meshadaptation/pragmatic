@@ -127,7 +127,7 @@ template<typename real_t, typename index_t>
               mean_q/=msh->NEList[node].size();
             }
             real_t A00=0, A01=0, A11=0, q0=0, q1=0;
-            for(std::set<int>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
+            for(typename std::deque<index_t>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
               real_t ml00 = 0.5*(msh->metric[node*4  ] + msh->metric[*il*4  ]);
               real_t ml01 = 0.5*(msh->metric[node*4+1] + msh->metric[*il*4+1]);
               real_t ml11 = 0.5*(msh->metric[node*4+3] + msh->metric[*il*4+3]);
@@ -339,7 +339,7 @@ template<typename real_t, typename index_t>
               mean_q/=msh->NEList[node].size();
             }
             real_t A00=0, A01=0, A02=0, A11=0, A12=0, A22=0, q0=0, q1=0, q2=0;
-            for(std::set<int>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
+            for(typename std::deque<index_t>::const_iterator il=msh->NNList[node].begin();il!=msh->NNList[node].end();++il){
               real_t ml00 = 0.5*(msh->metric[node*9  ] + msh->metric[*il*9  ]);
               real_t ml01 = 0.5*(msh->metric[node*9+1] + msh->metric[*il*9+1]);
               real_t ml02 = 0.5*(msh->metric[node*9+2] + msh->metric[*il*9+2]);

@@ -161,7 +161,7 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
     if(vtk_edge_length!=NULL){
       int nedges=mesh->NNList[i].size();
       real_t mean_edge_length=0;
-      for(typename std::set<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+      for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
         Edge<real_t, index_t> edge(i, *it);
         mean_edge_length+=mesh->Edges.find(edge)->get_length();
       }
