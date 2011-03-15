@@ -33,12 +33,13 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include <errno.h>
 #include <unistd.h>
 #include <sys/mman.h>
 
+#ifdef HAVE_LIBNUMA
 #include <numaif.h>
 #include <numa.h> 
-#include <errno.h>
 
 void check_page_residence(void *array, size_t len, unsigned char *vec){
   if(mincore(array, len, vec)){
@@ -60,8 +61,10 @@ void check_page_residence(void *array, size_t len, unsigned char *vec){
   }
   return;
 }
+#endif
   
 int main(){
+#ifdef HAVE_LIBNUMA
   size_t npages = 13;
   size_t PAGE_SIZE = getpagesize();
   
@@ -111,7 +114,7 @@ int main(){
     }
     std::cout<<"Page "<<i<<", node ID = "<<mode<<std::endl;
   }
-
+#endif
   std::cout<<"pass\n";
 
   return 0;
