@@ -153,7 +153,7 @@ class MetricTensor{
   /*! By default this calculates the superposition of two metrics where by default small
    * edge lengths are preserved. If the optional argument perserved_small_edges==false
    * then large edge lengths are perserved instead.
-   * @param metric is a reference to a MetricTensor object.
+   * @param M is a reference to a MetricTensor object.
    * @param perserved_small_edges when true causes small edge lengths to be preserved (default). Otherwise long edge are perserved.
    */
   void constrain(const real_t *M, bool perserved_small_edges=true){
