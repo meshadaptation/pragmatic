@@ -42,7 +42,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box5x5.vtu", mesh);
+  import_vtu("../data/box5x5x5.vtu", mesh);
 
   Surface<double, int> surface(*mesh);
 
@@ -62,10 +62,10 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   adapt.coarsen(0.5);
   std::cout<<"Coarsen time = "<<omp_get_wtime()-start_tic<<std::endl;
-  
+
   mesh->defragment();
 
-  export_vtu("../data/test_coarsen_2d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_coarsen_3d.vtu", mesh, &(psi[0]));
   delete mesh;
 
   std::cout<<"pass"<<std::endl;

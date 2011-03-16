@@ -99,7 +99,77 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
           );
   }
-  
+
+  /*! Defragment mesh. This compresses the storage of internal data
+    structures. This is useful if the mesh has been significently
+    coarsened. */
+  void defragment(){
+    // Discover which verticies and elements are active.
+    std::map<index_t, index_t> active_vertex_map;
+    std::deque<index_t> active_vertex, active_element;
+    for(int e=0;e<_NElements;e++){
+      index_t nid = _ENList[e*_nloc];
+      if(nid<0)
+        continue;
+      active_element.push_back(e);
+
+      active_vertex_map[nid] = 0;
+      for(int j=1;j<_nloc;j++){
+        nid = _ENList[e*_nloc+j];
+        active_vertex_map[nid]=0;
+      }
+    }
+    index_t cnt=0;
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map.begin();it!=active_vertex_map.end();++it){
+      it->second = cnt++;
+      active_vertex.push_back(it->first);
+    }
+
+    // Compress data structures.
+    _NNodes = active_vertex.size();
+    node_towner.resize(_NNodes);
+    _NElements = active_element.size();
+    element_towner.resize(_NElements);
+    index_t *defrag_ENList = new index_t[_NElements*_nloc];
+    real_t *defrag_coords = new real_t[_NNodes*_ndims];
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NElements;i++){
+        index_t eid = active_element[i];
+        for(int j=0;j<_nloc;j++){
+          defrag_ENList[i*_nloc+j] = active_vertex_map[_ENList[eid*_nloc+j]];
+        }
+#ifdef _OPENMP
+        element_towner[i] = omp_get_thread_num();
+#else
+        element_towner[i] = 0;
+#endif
+      }
+
+      node_towner.resize(_NNodes);
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        index_t nid=active_vertex[i];
+        for(int j=0;j<_ndims;j++)
+          defrag_coords[i*_ndims+j] = _coords[nid*_ndims+j];
+#ifdef _OPENMP
+        node_towner[i] = omp_get_thread_num();
+#else
+        node_towner[i] = 0;
+#endif 
+      }
+    }
+
+    delete [] _ENList;
+    _ENList = defrag_ENList;
+
+    delete [] _coords;
+    _coords = defrag_coords;
+    
+    create_adjancy();
+  }
+
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
     return _NNodes;
