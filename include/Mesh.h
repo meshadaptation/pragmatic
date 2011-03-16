@@ -288,7 +288,7 @@ template<typename real_t, typename index_t> class Mesh{
 #ifdef HAVE_LIBNUMA
     int nparts =numa_max_node()+1;
 #else
-    int nparts = omp_get_max_threads();
+    int nparts = 1;
 #endif
 
     std::vector<int> eid_new2old;
