@@ -50,7 +50,7 @@ class Metis{
  public:
   /*! Calculate a node renumbering.
    * @param graph is the undirected graph to be partitioned.
-   * @param decomp is an array storing the partition each node in the graph is assigned to.
+   * @param norder is an array storing the partition each node in the graph is assigned to.
    */
   static int reorder(const std::vector< std::set<index_t> > &graph, std::vector<int> &norder){
     int nnodes = graph.size();

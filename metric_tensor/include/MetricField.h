@@ -550,7 +550,7 @@ template<typename real_t, typename index_t>
   }
 
   /*! Apply maximum number of elements constraint.
-   * @param max_nelements the maximum number of elements desired.
+   * @param nelements the maximum number of elements desired.
    */
   void apply_max_nelements(real_t nelements){
     int predicted = predict_nelements();
@@ -559,7 +559,7 @@ template<typename real_t, typename index_t>
   }
 
   /*! Apply minimum number of elements constraint.
-   * @param min_nelements the minimum number of elements desired.
+   * @param nelements the minimum number of elements desired.
    */
   void apply_min_nelements(real_t nelements){
     int predicted = predict_nelements();

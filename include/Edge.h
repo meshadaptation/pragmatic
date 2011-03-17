@@ -37,8 +37,8 @@
 template<typename real_t, typename index_t> class Edge{
  public:
   /*! Constructor
-   * @param Node-Id 0
-   * @param Node-Id 1
+   * @param nid0 Node-Id 0
+   * @param nid1 Node-Id 1
    */
   Edge(index_t nid0, index_t nid1){
     edge.first = std::min(nid0, nid1);

@@ -60,20 +60,13 @@ template<typename real_t, typename index_t> class Mesh{
    * @param ENList array storing the global node number for each element.
    * @param x is the X coordinate.
    * @param y is the Y coordinate.
-   * @param comm MPI communicator. (MPI only)
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
-       const real_t *x, const real_t *y
+       const real_t *x, const real_t *y){
 #ifdef HAVE_MPI
-       , const MPI_Comm *comm=NULL
+    _comm = NULL;
 #endif
-       ){
-    _init(NNodes, NElements, ENList,
-          x, y, NULL
-#ifdef HAVE_MPI
-          ,comm
-#endif
-          );
+    _init(NNodes, NElements, ENList, x, y, NULL);
   }
 
   /*! 3D tetrahedra mesh constructor.
@@ -84,20 +77,11 @@ template<typename real_t, typename index_t> class Mesh{
    * @param x is the X coordinate.
    * @param y is the Y coordinate.
    * @param z is the Z coordinate.
-   * @param comm MPI communicator. (MPI only)
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
-       const real_t *x, const real_t *y, const real_t *z
-#ifdef HAVE_MPI
-       , const MPI_Comm *comm=NULL
-#endif
-       ){
+       const real_t *x, const real_t *y, const real_t *z){
     _init(NNodes, NElements, ENList,
-          x, y, z
-#ifdef HAVE_MPI
-          ,comm
-#endif
-          );
+          x, y, z);
   }
 
   /*! Defragment mesh. This compresses the storage of internal data
@@ -107,14 +91,14 @@ template<typename real_t, typename index_t> class Mesh{
     // Discover which verticies and elements are active.
     std::map<index_t, index_t> active_vertex_map;
     std::deque<index_t> active_vertex, active_element;
-    for(int e=0;e<_NElements;e++){
+    for(size_t e=0;e<_NElements;e++){
       index_t nid = _ENList[e*_nloc];
       if(nid<0)
         continue;
       active_element.push_back(e);
 
       active_vertex_map[nid] = 0;
-      for(int j=1;j<_nloc;j++){
+      for(size_t j=1;j<_nloc;j++){
         nid = _ENList[e*_nloc+j];
         active_vertex_map[nid]=0;
       }
@@ -135,9 +119,9 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<_NElements;i++){
+      for(size_t i=0;i<_NElements;i++){
         index_t eid = active_element[i];
-        for(int j=0;j<_nloc;j++){
+        for(size_t j=0;j<_nloc;j++){
           defrag_ENList[i*_nloc+j] = active_vertex_map[_ENList[eid*_nloc+j]];
         }
 #ifdef _OPENMP
@@ -149,9 +133,9 @@ template<typename real_t, typename index_t> class Mesh{
 
       node_towner.resize(_NNodes);
 #pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
+      for(size_t i=0;i<_NNodes;i++){
         index_t nid=active_vertex[i];
-        for(int j=0;j<_ndims;j++)
+        for(size_t j=0;j<_ndims;j++)
           defrag_coords[i*_ndims+j] = _coords[nid*_ndims+j];
 #ifdef _OPENMP
         node_towner[i] = omp_get_thread_num();
@@ -218,10 +202,10 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Grow a node patch around node id's until it reaches a minimum size.
-  std::set<index_t> get_node_patch(index_t nid, int min_patch_size){
+  std::set<index_t> get_node_patch(index_t nid, size_t min_patch_size){
     std::set<index_t> patch = get_node_patch(nid);
     
-    if(patch.size()<(size_t)min_patch_size){
+    if(patch.size()<min_patch_size){
       std::set<index_t> front = patch, new_front;
       for(;;){
         for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
@@ -233,7 +217,7 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
         
-        if(patch.size()>=(size_t)std::min(min_patch_size, _NNodes))
+        if(patch.size()>=std::min(min_patch_size, _NNodes))
           break;
         
         front.swap(new_front);
@@ -327,14 +311,11 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class MetricField;
   template<typename _real_t, typename _index_t> friend class Smooth;
   template<typename _real_t, typename _index_t> friend class Coarsen;
+  template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Mesh<_real_t, _index_t> *, const _real_t *);
 
   void _init(int NNodes, int NElements, const index_t *ENList,
-             const real_t *x, const real_t *y, const real_t *z
-#ifdef HAVE_MPI
-             ,const MPI_Comm *comm
-#endif
-             ){
+             const real_t *x, const real_t *y, const real_t *z){
     int etype;
     if(z==NULL){
       _nloc = 3;
@@ -368,7 +349,7 @@ template<typename real_t, typename index_t> class Mesh{
       int edgecut;
       
       std::vector<idxtype> metis_ENList(_NElements*_nloc);
-      for(int i=0;i<NElements*_nloc;i++)
+      for(size_t i=0;i<NElements*_nloc;i++)
         metis_ENList[i] = ENList[i];
       METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
                           &edgecut, &(epart[0]), &(npart[0]));
@@ -382,7 +363,7 @@ template<typename real_t, typename index_t> class Mesh{
         elements[epart[i]].push_back(i);
       
       std::vector< std::set<int> > edomains(nparts);
-      for(int i=0; i<_NElements; i++){
+      for(size_t i=0; i<_NElements; i++){
         edomains[epart[i]].insert(i);
       }
       
@@ -395,11 +376,11 @@ template<typename real_t, typename index_t> class Mesh{
       
       // Create seperate graphs for each partition.
       std::vector< std::map<index_t, std::set<index_t> > > pNNList(nparts);
-      for(int i=0; i<_NElements; i++){
-        for(int j=0;j<_nloc;j++){
+      for(size_t i=0; i<_NElements; i++){
+        for(size_t j=0;j<_nloc;j++){
           int jnid = ENList[i*_nloc+j];
           int jpart = npart[jnid];
-          for(int k=j+1;k<_nloc;k++){
+          for(size_t k=j+1;k<_nloc;k++){
             int knid = ENList[i*_nloc+k];
             int kpart = npart[knid];
             if(jpart!=kpart)
@@ -437,10 +418,10 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }else{
       std::vector< std::set<index_t> > lNNList(_NNodes);
-      for(int i=0; i<_NElements; i++){
-        for(int j=0;j<_nloc;j++){
+      for(size_t i=0; i<_NElements; i++){
+        for(size_t j=0;j<_nloc;j++){
           index_t nid_j = ENList[i*_nloc+j];
-          for(int k=j+1;k<_nloc;k++){
+          for(size_t k=j+1;k<_nloc;k++){
             index_t nid_k = ENList[i*_nloc+k];
             lNNList[nid_j].insert(nid_k);
             lNNList[nid_k].insert(nid_j);
@@ -450,13 +431,13 @@ template<typename real_t, typename index_t> class Mesh{
       Metis<index_t>::reorder(lNNList, nid_new2old);
       
       eid_new2old.resize(_NElements);
-      for(int e=0;e<_NElements;e++)
+      for(size_t e=0;e<_NElements;e++)
         eid_new2old[e] = e;
     }
     
     // Reverse mapping of renumbering.
     std::vector<index_t> nid_old2new(_NNodes);
-    for(int i=0;i<_NNodes;i++){
+    for(size_t i=0;i<_NNodes;i++){
       nid_old2new[nid_new2old[i]] = i;
     }
     
@@ -466,35 +447,31 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<_NElements;i++){
-        for(int j=0;j<_nloc;j++){
+      for(size_t i=0;i<_NElements;i++){
+        for(size_t j=0;j<_nloc;j++){
           _ENList[i*_nloc+j] = nid_old2new[ENList[eid_new2old[i]*_nloc+j]];
         }
         element_towner[i] = epart[eid_new2old[i]];
       }
       if(_ndims==2){
 #pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+        for(size_t i=0;i<_NNodes;i++){
           _coords[i*_ndims  ] = x[nid_new2old[i]];
           _coords[i*_ndims+1] = y[nid_new2old[i]];
         }
       }else{
 #pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+        for(size_t i=0;i<_NNodes;i++){
           _coords[i*_ndims  ] = x[nid_new2old[i]];
           _coords[i*_ndims+1] = y[nid_new2old[i]];
           _coords[i*_ndims+2] = z[nid_new2old[i]];
         }
       }
-      for(int i=0;i<_NNodes;i++)
+      for(size_t i=0;i<_NNodes;i++)
         node_towner[i] = npart[nid_new2old[i]];
     }
 
     create_adjancy();
-
-#ifdef HAVE_MPI
-    _comm = comm;
-#endif
   }
 
   /// Create required adjancy lists.
@@ -504,13 +481,13 @@ template<typename real_t, typename index_t> class Mesh{
     NEList.clear();
     NEList.resize(_NNodes);
     Edges.clear();
-    for(int i=0; i<_NElements; i++){
-      for(int j=0;j<_nloc;j++){
+    for(size_t i=0; i<_NElements; i++){
+      for(size_t j=0;j<_nloc;j++){
         index_t nid_j = _ENList[i*_nloc+j];
         if(nid_j<0)
           break;
         NEList[nid_j].insert(i);
-        for(int k=j+1;k<_nloc;k++){
+        for(size_t k=j+1;k<_nloc;k++){
           index_t nid_k = _ENList[i*_nloc+k];
           NNList_set[nid_j].insert(nid_k);
           NNList_set[nid_k].insert(nid_j);
@@ -530,14 +507,14 @@ template<typename real_t, typename index_t> class Mesh{
     // Compress NNList
     NNList.clear();
     NNList.resize(_NNodes);
-    for(int i=0;i<_NNodes;i++){
+    for(size_t i=0;i<_NNodes;i++){
       for(typename std::set<index_t>::const_iterator it=NNList_set[i].begin();it!=NNList_set[i].end();++it){
         NNList[i].push_back(*it);
       }
     }
   }
 
-  int _NNodes, _NElements, _ndims, _nloc;
+  size_t _NNodes, _NElements, _ndims, _nloc;
   index_t *_ENList;
   real_t *_coords;
   

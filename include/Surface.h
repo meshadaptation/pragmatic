@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *   
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -53,16 +53,12 @@ template<typename real_t, typename index_t>
   
   /// Default constructor.
   Surface(Mesh<real_t, index_t> &mesh){
-    _NNodes = mesh.get_number_nodes();
-    _NElements = mesh.get_number_elements();
+    _mesh = &mesh;
+
     _ndims = mesh.get_number_dimensions();
     nloc = (_ndims==2)?3:4;
     snloc = (_ndims==2)?2:3;
-    _ENList = mesh.get_enlist();;
-    _coords = mesh.get_coords();
-#ifdef HAVE_MPI
-    _mesh_comm = mesh.get_mpi_comm();
-#endif
+
     set_coplanar_tolerance(0.9999999);
 
     find_surface();
@@ -72,8 +68,92 @@ template<typename real_t, typename index_t>
   ~Surface(){
   }
 
+  /// True if surface contains vertex nid.
   bool contains_node(index_t nid){
     return surface_nodes.count(nid)>0;
+  }
+
+  /// True if node nid is a corner vertex.
+  bool is_corner_vertex(index_t nid){
+    std::set<int> incident_plane;
+    for(std::set<size_t>::const_iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it)
+      incident_plane.insert(coplanar_ids[*it]);
+    
+    return (incident_plane.size()>=_ndims);
+  }
+
+  bool is_collapsible(index_t nid_free, index_t nid_target){
+    // If nid_free is not on the surface then it's unconstrained.
+    if(surface_nodes.count(nid_free)==0)
+      return true;
+
+    std::set<int> incident_plane_free;
+    for(std::set<size_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
+      incident_plane_free.insert(coplanar_ids[*it]);
+    
+    // Non-collapsible if nid_free is a corner node.
+    if(incident_plane_free.size()>=_ndims)
+      return false;
+
+    std::set<int> incident_plane_target;
+    for(std::set<size_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
+      incident_plane_target.insert(coplanar_ids[*it]);
+    
+    // Logic if nid_free is on a geometric edge. This only applies for 3D.
+    if(incident_plane_free.size()==2){
+      return
+        (incident_plane_target.count(*incident_plane_free.begin()))
+        &&
+        (incident_plane_target.count(*incident_plane_free.rbegin()));
+    }
+    
+    // The final case is that the vertex is on a plane and can be
+    // collapsed to any other vertex on that plane.
+    assert(incident_plane_free.size()==1);
+    
+    return incident_plane_target.count(*incident_plane_free.begin());
+  }
+
+  bool collapse(index_t nid_free, index_t nid_target){
+    assert(is_collapsible(nid_free, nid_target));
+    
+    std::cerr<<__FILE__", "<<__LINE__<<" WARNING: known safety issue here\n";
+    surface_nodes.erase(nid_free); 
+    
+    // Find deleted facets.
+    std::set<index_t> deleted_facets;
+    for(typename std::set<size_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it){
+      if(SNEList[nid_target].count(*it))
+        deleted_facets.insert(*it);
+    }
+
+    // Renumber nodes in elements adjacent to rm_vertex, deleted
+    // elements being collapsed, and make these elements adjacent to
+    // target_vertex.
+    for(typename std::set<index_t>::iterator ee=SNEList[nid_free].begin();ee!=SNEList[nid_free].end();++ee){
+      // Delete if element is to be collapsed.
+      if(deleted_facets.count(ee)){
+        for(size_t i=0;i<snloc;i++){
+          SENList[snloc*(*ee)+i]=-1;
+        }
+        continue;
+      }
+      
+      // Renumber
+      for(size_t i=0;i<snloc;i++){
+        if(SENList[snloc*(*ee)+i]==nid_free){
+          SENList[snloc*(*ee)+i]=nid_target;
+          break;
+        }
+      }
+      
+      // Add element to target node-elemement adjancy list.
+      SNEList[nid_target].insert(*ee);
+    }
+    
+    // Remove deleted facets node-elemement adjancy list.
+    for(typename std::set<index_t>::const_iterator de=deleted_facets.begin(); de!=deleted_facets.end();++de)
+      SNEList[nid_target].erase(*de);
   }
 
   int get_number_facets(){
@@ -109,11 +189,11 @@ template<typename real_t, typename index_t>
   /// Detects the surface nodes of the domain.
   void find_surface(){
     std::map< std::set<index_t>, std::vector<int> > facets;
-    for(int i=0;i<_NElements;i++){
-      for(int j=0;j<nloc;j++){
+    for(size_t i=0;i<_mesh->_NElements;i++){
+      for(size_t j=0;j<nloc;j++){
         std::set<index_t> facet;
-        for(int k=1;k<nloc;k++){
-          facet.insert(_ENList[i*nloc+(j+k)%nloc]);
+        for(size_t k=1;k<nloc;k++){
+          facet.insert(_mesh->_ENList[i*nloc+(j+k)%nloc]);
         }
         if(facets.count(facet)){
           facets.erase(facet);
@@ -121,25 +201,25 @@ template<typename real_t, typename index_t>
           std::vector<int> element;
           if(snloc==3){
             if(j==0){
-              element.push_back(_ENList[i*nloc+1]);
-              element.push_back(_ENList[i*nloc+3]);
-              element.push_back(_ENList[i*nloc+2]);
+              element.push_back(_mesh->_ENList[i*nloc+1]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+2]);
             }else if(j==1){
-              element.push_back(_ENList[i*nloc+2]);
-              element.push_back(_ENList[i*nloc+3]);
-              element.push_back(_ENList[i*nloc+0]);
+              element.push_back(_mesh->_ENList[i*nloc+2]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+0]);
             }else if(j==2){
-              element.push_back(_ENList[i*nloc+0]);
-              element.push_back(_ENList[i*nloc+3]);
-              element.push_back(_ENList[i*nloc+1]);
+              element.push_back(_mesh->_ENList[i*nloc+0]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+1]);
             }else if(j==3){
-              element.push_back(_ENList[i*nloc+0]);
-              element.push_back(_ENList[i*nloc+1]);
-              element.push_back(_ENList[i*nloc+2]);
+              element.push_back(_mesh->_ENList[i*nloc+0]);
+              element.push_back(_mesh->_ENList[i*nloc+1]);
+              element.push_back(_mesh->_ENList[i*nloc+2]);
             }
           }else{
-            element.push_back(_ENList[i*nloc+(j+1)%nloc]);
-            element.push_back(_ENList[i*nloc+(j+2)%nloc]);
+            element.push_back(_mesh->_ENList[i*nloc+(j+1)%nloc]);
+            element.push_back(_mesh->_ENList[i*nloc+(j+2)%nloc]);
           }
           facets[facet] = element;
         }
@@ -160,7 +240,7 @@ template<typename real_t, typename index_t>
     // Calculate all element normals
     normals.resize(NSElements*_ndims);
     if(_ndims==2){
-      for(int i=0;i<NSElements;i++){
+      for(size_t i=0;i<NSElements;i++){
         normals[i*2] = sqrt(1 - pow((get_x(SENList[2*i+1]) - get_x(SENList[2*i]))
                                     /(get_y(SENList[2*i+1]) - get_y(SENList[2*i])), 2));
         if(isnan(normals[i*2])){
@@ -177,7 +257,7 @@ template<typename real_t, typename index_t>
           normals[i*2+1] *= -1;
       }
     }else{
-      for(int i=0;i<NSElements;i++){
+      for(size_t i=0;i<NSElements;i++){
         real_t x1 = get_x(SENList[3*i+1]) - get_x(SENList[3*i]);
         real_t y1 = get_y(SENList[3*i+1]) - get_y(SENList[3*i]);
         real_t z1 = get_z(SENList[3*i+1]) - get_z(SENList[3*i]);
@@ -198,19 +278,19 @@ template<typename real_t, typename index_t>
     }
     
     // Create EEList for surface
-    for(int i=0;i<NSElements;i++){
-      for(int j=0;j<snloc;j++){
+    for(size_t i=0;i<NSElements;i++){
+      for(size_t j=0;j<snloc;j++){
         SNEList[SENList[snloc*i+j]].insert(i);
       }
     }
     
     std::vector<int> EEList(NSElements*snloc);
-    for(int i=0;i<NSElements;i++){
+    for(size_t i=0;i<NSElements;i++){
       if(snloc==2){
-        for(int j=0;j<2;j++){
+        for(size_t j=0;j<2;j++){
           int nid=SENList[i*2+j];
           for(std::set<size_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
-            if((int)(*it)==i){
+            if(*it==i){
               continue;
             }else{
               EEList[i*2+j] = *it;
@@ -219,11 +299,11 @@ template<typename real_t, typename index_t>
           }
         }
       }else{
-        for(int j=0;j<3;j++){
-          int nid1=SENList[i*3+(j+1)%3];
-          int nid2=SENList[i*3+(j+2)%3];
+        for(size_t j=0;j<3;j++){
+          index_t nid1=SENList[i*3+(j+1)%3];
+          index_t nid2=SENList[i*3+(j+2)%3];
           for(std::set<size_t>::iterator it=SNEList[nid1].begin();it!=SNEList[nid1].end();++it){
-            if((int)(*it)==i){
+            if(*it==i){
               continue;
             }       
             if(SNEList[nid2].find(*it)!=SNEList[nid2].end()){
@@ -241,10 +321,10 @@ template<typename real_t, typename index_t>
       *it = 0;
   
     int current_id = 1;
-    for(int pos = 0;pos<NSElements;){
+    for(size_t pos = 0;pos<NSElements;){
       // Create a new starting point
       const real_t *ref_normal=NULL;
-      for(int i=pos;i<NSElements;i++){
+      for(size_t i=pos;i<NSElements;i++){
         if(coplanar_ids[i]==0){
           // This is the first element in the new patch
           pos = i;
@@ -266,13 +346,13 @@ template<typename real_t, typename index_t>
         front.erase(front.begin());
         
         // Check surrounding surface elements:      
-        for(int i=0; i<snloc; i++){
+        for(size_t i=0; i<snloc; i++){
           int sele2 = EEList[sele*snloc+i];
           if(coplanar_ids[sele2]>0)
             continue;
           
           double coplanar = 0.0;
-          for(int d=0;d<_ndims;d++)
+          for(size_t d=0;d<_ndims;d++)
             coplanar += ref_normal[d]*normals[sele2*_ndims+d];
           
           if(coplanar>=COPLANAR_MAGIC_NUMBER){
@@ -287,30 +367,24 @@ template<typename real_t, typename index_t>
   }
 
   inline real_t get_x(index_t nid){
-    return _coords[nid*_ndims];
+    return _mesh->_coords[nid*_ndims];
   }
 
   inline real_t get_y(index_t nid){
-    return _coords[nid*_ndims+1];
+    return _mesh->_coords[nid*_ndims+1];
   }
 
   inline real_t get_z(index_t nid){
-    return _coords[nid*_ndims+2];
+    return _mesh->_coords[nid*_ndims+2];
   }
 
-  int _NNodes, _NElements, NSElements, _ndims, nloc, snloc;
-  const index_t *_ENList, *_node_distribution;
-  const real_t *_coords;
-  std::vector< std::set<index_t> > NNList;
+  size_t NSElements, _ndims, nloc, snloc;
   std::map<int, std::set<size_t> > SNEList;
-  std::vector<int> norder;
   std::set<index_t> surface_nodes;
   std::vector<int> SENList, coplanar_ids;
   std::vector<real_t> normals;
   real_t COPLANAR_MAGIC_NUMBER;
-
-#ifdef HAVE_MPI
-  const MPI_Comm *_mesh_comm;
-#endif
+  
+  Mesh<real_t, index_t> *_mesh;
 };
 #endif

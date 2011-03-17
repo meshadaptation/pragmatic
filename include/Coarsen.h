@@ -78,12 +78,20 @@ template<typename real_t, typename index_t> class Coarsen{
       index_t rm_vertex = dynamic_vertex.front();
       dynamic_vertex.pop_front();
       
+      // If this is a corner vertex then continue to next vertex immediately.
+      if(_surface->is_corner_vertex(rm_vertex))
+        continue;
+      
       // Identify edge to be removed. We choose the shortest edge.
       const Edge<real_t, index_t> *target_edge=NULL;
       {
         // Find shortest edge connected to vertex.
         std::map<real_t, const Edge<real_t, index_t>* > short_edges;
         for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+          // First check if this edge can be collapsed
+          if(!_surface->is_collapsible(rm_vertex, *nn))
+             continue;
+
           typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
           assert(edge!=_mesh->Edges.end());
           short_edges[edge->length] = &(*edge);
@@ -110,14 +118,14 @@ template<typename real_t, typename index_t> class Coarsen{
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
         // Delete if element is to be collapsed.
         if(target_edge->adjacent_elements.count(*ee)){
-          for(int i=0;i<_mesh->_nloc;i++){
+          for(size_t i=0;i<_mesh->_nloc;i++){
             _mesh->_ENList[_mesh->_nloc*(*ee)+i]=-1;
           }
           continue;
         }
         
         // Renumber
-        for(int i=0;i<_mesh->_nloc;i++){
+        for(size_t i=0;i<_mesh->_nloc;i++){
           if(_mesh->_ENList[_mesh->_nloc*(*ee)+i]==rm_vertex){
             _mesh->_ENList[_mesh->_nloc*(*ee)+i]=target_vertex;
             break;
@@ -126,11 +134,10 @@ template<typename real_t, typename index_t> class Coarsen{
         
         // Add element to target node-elemement adjancy list.
         _mesh->NEList[target_vertex].insert(*ee);
-
-        // Remove elements from node-elemement adjancy list.
-        for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de)
-          _mesh->NEList[target_vertex].erase(*de);
       }
+      // Remove elements from node-elemement adjancy list.
+      for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de)
+        _mesh->NEList[target_vertex].erase(*de);
       
       // Update Edges.
       _mesh->Edges.erase(*target_edge);
