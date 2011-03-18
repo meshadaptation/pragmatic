@@ -62,10 +62,8 @@ template<typename real_t, typename index_t> class Coarsen{
       std::set<index_t> dynamic_vertex_set;
       for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
         if(it->length<L_min){
-          if(!_surface->contains_node(it->edge.first))
-            dynamic_vertex_set.insert(it->edge.first);
-          if(!_surface->contains_node(it->edge.second))
-            dynamic_vertex_set.insert(it->edge.second);
+          dynamic_vertex_set.insert(it->edge.first);
+          dynamic_vertex_set.insert(it->edge.second);
         }
       }
       
@@ -110,6 +108,11 @@ template<typename real_t, typename index_t> class Coarsen{
       // Identify vertex that will be collapsed onto.
       index_t target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
 
+      // Perform coarsening on surface if necessary.
+      if(_surface->contains_node(rm_vertex))
+        _surface->collapse(rm_vertex, target_vertex);
+
+      // Cache elements to be deleted.
       std::set<index_t> deleted_elements = target_edge->adjacent_elements;
 
       // Renumber nodes in elements adjacent to rm_vertex, deleted

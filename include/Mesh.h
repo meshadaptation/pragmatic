@@ -119,7 +119,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<_NElements;i++){
+      for(int i=0;i<(int)_NElements;i++){
         index_t eid = active_element[i];
         for(size_t j=0;j<_nloc;j++){
           defrag_ENList[i*_nloc+j] = active_vertex_map[_ENList[eid*_nloc+j]];
@@ -133,7 +133,7 @@ template<typename real_t, typename index_t> class Mesh{
 
       node_towner.resize(_NNodes);
 #pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
+      for(int i=0;i<(int)_NNodes;i++){
         index_t nid=active_vertex[i];
         for(size_t j=0;j<_ndims;j++)
           defrag_coords[i*_ndims+j] = _coords[nid*_ndims+j];
@@ -447,7 +447,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<_NElements;i++){
+      for(int i=0;i<(int)_NElements;i++){
         for(size_t j=0;j<_nloc;j++){
           _ENList[i*_nloc+j] = nid_old2new[ENList[eid_new2old[i]*_nloc+j]];
         }
@@ -455,13 +455,13 @@ template<typename real_t, typename index_t> class Mesh{
       }
       if(_ndims==2){
 #pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+        for(int i=0;i<(int)_NNodes;i++){
           _coords[i*_ndims  ] = x[nid_new2old[i]];
           _coords[i*_ndims+1] = y[nid_new2old[i]];
         }
       }else{
 #pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+        for(int i=0;i<(int)_NNodes;i++){
           _coords[i*_ndims  ] = x[nid_new2old[i]];
           _coords[i*_ndims+1] = y[nid_new2old[i]];
           _coords[i*_ndims+2] = z[nid_new2old[i]];

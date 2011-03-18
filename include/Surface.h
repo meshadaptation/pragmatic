@@ -70,13 +70,13 @@ template<typename real_t, typename index_t>
 
   /// True if surface contains vertex nid.
   bool contains_node(index_t nid){
-    return surface_nodes.count(nid)>0;
+    return surface_nodes[nid];
   }
 
   /// True if node nid is a corner vertex.
   bool is_corner_vertex(index_t nid){
     std::set<int> incident_plane;
-    for(std::set<size_t>::const_iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it)
+    for(typename std::set<index_t>::const_iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it)
       incident_plane.insert(coplanar_ids[*it]);
     
     return (incident_plane.size()>=_ndims);
@@ -84,11 +84,11 @@ template<typename real_t, typename index_t>
 
   bool is_collapsible(index_t nid_free, index_t nid_target){
     // If nid_free is not on the surface then it's unconstrained.
-    if(surface_nodes.count(nid_free)==0)
+    if(!surface_nodes[nid_free])
       return true;
 
     std::set<int> incident_plane_free;
-    for(std::set<size_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
+    for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
       incident_plane_free.insert(coplanar_ids[*it]);
     
     // Non-collapsible if nid_free is a corner node.
@@ -96,7 +96,7 @@ template<typename real_t, typename index_t>
       return false;
 
     std::set<int> incident_plane_target;
-    for(std::set<size_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
+    for(typename std::set<index_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
       incident_plane_target.insert(coplanar_ids[*it]);
     
     // Logic if nid_free is on a geometric edge. This only applies for 3D.
@@ -114,15 +114,14 @@ template<typename real_t, typename index_t>
     return incident_plane_target.count(*incident_plane_free.begin());
   }
 
-  bool collapse(index_t nid_free, index_t nid_target){
+  void collapse(index_t nid_free, index_t nid_target){
     assert(is_collapsible(nid_free, nid_target));
     
-    std::cerr<<__FILE__", "<<__LINE__<<" WARNING: known safety issue here\n";
-    surface_nodes.erase(nid_free); 
+    surface_nodes[nid_free] = false; 
     
     // Find deleted facets.
     std::set<index_t> deleted_facets;
-    for(typename std::set<size_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it){
+    for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it){
       if(SNEList[nid_target].count(*it))
         deleted_facets.insert(*it);
     }
@@ -130,9 +129,9 @@ template<typename real_t, typename index_t>
     // Renumber nodes in elements adjacent to rm_vertex, deleted
     // elements being collapsed, and make these elements adjacent to
     // target_vertex.
-    for(typename std::set<index_t>::iterator ee=SNEList[nid_free].begin();ee!=SNEList[nid_free].end();++ee){
+    for(typename std::set<index_t>::const_iterator ee=SNEList[nid_free].begin();ee!=SNEList[nid_free].end();++ee){
       // Delete if element is to be collapsed.
-      if(deleted_facets.count(ee)){
+      if(deleted_facets.count(*ee)){
         for(size_t i=0;i<snloc;i++){
           SENList[snloc*(*ee)+i]=-1;
         }
@@ -176,7 +175,7 @@ template<typename real_t, typename index_t>
     return &(normals[eid*_ndims]);
   }
 
-  std::set<size_t> get_surface_patch(int i){
+  std::set<index_t> get_surface_patch(int i){
     return SNEList[i];
   }
 
@@ -188,6 +187,10 @@ template<typename real_t, typename index_t>
  private:
   /// Detects the surface nodes of the domain.
   void find_surface(){
+    surface_nodes.resize(_mesh->_NNodes);
+    for(size_t i=0;i<_mesh->_NNodes;i++)
+      surface_nodes[i] = false;
+
     std::map< std::set<index_t>, std::vector<int> > facets;
     for(size_t i=0;i<_mesh->_NElements;i++){
       for(size_t j=0;j<nloc;j++){
@@ -229,7 +232,8 @@ template<typename real_t, typename index_t>
     NSElements = facets.size();
     for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
       SENList.insert(SENList.end(), it->second.begin(), it->second.end());
-      surface_nodes.insert(it->first.begin(), it->first.end());
+      for(typename std::set<index_t>::const_iterator jt=it->first.begin();jt!=it->first.end();++jt)
+        surface_nodes[*jt] = true;
     }
 
     calculate_coplanar_ids();
@@ -288,9 +292,9 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<NSElements;i++){
       if(snloc==2){
         for(size_t j=0;j<2;j++){
-          int nid=SENList[i*2+j];
-          for(std::set<size_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
-            if(*it==i){
+          index_t nid=SENList[i*2+j];
+          for(typename std::set<index_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
+            if(*it==(index_t)i){
               continue;
             }else{
               EEList[i*2+j] = *it;
@@ -302,8 +306,8 @@ template<typename real_t, typename index_t>
         for(size_t j=0;j<3;j++){
           index_t nid1=SENList[i*3+(j+1)%3];
           index_t nid2=SENList[i*3+(j+2)%3];
-          for(std::set<size_t>::iterator it=SNEList[nid1].begin();it!=SNEList[nid1].end();++it){
-            if(*it==i){
+          for(typename std::set<index_t>::iterator it=SNEList[nid1].begin();it!=SNEList[nid1].end();++it){
+            if(*it==(index_t)i){
               continue;
             }       
             if(SNEList[nid2].find(*it)!=SNEList[nid2].end()){
@@ -379,9 +383,9 @@ template<typename real_t, typename index_t>
   }
 
   size_t NSElements, _ndims, nloc, snloc;
-  std::map<int, std::set<size_t> > SNEList;
-  std::set<index_t> surface_nodes;
-  std::vector<int> SENList, coplanar_ids;
+  std::map<int, std::set<index_t> > SNEList;
+  std::vector<bool> surface_nodes;
+  std::vector<index_t> SENList, coplanar_ids;
   std::vector<real_t> normals;
   real_t COPLANAR_MAGIC_NUMBER;
   

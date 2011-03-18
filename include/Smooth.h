@@ -147,14 +147,14 @@ template<typename real_t, typename index_t>
             if(_surface->contains_node(node)){
               // If this node is on the surface then we have to project
               // this position back onto the surface.
-              std::set<size_t> *patch;
-              patch = new std::set<size_t>;
+              std::set<index_t> *patch;
+              patch = new std::set<index_t>;
               *patch = _surface->get_surface_patch(node);
               
               std::set<int> *coids;
               coids = new std::set<int>;
               
-              for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
+              for(typename std::set<index_t>::const_iterator e=patch->begin();e!=patch->end();++e)
                 coids->insert(_surface->get_coplanar_id(*e));
               
               if(coids->size()<2){
@@ -366,14 +366,14 @@ template<typename real_t, typename index_t>
             if(_surface->contains_node(node)){
               // If this node is on the surface then we have to project
               // this position back onto the surface.
-              std::set<size_t> *patch;
-              patch = new std::set<size_t>;
+              std::set<index_t> *patch;
+              patch = new std::set<index_t>;
               *patch = _surface->get_surface_patch(node);
 
               std::map<int, std::set<int> > *coids;
               coids = new std::map<int, std::set<int> >;
 
-              for(std::set<size_t>::const_iterator e=patch->begin();e!=patch->end();++e)
+              for(typename std::set<index_t>::const_iterator e=patch->begin();e!=patch->end();++e)
                 (*coids)[_surface->get_coplanar_id(*e)].insert(*e);
 
               if(coids->size()<3)
