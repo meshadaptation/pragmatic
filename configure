@@ -2781,9 +2781,9 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __INTEL_COMPILER__ defined" >&5
-$as_echo_n "checking for __INTEL_COMPILER__ defined... " >&6; }
-if test "${ac_cv_defined___INTEL_COMPILER__+set}" = set; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __INTEL_COMPILER defined" >&5
+$as_echo_n "checking for __INTEL_COMPILER defined... " >&6; }
+if test "${ac_cv_defined___INTEL_COMPILER+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
 
@@ -2794,7 +2794,7 @@ int
 main ()
 {
 
-  #ifdef __INTEL_COMPILER__
+  #ifdef __INTEL_COMPILER
   int ok;
   #else
   choke me
@@ -2805,15 +2805,15 @@ main ()
 }
 _ACEOF
 if ac_fn_cxx_try_compile "$LINENO"; then :
-  ac_cv_defined___INTEL_COMPILER__=yes
+  ac_cv_defined___INTEL_COMPILER=yes
 else
-  ac_cv_defined___INTEL_COMPILER__=no
+  ac_cv_defined___INTEL_COMPILER=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_defined___INTEL_COMPILER__" >&5
-$as_echo "$ac_cv_defined___INTEL_COMPILER__" >&6; }
-if test $ac_cv_defined___INTEL_COMPILER__ != "no"; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_defined___INTEL_COMPILER" >&5
+$as_echo "$ac_cv_defined___INTEL_COMPILER" >&6; }
+if test $ac_cv_defined___INTEL_COMPILER != "no"; then :
   ICPC="yes"
 fi
 

@@ -40,7 +40,7 @@ AC_LANG_PUSH([C++])
 
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.
-AC_CHECK_DEFINED(__INTEL_COMPILER__, [ICPC="yes"], [])
+AC_CHECK_DEFINED(__INTEL_COMPILER, [ICPC="yes"], [])
 
 CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
