@@ -34,7 +34,7 @@ AC_CANONICAL_HOST
 
 # Override autoconf defaults for CXXFLAGS before searching for compiler
 CXXFLAGS="${CXXFLAGS:''}"
-AC_PROG_CXX
+AC_PROG_CXX([icpc g++])
 
 CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
@@ -89,8 +89,8 @@ fi
 
 AC_CHECK_LIB(stdc++,main,,) 
 AC_CHECK_LIB(m,main,,)
-AC_CHECK_LIB(metis,main,,)
-AC_CHECK_LIB(numa,main,,)
+AC_CHECK_LIB(numa,main,,AC_MSG_WARN([No NUMA support available.]))
+AC_CHECK_LIB(metis,main,,AC_MSG_ERROR([METIS required]))
 
 # Zoltan
 AC_ARG_ENABLE(zoltan,[AC_HELP_STRING([--enable-zoltan], [Enables Zoltan support])])
