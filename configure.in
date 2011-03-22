@@ -36,13 +36,17 @@ AC_CANONICAL_HOST
 CXXFLAGS="${CXXFLAGS:''}"
 AC_PROG_CXX([icpc g++])
 
+AC_LANG_PUSH([C++])
+
+# autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
+# check to determine if this is the intel compiler.
+AC_CHECK_DEFINED(__INTEL_COMPILER__, [ICPC="yes"], [])
+
 CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
 
-AC_LANG_PUSH([C++])
 AC_OPENMP()
 AC_SUBST(OPENMP_CXXFLAGS)
-AC_LANG_POP([C++])
 
 AC_PROG_INSTALL
 AC_CHECK_PROG(AR, ar, ar, ,$PATH)
@@ -63,18 +67,7 @@ AC_ARG_ENABLE(gprof,
     [AC_HELP_STRING([--enable-gprof],
 	    [enables profiling with gprof])])
 
-if test "$CXX" = "g++" ; then
-    if test "$enable_debugging" = "yes" ; then
-        CXXFLAGS="-g -O0 $CXXFLAGS"
-        LDFLAGS="-g $LDFLAGS"
-    elif test "$enable_gprof" = "yes" ; then
-        CXXFLAGS="-pg -g -O2 $CXXFLAGS"
-        LDFLAGS="-pg -g $LDFLAGS"
-    else
-        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
-        CPPFLAGS="$CPPFLAGS -DNDEBUG"
-    fi
-elif test "$CXX" = "icpc" ; then
+if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
@@ -83,6 +76,17 @@ elif test "$CXX" = "icpc" ; then
         LDFLAGS="-p -g $LDFLAGS"
     else
         CXXFLAGS="-O2 $CXXFLAGS"
+        CPPFLAGS="$CPPFLAGS -DNDEBUG"
+    fi
+elif test "x$GCC" = "xyes" ; then
+    if test "$enable_debugging" = "yes" ; then
+        CXXFLAGS="-g -O0 $CXXFLAGS"
+        LDFLAGS="-g $LDFLAGS"
+    elif test "$enable_gprof" = "yes" ; then
+        CXXFLAGS="-pg -g -O2 $CXXFLAGS"
+        LDFLAGS="-pg -g $LDFLAGS"
+    else
+        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 fi
@@ -100,13 +104,8 @@ fi
 
 vtk_header_relative_path=""
 AC_ARG_ENABLE(vtk,[AC_HELP_STRING([--enable-vtk], [Only use to disable vtk])])
-# various synonyms accepted for disabling VTK
-if test "$with_vtk" = no ; then enable_vtk=no; fi
-if test "$with_VTK" = no ; then enable_vtk=no; fi
-if test "$enable_VTK" = no ; then enable_vtk=no; fi
 if test "$enable_vtk" != "no" ; then
     AC_MSG_NOTICE([Checking for VTK automagic.])
-    AC_LANG_PUSH([C++])
     AC_LINK_IFELSE(
 	[AC_LANG_PROGRAM([[
 #include <vtkVersion.h>
@@ -227,10 +226,8 @@ typedef float vtkFloatingPointType;
 #endif
 EOF
 
-AC_LANG_PUSH([C++])
 AC_CHECK_HEADER(vtkCellData.h,[],
 [AC_MSG_ERROR([Cannot find vtk instillation.])])
-AC_LANG_POP([C++])
 
 AC_SUBST(ARFLAGS)
 AC_C_CONST

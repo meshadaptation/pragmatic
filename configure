@@ -2771,6 +2771,52 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+# autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
+# check to determine if this is the intel compiler.
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __INTEL_COMPILER__ defined" >&5
+$as_echo_n "checking for __INTEL_COMPILER__ defined... " >&6; }
+if test "${ac_cv_defined___INTEL_COMPILER__+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+  #ifdef __INTEL_COMPILER__
+  int ok;
+  #else
+  choke me
+  #endif
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_compile "$LINENO"; then :
+  ac_cv_defined___INTEL_COMPILER__=yes
+else
+  ac_cv_defined___INTEL_COMPILER__=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_defined___INTEL_COMPILER__" >&5
+$as_echo "$ac_cv_defined___INTEL_COMPILER__" >&6; }
+if test $ac_cv_defined___INTEL_COMPILER__ != "no"; then :
+  ICPC="yes"
+fi
+
 CPPFLAGS="${CPPFLAGS:''}"
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -3306,11 +3352,11 @@ if test "x$ac_cv_prog_cc_c89" != xno; then :
 
 fi
 
-ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -3443,13 +3489,6 @@ as_fn_error $? "C preprocessor \"$CPP\" fails sanity check
 See \`config.log' for more details" "$LINENO" 5 ; }
 fi
 
-ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
-
-
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -3522,12 +3561,6 @@ $as_echo "$ac_cv_prog_cxx_openmp" >&6; }
   fi
 
 
-
-ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 # Find a good install program.  We prefer a C program (faster),
@@ -3809,18 +3842,7 @@ if test "${enable_gprof+set}" = set; then :
 fi
 
 
-if test "$CXX" = "g++" ; then
-    if test "$enable_debugging" = "yes" ; then
-        CXXFLAGS="-g -O0 $CXXFLAGS"
-        LDFLAGS="-g $LDFLAGS"
-    elif test "$enable_gprof" = "yes" ; then
-        CXXFLAGS="-pg -g -O2 $CXXFLAGS"
-        LDFLAGS="-pg -g $LDFLAGS"
-    else
-        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
-        CPPFLAGS="$CPPFLAGS -DNDEBUG"
-    fi
-elif test "$CXX" = "icpc" ; then
+if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
@@ -3831,8 +3853,18 @@ elif test "$CXX" = "icpc" ; then
         CXXFLAGS="-O2 $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
+elif test "x$GCC" = "xyes" ; then
+    if test "$enable_debugging" = "yes" ; then
+        CXXFLAGS="-g -O0 $CXXFLAGS"
+        LDFLAGS="-g $LDFLAGS"
+    elif test "$enable_gprof" = "yes" ; then
+        CXXFLAGS="-pg -g -O2 $CXXFLAGS"
+        LDFLAGS="-pg -g $LDFLAGS"
+    else
+        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
+        CPPFLAGS="$CPPFLAGS -DNDEBUG"
+    fi
 fi
-
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lstdc++" >&5
 $as_echo_n "checking for main in -lstdc++... " >&6; }
@@ -3853,7 +3885,7 @@ return main ();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
+if ac_fn_cxx_try_link "$LINENO"; then :
   ac_cv_lib_stdcpp_main=yes
 else
   ac_cv_lib_stdcpp_main=no
@@ -3892,7 +3924,7 @@ return main ();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
+if ac_fn_cxx_try_link "$LINENO"; then :
   ac_cv_lib_m_main=yes
 else
   ac_cv_lib_m_main=no
@@ -3931,7 +3963,7 @@ return main ();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
+if ac_fn_cxx_try_link "$LINENO"; then :
   ac_cv_lib_numa_main=yes
 else
   ac_cv_lib_numa_main=no
@@ -3973,7 +4005,7 @@ return main ();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
+if ac_fn_cxx_try_link "$LINENO"; then :
   ac_cv_lib_metis_main=yes
 else
   ac_cv_lib_metis_main=no
@@ -4003,6 +4035,7 @@ if test "${enable_zoltan+set}" = set; then :
 fi
 
 if test "x$enable_zoltan" = "xyes"; then
+
 
 # Set variables...
 
@@ -4090,11 +4123,11 @@ else
 fi
 
 # Save variables...
-ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 
 ZOLTAN="yes"
@@ -4110,19 +4143,9 @@ if test "${enable_vtk+set}" = set; then :
   enableval=$enable_vtk;
 fi
 
-# various synonyms accepted for disabling VTK
-if test "$with_vtk" = no ; then enable_vtk=no; fi
-if test "$with_VTK" = no ; then enable_vtk=no; fi
-if test "$enable_VTK" = no ; then enable_vtk=no; fi
 if test "$enable_vtk" != "no" ; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: Checking for VTK automagic." >&5
 $as_echo "$as_me: Checking for VTK automagic." >&6;}
-    ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -5005,12 +5028,6 @@ typedef float vtkFloatingPointType;
 #endif
 EOF
 
-ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
 ac_fn_cxx_check_header_mongrel "$LINENO" "vtkCellData.h" "ac_cv_header_vtkCellData_h" "$ac_includes_default"
 if test "x$ac_cv_header_vtkCellData_h" = x""yes; then :
 
@@ -5018,12 +5035,6 @@ else
   as_fn_error $? "Cannot find vtk instillation." "$LINENO" 5
 fi
 
-
-ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 
 
