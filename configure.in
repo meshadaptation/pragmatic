@@ -71,7 +71,7 @@ if test "$CXX" = "g++" ; then
         CXXFLAGS="-pg -g -O2 $CXXFLAGS"
         LDFLAGS="-pg -g $LDFLAGS"
     else
-        CXXFLAGS="-O3 -mtune=native -fexpensive-optimizations $CXXFLAGS"
+        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "$CXX" = "icpc" ; then
