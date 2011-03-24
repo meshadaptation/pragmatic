@@ -217,7 +217,7 @@ template<typename real_t, typename index_t>
           }
 
           Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
-          A.lu().solve(b, &a);
+          A.ldlt().solve(b, &a);
 
           Hessian[i*4  ] = 2*a[1]; // d2/dx2
           Hessian[i*4+1] = a[2];   // d2/dxdy
@@ -263,7 +263,7 @@ template<typename real_t, typename index_t>
           }
 
           Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
-          A.lu().solve(b, &a);
+          A.ldlt().solve(b, &a);
 
           Hessian[i*9  ] = a[4]*2.0; // d2/dx2
           Hessian[i*9+1] = a[5];     // d2/dxdy
