@@ -63,9 +63,6 @@ int main(int argc, char **argv){
   vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));
 
-  //metric_field.apply_gradation(1.3);
-  std::cout << "Done gradation" << std::endl;
-  
   double rms[] = {0., 0., 0.,
                   0., 0., 0.,
                   0., 0., 0.};
