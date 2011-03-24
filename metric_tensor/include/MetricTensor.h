@@ -403,8 +403,8 @@ class MetricTensor{
   }
 
   int lookup(size_t i, size_t j) const{
-    assert(i>=0); assert(i<_dimension);
-    assert(j>=0); assert(j<_dimension);
+    assert(i<_dimension);
+    assert(j<_dimension);
     if(_dimension==2)
     {
       switch(i)
