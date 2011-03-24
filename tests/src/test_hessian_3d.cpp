@@ -51,9 +51,9 @@ int main(int argc, char **argv){
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] =
-      pow(mesh->get_coords(i)[0], 2) +
-      pow(mesh->get_coords(i)[1], 2) +
-      pow(mesh->get_coords(i)[2], 2);
+      pow(mesh->get_coords(i)[0]+0.1, 2) +
+      pow(mesh->get_coords(i)[1]+0.1, 2) +
+      pow(mesh->get_coords(i)[2]+0.1, 2);
   
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
@@ -88,9 +88,9 @@ int main(int argc, char **argv){
 
   for(size_t i=0;i<NNodes;i++)
     psi[i] =
-      pow(mesh->get_coords(i)[0], 2) +
-      pow(mesh->get_coords(i)[1], 2) +
-      pow(mesh->get_coords(i)[2], 2);
+      pow(mesh->get_coords(i)[0]+0.1, 2) +
+      pow(mesh->get_coords(i)[1]+0.1, 2) +
+      pow(mesh->get_coords(i)[2]+0.1, 2);
 
   export_vtu("../data/test_hessian_3d.vtu", mesh, &(psi[0]));
 
