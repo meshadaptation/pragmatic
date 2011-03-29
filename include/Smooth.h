@@ -53,8 +53,8 @@ template<typename real_t, typename index_t>
     _NElements = mesh.get_number_elements();
     _ndims = mesh.get_number_dimensions();
     _nloc = (_ndims==2)?3:4;
-    _ENList = mesh.get_enlist();;
-    _coords = mesh.get_coords();
+    _ENList = &(mesh._ENList[0]);
+    _coords = &(mesh._coords[0]);
 #ifdef HAVE_MPI
     msh_comm = mesh.get_mpi_comm();
 #endif

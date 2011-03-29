@@ -70,8 +70,6 @@ template<typename real_t, typename index_t>
     _NElements = mesh.get_number_elements();
     _ndims = mesh.get_number_dimensions();
     _nloc = (_ndims==2)?3:4;
-    _ENList = mesh.get_enlist();;
-    _coords = mesh.get_coords();
 #ifdef HAVE_MPI
     _mesh_comm = mesh.get_mpi_comm();
 #endif
@@ -312,7 +310,7 @@ template<typename real_t, typename index_t>
     for(int e=0; e<_NElements; e++){
       if( _ndims == 2)
       {
-        const index_t *n=_ENList+_nloc*e;           // indices for element e start at _ENList[ nloc*e ]
+        const index_t *n=_mesh->get_element(e);           // indices for element e start at _ENList[ nloc*e ]
         for(index_t i=0; i<3; i++){
           for(index_t j=i+1; j<3; j++)
           {
@@ -323,7 +321,7 @@ template<typename real_t, typename index_t>
       }
       else if( _ndims == 3 )
       {
-        const index_t *n=_ENList+_nloc*e;           // indices for element e start at _ENList[ nloc*e ]
+        const index_t *n=_mesh->get_element(e);           // indices for element e start at _ENList[ nloc*e ]
         for(index_t i=0; i<4; i++)
         {
           for(index_t j=i+1; j<4; j++)
@@ -586,17 +584,17 @@ template<typename real_t, typename index_t>
       return predicted;
 
     if(_ndims==2){
-      const real_t *refx0 = _coords + _ENList[0]*_ndims;
-      const real_t *refx1 = _coords + _ENList[1]*_ndims;
-      const real_t *refx2 = _coords + _ENList[2]*_ndims;
+      const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
+      const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
+      const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
       ElementProperty<real_t> property(refx0, refx1, refx2);
 
       real_t total_area_metric = 0.0;
       for(int i=0;i<_NElements;i++){
-        const index_t *n=_ENList+_nloc*i;
-        const real_t *x0 = _coords + n[0]*_ndims;
-        const real_t *x1 = _coords + n[1]*_ndims;
-        const real_t *x2 = _coords + n[2]*_ndims;
+        const index_t *n=_mesh->get_element(i);
+        const real_t *x0 = _mesh->get_coords(n[0]);
+        const real_t *x1 = _mesh->get_coords(n[1]);
+        const real_t *x2 = _mesh->get_coords(n[2]);
         real_t area = property.area(x0, x1, x2);
 
         const real_t *m0=_metric[n[0]].get_metric();
@@ -616,19 +614,19 @@ template<typename real_t, typename index_t>
 
       predicted = total_area_metric/ideal_area;
     }else{
-      const real_t *refx0 = _coords + _ENList[0]*_ndims;
-      const real_t *refx1 = _coords + _ENList[1]*_ndims;
-      const real_t *refx2 = _coords + _ENList[2]*_ndims;
-      const real_t *refx3 = _coords + _ENList[3]*_ndims;
+      const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
+      const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
+      const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
+      const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
       ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
 
       real_t total_volume_metric = 0.0;
       for(int i=0;i<_NElements;i++){
-        const index_t *n=_ENList+_nloc*i;
-        const real_t *x0 = _coords + n[0]*_ndims;
-        const real_t *x1 = _coords + n[1]*_ndims;
-        const real_t *x2 = _coords + n[2]*_ndims;
-        const real_t *x3 = _coords + n[3]*_ndims;
+        const index_t *n=_mesh->get_element(i);
+        const real_t *x0 = _mesh->get_coords(n[0]);
+        const real_t *x1 = _mesh->get_coords(n[1]);
+        const real_t *x2 = _mesh->get_coords(n[2]);
+        const real_t *x3 = _mesh->get_coords(n[3]);
         real_t volume = property.volume(x0, x1, x2, x3);
 
         const real_t *m0=_metric[n[0]].get_metric();
@@ -659,15 +657,15 @@ template<typename real_t, typename index_t>
  private:
 
   inline real_t get_x(index_t nid){
-    return _coords[nid*_ndims];
+    return _mesh->get_coords(nid)[0];
   }
 
   inline real_t get_y(index_t nid){
-    return _coords[nid*_ndims+1];
+    return _mesh->get_coords(nid)[1];
   }
 
   inline real_t get_z(index_t nid){
-    return _coords[nid*_ndims+2];
+    return _mesh->get_coords(nid)[2];
   }
 
   inline double length(index_t n0, index_t n1) const{
@@ -675,14 +673,12 @@ template<typename real_t, typename index_t>
 
     double l = 0.0;
     for(index_t i=0; i<_ndims; i++)
-      l += ((_coords[n0*_ndims+i]-_coords[n1*_ndims+i])*(_coords[n0*_ndims+i]-_coords[n1*_ndims+i]));
+      l += pow(_mesh->get_coords(n0)[i]-_mesh->get_coords(n1)[i], 2);
 //    l +=  (      x_i|n_0       -      x_1|n_1       )^2
     return sqrt(l);
   }
 
   int _NNodes, _NElements, _ndims, _nloc;
-  const index_t *_ENList;
-  const real_t *_coords;
 
 #ifdef HAVE_MPI
   const MPI_Comm *_comm;

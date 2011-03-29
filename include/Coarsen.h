@@ -53,7 +53,7 @@ template<typename real_t, typename index_t> class Coarsen{
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
     for(size_t i=0;i<NElements;i++){
-      const int *n=_mesh->_ENList+i*nloc;
+      const int *n=_mesh->get_element(i);
       if(n[0]<0)
         continue;
       
@@ -72,6 +72,7 @@ template<typename real_t, typename index_t> class Coarsen{
   
   /// Default destructor.
   ~Coarsen(){
+    delete property;
   }
 
   /*! Perform coarsening.

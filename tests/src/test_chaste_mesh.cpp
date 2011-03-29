@@ -172,10 +172,10 @@ int main(int argc, char **argv){
 
   assert(NElements==(int)mesh.get_number_elements());
   for(int i=0;i<NElements;i++){
-    vtkIdType pts[] = {mesh.get_enlist(i)[0],
-                       mesh.get_enlist(i)[1],
-                       mesh.get_enlist(i)[2],
-                       mesh.get_enlist(i)[3]};
+    vtkIdType pts[] = {mesh.get_element(i)[0],
+                       mesh.get_element(i)[1],
+                       mesh.get_element(i)[2],
+                       mesh.get_element(i)[3]};
     ug->InsertNextCell(VTK_TETRA, 4, pts);
   }
 

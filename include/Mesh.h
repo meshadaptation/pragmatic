@@ -114,8 +114,8 @@ template<typename real_t, typename index_t> class Mesh{
     node_towner.resize(_NNodes);
     _NElements = active_element.size();
     element_towner.resize(_NElements);
-    index_t *defrag_ENList = new index_t[_NElements*_nloc];
-    real_t *defrag_coords = new real_t[_NNodes*_ndims];
+    std::vector<index_t> defrag_ENList(_NElements*_nloc);
+    std::vector<real_t> defrag_coords(_NNodes*_ndims);
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -145,13 +145,21 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
 
-    delete [] _ENList;
-    _ENList = defrag_ENList;
-
-    delete [] _coords;
-    _coords = defrag_coords;
+    _ENList.swap(defrag_ENList);
+    _coords.swap(defrag_coords);
     
     create_adjancy();
+  }
+
+  /// Add a new vertex
+  index_t append_vertex(const real_t *x, const real_t *m){
+    for(size_t i=0;i<_ndims;i++)
+      _coords.push_back(x[i]);
+    for(size_t i=0;i<_ndims*_ndims;i++)
+      metric.push_back(m[i]);
+    _NNodes++;
+    
+    return _NNodes-1;
   }
 
   /// Return the number of nodes in the mesh.
@@ -184,13 +192,8 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return a pointer to the element-node list.
-  const index_t *get_enlist() const{
-    return _ENList;
-  }
-
-  /// Return a pointer to the element-node list.
-  const index_t *get_enlist(size_t eid) const{
-    return _ENList + eid*_nloc;
+  const index_t *get_element(size_t eid) const{
+    return &(_ENList[eid*_nloc]);
   }
 
   /// Return the node id's connected to the specified node_id
@@ -228,13 +231,13 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return positions vector.
-  real_t *get_coords(){
-    return _coords;
+  const real_t *get_coords(size_t nid) const{
+    return &(_coords[nid*_ndims]);
   }
 
-  /// Return positions vector.
-  const real_t *get_coords(size_t nid) const{
-    return _coords + nid*_ndims;
+  /// Return metric at that vertex.
+  const real_t *get_metric(size_t nid) const{
+    return &(metric[nid*_ndims*_ndims]);
   }
 
   /// Return new local node number given on original node number.
@@ -251,8 +254,6 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Default destructor.
   ~Mesh(){
-    delete [] _ENList;
-    delete [] _coords;
   }
 
   /// Calculates the edge lengths in metric space.
@@ -311,6 +312,7 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class MetricField;
   template<typename _real_t, typename _index_t> friend class Smooth;
   template<typename _real_t, typename _index_t> friend class Coarsen;
+  template<typename _real_t, typename _index_t> friend class Refine;
   template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Mesh<_real_t, _index_t> *, const _real_t *);
 
@@ -329,8 +331,8 @@ template<typename real_t, typename index_t> class Mesh{
 
     _NNodes = NNodes;
     _NElements = NElements;
-    _ENList = new index_t[_NElements*_nloc];
-    _coords = new real_t[_NNodes*_ndims];
+    _ENList.resize(_NElements*_nloc);
+    _coords.resize(_NNodes*_ndims);
 
     // Partition the nodes and elements so that the mesh can be
     // topologically mapped to the computer node topology. If we have
@@ -515,8 +517,8 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   size_t _NNodes, _NElements, _ndims, _nloc;
-  index_t *_ENList;
-  real_t *_coords;
+  std::vector<index_t> _ENList;
+  std::vector<real_t> _coords;
   
   std::vector<index_t> nid_new2old;
   std::vector<int> element_towner, node_towner;

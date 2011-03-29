@@ -59,6 +59,8 @@ class ElementProperty{
       orientation = -1;
     else
       orientation = 1;
+
+    dimension = 2;
   }
 
   /*! Constructor for 3D tetrahedral elements.
@@ -75,6 +77,8 @@ class ElementProperty{
       orientation = -1;
     else
       orientation = 1;
+
+    dimension = 3;
   }
 
   /*! Calculate area of 2D triangle.
@@ -94,6 +98,26 @@ class ElementProperty{
    */
   real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
     return orientation*(-(x0[0] - x3[0])*((x0[2] - x2[2])*(x0[1] - x1[1]) - (x0[2] - x1[2])*(x0[1] - x2[1])) + (x0[0] - x2[0])*((x0[2] - x3[2])*(x0[1] - x1[1]) - (x0[2] - x1[2])*(x0[1] - x3[1])) - (x0[0] - x1[0])*((x0[2] - x3[2])*(x0[1] - x2[1]) - (x0[2] - x2[2])*(x0[1] - x3[1])))/6;
+  }
+
+  /*! Length of an edge as measured in metric space.
+   *
+   * @param x0 coordinate at start of line segment.
+   * @param x1 coordinate at finish of line segment.
+   * @param m metric tensor for first point.
+   */
+  real_t length(const real_t *x0, const real_t *x1, const real_t *m){
+    // l is the length of the perimeter, measured in metric space
+    if(dimension==1)
+      return
+        sqrt((x0[1] - x1[1])*((x0[1] - x1[1])*m[3] + (x0[0] - x1[0])*m[1]) + 
+             (x0[0] - x1[0])*((x0[1] - x1[1])*m[1] + (x0[0] - x1[0])*m[2]));
+    else
+      return
+        sqrt((x0[2] - x1[2])*((x0[2] - x1[2])*m[8] + (x0[1] - x1[1])*m[5] + (x0[0] - x1[0])*m[2]) +
+             (x0[1] - x1[1])*((x0[2] - x1[2])*m[5] + (x0[1] - x1[1])*m[4] + (x0[0] - x1[0])*m[1]) +
+             (x0[0] - x1[0])*((x0[2] - x1[2])*m[2] + (x0[1] - x1[1])*m[1] + (x0[0] - x1[0])*m[0]));
+    
   }
   
   /*! Evaluates the 2D Lipnikov functional. The description for the
@@ -185,6 +209,6 @@ class ElementProperty{
   }
 
  private:
-  int orientation;
+  int orientation, dimension;
 };
 #endif
