@@ -50,11 +50,13 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes, 0);
+  vector<double> psi(NNodes);
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) + pow(mesh->get_coords(i)[1], 3);
   
   metric_field.add_field(&(psi[0]), 1.0);
 
-  metric_field.apply_nelements(100);
+  metric_field.apply_nelements(400);
   metric_field.update_mesh();
   
   Refine<double, int> adapt(*mesh, surface);

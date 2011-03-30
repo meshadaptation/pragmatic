@@ -155,11 +155,29 @@ template<typename real_t, typename index_t> class Mesh{
   index_t append_vertex(const real_t *x, const real_t *m){
     for(size_t i=0;i<_ndims;i++)
       _coords.push_back(x[i]);
+
     for(size_t i=0;i<_ndims*_ndims;i++)
       metric.push_back(m[i]);
+
     _NNodes++;
     
     return _NNodes-1;
+  }
+
+  /// Add a new element
+  index_t append_element(const int *n){
+    for(size_t i=0;i<_nloc;i++)
+      _ENList.push_back(n[i]);
+
+    _NElements++;
+    
+    return _NElements-1;
+  }
+
+  /// Erase an element
+  void erase_element(const index_t eid){
+    for(size_t i=0;i<_nloc;i++)
+      _ENList[eid*_nloc+i] = -1;
   }
 
   /// Return the number of nodes in the mesh.
@@ -192,7 +210,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return a pointer to the element-node list.
-  const index_t *get_element(size_t eid) const{
+  const int *get_element(size_t eid) const{
     return &(_ENList[eid*_nloc]);
   }
 
