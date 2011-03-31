@@ -82,6 +82,7 @@ template<typename real_t, typename index_t> class Refine{
       _mesh->create_adjancy();
       _mesh->calc_edge_lengths();
 
+      cerr<<"refine cnt = "<<refine_cnt<<std::endl;
       if(refine_cnt==0)
         break;
     }
@@ -126,9 +127,8 @@ template<typename real_t, typename index_t> class Refine{
       }
     }
 
-    int refine_cnt = refined_edges.size();
-    if(refine_cnt==0){
-      return refine_cnt;
+    if(refined_edges.size()==0){
+      return 0;
     }
 
     // Given these refined edges, refine elements. Because we are
@@ -137,6 +137,7 @@ template<typename real_t, typename index_t> class Refine{
     int NElements = _mesh->get_number_elements();
     if(ndims==2){
       for(int i=0;i<NElements;i++){
+        // Check if this element has been erased - if so continue to next element.
         const int *n=_mesh->get_element(i);
         if(n[0]<0)
           continue;
@@ -223,9 +224,141 @@ template<typename real_t, typename index_t> class Refine{
       }
     }else{
       for(int i=0;i<NElements;i++){
+        // Check if this element has been erased - if so continue to next element.
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        typename std::map< Edge<real_t, index_t>, index_t>::const_iterator edge[6];
+        int refine_cnt=0;
+        {
+          int e = 0;
+          for(size_t j=0;j<3;j++)
+            for(size_t k=j+1;k<3;k++){
+              edge[e] = refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+              if(edge[e]!=refined_edges.end())
+                refine_cnt++;
+              e++;
+            }
+        }
+
+        // Apply refinement templates.
+        if(refine_cnt==0){
+          // No refinement - continue to next element.
+          continue;
+        }else if(refine_cnt==1){
+          // Find refined edge.
+          typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split;
+          for(int j=0;j<6;j++)
+            if(edge[j]!=refined_edges.end()){
+              split = edge[j];
+              break;
+            }
+          
+          // Find the opposit edge
+          int oe[2];
+          for(int j=0, pos=0;j<4;j++)
+            if((n[j]!=split->first.edge.first)&&(n[j]!=split->first.edge.second))
+              oe[pos++] = n[j];
+          
+          // Form and add two new edges.
+          const int ele0[] = {split->first.edge.first, split->second, oe[0], oe[1]};
+          const int ele1[] = {split->first.edge.second, split->second, oe[0], oe[1]};
+          
+          _mesh->append_element(ele0);
+          _mesh->append_element(ele1);
+        }else if(refine_cnt==2){
+          // Find refined edges.
+          typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split[2];
+          for(int j=0, pos=0;j<6;j++){
+            if(edge[j]!=refined_edges.end()){
+              split[pos++] = edge[j];
+            }
+            if(pos==2)
+              break;
+          }
+          
+          // Here there are two possibilities. Either the two split
+          // edges share a vertex (case 1) or there are opposit (case 2).
+          int n0=-1;
+          if((split[0]->first.edge.first==split[1]->first.edge.first)||
+             (split[0]->first.edge.first==split[1]->first.edge.second))
+            n0 = split[0]->first.edge.first;
+          else if((split[0]->first.edge.second==split[1]->first.edge.first)||
+                  (split[0]->first.edge.second==split[1]->first.edge.second))
+            n0 = split[0]->first.edge.second;
+          if(n0>=0){
+            // Case 1
+            int n1 = (n0==split[0]->first.edge.first)?split[0]->first.edge.second:split[0]->first.edge.first;
+            int n2 = (n0==split[1]->first.edge.first)?split[1]->first.edge.second:split[1]->first.edge.first;
+            int n3;
+            for(int j=0;j<4;j++)
+              if((n[j]!=n0)||(n[j]!=n1)||(n[j]!=n2)){
+                n3 = n[j];
+                break;
+              }
+
+            const int ele0[] = {n0, split[0]->second, split[1]->second, n3};
+            _mesh->append_element(ele0);
+
+            // Calculate lengths of diagonals in quadrilateral part.
+            real_t d1 = _mesh->calc_edge_length(split[0]->second, n2);
+            real_t d2 = _mesh->calc_edge_length(split[1]->second, n1);
+            if(d1<d2){
+              const int ele1[] = {n2, split[1]->second, split[0]->second, n3};
+              const int ele2[] = {n2, split[0]->second, n1, n3};
+              
+              _mesh->append_element(ele1);
+              _mesh->append_element(ele2);
+            }else{
+              const int ele1[] = {split[1]->second, split[0]->second, n1, n3};
+              const int ele2[] = {split[1]->second, n1, n2, n3};
+              
+              _mesh->append_element(ele1);
+              _mesh->append_element(ele2);
+            }
+          }else{
+            // Case 2
+            const int ele0[] = {split[0]->first.edge.first, split[0]->second, split[1]->first.edge.first, split[1]->second};
+            const int ele1[] = {split[0]->first.edge.first, split[0]->second, split[1]->first.edge.second, split[1]->second};
+            const int ele2[] = {split[0]->first.edge.second, split[0]->second, split[1]->first.edge.first, split[1]->second};
+            const int ele3[] = {split[0]->first.edge.second, split[0]->second, split[1]->first.edge.second, split[1]->second};
+            
+            _mesh->append_element(ele0);
+            _mesh->append_element(ele1);
+            _mesh->append_element(ele2);
+            _mesh->append_element(ele3);
+          }
+        }else if(refine_cnt==3){
+        }else if(refine_cnt==4){
+        }else if(refine_cnt==5){
+        }else if(refine_cnt==6){
+          const int ele0[] = {n[0], edge[0]->second, edge[1]->second, edge[2]->second};
+          const int ele1[] = {n[1], edge[3]->second, edge[0]->second, edge[4]->second};
+          const int ele2[] = {n[1], edge[1]->second, edge[3]->second, edge[5]->second};
+          const int ele3[] = {edge[0]->second, edge[3]->second, edge[1]->second, edge[4]->second};
+          const int ele4[] = {edge[0]->second, edge[4]->second, edge[1]->second, edge[2]->second};
+          const int ele5[] = {edge[1]->second, edge[3]->second, edge[5]->second, edge[4]->second};
+          const int ele6[] = {edge[1]->second, edge[4]->second, edge[5]->second, edge[2]->second};
+          const int ele7[] = {edge[2]->second, edge[4]->second, edge[5]->second, n[3]};
+
+          _mesh->append_element(ele0);
+          _mesh->append_element(ele1);
+          _mesh->append_element(ele2);
+          _mesh->append_element(ele3);
+          _mesh->append_element(ele4);
+          _mesh->append_element(ele5);
+          _mesh->append_element(ele6);
+          _mesh->append_element(ele7);
+        }
+        // Remove parent element.
+        _mesh->erase_element(i);
+        
+        // Fix orientations.
       }
     }
-    return refine_cnt;
+    // return refined_edges.size();
+    return 0;
   }
 
  private:
