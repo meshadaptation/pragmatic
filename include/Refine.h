@@ -314,7 +314,7 @@ template<typename real_t, typename index_t> class Refine{
           // pair of edges.
           std::set<index_t> shared;
           for(int j=0;j<refine_cnt;j++){
-            for(int k=j;k<refine_cnt;k++){
+            for(int k=j+1;k<refine_cnt;k++){
               index_t nid = split[j]->first.connected(split[k]->first);
               if(nid>=0)
                 shared.insert(nid);
@@ -451,6 +451,75 @@ template<typename real_t, typename index_t> class Refine{
           }
         }else if(refine_cnt==4){
           std::cerr<<"Refine count "<<refine_cnt<<std::endl;
+          // Search for the edge that vertex that's only contained in one edge.
+          index_t m[8];
+          int id = -1;
+          for(int j=0;j<refine_cnt;j++){
+            int nshare=0;
+            for(int k=j+1;k<refine_cnt;k++)
+              if(split[k]->first.contains(split[j]->first.edge.first)){
+                nshare++;
+                break;
+              }
+            if(nshare==0){
+              id = j;
+              m[0] = split[j]->first.edge.second;
+              m[7] = split[j]->first.edge.first;
+              break;
+            }
+
+            nshare = 0;
+            for(int k=j+1;k<refine_cnt;k++)
+              if(split[k]->first.contains(split[j]->first.edge.second)){
+                nshare++;
+                break;
+              }
+            if(nshare==0){
+              id = j;
+              m[0] = split[j]->first.edge.first;
+              m[7] = split[j]->first.edge.second;
+              break;
+            }
+          }
+
+          assert(id>=0);
+
+          m[6] = split[id]->second;
+          
+          int id2=-1;
+          for(int j=0;j<refine_cnt;j++){
+            if(j==id)
+              continue;
+            if(split[j]->first.contains(m[0])){
+              if(id2<0){
+                id2=j;
+                m[1] = split[j]->second;
+                if(split[j]->first.edge.first==m[0])
+                  m[2] = split[j]->first.edge.second;
+                else
+                  m[2] = split[j]->first.edge.first;
+              }else{
+                m[5] = split[j]->second;
+                if(split[j]->first.edge.first==m[0])
+                  m[4] = split[j]->first.edge.second;
+                else
+                  m[4] = split[j]->first.edge.first;
+              }
+            }else{
+              m[3] = split[j]->second;
+            }
+          }
+          const int ele0[] = {m[0], m[1], m[5], m[6]};
+          const int ele1[] = {m[1], m[5], m[6], m[7]};
+          const int ele2[] = {m[1], m[3], m[5], m[7]};
+          const int ele3[] = {m[1], m[2], m[3], m[7]};
+          const int ele4[] = {m[3], m[4], m[5], m[7]};
+
+          _mesh->append_element(ele0);
+          _mesh->append_element(ele1);
+          _mesh->append_element(ele2);
+          _mesh->append_element(ele3);
+          _mesh->append_element(ele4);
         }else if(refine_cnt==5){
           std::cerr<<"Refine count "<<refine_cnt<<std::endl;
         }else if(refine_cnt==6){
