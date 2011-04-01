@@ -84,6 +84,18 @@ template<typename real_t, typename index_t> class Edge{
     return length;
   }
 
+  index_t connected(const Edge& in) const{
+    if((edge.first==in.edge.first)||(edge.first==in.edge.second))
+      return edge.first;
+    else if((edge.second==in.edge.first)||(edge.second==in.edge.second))
+      return edge.second;
+    return -1;
+  }
+  
+  bool contains(index_t nid) const{
+    return (nid==edge.first)||(nid==edge.second);
+  }
+
   template<typename _real_t, typename _index_t> friend class Mesh;
   template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend class Refine;

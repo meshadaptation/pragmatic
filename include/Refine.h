@@ -229,69 +229,46 @@ template<typename real_t, typename index_t> class Refine{
         if(n[0]<0)
           continue;
         
-        typename std::map< Edge<real_t, index_t>, index_t>::const_iterator edge[6];
-        int refine_cnt=0;
-        {
-          int e = 0;
-          for(size_t j=0;j<3;j++)
-            for(size_t k=j+1;k<3;k++){
-              edge[e] = refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
-              if(edge[e]!=refined_edges.end())
-                refine_cnt++;
-              e++;
-            }
-        }
+        std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
+        for(size_t j=0;j<3;j++)
+          for(size_t k=j+1;k<3;k++){
+            typename std::map< Edge<real_t, index_t>, index_t>::const_iterator it =
+              refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+            if(it!=refined_edges.end())
+              split.push_back(it);
+          }
+        int refine_cnt=split.size();
 
         // Apply refinement templates.
         if(refine_cnt==0){
           // No refinement - continue to next element.
           continue;
         }else if(refine_cnt==1){
-          // Find refined edge.
-          typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split;
-          for(int j=0;j<6;j++)
-            if(edge[j]!=refined_edges.end()){
-              split = edge[j];
-              break;
-            }
-          
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
+
           // Find the opposit edge
           int oe[2];
           for(int j=0, pos=0;j<4;j++)
-            if((n[j]!=split->first.edge.first)&&(n[j]!=split->first.edge.second))
+            if(split[0]->first.contains(n[j]))
               oe[pos++] = n[j];
           
           // Form and add two new edges.
-          const int ele0[] = {split->first.edge.first, split->second, oe[0], oe[1]};
-          const int ele1[] = {split->first.edge.second, split->second, oe[0], oe[1]};
+          const int ele0[] = {split[0]->first.edge.first, split[0]->second, oe[0], oe[1]};
+          const int ele1[] = {split[0]->first.edge.second, split[0]->second, oe[0], oe[1]};
           
           _mesh->append_element(ele0);
           _mesh->append_element(ele1);
         }else if(refine_cnt==2){
-          // Find refined edges.
-          typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split[2];
-          for(int j=0, pos=0;j<6;j++){
-            if(edge[j]!=refined_edges.end()){
-              split[pos++] = edge[j];
-            }
-            if(pos==2)
-              break;
-          }
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
           
           // Here there are two possibilities. Either the two split
           // edges share a vertex (case 1) or there are opposit (case 2).
-          int n0=-1;
-          if((split[0]->first.edge.first==split[1]->first.edge.first)||
-             (split[0]->first.edge.first==split[1]->first.edge.second))
-            n0 = split[0]->first.edge.first;
-          else if((split[0]->first.edge.second==split[1]->first.edge.first)||
-                  (split[0]->first.edge.second==split[1]->first.edge.second))
-            n0 = split[0]->first.edge.second;
+          int n0=split[0]->first.connected(split[1]->first);
           if(n0>=0){
             // Case 1
             int n1 = (n0==split[0]->first.edge.first)?split[0]->first.edge.second:split[0]->first.edge.first;
             int n2 = (n0==split[1]->first.edge.first)?split[1]->first.edge.second:split[1]->first.edge.first;
-            int n3;
+            int n3=-1;
             for(int j=0;j<4;j++)
               if((n[j]!=n0)||(n[j]!=n1)||(n[j]!=n2)){
                 n3 = n[j];
@@ -330,17 +307,163 @@ template<typename real_t, typename index_t> class Refine{
             _mesh->append_element(ele3);
           }
         }else if(refine_cnt==3){
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
+
+          // There are 3 cases that need to be considered. They can be
+          // distinguished by the total number of nodes that are common between any
+          // pair of edges.
+          std::set<index_t> shared;
+          for(int j=0;j<refine_cnt;j++){
+            for(int k=j;k<refine_cnt;k++){
+              index_t nid = split[j]->first.connected(split[k]->first);
+              if(nid>=0)
+                shared.insert(nid);
+            }
+          }
+          size_t nshared = shared.size();
+          
+          if(nshared==1){
+            index_t n0 = *(shared.begin());
+            const int ele0[] = {n0, split[0]->second, split[1]->second, split[2]->second};
+            _mesh->append_element(ele0);
+            index_t m[6];
+            for(int j=0;j<3;j++){
+              if(n0==split[j]->first.edge.first)
+                m[j] = split[j]->first.edge.first;
+              else
+                m[j] = split[j]->first.edge.second;
+              m[j+3] = split[j]->second;
+
+              real_t d0 = _mesh->calc_edge_length(m[0], m[4]);
+              real_t d1 = _mesh->calc_edge_length(m[1], m[3]);
+              if(d0<d1){
+                const int ele1[] = {m[0], m[1], m[2], m[4]};
+                _mesh->append_element(ele1);
+                
+                real_t d2 = _mesh->calc_edge_length(m[0], m[5]);
+                real_t d3 = _mesh->calc_edge_length(m[2], m[3]);
+                if(d2<d3){
+                  const int ele2[] = {m[0], m[5], m[2], m[4]};
+                  const int ele3[] = {m[0], m[3], m[5], m[4]};
+
+                  _mesh->append_element(ele2);
+                  _mesh->append_element(ele3);
+                }else{
+                  const int ele2[] = {m[0], m[4], m[2], m[3]};
+                  const int ele3[] = {m[2], m[4], m[5], m[3]};
+                  
+                  _mesh->append_element(ele2);
+                  _mesh->append_element(ele3);
+                }
+              }else{
+                const int ele1[] = {m[0], m[1], m[2], m[3]};
+                _mesh->append_element(ele1);
+                
+                real_t d2 = _mesh->calc_edge_length(m[1], m[5]);
+                real_t d3 = _mesh->calc_edge_length(m[2], m[4]);
+                if(d2<d3){
+                  const int ele2[] = {m[1], m[4], m[5], m[3]};
+                  const int ele3[] = {m[1], m[5], m[2], m[3]};
+
+                  _mesh->append_element(ele2);
+                  _mesh->append_element(ele3);
+                }else{
+                  const int ele2[] = {m[2], m[4], m[5], m[3]};
+                  const int ele3[] = {m[2], m[4], m[1], m[3]};
+                  
+                  _mesh->append_element(ele2);
+                  _mesh->append_element(ele3);
+                }
+              }
+            }
+          }else if(nshared==2){
+            // Find middle edge
+            int eorder[3];
+            for(int j=0;i<3;i++){
+              if((split[j]->first.connected(split[(j+1)%3]->first)>=0)&&
+                 (split[j]->first.connected(split[(j+2)%3]->first)>=0)){
+                eorder[0] = (j+1)%3;
+                eorder[1] = j;
+                eorder[2] = (j+2)%3;
+                break;
+              }
+            }
+            
+            index_t m[7];
+            if(split[eorder[0]]->first.connected(split[eorder[1]]->first)==split[eorder[0]]->first.edge.first){
+              m[0] = split[eorder[0]]->first.edge.second;
+              m[2] = split[eorder[0]]->first.edge.first;
+            }else{
+              m[0] = split[eorder[0]]->first.edge.first;
+              m[2] = split[eorder[0]]->first.edge.second;
+            }
+            if(split[eorder[1]]->first.connected(split[eorder[2]]->first)==split[eorder[2]]->first.edge.first){
+              m[4] = split[eorder[0]]->first.edge.first;
+              m[6] = split[eorder[0]]->first.edge.second;
+            }else{
+              m[4] = split[eorder[0]]->first.edge.second;
+              m[6] = split[eorder[0]]->first.edge.first;
+            }
+            m[1] = split[eorder[0]]->second;
+            m[3] = split[eorder[1]]->second;
+            m[5] = split[eorder[2]]->second;
+
+            const int ele0[] = {m[3], m[4], m[0], m[5]};
+            const int ele1[] = {m[3], m[5], m[0], m[6]};
+            const int ele2[] = {m[0], m[1], m[3], m[6]};
+            const int ele3[] = {m[1], m[2], m[3], m[6]};
+            
+            _mesh->append_element(ele0);
+            _mesh->append_element(ele1);
+            _mesh->append_element(ele2);
+            _mesh->append_element(ele3);
+          }else if(nshared==3){
+            index_t m[7];
+            m[0] = split[0]->first.edge.first;
+            m[1] = split[0]->second;
+            m[2] = split[0]->first.edge.second;
+            if(split[1]->first.contains(m[2])){
+              m[3] = split[1]->second;
+              if(split[1]->first.edge.first!=m[2])
+                m[4] = split[1]->first.edge.first;
+              else
+                m[4] = split[1]->first.edge.second;
+              m[5] = split[2]->second;
+            }else{
+              m[3] = split[2]->second;
+              if(split[2]->first.edge.first!=m[2])
+                m[4] = split[2]->first.edge.first;
+              else
+                m[4] = split[2]->first.edge.second;
+              m[5] = split[1]->second;
+            }
+            m[6] = *(shared.begin());
+            
+            const int ele0[] = {m[0], m[1], m[5], m[6]};
+            const int ele1[] = {m[1], m[2], m[3], m[6]};
+            const int ele2[] = {m[5], m[3], m[4], m[6]};
+            const int ele3[] = {m[1], m[3], m[5], m[6]};
+            
+            _mesh->append_element(ele0);
+            _mesh->append_element(ele1);
+            _mesh->append_element(ele2);
+            _mesh->append_element(ele3);
+          }
         }else if(refine_cnt==4){
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
         }else if(refine_cnt==5){
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
         }else if(refine_cnt==6){
-          const int ele0[] = {n[0], edge[0]->second, edge[1]->second, edge[2]->second};
-          const int ele1[] = {n[1], edge[3]->second, edge[0]->second, edge[4]->second};
-          const int ele2[] = {n[1], edge[1]->second, edge[3]->second, edge[5]->second};
-          const int ele3[] = {edge[0]->second, edge[3]->second, edge[1]->second, edge[4]->second};
-          const int ele4[] = {edge[0]->second, edge[4]->second, edge[1]->second, edge[2]->second};
-          const int ele5[] = {edge[1]->second, edge[3]->second, edge[5]->second, edge[4]->second};
-          const int ele6[] = {edge[1]->second, edge[4]->second, edge[5]->second, edge[2]->second};
-          const int ele7[] = {edge[2]->second, edge[4]->second, edge[5]->second, n[3]};
+          std::cerr<<"Refine count "<<refine_cnt<<std::endl;
+
+          const int ele0[] = {n[0], split[0]->second, split[1]->second, split[2]->second};
+          const int ele1[] = {n[1], split[3]->second, split[0]->second, split[4]->second};
+          const int ele2[] = {n[1], split[1]->second, split[3]->second, split[5]->second};
+          const int ele3[] = {split[0]->second, split[3]->second, split[1]->second, split[4]->second};
+          const int ele4[] = {split[0]->second, split[4]->second, split[1]->second, split[2]->second};
+          const int ele5[] = {split[1]->second, split[3]->second, split[5]->second, split[4]->second};
+          const int ele6[] = {split[1]->second, split[4]->second, split[5]->second, split[2]->second};
+          const int ele7[] = {split[2]->second, split[4]->second, split[5]->second, n[3]};
 
           _mesh->append_element(ele0);
           _mesh->append_element(ele1);
