@@ -392,7 +392,7 @@ class MetricTensor{
     {
       for(size_t j=0; j<_dimension; j++)
       {
-        int ii = lookup(i,j);
+        int ii = (i*_dimension) + j;
         _metric[ii] = 0.0;
         for(size_t k=0;k<_dimension;k++)
           _metric[ii]+=eigenvalues[k]*V[k*_dimension+i]*V[k*_dimension+j];
@@ -400,51 +400,6 @@ class MetricTensor{
     }
 
     return 0;
-  }
-
-  int lookup(size_t i, size_t j) const{
-    assert(i<_dimension);
-    assert(j<_dimension);
-    if(_dimension==2)
-    {
-      switch(i)
-      {
-      case(0):
-        switch(j)
-        {
-        case(0): return 0;
-        case(1): return 1;
-        }
-      case(1):
-        switch(j)
-        {
-        case(0): return 1;
-        case(1): return 2;
-        }
-      }
-    }
-    else
-    {
-      switch(i)
-      {
-      case(0):
-        switch(j)
-        {
-        case(0): return 0;
-        case(1): return 1;
-        case(2): return 3;
-        }
-      case(1):
-        switch(j)
-        {
-        case(0): return 1;
-        case(1): return 2;
-        case(2): return 4;
-        }
-      case(2): return 3+j;
-      }
-    }
-    return -1;
   }
 
  private:

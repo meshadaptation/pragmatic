@@ -305,7 +305,7 @@ template<typename real_t, typename index_t>
   // For this to work, need to replace calls to vtk objects with calls to new mesh class
   void apply_gradation(double gradation)
   {
-      // Form NNlist.
+    // Form NNlist.
     std::deque< std::set<index_t> > NNList( _NNodes );
     for(int e=0; e<_NElements; e++){
       if( _ndims == 2)
@@ -335,7 +335,7 @@ template<typename real_t, typename index_t>
       {
         cerr<<"ERROR: unsupported dimension: " << _ndims << " (must be 2 or 3)" << endl;
       }
-    }
+    } 
 
     double log_gradation = log(gradation);
 
@@ -352,6 +352,7 @@ template<typename real_t, typename index_t>
         {
           double l = _metric[n].average_length();
           ordered_edges.insert(std::pair<double, size_t>(l, n));
+          //std::cout << "(node, length) = (" << n << ", " << l << ")\n";
         }
       }
       else
@@ -367,6 +368,7 @@ template<typename real_t, typename index_t>
 
       for(std::multimap<double, size_t>::const_iterator n=ordered_edges.begin(); n!=ordered_edges.end(); n++)
       {
+        std::cout << "n->second: " << n->second << "\n";
         // Used to ensure that the front cannot go back on itself.
         std::set<size_t> swept;
 
@@ -377,29 +379,30 @@ template<typename real_t, typename index_t>
         while(!front.empty())
         {
           index_t p=*(front.begin());
+          std::cout << "p: " << p << "\n";
           front.erase(p);
           swept.insert(p);
 
-//          std::vector<double> Tp(_ndims*_ndims);
           std::vector<double> Dp(_ndims), Vp(_ndims*_ndims);
-
-//          std::vector<double> Tq(_ndims*_ndims);
           std::vector<double> Dq(_ndims), Vq(_ndims*_ndims);
 
-          for(typename std::set<index_t>::const_iterator it=NNList[p].begin(); it!=NNList[p].end(); it++)
+          std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
+
+          for(typename std::set<index_t>::const_iterator it=adjacent_nodes.begin(); 
+                it!=adjacent_nodes.end(); 
+                it++)
           {
             index_t q=*it;
+            std::cout << "q: " << q << "\n";
 
             if(swept.count(q))
               continue;
             else
               swept.insert(q);
 
-//            m->GetTuple(p, &(Tp[0]));
             MetricTensor<real_t> Mp(_ndims, _metric[p].get_metric());
             Mp.eigen_decomp(&(Dp[0]), &(Vp[0]));
 
-//            m->GetTuple(q, &(Tq[0]));
             MetricTensor<real_t> Mq(_ndims, _metric[q].get_metric());
             Mq.eigen_decomp(&(Dq[0]), &(Vq[0]));
 
@@ -451,6 +454,7 @@ template<typename real_t, typename index_t>
               double hp = 1.0/sqrt(Dp[k]);
               double hq = 1.0/sqrt(Dq[pairs[k]]);
               double gamma = exp(fabs(hp - hq)/Lpq);
+              std::cout << "gamma = " << gamma << "\n";
 
               if(isinf(gamma))
                 gamma = DBL_MAX;
@@ -459,6 +463,7 @@ template<typename real_t, typename index_t>
                 if(hp>hq)
                 {
                   hp = hq + dh;
+                  std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   Dp[k] = 1.0/(hp*hp);
                   add_p = true;
                 }
@@ -466,21 +471,24 @@ template<typename real_t, typename index_t>
                 {
                   hq = hp + dh;
                   Dq[pairs[k]] = 1.0/(hq*hq);
+                  std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   add_q = true;
                 }
               }
             }
 
-            // todo: hangs if this is uncommented - need to get it working...
+
             // Reform metrics if modified
             if(add_p)
             {
               front.insert(p);
 
               Mp.eigen_undecomp(&(Dp[0]), &(Vp[0]));
-//              Mp.get_metric2(&(Tp[0]));
-//              m->SetTuple(p, &(Tp[0]));
               _metric[p].set_metric( Mp.get_metric() );
+              for (int i=0; i<4; i++)
+              {
+                assert( _metric[p].get_metric()[i] == Mp.get_metric()[i]i );
+              }
               hits.insert(p);
             }
             if(add_q)
@@ -492,11 +500,12 @@ template<typename real_t, typename index_t>
 //              m->SetTuple(q, &(Tq[0]));
               _metric[q].set_metric( Mq.get_metric() );
               hits.insert(p);
-            }
+            } 
           }
         }
       }
 
+      std::cout << "Hits: " << hits.size() << "\n\n";
       if(hits.empty())
         break;
     }

@@ -55,7 +55,6 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
 
-  metric_field.apply_gradation(1.3);
   metric_field.update_mesh();
 
   std::cout<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
