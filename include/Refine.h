@@ -82,7 +82,6 @@ template<typename real_t, typename index_t> class Refine{
       _mesh->create_adjancy();
       _mesh->calc_edge_lengths();
 
-      cerr<<"refine cnt = "<<refine_cnt<<std::endl;
       if(refine_cnt==0)
         break;
     }
@@ -348,9 +347,6 @@ template<typename real_t, typename index_t> class Refine{
           refined_edges[*it] = nid;
         }
         
-        std::cerr<<"number of new edges = "<<new_edges.size()<<std::endl;
-        std::cerr<<"number of refined edges = "<<refined_edges.size()<<std::endl;
-        
         if(new_edges.size()==0)
           break;
       }
@@ -454,10 +450,46 @@ template<typename real_t, typename index_t> class Refine{
         }
         // Remove parent element.
         _mesh->erase_element(i);
-        
-        // Fix orientations.
-        // ... 
       }
+    }
+    
+    // Fix orientations of new elements.
+    for(int i=NElements;i<_mesh->get_number_elements();i++){
+      int *n=&(_mesh->_ENList[i*nloc]);
+      
+      real_t av;
+      if(ndims==2)
+        av = property->area(_mesh->get_coords(n[0]),
+                            _mesh->get_coords(n[1]),
+                            _mesh->get_coords(n[2]));
+      else
+        av = property->volume(_mesh->get_coords(n[0]),
+                              _mesh->get_coords(n[1]),
+                              _mesh->get_coords(n[2]),
+                              _mesh->get_coords(n[3]));
+      if(av<0){
+        // Flip element
+        int ntmp = n[0];
+        n[0] = n[1];
+        n[1] = ntmp;
+      }
+    }
+
+    real_t total_volume=0;
+    for(int i=0;i<_mesh->get_number_elements();i++){
+      int *n=&(_mesh->_ENList[i*nloc]);
+      
+      real_t av;
+      if(ndims==2)
+        av = property->area(_mesh->get_coords(n[0]),
+                            _mesh->get_coords(n[1]),
+                            _mesh->get_coords(n[2]));
+      else
+        av = property->volume(_mesh->get_coords(n[0]),
+                              _mesh->get_coords(n[1]),
+                              _mesh->get_coords(n[2]),
+                              _mesh->get_coords(n[3]));
+      total_volume+=av;
     }
 
     return refined_edges.size();
