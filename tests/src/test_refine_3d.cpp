@@ -77,7 +77,7 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
   export_vtu("../data/test_refine_3d.vtu", mesh, &(psi[0]));
-  export_vtu("../data/test_refine_3d_surface", &surface);
+  export_vtu("../data/test_refine_3d_surface.vtu", &surface);
 
   delete mesh;
 

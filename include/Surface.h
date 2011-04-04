@@ -202,7 +202,6 @@ template<typename real_t, typename index_t>
           continue;
 
         // Renumber existing facet and add the new one.
-        std::cout<<"replace ("<<n[0]<<", "<<n[1]<<") with ("<<edge->first.edge.first<<", "<<edge->second<<")\n";
         n[0] = edge->first.edge.first;
         n[1] = edge->second;
 
@@ -238,13 +237,13 @@ template<typename real_t, typename index_t>
         if(refine_cnt==1){
           // Find the opposit vertex
           int n0;
-          for(size_t j=0;j<ndims;j++){
+          for(size_t j=0;j<snloc;j++){
             if((split[0]->first.edge.first!=n[j])&&(split[0]->first.edge.second!=n[j])){
               n0 = n[j];
               break;
             }
           }
-
+            
           // Renumber existing facet and add the new one.
           n[0] = split[0]->first.edge.first;
           n[1] = split[0]->second;
@@ -253,24 +252,20 @@ template<typename real_t, typename index_t>
           SENList.push_back(split[0]->second);
           SENList.push_back(split[0]->first.edge.second);
           SENList.push_back(n0);
-
+          
           coplanar_ids.push_back(coplanar_ids[i]);
           for(size_t j=0;j<ndims;j++)
             normals.push_back(normals[ndims*i+j]);
         }else{
+          assert(refine_cnt==3);
+
           index_t m[6];
-          m[0] = split[0]->first.edge.first;
-          m[1] = split[0]->second;
-          m[2] = split[0]->first.edge.second;
-          m[3] = split[1]->second;
-          // Find the opposit vertex
-          for(size_t j=0;j<ndims;j++){
-            if((split[0]->first.edge.first!=n[j])&&(split[0]->first.edge.second!=n[j])){
-              m[4] = n[j];
-              break;
-            }
-          }
-          m[5] = split[2]->second;
+          m[0] = n[0];
+          m[1] = refined_edges.find(Edge<real_t, index_t>(n[0], n[1]))->second;
+          m[2] = n[1];
+          m[3] = refined_edges.find(Edge<real_t, index_t>(n[1], n[2]))->second;
+          m[4] = n[2];
+          m[5] = refined_edges.find(Edge<real_t, index_t>(n[2], n[0]))->second;
           
           // Renumber existing facet and add the new one.
           n[0] = m[0];
