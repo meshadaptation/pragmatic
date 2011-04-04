@@ -485,10 +485,6 @@ template<typename real_t, typename index_t>
 
               Mp.eigen_undecomp(&(Dp[0]), &(Vp[0]));
               _metric[p].set_metric( Mp.get_metric() );
-              for (int i=0; i<4; i++)
-              {
-                assert( _metric[p].get_metric()[i] == Mp.get_metric()[i]i );
-              }
               hits.insert(p);
             }
             if(add_q)
@@ -496,8 +492,6 @@ template<typename real_t, typename index_t>
               front.insert(q);
 
               Mq.eigen_undecomp(&(Dq[0]), &(Vq[0]));
-//              Mq.get_metric2(&(Tq[0]));
-//              m->SetTuple(q, &(Tq[0]));
               _metric[q].set_metric( Mq.get_metric() );
               hits.insert(p);
             } 
