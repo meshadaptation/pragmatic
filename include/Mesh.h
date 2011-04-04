@@ -120,6 +120,8 @@ template<typename real_t, typename index_t> class Mesh{
     element_towner.resize(_NElements);
     std::vector<index_t> defrag_ENList(_NElements*_nloc);
     std::vector<real_t> defrag_coords(_NNodes*_ndims);
+    std::vector<real_t> defrag_metric(_NNodes*_ndims*_ndims);
+
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -141,6 +143,8 @@ template<typename real_t, typename index_t> class Mesh{
         index_t nid=active_vertex[i];
         for(size_t j=0;j<_ndims;j++)
           defrag_coords[i*_ndims+j] = _coords[nid*_ndims+j];
+        for(size_t j=0;j<_ndims*_ndims;j++)
+          defrag_metric[i*_ndims*_ndims+j] = metric[nid*_ndims*_ndims+j];
 #ifdef _OPENMP
         node_towner[i] = omp_get_thread_num();
 #else
@@ -151,9 +155,11 @@ template<typename real_t, typename index_t> class Mesh{
 
     _ENList.swap(defrag_ENList);
     _coords.swap(defrag_coords);
+    metric.swap(defrag_metric);
     
     create_adjancy();
-    
+    calc_edge_lengths();
+
     if(local_active_vertex_map)
       delete active_vertex_map;
   }

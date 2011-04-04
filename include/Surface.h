@@ -158,6 +158,11 @@ template<typename real_t, typename index_t>
   /*! Defragment surface mesh. This compresses the storage of internal data
     structures after the mesh has been defraged.*/
   void defragment(std::map<index_t, index_t> *active_vertex_map){
+    surface_nodes.resize(_mesh->_NNodes);
+    for(size_t i=0;i<_mesh->_NNodes;i++)
+      surface_nodes[i] = false;
+    SNEList.clear();
+
     std::vector<index_t> defrag_SENList, defrag_coplanar_ids;
     std::vector<real_t> defrag_normals;
     size_t NSElements = get_number_facets();
@@ -167,7 +172,10 @@ template<typename real_t, typename index_t>
         continue;
       
       for(size_t j=0;j<snloc;j++){
-        defrag_SENList.push_back((*active_vertex_map)[n[j]]);
+        int nid = (*active_vertex_map)[n[j]];
+        defrag_SENList.push_back(nid);
+        surface_nodes[nid] = true;
+        SNEList[nid].insert(i);
       }
       defrag_coplanar_ids.push_back(coplanar_ids[i]);
       for(size_t j=0;j<ndims;j++){
@@ -202,12 +210,11 @@ template<typename real_t, typename index_t>
           continue;
 
         // Renumber existing facet and add the new one.
-        n[0] = edge->first.edge.first;
+        index_t cache_n1 = n[1];
         n[1] = edge->second;
 
         SENList.push_back(edge->second);
-        SENList.push_back(edge->first.edge.second);
-        std::cout<<"add ("<<edge->second<<", "<<edge->first.edge.second<<")\n";
+        SENList.push_back(cache_n1);
 
         coplanar_ids.push_back(coplanar_ids[i]);
         for(size_t j=0;j<ndims;j++)

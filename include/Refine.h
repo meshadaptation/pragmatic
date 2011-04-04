@@ -81,7 +81,7 @@ template<typename real_t, typename index_t> class Refine{
       int refine_cnt = refine_level(L_max);
       _mesh->create_adjancy();
       _mesh->calc_edge_lengths();
-
+      
       if(refine_cnt==0)
         break;
     }
