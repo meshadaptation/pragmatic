@@ -155,23 +155,157 @@ template<typename real_t, typename index_t>
       SNEList[nid_target].erase(*de);
   }
 
-  int get_number_facets(){
-    return NSElements;
+  void refine(std::map< Edge<real_t, index_t>, index_t> &refined_edges){
+    if(refined_edges.size()==0){
+      return;
+    }
+    
+    // Given the refined edges, refine facets.
+    int lNSElements = get_number_facets();
+    if(_ndims==2){
+      for(int i=0;i<lNSElements;i++){
+        // Check if this element has been erased - if so continue to next element.
+        int *n=&(SENList[i*snloc]);
+        if(n[0]<0)
+          continue;
+        
+        // Check if this edge has been refined.
+        typename std::map< Edge<real_t, index_t>, index_t>::const_iterator edge = 
+          refined_edges.find(Edge<real_t, index_t>(n[0], n[1]));
+        
+        // If it's refined then just jump onto the next one.
+        if(edge==refined_edges.end())
+          continue;
+
+        // Renumber existing facet and add the new one.
+        std::cout<<"replace ("<<n[0]<<", "<<n[1]<<") with ("<<edge->first.edge.first<<", "<<edge->second<<")\n";
+        n[0] = edge->first.edge.first;
+        n[1] = edge->second;
+
+        SENList.push_back(edge->second);
+        SENList.push_back(edge->first.edge.second);
+        std::cout<<"add ("<<edge->second<<", "<<edge->first.edge.second<<")\n";
+
+        coplanar_ids.push_back(coplanar_ids[i]);
+        for(size_t j=0;j<_ndims;j++)
+          normals.push_back(normals[_ndims*i+j]);
+      }
+    }else{      
+      for(int i=0;i<lNSElements;i++){
+        // Check if this element has been erased - if so continue to next element.
+        int *n=&(SENList[i*snloc]);
+        if(n[0]<0)
+          continue;
+        
+        std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
+        for(size_t j=0;j<3;j++)
+          for(size_t k=j+1;k<3;k++){
+            typename std::map< Edge<real_t, index_t>, index_t>::const_iterator it =
+              refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+            if(it!=refined_edges.end())
+              split.push_back(it);
+          }
+        int refine_cnt=split.size();
+        
+        if(refine_cnt==0)
+          continue;
+        
+        // Apply refinement templates.
+        if(refine_cnt==1){
+          // Find the opposit vertex
+          int n0;
+          for(size_t j=0;j<_ndims;j++){
+            if((split[0]->first.edge.first!=n[j])&&(split[0]->first.edge.second!=n[j])){
+              n0 = n[j];
+              break;
+            }
+          }
+
+          // Renumber existing facet and add the new one.
+          n[0] = split[0]->first.edge.first;
+          n[1] = split[0]->second;
+          n[2] = n0;
+
+          SENList.push_back(split[0]->second);
+          SENList.push_back(split[0]->first.edge.second);
+          SENList.push_back(n0);
+
+          coplanar_ids.push_back(coplanar_ids[i]);
+          for(size_t j=0;j<_ndims;j++)
+            normals.push_back(normals[_ndims*i+j]);
+        }else{
+          index_t m[6];
+          m[0] = split[0]->first.edge.first;
+          m[1] = split[0]->second;
+          m[2] = split[0]->first.edge.second;
+          m[3] = split[1]->second;
+          // Find the opposit vertex
+          for(size_t j=0;j<_ndims;j++){
+            if((split[0]->first.edge.first!=n[j])&&(split[0]->first.edge.second!=n[j])){
+              m[4] = n[j];
+              break;
+            }
+          }
+          m[5] = split[2]->second;
+          
+          // Renumber existing facet and add the new one.
+          n[0] = m[0];
+          n[1] = m[1];
+          n[2] = m[5];
+          
+          SENList.push_back(m[1]);
+          SENList.push_back(m[3]);
+          SENList.push_back(m[5]);
+          
+          coplanar_ids.push_back(coplanar_ids[i]);
+          for(size_t j=0;j<_ndims;j++)
+            normals.push_back(normals[_ndims*i+j]);
+
+          SENList.push_back(m[1]);
+          SENList.push_back(m[2]);
+          SENList.push_back(m[3]);
+          
+          coplanar_ids.push_back(coplanar_ids[i]);
+          for(size_t j=0;j<_ndims;j++)
+            normals.push_back(normals[_ndims*i+j]);
+
+          SENList.push_back(m[3]);
+          SENList.push_back(m[4]);
+          SENList.push_back(m[5]);
+          
+          coplanar_ids.push_back(coplanar_ids[i]);
+          for(size_t j=0;j<_ndims;j++)
+            normals.push_back(normals[_ndims*i+j]);
+        }
+      }
+    }
   }
 
-  const int* get_facets(){
+  int get_number_facets() const{
+    return SENList.size()/snloc;
+  }
+
+  const int* get_facets() const{
     return &(SENList[0]);
   }
   
-  int get_coplanar_id(int eid){
+  int get_number_dimensions() const{
+    return _mesh->get_number_dimensions();
+  }
+
+  int get_number_nodes() const{
+    return _mesh->get_number_nodes();
+  }
+
+  int get_coplanar_id(int eid) const{
     return coplanar_ids[eid];
   }
 
-  const int* get_coplanar_ids(){
+  const int* get_coplanar_ids() const{
     return &(coplanar_ids[0]);
   }
 
-  const real_t* get_normal(int eid){
+  const real_t* get_normal(int eid) const{
     return &(normals[eid*_ndims]);
   }
 
@@ -185,6 +319,8 @@ template<typename real_t, typename index_t>
   }
   
  private:
+  template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Surface<_real_t, _index_t> *);
+
   /// Detects the surface nodes of the domain.
   void find_surface(){
     surface_nodes.resize(_mesh->_NNodes);
@@ -229,7 +365,6 @@ template<typename real_t, typename index_t>
       }
     }
     
-    NSElements = facets.size();
     for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
       SENList.insert(SENList.end(), it->second.begin(), it->second.end());
       for(typename std::set<index_t>::const_iterator jt=it->first.begin();jt!=it->first.end();++jt)
@@ -242,6 +377,7 @@ template<typename real_t, typename index_t>
   /// Calculate co-planar patches.
   void calculate_coplanar_ids(){
     // Calculate all element normals
+    size_t NSElements = get_number_facets();
     normals.resize(NSElements*_ndims);
     if(_ndims==2){
       for(size_t i=0;i<NSElements;i++){
@@ -370,19 +506,19 @@ template<typename real_t, typename index_t>
     }
   }
 
-  inline real_t get_x(index_t nid){
+  inline real_t get_x(index_t nid) const{
     return _mesh->_coords[nid*_ndims];
   }
 
-  inline real_t get_y(index_t nid){
+  inline real_t get_y(index_t nid) const{
     return _mesh->_coords[nid*_ndims+1];
   }
 
-  inline real_t get_z(index_t nid){
+  inline real_t get_z(index_t nid) const{
     return _mesh->_coords[nid*_ndims+2];
   }
 
-  size_t NSElements, _ndims, nloc, snloc;
+  size_t _ndims, nloc, snloc;
   std::map<int, std::set<index_t> > SNEList;
   std::vector<bool> surface_nodes;
   std::vector<index_t> SENList, coplanar_ids;

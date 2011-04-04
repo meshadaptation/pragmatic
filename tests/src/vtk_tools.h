@@ -42,6 +42,7 @@
 #include <string>
 
 #include "Mesh.h"
+#include "Surface.h"
 
 template<typename real_t, typename index_t>
 void import_vtu(const char *filename, Mesh<real_t, index_t>* &mesh){
@@ -236,6 +237,70 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   ug->Delete();
   
   return;
+}
+
+template<typename real_t, typename index_t>
+  void export_vtu(const char *filename, const Surface<real_t, index_t> *surface){
+  vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
+  
+  vtkPoints *vtk_points = vtkPoints::New();
+  size_t NNodes = surface->get_number_nodes();
+  vtk_points->SetNumberOfPoints(NNodes);
+  int ndims = surface->get_number_dimensions();
+  for(size_t i=0;i<NNodes;i++){
+    if(ndims==2)
+      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), 0.0);
+    else
+      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), surface->get_z(i));
+  }
+  ug->SetPoints(vtk_points);
+  vtk_points->Delete();
+
+  // Need to get out the facets
+  int NSElements = surface->get_number_facets();
+  const int *facets = surface->get_facets();
+  for(int i=0;i<NSElements;i++){
+    if(ndims==2){
+      vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
+      ug->InsertNextCell(VTK_LINE, 2, pts);
+    }else{
+      vtkIdType pts[] = {facets[i*3], facets[i*3+1], facets[i*3+2]};
+      ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
+    }
+  }
+
+  // Need the facet ID's
+  vtkIntArray *scalar = vtkIntArray::New();
+  scalar->SetNumberOfComponents(1);
+  scalar->SetNumberOfTuples(NSElements);
+  scalar->SetName("coplanar_ids");
+  for(int i=0;i<NSElements;i++){
+    scalar->SetTuple1(i, surface->get_coplanar_id(i));
+  }
+  ug->GetCellData()->AddArray(scalar);
+  scalar->Delete();
+  
+  vtkDoubleArray *normal = vtkDoubleArray::New();
+  normal->SetNumberOfComponents(3);
+  normal->SetNumberOfTuples(NSElements);
+  normal->SetName("normals");
+  for(int i=0;i<NSElements;i++){
+    const double *n = surface->get_normal(i);
+    if(ndims==2)
+      normal->SetTuple3(i, n[0], n[1], 0.0);
+    else
+      normal->SetTuple3(i, n[0], n[1], n[2]);
+  }
+  ug->GetCellData()->AddArray(normal);
+  normal->Delete();
+
+  vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
+  writer->SetFileName(filename);
+  writer->SetInput(ug);
+  writer->Write();
+
+  writer->Delete();
+  ug->Delete();
 }
 
 #endif

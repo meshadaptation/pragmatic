@@ -134,9 +134,7 @@ template<typename real_t, typename index_t> class Refine{
       return 0;
     }
 
-    // Given these refined edges, refine elements. Because we are
-    // using templates to refine elements, 2D and 3D are dealt with
-    // seperately in software.
+    // Given these refined edges, refine elements.
     int NElements = _mesh->get_number_elements();
     if(ndims==2){
       for(int i=0;i<NElements;i++){
@@ -162,7 +160,7 @@ template<typename real_t, typename index_t> class Refine{
         }else if(refine_cnt==1){
           // Single edge split.
           typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split;
-          int rotated_ele[3];
+          int rotated_ele[] = {-1, -1, -1};
           for(int j=0;j<3;j++)
             if(edge[j]!=refined_edges.end()){
               split = edge[j];
@@ -179,7 +177,7 @@ template<typename real_t, typename index_t> class Refine{
         }else if(refine_cnt==2){
           // Two edges split - have to mesh resulting quadrilateral.
           typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split[2];
-          int rotated_ele[3];
+          int rotated_ele[] = {-1, -1, -1};
           for(int j=0;j<3;j++)
             if(edge[j]==refined_edges.end()){
               split[0] = edge[(j+1)%3];
@@ -395,7 +393,7 @@ template<typename real_t, typename index_t> class Refine{
           _mesh->append_element(ele2);
           _mesh->append_element(ele3);
         }else if(refine_cnt==3){
-          index_t m[7];
+          index_t m[] = {-1, -1, -1, -1, -1, -1, -1};
           m[0] = split[0]->first.edge.first;
           m[1] = split[0]->second;
           m[2] = split[0]->first.edge.second;
@@ -478,7 +476,9 @@ template<typename real_t, typename index_t> class Refine{
     real_t total_volume=0;
     for(int i=0;i<_mesh->get_number_elements();i++){
       int *n=&(_mesh->_ENList[i*nloc]);
-      
+      if(n[0]<0)
+        continue;
+
       real_t av;
       if(ndims==2)
         av = property->area(_mesh->get_coords(n[0]),
@@ -491,6 +491,9 @@ template<typename real_t, typename index_t> class Refine{
                               _mesh->get_coords(n[3]));
       total_volume+=av;
     }
+
+    // Finally, refine surface
+    _surface->refine(refined_edges);
 
     return refined_edges.size();
   }

@@ -54,66 +54,19 @@ int main(int argc, char **argv){
   
   Surface<double, int> surface(*mesh);
 
-  vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
+  export_vtu("../data/test_surface_2d.vtu", &surface);
 
-  vtkPoints *vtk_points = vtkPoints::New();
-  size_t NNodes = mesh->get_number_nodes();
-  vtk_points->SetNumberOfPoints(NNodes);
-  for(size_t i=0;i<NNodes;i++){
-    const double *r = mesh->get_coords(i);
-    vtk_points->SetPoint(i, r[0], r[1], 0.0);
-  }
-  ug->SetPoints(ug->GetPoints());
-  vtk_points->Delete();
-
-  // Need to get out the facets
-  int NSElements = surface.get_number_facets();
-  const int *facets = surface.get_facets();
-  for(int i=0;i<NSElements;i++){
-    vtkIdType pts[] = {facets[i*3], facets[i*3+1], facets[i*3+2]};
-    ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
-  }
-
-  // Need the facet ID's
-  const int *coplanar_ids = surface.get_coplanar_ids();
-
-  vtkIntArray *scalar = vtkIntArray::New();
-  scalar->SetNumberOfComponents(1);
-  scalar->SetNumberOfTuples(NSElements);
-  scalar->SetName("coplanar_ids");
   std::set<int> unique_ids;
-  for(int i=0;i<NSElements;i++){
-    unique_ids.insert(coplanar_ids[i]);
-    scalar->SetTuple1(i, coplanar_ids[i]);
+  for(int i=0;i<surface.get_number_facets();i++){
+    unique_ids.insert(surface.get_coplanar_id(i));
   }
-  ug->GetCellData()->AddArray(scalar);
-  scalar->Delete();
-
-  vtkDoubleArray *normal = vtkDoubleArray::New();
-  normal->SetNumberOfComponents(3);
-  normal->SetNumberOfTuples(NSElements);
-  normal->SetName("normals");
-  for(int i=0;i<NSElements;i++){
-    const double *n = surface.get_normal(i);
-    normal->SetTuple3(i, n[0], n[1], n[2]);
-  }
-  ug->GetCellData()->AddArray(normal);
-  normal->Delete();
-
-  vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("../data/test_surface_3d.vtu");
-  writer->SetInput(ug);
-  writer->Write();
-
-  writer->Delete();
-  ug->Delete();
-
-  delete mesh;
 
   if(unique_ids.size()==6)
     std::cout<<"pass\n";
   else
     std::cout<<"fail\n";
 
+  delete mesh;
+  
   return 0;
 }

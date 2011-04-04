@@ -68,7 +68,15 @@ int main(int argc, char **argv){
 
   mesh->defragment();
 
+  NNodes = mesh->get_number_nodes();
+  psi.resize(NNodes);
+  for(size_t i=0;i<NNodes;i++)
+    psi[i] = pow(mesh->get_coords(i)[0], 3) +
+      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
+  
   export_vtu("../data/test_refine_3d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_refine_3d_surface", &surface);
+
   delete mesh;
 
   std::cout<<"pass"<<std::endl;

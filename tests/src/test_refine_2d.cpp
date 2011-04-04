@@ -68,6 +68,8 @@ int main(int argc, char **argv){
   mesh->defragment();
 
   export_vtu("../data/test_refine_2d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_refine_2d_surface.vtu", &surface);
+
   delete mesh;
 
   std::cout<<"pass"<<std::endl;

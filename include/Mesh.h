@@ -182,6 +182,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
+    assert(_NNodes == (_coords.size()/_ndims));
     return _NNodes;
   }
 

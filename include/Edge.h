@@ -97,6 +97,7 @@ template<typename real_t, typename index_t> class Edge{
   }
 
   template<typename _real_t, typename _index_t> friend class Mesh;
+  template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend class Refine;
 
