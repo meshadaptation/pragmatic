@@ -87,9 +87,13 @@ template<typename real_t, typename index_t> class Mesh{
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significently
     coarsened. */
-  void defragment(){
+  void defragment(std::map<index_t, index_t> *active_vertex_map=NULL){
     // Discover which verticies and elements are active.
-    std::map<index_t, index_t> active_vertex_map;
+    bool local_active_vertex_map=(active_vertex_map==NULL);
+    if(local_active_vertex_map){
+      active_vertex_map = new std::map<index_t, index_t>;
+    }
+
     std::deque<index_t> active_vertex, active_element;
     for(size_t e=0;e<_NElements;e++){
       index_t nid = _ENList[e*_nloc];
@@ -97,14 +101,14 @@ template<typename real_t, typename index_t> class Mesh{
         continue;
       active_element.push_back(e);
 
-      active_vertex_map[nid] = 0;
+      (*active_vertex_map)[nid] = 0;
       for(size_t j=1;j<_nloc;j++){
         nid = _ENList[e*_nloc+j];
-        active_vertex_map[nid]=0;
+        (*active_vertex_map)[nid]=0;
       }
     }
     index_t cnt=0;
-    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map.begin();it!=active_vertex_map.end();++it){
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
       it->second = cnt++;
       active_vertex.push_back(it->first);
     }
@@ -122,7 +126,7 @@ template<typename real_t, typename index_t> class Mesh{
       for(int i=0;i<(int)_NElements;i++){
         index_t eid = active_element[i];
         for(size_t j=0;j<_nloc;j++){
-          defrag_ENList[i*_nloc+j] = active_vertex_map[_ENList[eid*_nloc+j]];
+          defrag_ENList[i*_nloc+j] = (*active_vertex_map)[_ENList[eid*_nloc+j]];
         }
 #ifdef _OPENMP
         element_towner[i] = omp_get_thread_num();
@@ -149,6 +153,9 @@ template<typename real_t, typename index_t> class Mesh{
     _coords.swap(defrag_coords);
     
     create_adjancy();
+    
+    if(local_active_vertex_map)
+      delete active_vertex_map;
   }
 
   /// Add a new vertex

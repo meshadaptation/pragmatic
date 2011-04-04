@@ -63,7 +63,9 @@ int main(int argc, char **argv){
   adapt.coarsen(0.5);
   std::cout<<"Coarsen time = "<<omp_get_wtime()-start_tic<<std::endl;
 
-  mesh->defragment();
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
   export_vtu("../data/test_coarsen_3d.vtu", mesh, &(psi[0]));
   export_vtu("../data/test_coarsen_3d_surface.vtu", &surface);

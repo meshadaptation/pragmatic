@@ -64,8 +64,10 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   adapt.refine(1.5);
   std::cout<<"Refine time = "<<omp_get_wtime()-start_tic<<std::endl;
-  
-  mesh->defragment();
+
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
   export_vtu("../data/test_refine_2d.vtu", mesh, &(psi[0]));
   export_vtu("../data/test_refine_2d_surface.vtu", &surface);

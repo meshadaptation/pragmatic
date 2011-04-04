@@ -66,7 +66,9 @@ int main(int argc, char **argv){
   adapt.refine(1.5);
   std::cout<<"Refine time = "<<omp_get_wtime()-start_tic<<std::endl;
 
-  mesh->defragment();
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
   NNodes = mesh->get_number_nodes();
   psi.resize(NNodes);
