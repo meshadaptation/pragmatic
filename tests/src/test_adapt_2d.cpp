@@ -63,13 +63,17 @@ int main(int argc, char **argv){
   
   double start_tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
-  coarsen.coarsen(0.8);
-  std::cout<<"Coarsen: "<<omp_get_wtime()-start_tic<<std::endl;
+  coarsen.coarsen(0.5);
+  std::cout<<"Coarsen1: "<<omp_get_wtime()-start_tic<<std::endl;
 
   start_tic = omp_get_wtime();
   Refine<double, int> refine(*mesh, surface);
   refine.refine(1.2);
   std::cout<<"Refine: "<<omp_get_wtime()-start_tic<<std::endl;
+
+  start_tic = omp_get_wtime();
+  coarsen.coarsen(0.5);
+  std::cout<<"Coarsen2: "<<omp_get_wtime()-start_tic<<std::endl;
 
   start_tic = omp_get_wtime();
   std::map<int, int> active_vertex_map;
@@ -79,11 +83,11 @@ int main(int argc, char **argv){
 
   start_tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
-  int iter = smooth.smooth(1.0e-4, 500);
+  int iter = smooth.smooth(1.0e-6, 500);
   std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
 
   start_tic = omp_get_wtime();
-  iter = smooth.smooth(1.0e-5, 500, true);
+  iter = smooth.smooth(1.0e-7, 500, true);
   std::cout<<"Smooth 2 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
 
   export_vtu("../data/test_adapt_2d.vtu", mesh, &(psi[0]));

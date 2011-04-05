@@ -196,16 +196,19 @@ template<typename real_t, typename index_t>
         }
       }
       
-      // qrms=sqrt(qrms/_NElements);
-      // std::cout<<_NElements<<" "<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
+      //qrms=sqrt(qrms/_NElements);
+      //std::cout<<_NElements<<" "<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
+
       if(prev_mean_quality<0){
         prev_mean_quality = qmean;
         continue;
       }else{
-        double res = abs(qmean-prev_mean_quality)/prev_mean_quality;
+        double res = fabs(qmean-prev_mean_quality)/prev_mean_quality;
         prev_mean_quality = qmean;
-        if(res<tolerance)
+        if(res<tolerance){
+          iter++; // Ensure number of iterations returned is correct.
           break;
+        }
       }
     }
     

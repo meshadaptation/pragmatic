@@ -47,11 +47,12 @@ template<typename real_t, typename index_t> class Coarsen{
   Coarsen(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
+
+    ndims = _mesh->get_number_dimensions();
+    nloc = (ndims==2)?3:4;
     
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
-    ndims = _mesh->get_number_dimensions();
-    nloc = (ndims==2)?3:4;
     for(size_t i=0;i<NElements;i++){
       const int *n=_mesh->get_element(i);
       if(n[0]<0)
@@ -304,10 +305,8 @@ template<typename real_t, typename index_t> class Coarsen{
 
  private:
   Mesh<real_t, index_t> *_mesh;
-  ElementProperty<real_t> *property;
-
   Surface<real_t, index_t> *_surface;
-
+  ElementProperty<real_t> *property;
   size_t ndims, nloc;
 };
 

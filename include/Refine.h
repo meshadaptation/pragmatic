@@ -500,10 +500,8 @@ template<typename real_t, typename index_t> class Refine{
 
  private:
   Mesh<real_t, index_t> *_mesh;
-  ElementProperty<real_t> *property;
-
   Surface<real_t, index_t> *_surface;
-
+  ElementProperty<real_t> *property;
   size_t ndims, nloc;
 };
 

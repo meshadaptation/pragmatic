@@ -315,6 +315,27 @@ template<typename real_t, typename index_t>
         }
       }
     }
+
+    size_t NNodes = _mesh->get_number_nodes();
+    size_t NSElements = get_number_facets();
+
+    SNEList.clear();
+    surface_nodes.resize(NNodes);
+    for(size_t i=0;i<NNodes;i++)
+      surface_nodes[i] = false;
+    
+    for(size_t i=0;i<NSElements;i++){
+      const int *n=get_facet(i);
+      if(n[0]<0)
+        continue;
+      
+      for(size_t j=0;j<snloc;j++){
+        const int *n=get_facet(i);
+        
+        SNEList[n[j]].insert(i);
+        surface_nodes[n[j]] = true;
+      }
+    }
   }
 
   int get_number_facets() const{
