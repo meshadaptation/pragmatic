@@ -98,104 +98,118 @@ template<typename real_t, typename index_t>
     return;
   }
 
-  real_t smooth(bool qconstrain=false){
-    real_t qlinfinity = std::numeric_limits<real_t>::max();
-    real_t qmean = 0.0, qrms=0.0;
-    
-    int ncolours = colour_sets.size();
-
-    if(_ndims==2){
-      // Smoothing loop.
-      for(int colour=0; colour<ncolours; colour++){
+  int smooth(real_t tolerance, int max_iterations, bool qconstrain=false){
+    double prev_mean_quality = -1;
+    int iter=0;
+    for(;iter<max_iterations;iter++){    
+      
+      real_t qlinfinity = std::numeric_limits<real_t>::max();
+      real_t qmean = 0.0, qrms=0.0;
+      
+      int ncolours = colour_sets.size();
+      
+      if(_ndims==2){
+        // Smoothing loop.
+        for(int colour=0; colour<ncolours; colour++){
+#pragma omp parallel
+          {
+            int node_set_size = colour_sets[colour].size();
+#pragma omp for schedule(static)
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[colour][cn];
+              smooth_2d_kernel(node, qconstrain);
+            }
+          }
+        }
+        
+        std::vector<real_t> qvec(_NElements);
 #pragma omp parallel
         {
-          int node_set_size = colour_sets[colour].size();
+          real_t lqlinfinity = std::numeric_limits<real_t>::max();
+#pragma omp for schedule(static) reduction(+:qmean)
+          for(int i=0;i<_NElements;i++){
+            const int *n=_ENList+i*3;
+            const real_t *x0 = _coords + n[0]*_ndims;
+            const real_t *x1 = _coords + n[1]*_ndims;
+            const real_t *x2 = _coords + n[2]*_ndims;
+            
+            qvec[i] = property->lipnikov(x0, x1, x2,
+                                         &(msh->metric[n[0]*4]),
+                                         &(msh->metric[n[1]*4]),
+                                         &(msh->metric[n[2]*4]));
+            lqlinfinity = std::min(lqlinfinity, qvec[i]);
+            qmean += qvec[i]/_NElements;
+          }
+#pragma omp for schedule(static) reduction(+:qrms)
+          for(int i=0;i<_NElements;i++){
+            qrms += pow(qvec[i]-qmean, 2);
+          }
+#pragma omp critical 
+          {
+            qlinfinity = std::min(qlinfinity, lqlinfinity);
+          }
+        }
+      }else{
+        // Smoothing loop.
+        for(int colour=0; colour<ncolours; colour++){
+#pragma omp parallel
+          {
+            int node_set_size = colour_sets[colour].size();
 #pragma omp for schedule(static)
-          for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[colour][cn];
-            smooth_2d_kernel(node, qconstrain);
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[colour][cn];
+              smooth_3d_kernel(node, qconstrain);          
+            }
+          }
+        }
+        
+        std::vector<real_t> qvec(_NElements);
+#pragma omp parallel
+        {
+          real_t lqlinfinity = std::numeric_limits<real_t>::max();
+#pragma omp for schedule(static) reduction(+:qmean)
+          for(int i=0;i<_NElements;i++){
+            const int *n=_ENList+i*4;
+            const real_t *x0 = _coords + n[0]*_ndims;
+            const real_t *x1 = _coords + n[1]*_ndims;
+            const real_t *x2 = _coords + n[2]*_ndims;
+            const real_t *x3 = _coords + n[3]*_ndims;
+            
+            qvec[i] = property->lipnikov(x0, x1, x2, x3,
+                                         &(msh->metric[n[0]*9]),
+                                         &(msh->metric[n[1]*9]),
+                                         &(msh->metric[n[2]*9]),
+                                         &(msh->metric[n[3]*9]));
+            
+            lqlinfinity = std::min(lqlinfinity, qvec[i]);
+            qmean += qvec[i]/_NElements;
+          }
+#pragma omp for schedule(static) reduction(+:qrms)
+          for(int i=0;i<_NElements;i++){
+            
+            qrms += pow(qvec[i]-qmean, 2);
+          }
+#pragma omp critical 
+          {
+            qlinfinity = std::min(qlinfinity, lqlinfinity);
           }
         }
       }
       
-      std::vector<real_t> qvec(_NElements);
-#pragma omp parallel
-      {
-        real_t lqlinfinity = std::numeric_limits<real_t>::max();
-#pragma omp for schedule(static) reduction(+:qmean)
-        for(int i=0;i<_NElements;i++){
-          const int *n=_ENList+i*3;
-          const real_t *x0 = _coords + n[0]*_ndims;
-          const real_t *x1 = _coords + n[1]*_ndims;
-          const real_t *x2 = _coords + n[2]*_ndims;
-          
-          qvec[i] = property->lipnikov(x0, x1, x2,
-                                       &(msh->metric[n[0]*4]),
-                                       &(msh->metric[n[1]*4]),
-                                       &(msh->metric[n[2]*4]));
-          lqlinfinity = std::min(lqlinfinity, qvec[i]);
-          qmean += qvec[i]/_NElements;
-        }
-#pragma omp for schedule(static) reduction(+:qrms)
-        for(int i=0;i<_NElements;i++){
-          qrms += pow(qvec[i]-qmean, 2);
-        }
-#pragma omp critical 
-        {
-          qlinfinity = std::min(qlinfinity, lqlinfinity);
-        }
-      }
-    }else{
-      // Smoothing loop.
-      for(int colour=0; colour<ncolours; colour++){
-#pragma omp parallel
-        {
-          int node_set_size = colour_sets[colour].size();
-#pragma omp for schedule(static)
-          for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[colour][cn];
-            smooth_3d_kernel(node, qconstrain);          
-          }
-        }
-      }
-      
-      std::vector<real_t> qvec(_NElements);
-#pragma omp parallel
-      {
-        real_t lqlinfinity = std::numeric_limits<real_t>::max();
-#pragma omp for schedule(static) reduction(+:qmean)
-        for(int i=0;i<_NElements;i++){
-          const int *n=_ENList+i*4;
-          const real_t *x0 = _coords + n[0]*_ndims;
-          const real_t *x1 = _coords + n[1]*_ndims;
-          const real_t *x2 = _coords + n[2]*_ndims;
-          const real_t *x3 = _coords + n[3]*_ndims;
-          
-          qvec[i] = property->lipnikov(x0, x1, x2, x3,
-                                       &(msh->metric[n[0]*9]),
-                                       &(msh->metric[n[1]*9]),
-                                       &(msh->metric[n[2]*9]),
-                                       &(msh->metric[n[3]*9]));
-
-          lqlinfinity = std::min(lqlinfinity, qvec[i]);
-          qmean += qvec[i]/_NElements;
-        }
-#pragma omp for schedule(static) reduction(+:qrms)
-        for(int i=0;i<_NElements;i++){
-
-          qrms += pow(qvec[i]-qmean, 2);
-        }
-#pragma omp critical 
-        {
-          qlinfinity = std::min(qlinfinity, lqlinfinity);
-        }
+      // qrms=sqrt(qrms/_NElements);
+      // std::cout<<_NElements<<" "<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
+      if(prev_mean_quality<0){
+        prev_mean_quality = qmean;
+        continue;
+      }else{
+        double res = abs(qmean-prev_mean_quality)/prev_mean_quality;
+        prev_mean_quality = qmean;
+        if(res<tolerance)
+          break;
       }
     }
     
-    qrms=sqrt(qrms/_NElements);
-
-    // std::cout<<_NElements<<" "<<qmean<<" "<<qrms<<" "<<qlinfinity<<std::endl;
-    return qmean;
+    return iter;
   }
 
   void smooth_2d_kernel(index_t node, bool qconstrain=false){

@@ -64,15 +64,7 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth(*mesh, surface);
 
   double start_tic = omp_get_wtime();
-  double prev_mean_quality = smooth.smooth(true);
-  int iter=1;
-  for(;iter<500;iter++){    
-    double mean_quality = smooth.smooth(true);
-    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
-    prev_mean_quality = mean_quality;
-    if(res<1.0e-5)
-      break;
-  }
+  int niterations = smooth.smooth(1.0e-5, 500, true);
   std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   for(size_t i=0;i<NNodes;i++)
@@ -82,7 +74,7 @@ int main(int argc, char **argv){
   export_vtu("../data/test_smooth_constrained_2d.vtu", mesh, &(psi[0]));
   delete mesh;
 
-  if(iter<80)
+  if(niterations<80)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

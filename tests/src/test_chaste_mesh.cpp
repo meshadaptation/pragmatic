@@ -95,16 +95,7 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth(mesh, surface);
 
   double start_tic = omp_get_wtime();
-  double prev_mean_quality = smooth.smooth();
-  int iter=1;
-  for(;iter<500;iter++){
-    double mean_quality = smooth.smooth();
-    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
-    prev_mean_quality = mean_quality;
-    if(res<1.0e-4)
-      break;
-    std::cout<<"quality "<<iter<<" "<<mean_quality<<std::endl;
-  }
+  int iter = smooth.smooth(1.0e-4, 500);
   std::cout<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   if(iter<500)
@@ -113,15 +104,7 @@ int main(int argc, char **argv){
     std::cout<<"fail\n";
 
   start_tic = omp_get_wtime();
-  prev_mean_quality = smooth.smooth(true);
-  iter=1;
-  for(;iter<500;iter++){
-    double mean_quality = smooth.smooth(true);
-    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
-    prev_mean_quality = mean_quality;
-    if(res<1.0e-5)
-      break;
-  }
+  smooth.smooth(1.0e-5, 500, true);
   std::cout<<"Constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   if(iter<500)
