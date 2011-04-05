@@ -61,16 +61,23 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(1000);
   metric_field.update_mesh();
   
+  double start_tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
-  coarsen.coarsen(0.9);
+  coarsen.coarsen(0.8);
+  std::cout<<"Coarsen: "<<omp_get_wtime()-start_tic<<std::endl;
 
+  start_tic = omp_get_wtime();
   Refine<double, int> refine(*mesh, surface);
-  refine.refine(1.1);
+  refine.refine(1.2);
+  std::cout<<"Refine: "<<omp_get_wtime()-start_tic<<std::endl;
 
+  start_tic = omp_get_wtime();
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
+  std::cout<<"Defragment: "<<omp_get_wtime()-start_tic<<std::endl;
 
+  start_tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
   double prev_mean_quality = smooth.smooth();
   int iter=1;
@@ -81,6 +88,19 @@ int main(int argc, char **argv){
     if(res<1.0e-4)
       break;
   }
+  std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
+
+  start_tic = omp_get_wtime();
+  prev_mean_quality = smooth.smooth(true);
+  iter=1;
+  for(;iter<500;iter++){    
+    double mean_quality = smooth.smooth(true);
+    double res = abs(mean_quality-prev_mean_quality)/prev_mean_quality;
+    prev_mean_quality = mean_quality;
+    if(res<1.0e-5)
+      break;
+  }
+  std::cout<<"Smooth 2 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
 
   export_vtu("../data/test_adapt_2d.vtu", mesh, &(psi[0]));
   export_vtu("../data/test_adapt_2d_surface.vtu", &surface);

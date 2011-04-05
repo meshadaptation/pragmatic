@@ -258,13 +258,13 @@ template<typename real_t, typename index_t>
 
   // Need to get out the facets
   int NSElements = surface->get_number_facets();
-  const int *facets = surface->get_facets();
   for(int i=0;i<NSElements;i++){
+    const int *facet = surface->get_facet(i);
     if(ndims==2){
-      vtkIdType pts[] = {facets[i*2], facets[i*2+1]};
+      vtkIdType pts[] = {facet[0], facet[1]};
       ug->InsertNextCell(VTK_LINE, 2, pts);
     }else{
-      vtkIdType pts[] = {facets[i*3], facets[i*3+1], facets[i*3+2]};
+      vtkIdType pts[] = {facet[0], facet[1], facet[2]};
       ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
     }
   }

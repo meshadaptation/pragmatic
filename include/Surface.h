@@ -99,19 +99,21 @@ template<typename real_t, typename index_t>
     for(typename std::set<index_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
       incident_plane_target.insert(coplanar_ids[*it]);
     
-    // Logic if nid_free is on a geometric edge. This only applies for 3D.
-    if(incident_plane_free.size()==2){
-      return
-        (incident_plane_target.count(*incident_plane_free.begin()))
-        &&
-        (incident_plane_target.count(*incident_plane_free.rbegin()));
+    if(ndims==3){
+      // Logic if nid_free is on a geometric edge. This only applies for 3D.
+      if(incident_plane_free.size()==2){
+        return
+          (incident_plane_target.count(*incident_plane_free.begin()))
+          &&
+          (incident_plane_target.count(*incident_plane_free.rbegin()));
+      }
     }
     
     // The final case is that the vertex is on a plane and can be
     // collapsed to any other vertex on that plane.
     assert(incident_plane_free.size()==1);
     
-    return incident_plane_target.count(*incident_plane_free.begin());
+    return incident_plane_target.count(*incident_plane_free.begin())>0;
   }
 
   void collapse(index_t nid_free, index_t nid_target){
@@ -158,16 +160,16 @@ template<typename real_t, typename index_t>
   /*! Defragment surface mesh. This compresses the storage of internal data
     structures after the mesh has been defraged.*/
   void defragment(std::map<index_t, index_t> *active_vertex_map){
-    surface_nodes.resize(_mesh->_NNodes);
-    for(size_t i=0;i<_mesh->_NNodes;i++)
+    size_t NNodes = _mesh->get_number_nodes();
+    surface_nodes.resize(NNodes);
+    for(size_t i=0;i<NNodes;i++)
       surface_nodes[i] = false;
-    SNEList.clear();
-
+    
     std::vector<index_t> defrag_SENList, defrag_coplanar_ids;
     std::vector<real_t> defrag_normals;
     size_t NSElements = get_number_facets();
     for(size_t i=0;i<NSElements;i++){
-      int *n=&(SENList[i*snloc]);
+      const int *n=get_facet(i);
       if(n[0]<0)
         continue;
       
@@ -175,16 +177,24 @@ template<typename real_t, typename index_t>
         int nid = (*active_vertex_map)[n[j]];
         defrag_SENList.push_back(nid);
         surface_nodes[nid] = true;
-        SNEList[nid].insert(i);
       }
       defrag_coplanar_ids.push_back(coplanar_ids[i]);
-      for(size_t j=0;j<ndims;j++){
+      for(size_t j=0;j<ndims;j++)
         defrag_normals.push_back(normals[i*ndims+j]);
-      }
     }
     defrag_SENList.swap(SENList);
     defrag_coplanar_ids.swap(coplanar_ids);
     defrag_normals.swap(normals);
+    
+    // Finally, fix the Node-Element adjancy list.
+    SNEList.clear();
+    NSElements = get_number_facets();
+    for(size_t i=0;i<NSElements;i++){
+      const int *n=get_facet(i);
+      
+      for(size_t j=0;j<snloc;j++)
+        SNEList[n[j]].insert(i);
+    }
   }
 
   void refine(std::map< Edge<real_t, index_t>, index_t> &refined_edges){
@@ -311,8 +321,8 @@ template<typename real_t, typename index_t>
     return SENList.size()/snloc;
   }
 
-  const int* get_facets() const{
-    return &(SENList[0]);
+  const int* get_facet(index_t id) const{
+    return &(SENList[id*snloc]);
   }
   
   int get_number_dimensions() const{
