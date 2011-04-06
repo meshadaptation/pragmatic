@@ -215,16 +215,13 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   for(size_t i=0;i<NElements;i++){
     vtk_cell_numbering->SetTuple1(i, i);
     vtk_cell_tpartition->SetTuple1(i, mesh->get_element_towner(i));
+    const index_t *n = mesh->get_element(i);
+    assert(n[0]>=0);
     if(ndims==2){
-      vtkIdType pts[] = {mesh->get_element(i)[0],
-                         mesh->get_element(i)[1], 
-                         mesh->get_element(i)[2]};
+      vtkIdType pts[] = {n[0], n[1], n[2]};
       ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
     }else{
-      vtkIdType pts[] = {mesh->get_element(i)[0],
-                         mesh->get_element(i)[1], 
-                         mesh->get_element(i)[2],
-                         mesh->get_element(i)[3]};
+      vtkIdType pts[] = {n[0], n[1], n[2], n[3]};
       ug->InsertNextCell(VTK_TETRA, 4, pts);
     }
   }

@@ -105,6 +105,10 @@ int main(int argc, char **argv){
   iter = smooth.smooth(1.0e-5, 100, true);
   std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
 
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+  
   export_vtu("../data/test_adapt_2d.vtu", mesh);
   export_vtu("../data/test_adapt_2d_surface.vtu", &surface);
 
