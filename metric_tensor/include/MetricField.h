@@ -70,9 +70,6 @@ template<typename real_t, typename index_t>
     _NElements = mesh.get_number_elements();
     _ndims = mesh.get_number_dimensions();
     _nloc = (_ndims==2)?3:4;
-#ifdef HAVE_MPI
-    _mesh_comm = mesh.get_mpi_comm();
-#endif
     _surface = &surface;
     _mesh = &mesh;
 
@@ -682,10 +679,6 @@ template<typename real_t, typename index_t>
   }
 
   int _NNodes, _NElements, _ndims, _nloc;
-
-#ifdef HAVE_MPI
-  const MPI_Comm *_comm;
-#endif
   MetricTensor<real_t> *_metric;
   Surface<real_t, index_t> *_surface;
   Mesh<real_t, index_t> *_mesh;

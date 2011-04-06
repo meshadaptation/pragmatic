@@ -63,9 +63,6 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y){
-#ifdef HAVE_MPI
-    _comm = NULL;
-#endif
     _init(NNodes, NElements, ENList, x, y, NULL);
   }
 
@@ -283,13 +280,6 @@ template<typename real_t, typename index_t> class Mesh{
   int new2old(int nid){
     return nid_new2old[nid];
   }
-
-#ifdef HAVE_MPI
-  /// Return mpi communicator
-  const MPI_Comm * get_mpi_comm(){
-    return _comm;
-  }
-#endif
 
   /// Default destructor.
   ~Mesh(){
@@ -581,9 +571,5 @@ template<typename real_t, typename index_t> class Mesh{
 
   // Metric tensor field.
   std::vector<real_t> metric;
-
-#ifdef HAVE_MPI
-  const MPI_Comm *_comm;
-#endif
 };
 #endif

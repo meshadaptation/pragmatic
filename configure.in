@@ -32,11 +32,18 @@ AC_CONFIG_HEADERS(include/config.h)
 # Check system type
 AC_CANONICAL_HOST
 
+AC_LANG_PUSH([C++])
+
 # Override autoconf defaults for CXXFLAGS before searching for compiler
 CXXFLAGS="${CXXFLAGS:''}"
-AC_PROG_CXX([icpc g++])
 
-AC_LANG_PUSH([C++])
+if test -z "$CXX" && test -n "$MPICXX"; then
+    CXX="$MPICXX"
+fi
+AC_PROG_CXX([icpc g++])
+AX_MPI
+CXX="$MPICXX"
+LIBS="$MPILIBS $LIBS"
 
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.

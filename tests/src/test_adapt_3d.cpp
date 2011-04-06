@@ -98,14 +98,15 @@ int main(int argc, char **argv){
     std::cout<<"Coarsen2: "<<omp_get_wtime()-start_tic<<std::endl;
     
     start_tic = omp_get_wtime();
-    iter = smooth.smooth(1.0e-3, 50);
+    iter = smooth.smooth(1.0e-4, 50);
     std::cout<<"Smooth 2 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
     
     L_max = mesh->maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter<10));
   
   start_tic = omp_get_wtime();
-  iter = smooth.smooth(1.0e-5, 100, true);
+  iter = smooth.smooth(1.0e-6, 100);
+  iter += smooth.smooth(1.0e-7, 100, true);
   std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
   
   std::map<int, int> active_vertex_map;
