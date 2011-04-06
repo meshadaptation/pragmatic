@@ -44,7 +44,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  import_vtu("../data/box10x10x10.vtu", mesh);
 
   Surface<double, int> surface(*mesh);
 
@@ -54,14 +54,17 @@ int main(int argc, char **argv){
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
+    psi[i] = 
+      pow(mesh->get_coords(i)[0]+0.1, 4) + 
+      pow(mesh->get_coords(i)[1]+0.1, 4) +
+      pow(mesh->get_coords(i)[2]+0.1, 4);
   
-  metric_field.add_field(&(psi[0]), 0.01);
+  metric_field.add_field(&(psi[0]), 0.2);
   metric_field.update_mesh();
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_low = 0.4;
-  double L_up = 1.0;
+  double L_up = sqrt(2);
 
   double start_tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
@@ -104,9 +107,9 @@ int main(int argc, char **argv){
   start_tic = omp_get_wtime();
   iter = smooth.smooth(1.0e-5, 100, true);
   std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
-
-  export_vtu("../data/test_adapt_2d.vtu", mesh);
-  export_vtu("../data/test_adapt_2d_surface.vtu", &surface);
+  
+  export_vtu("../data/test_adapt_3d.vtu", mesh);
+  export_vtu("../data/test_adapt_3d_surface.vtu", &surface);
 
   delete mesh;
 

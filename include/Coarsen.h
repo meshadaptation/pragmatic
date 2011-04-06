@@ -79,12 +79,12 @@ template<typename real_t, typename index_t> class Coarsen{
   /*! Perform coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
-  void coarsen(real_t L_min){
+  void coarsen(real_t L_low, real_t L_max){
     // Initialise a dynamic vertex list
     size_t NNodes = _mesh->get_number_nodes();
     std::vector<bool> dynamic_vertex(NNodes, false);
     for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
-      if(it->length<L_min){
+      if(it->length<L_low){
         dynamic_vertex[it->edge.first] = true;
         dynamic_vertex[it->edge.second] = true;
       }
@@ -98,7 +98,7 @@ template<typename real_t, typename index_t> class Coarsen{
         else
           continue;
         
-        int nid = coarsen_kernel(rm_vertex, L_min);
+        int nid = coarsen_kernel(rm_vertex, L_low, L_max);
         if(nid>=0){
           dynamic_vertex[nid] = true;
           for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[nid].begin();nn!=_mesh->NNList[nid].end();++nn){
@@ -121,7 +121,7 @@ template<typename real_t, typename index_t> class Coarsen{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
    */
-  int coarsen_kernel(index_t rm_vertex, real_t L_min){    
+  int coarsen_kernel(index_t rm_vertex, real_t L_low, real_t L_max){    
     // If this is a corner vertex then return immediately.
     if(_surface->is_corner_vertex(rm_vertex))
       return -1;
@@ -144,7 +144,7 @@ template<typename real_t, typename index_t> class Coarsen{
       if(short_edges.size()==0)
         return -1;
       
-      if(short_edges.begin()->first > L_min)
+      if(short_edges.begin()->first > L_low)
         return -1;
       
       target_edge = short_edges.begin()->second;
@@ -191,6 +191,17 @@ template<typename real_t, typename index_t> class Coarsen{
       }
     }
     
+    // Check of any of the new edges are longer than L_max.
+    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+      if(target_vertex==*nn)
+        continue;
+      
+      if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
+        reject_collapse=true;
+        break;
+      }
+    }
+
     if(reject_collapse)
       return -1;
     

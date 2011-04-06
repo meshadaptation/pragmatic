@@ -50,13 +50,25 @@ class Colour{
   static void greedy(std::vector< std::deque<index_t> > &NNList, index_t *colour){
     size_t NNodes = NNList.size();
 
-    colour[0] = 0;
-    for(size_t node=1;node<NNodes;node++){
+    // Colour first active node.
+    size_t node;
+    for(node=0;node<NNodes;node++){
+      if(NNList[node].size()>0){
+        colour[node] = 0;
+        break;
+      }
+    }
+    
+    // Colour remaining active nodes.
+    for(;node<NNodes;node++){
+      if(NNList[node].size()==0)
+        continue;
+      
       std::set<index_t> used_colours;
       for(typename std::deque<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it)
         if(*it<(int)node)
           used_colours.insert(colour[*it]);
-
+      
       for(index_t i=0;;i++)
         if(used_colours.count(i)==0){
           colour[node] = i;

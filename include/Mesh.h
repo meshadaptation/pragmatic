@@ -162,6 +162,9 @@ template<typename real_t, typename index_t> class Mesh{
 
     if(local_active_vertex_map)
       delete active_vertex_map;
+
+    element_towner.clear();
+    node_towner.clear();
   }
 
   /// Add a new vertex
@@ -172,6 +175,8 @@ template<typename real_t, typename index_t> class Mesh{
     for(size_t i=0;i<_ndims*_ndims;i++)
       metric.push_back(m[i]);
 
+    node_towner.push_back(0);
+    
     _NNodes++;
     
     return _NNodes-1;
@@ -181,6 +186,8 @@ template<typename real_t, typename index_t> class Mesh{
   index_t append_element(const int *n){
     for(size_t i=0;i<_nloc;i++)
       _ENList.push_back(n[i]);
+
+    element_towner.push_back(0);
 
     _NElements++;
     
@@ -338,6 +345,17 @@ template<typename real_t, typename index_t> class Mesh{
                     (ml00*x + ml01*y + ml02*z)*x);
     }
     return length;
+  }
+  
+  real_t maximal_edge_length(){
+    calc_edge_lengths();
+    
+    real_t L_max=0;
+    for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin();it!=Edges.end();++it){
+      L_max = std::max(L_max, it->length);
+    }
+    
+    return L_max;
   }
 
  private:
@@ -501,6 +519,7 @@ template<typename real_t, typename index_t> class Mesh{
           _coords[i*_ndims+2] = z[nid_new2old[i]];
         }
       }
+#pragma omp for schedule(static)
       for(size_t i=0;i<_NNodes;i++)
         node_towner[i] = npart[nid_new2old[i]];
     }

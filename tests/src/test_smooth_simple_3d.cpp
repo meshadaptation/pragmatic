@@ -67,13 +67,9 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   int niterations = smooth.smooth(1.0e-4, 500);
   std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 3) +
-      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
   mesh->calc_edge_lengths();
-  export_vtu("../data/test_smooth_simple_3d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_smooth_simple_3d.vtu", mesh);
   delete mesh;
 
   if(niterations<100)

@@ -98,7 +98,7 @@ void import_vtu(const char *filename, Mesh<real_t, index_t>* &mesh){
 }
 
 template<typename real_t, typename index_t>
-void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const real_t *psi){
+void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const real_t *psi=NULL){
   // Create VTU object to write out.
   vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
   
@@ -106,11 +106,15 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   size_t NNodes = mesh->get_number_nodes();
   vtk_points->SetNumberOfPoints(NNodes);
 
-  vtkDoubleArray *vtk_psi = vtkDoubleArray::New();
-  vtk_psi->SetNumberOfComponents(1);
-  vtk_psi->SetNumberOfTuples(NNodes);
-  vtk_psi->SetName("psi");
+  vtkDoubleArray *vtk_psi = NULL;
 
+  if(psi!=NULL){
+    vtk_psi = vtkDoubleArray::New();
+    vtk_psi->SetNumberOfComponents(1);
+    vtk_psi->SetNumberOfTuples(NNodes);
+    vtk_psi->SetName("psi");
+  }
+  
   vtkIntArray *vtk_node_numbering = vtkIntArray::New();
   vtk_node_numbering->SetNumberOfComponents(1);
   vtk_node_numbering->SetNumberOfTuples(NNodes);
@@ -142,7 +146,8 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
 
   for(size_t i=0;i<NNodes;i++){
     const real_t *r = mesh->get_coords(i);
-    vtk_psi->SetTuple1(i, psi[i]);
+    if(vtk_psi!=NULL)
+      vtk_psi->SetTuple1(i, psi[i]);
     vtk_node_numbering->SetTuple1(i, i);
     vtk_node_tpartition->SetTuple1(i, mesh->get_node_towner(i));
     if(ndims==2){
@@ -174,8 +179,10 @@ void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const r
   ug->SetPoints(vtk_points);
   vtk_points->Delete();
 
-  ug->GetPointData()->AddArray(vtk_psi);
-  vtk_psi->Delete();
+  if(vtk_psi!=NULL){
+    ug->GetPointData()->AddArray(vtk_psi);
+    vtk_psi->Delete();
+  }
 
   ug->GetPointData()->AddArray(vtk_node_numbering);
   vtk_node_numbering->Delete();

@@ -51,23 +51,20 @@ int main(int argc, char **argv){
   size_t NNodes = mesh->get_number_nodes();
 
   vector<double> psi(NNodes, 0);
-  
   metric_field.add_field(&(psi[0]), 1.0);
-
-  metric_field.apply_nelements(1);
   metric_field.update_mesh();
   
   Coarsen<double, int> adapt(*mesh, surface);
 
   double start_tic = omp_get_wtime();
-  adapt.coarsen(0.5);
+  adapt.coarsen(0.4, sqrt(2));
   std::cout<<"Coarsen time = "<<omp_get_wtime()-start_tic<<std::endl;
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  export_vtu("../data/test_coarsen_2d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_coarsen_2d.vtu", mesh);
   export_vtu("../data/test_coarsen_2d_surface.vtu", &surface);
 
   delete mesh;

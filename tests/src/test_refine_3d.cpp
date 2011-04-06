@@ -42,7 +42,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box5x5x5.vtu", mesh);
+  import_vtu("../data/box10x10x10.vtu", mesh);
 
   Surface<double, int> surface(*mesh);
 
@@ -52,18 +52,18 @@ int main(int argc, char **argv){
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 3) +
-      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
+    psi[i] = 
+      pow(mesh->get_coords(i)[0], 4) +
+      pow(mesh->get_coords(i)[1], 4) + 
+      pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 1.0);
-
-  metric_field.apply_nelements(1000);
+  metric_field.add_field(&(psi[0]), 0.02);
   metric_field.update_mesh();
   
   Refine<double, int> adapt(*mesh, surface);
 
   double start_tic = omp_get_wtime();
-  adapt.refine(1.5);
+  adapt.refine(sqrt(2));
   std::cout<<"Refine time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   std::map<int, int> active_vertex_map;
@@ -76,7 +76,7 @@ int main(int argc, char **argv){
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
-  export_vtu("../data/test_refine_3d.vtu", mesh, &(psi[0]));
+  export_vtu("../data/test_refine_3d.vtu", mesh);
   export_vtu("../data/test_refine_3d_surface.vtu", &surface);
 
   delete mesh;
