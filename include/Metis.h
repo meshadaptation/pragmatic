@@ -61,6 +61,8 @@ class Metis{
     xadj[0]=0;
     for(int i=0;i<nnodes;i++){
       for(std::set<int>::iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
+        assert((*jt)>=0);
+        assert((*jt)<nnodes);
         adjncy.push_back(*jt);
         pos++;
       }

@@ -29,20 +29,17 @@
 #ifndef VTK_TOOLS_H
 #define VTK_TOOLS_H
 
-#include <vtkUnstructuredGrid.h>
-#include <vtkXMLUnstructuredGridReader.h>
-#include <vtkXMLUnstructuredGridWriter.h>
-#include <vtkCell.h>
-#include <vtkDoubleArray.h>
-#include <vtkIntArray.h>
-#include <vtkPointData.h>
-#include <vtkCellData.h>
-
 #include <vector>
 #include <string>
 
 #include "Mesh.h"
 #include "Surface.h"
+#include "Metis.h"
+#include "vtk.h"
+
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
 
 template<typename real_t, typename index_t> class VTKTools{
  public:
@@ -91,15 +88,128 @@ template<typename real_t, typename index_t> class VTKTools{
     reader->Delete();
     
     Mesh<real_t, index_t> *mesh=NULL;
-    if(ndims==2)
-      mesh = new Mesh<real_t, int>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
-    else
-      mesh = new Mesh<real_t, int>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+    //        partition                    gnn       pnn
+    std::map< index_t, std::set< std::pair<index_t, index_t> > > halo;
+    { // Handle mpi parallel run.
+      int nparts=1;
+      if(MPI::Is_initialized()){
+        nparts = MPI::COMM_WORLD.Get_size();
+      }
+
+      if(nparts>1){
+        std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
+        
+        int rank = MPI::COMM_WORLD.Get_rank();
+        if(rank==0){
+          int numflag = 0, edgecut;
+          int etype = 1; // triangles
+          if(ndims==3)
+            etype = 2; // tetrahedra
+
+          std::vector<idxtype> metis_ENList(NElements*nloc);
+          for(size_t i=0;i<NElements*nloc;i++)
+            metis_ENList[i] = ENList[i];
+          int intNElements = NElements;
+          int intNNodes = NNodes;
+          METIS_PartMeshNodal(&intNElements, &intNNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
+                              &edgecut, &(epart[0]), &(npart[0]));
+        }
+        
+        // This is a bug right here if idxtype is not of size int.
+        MPI::COMM_WORLD.Bcast(&(epart[0]), NElements, MPI_INT, 0);
+        MPI::COMM_WORLD.Bcast(&(npart[0]), NNodes, MPI_INT, 0);
+        
+        std::deque<index_t> node_partition;
+        for(size_t i=0;i<NNodes;i++)
+          if(npart[i]==rank)
+            node_partition.push_back(i);
+        
+        std::deque<index_t> element_partition;
+        for(size_t i=0;i<NElements;i++){
+          if(epart[i]==rank)
+            element_partition.push_back(i);
+          
+          std::set<index_t> residency;
+          for(int j=0;j<nloc;j++)
+            residency.insert(npart[ENList[i*nloc+j]]);
+          
+          if((residency.count(rank)>0)&&(residency.size()>1)){
+            if(epart[i]!=rank)
+              element_partition.push_back(i);
+            
+            for(int j=0;j<nloc;j++){
+              index_t nid = ENList[i*nloc+j];
+              int owner = npart[nid];
+              if(owner!=rank)
+                halo[owner].insert(std::pair<index_t, index_t>(nid, -1));
+            }
+          }
+        }
+
+        // Append halo nodes.
+        for(typename std::map<index_t, std::set< std::pair<index_t, index_t> > >::iterator it=halo.begin();it!=halo.end();++it){
+          for(typename std::set< std::pair<index_t, index_t> >::iterator jt=it->second.begin();jt!=it->second.end();++jt){
+            node_partition.push_back(jt->first);
+          }
+        }
+        
+        // Global numbering to partition numbering look up table.
+        NNodes = node_partition.size();
+        std::map<index_t, index_t> gnn2pnn; 
+        for(size_t i=0;i<NNodes;i++)
+          gnn2pnn[node_partition[i]] = i;
+        
+        // Add partitioning numbering to halo.
+        for(typename std::map<index_t, std::set< std::pair<index_t, index_t> > >::iterator it=halo.begin();it!=halo.end();++it){
+          for(typename std::set< std::pair<index_t, index_t> >::iterator jt=it->second.begin();jt!=it->second.end();){
+            std::pair<index_t, index_t> new_pair(jt->first, gnn2pnn[jt->first]);
+            typename std::set< std::pair<index_t, index_t> >::iterator old_pair = jt++;
+            it->second.erase(old_pair);
+            it->second.insert(new_pair);
+          }
+        }
+        
+        // Construct local mesh.
+        std::vector<real_t> lx(NNodes), ly(NNodes), lz(NNodes);
+        for(size_t i=0;i<NNodes;i++){
+          lx[i] = x[node_partition[i]];
+          ly[i] = y[node_partition[i]];
+          if(ndims==3)
+            lz[i] = z[node_partition[i]];
+        }
+        
+        NElements = element_partition.size();
+        std::vector<index_t> lENList(NElements*nloc);
+        for(size_t i=0;i<NElements;i++){
+          for(int j=0;j<nloc;j++){
+            index_t nid = gnn2pnn[ENList[element_partition[i]*nloc+j]];
+            assert(nid>=0);
+            assert(nid<(index_t)NNodes);
+            lENList[i*nloc+j] = nid;
+          }
+        }
+        
+        // Swap
+        x.swap(lx);
+        y.swap(ly);
+        if(ndims==3)
+          z.swap(lz);
+        ENList.swap(lENList);
+
+        std::cout<<"rank "<<rank<<" : "<<NNodes<<", "<<NElements<<std::endl;
+      }
+    }
     
+    if(ndims==2)
+      mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+    else
+      mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+    std::cout<<"imported mesh\n";
+
     return mesh;
   }
   
-  static void export_vtu(const char *filename, const Mesh<real_t, index_t> *mesh, const real_t *psi=NULL){
+  static void export_vtu(const char *basename, const Mesh<real_t, index_t> *mesh, const real_t *psi=NULL){
     // Create VTU object to write out.
     vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
     
@@ -228,18 +338,40 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetCellData()->AddArray(vtk_cell_tpartition);
     vtk_cell_tpartition->Delete();
     
-    vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-    writer->SetFileName(filename);
-    writer->SetInput(ug);
-    writer->Write();
-  
-    writer->Delete();
+    int nparts=1;
+    if(MPI::Is_initialized()){
+      nparts = MPI::COMM_WORLD.Get_size();
+    }
+    
+    if(nparts==1){
+      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".vtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetInput(ug);
+      writer->Write();
+      
+      writer->Delete();
+    }else{
+      int rank = MPI::COMM_WORLD.Get_rank();
+      int nparts = MPI::COMM_WORLD.Get_size();
+      
+      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".pvtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetNumberOfPieces(nparts);
+      writer->SetGhostLevel(1);
+      writer->SetStartPiece(rank);
+      writer->SetEndPiece(rank);
+      writer->SetInput(ug);
+      writer->Write();
+      writer->Delete();
+    }
     ug->Delete();
-  
+    
     return;
   }
 
-  static void export_vtu(const char *filename, const Surface<real_t, index_t> *surface){
+  static void export_vtu(const char *basename, const Surface<real_t, index_t> *surface){
     vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
   
     vtkPoints *vtk_points = vtkPoints::New();
@@ -293,12 +425,35 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetCellData()->AddArray(normal);
     normal->Delete();
 
-    vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-    writer->SetFileName(filename);
-    writer->SetInput(ug);
-    writer->Write();
-
-    writer->Delete();
+    int nparts=1;
+    if(MPI::Is_initialized()){
+      nparts = MPI::COMM_WORLD.Get_size();
+    }
+    
+    if(nparts==1){
+      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".vtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetInput(ug);
+      writer->Write();
+      
+      writer->Delete();
+    }else{
+      int rank = MPI::COMM_WORLD.Get_rank();
+      int nparts = MPI::COMM_WORLD.Get_size();
+      
+      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".pvtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetNumberOfPieces(nparts);
+      writer->SetGhostLevel(1);
+      writer->SetStartPiece(rank);
+      writer->SetEndPiece(rank);
+      writer->SetInput(ug);
+      writer->Write();
+      writer->Delete();
+    }
+    
     ug->Delete();
   }
 };
