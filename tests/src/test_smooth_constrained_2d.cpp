@@ -33,7 +33,7 @@
 
 #include "Mesh.h"
 #include "Surface.h"
-#include "vtk_tools.h"
+#include "VTKTools.h"
 #include "MetricField.h"
 
 #include "Smooth.h"
@@ -41,8 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -68,7 +67,7 @@ int main(int argc, char **argv){
   std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
 
   mesh->calc_edge_lengths();
-  export_vtu("../data/test_smooth_constrained_2d.vtu", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_smooth_constrained_2d.vtu", mesh);
   delete mesh;
 
   if(niterations<80)

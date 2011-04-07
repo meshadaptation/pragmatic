@@ -40,7 +40,7 @@
 
 #include "Surface.h"
 #include "Mesh.h"
-#include "vtk_tools.h"
+#include "VTKTools.h"
 
 using namespace std;
 
@@ -49,12 +49,11 @@ using namespace std;
  */
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
-  
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+
   Surface<double, int> surface(*mesh);
 
-  export_vtu("../data/test_surface_2d.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_surface_2d.vtu", &surface);
   
   std::set<int> unique_ids;
   for(int i=0;i<surface.get_number_facets();i++){

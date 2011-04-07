@@ -273,6 +273,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return metric at that vertex.
   const real_t *get_metric(size_t nid) const{
+    assert(metric.size()>0);
     return &(metric[nid*_ndims*_ndims]);
   }
 
@@ -354,7 +355,7 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend class Refine;
   template<typename _real_t, typename _index_t> friend class Surface;
-  template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Mesh<_real_t, _index_t> *, const _real_t *);
+  template<typename _real_t, typename _index_t> friend class VTKTools;
 
   void _init(int NNodes, int NElements, const index_t *ENList,
              const real_t *x, const real_t *y, const real_t *z){

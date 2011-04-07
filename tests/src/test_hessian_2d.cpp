@@ -33,14 +33,13 @@
 
 #include "Mesh.h"
 #include "Surface.h"
-#include "vtk_tools.h"
+#include "VTKTools.h"
 #include "MetricField.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -77,7 +76,7 @@ int main(int argc, char **argv){
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
 
-  export_vtu("../data/test_hessian_2d.vtu", mesh, &(psi[0]));
+  VTKTools<double, int>::export_vtu("../data/test_hessian_2d.vtu", mesh, &(psi[0]));
   
   delete mesh;
 

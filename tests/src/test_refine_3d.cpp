@@ -33,7 +33,7 @@
 
 #include "Mesh.h"
 #include "Surface.h"
-#include "vtk_tools.h"
+#include "VTKTools.h"
 #include "MetricField.h"
 
 #include "Refine.h"
@@ -41,8 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box10x10x10.vtu", mesh);
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -76,8 +75,8 @@ int main(int argc, char **argv){
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
-  export_vtu("../data/test_refine_3d.vtu", mesh);
-  export_vtu("../data/test_refine_3d_surface.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_refine_3d.vtu", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_refine_3d_surface.vtu", &surface);
 
   delete mesh;
 

@@ -376,7 +376,7 @@ template<typename real_t, typename index_t>
   }
   
  private:
-  template<typename _real_t, typename _index_t> friend void export_vtu(const char *, const Surface<_real_t, _index_t> *);
+  template<typename _real_t, typename _index_t> friend class VTKTools;
 
   /// Detects the surface nodes of the domain.
   void find_surface(){

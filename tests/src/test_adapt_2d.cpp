@@ -33,7 +33,7 @@
 
 #include "Mesh.h"
 #include "Surface.h"
-#include "vtk_tools.h"
+#include "VTKTools.h"
 #include "MetricField.h"
 
 #include "Coarsen.h"
@@ -43,8 +43,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=NULL;
-  import_vtu("../data/box20x20.vtu", mesh);
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -109,8 +108,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  export_vtu("../data/test_adapt_2d.vtu", mesh);
-  export_vtu("../data/test_adapt_2d_surface.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d.vtu", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface.vtu", &surface);
 
   delete mesh;
 
