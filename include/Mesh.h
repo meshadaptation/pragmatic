@@ -680,7 +680,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   void halo_update(real_t *vec, int block){
 #ifdef HAVE_MPI
-    if(!MPI::Is_initialized())
+    if(mpi_nparts<2)
       return;
     
     int rank;
