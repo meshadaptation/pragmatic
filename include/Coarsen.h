@@ -164,9 +164,9 @@ template<typename real_t, typename index_t> class Coarsen{
         continue;
       
       // Create a copy of the proposed element
-      int n[_mesh->_nloc];
-      for(size_t i=0;i<_mesh->_nloc;i++){
-        int nid = _mesh->_ENList[_mesh->_nloc*(*ee)+i];
+      int n[nloc];
+      for(size_t i=0;i<nloc;i++){
+        int nid = _mesh->_ENList[nloc*(*ee)+i];
         if(nid==rm_vertex)
           n[i] = target_vertex;
         else
@@ -215,16 +215,16 @@ template<typename real_t, typename index_t> class Coarsen{
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       // Delete if element is to be collapsed.
       if(target_edge->adjacent_elements.count(*ee)){
-        for(size_t i=0;i<_mesh->_nloc;i++){
-          _mesh->_ENList[_mesh->_nloc*(*ee)+i]=-1;
+        for(size_t i=0;i<nloc;i++){
+          _mesh->_ENList[nloc*(*ee)+i]=-1;
         }
         continue;
       }
       
       // Renumber
-      for(size_t i=0;i<_mesh->_nloc;i++){
-        if(_mesh->_ENList[_mesh->_nloc*(*ee)+i]==rm_vertex){
-          _mesh->_ENList[_mesh->_nloc*(*ee)+i]=target_vertex;
+      for(size_t i=0;i<nloc;i++){
+        if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
+          _mesh->_ENList[nloc*(*ee)+i]=target_vertex;
           break;
         }
       }

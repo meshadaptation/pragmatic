@@ -49,7 +49,9 @@
 #include <mpi.h>
 #endif
 
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 /*! \brief Constructs metric tensor field which encodes anisotropic
  *  edge size information.
@@ -578,79 +580,86 @@ template<typename real_t, typename index_t>
   /*! Predict the number of elements when mesh satisifies metric tensor field.
    */
   real_t predict_nelements(){
-    real_t predicted=0;
+    double predicted=0;
 
-    if(_NElements<1)
-      return predicted;
-
-    if(_ndims==2){
-      const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
-      const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
-      const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
-      ElementProperty<real_t> property(refx0, refx1, refx2);
-
-      real_t total_area_metric = 0.0;
-      for(int i=0;i<_NElements;i++){
-        const index_t *n=_mesh->get_element(i);
-        const real_t *x0 = _mesh->get_coords(n[0]);
-        const real_t *x1 = _mesh->get_coords(n[1]);
-        const real_t *x2 = _mesh->get_coords(n[2]);
-        real_t area = property.area(x0, x1, x2);
-
-        const real_t *m0=_metric[n[0]].get_metric();
-        const real_t *m1=_metric[n[1]].get_metric();
-        const real_t *m2=_metric[n[2]].get_metric();
-
-        real_t m00 = (m0[0]+m1[0]+m2[0])/3;
-        real_t m01 = (m0[1]+m1[1]+m2[1])/3;
-        real_t m11 = (m0[3]+m1[3]+m2[3])/3;
-
-        real_t det = m00*m11-m01*m01;
-        total_area_metric += area*sqrt(det);
+    if(_NElements>0){
+      if(_ndims==2){
+        const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
+        const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
+        const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
+        ElementProperty<real_t> property(refx0, refx1, refx2);
+        
+        real_t total_area_metric = 0.0;
+        for(int i=0;i<_NElements;i++){
+          const index_t *n=_mesh->get_element(i);
+          const real_t *x0 = _mesh->get_coords(n[0]);
+          const real_t *x1 = _mesh->get_coords(n[1]);
+          const real_t *x2 = _mesh->get_coords(n[2]);
+          real_t area = property.area(x0, x1, x2);
+          
+          const real_t *m0=_metric[n[0]].get_metric();
+          const real_t *m1=_metric[n[1]].get_metric();
+          const real_t *m2=_metric[n[2]].get_metric();
+          
+          real_t m00 = (m0[0]+m1[0]+m2[0])/3;
+          real_t m01 = (m0[1]+m1[1]+m2[1])/3;
+          real_t m11 = (m0[3]+m1[3]+m2[3])/3;
+          
+          real_t det = m00*m11-m01*m01;
+          total_area_metric += area*sqrt(det);
+        }
+        
+        // Ideal area of triangle in metric space.
+        double ideal_area = sqrt(3.0)/4.0;
+        
+        predicted = total_area_metric/ideal_area;
+      }else{
+        const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
+        const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
+        const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
+        const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
+        ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
+        
+        real_t total_volume_metric = 0.0;
+        for(int i=0;i<_NElements;i++){
+          const index_t *n=_mesh->get_element(i);
+          const real_t *x0 = _mesh->get_coords(n[0]);
+          const real_t *x1 = _mesh->get_coords(n[1]);
+          const real_t *x2 = _mesh->get_coords(n[2]);
+          const real_t *x3 = _mesh->get_coords(n[3]);
+          real_t volume = property.volume(x0, x1, x2, x3);
+          
+          const real_t *m0=_metric[n[0]].get_metric();
+          const real_t *m1=_metric[n[1]].get_metric();
+          const real_t *m2=_metric[n[2]].get_metric();
+          const real_t *m3=_metric[n[3]].get_metric();
+          
+          real_t m00 = (m0[0]+m1[0]+m2[0]+m3[0])/4;
+          real_t m01 = (m0[1]+m1[1]+m2[1]+m3[1])/4;
+          real_t m02 = (m0[2]+m1[2]+m2[2]+m3[2])/4;
+          real_t m11 = (m0[4]+m1[4]+m2[4]+m3[4])/4;
+          real_t m12 = (m0[5]+m1[5]+m2[5]+m3[5])/4;
+          real_t m22 = (m0[8]+m1[8]+m2[8]+m3[8])/4;
+          
+          real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
+          total_volume_metric += volume*sqrt(det);
+        }
+        
+        // Ideal volume of triangle in metric space.
+        double ideal_volume = 1.0/sqrt(72.0);
+        
+        predicted = total_volume_metric/ideal_volume;
       }
-
-      // Ideal area of triangle in metric space.
-      double ideal_area = sqrt(3.0)/4.0;
-
-      predicted = total_area_metric/ideal_area;
-    }else{
-      const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
-      const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
-      const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
-      const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
-      ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
-
-      real_t total_volume_metric = 0.0;
-      for(int i=0;i<_NElements;i++){
-        const index_t *n=_mesh->get_element(i);
-        const real_t *x0 = _mesh->get_coords(n[0]);
-        const real_t *x1 = _mesh->get_coords(n[1]);
-        const real_t *x2 = _mesh->get_coords(n[2]);
-        const real_t *x3 = _mesh->get_coords(n[3]);
-        real_t volume = property.volume(x0, x1, x2, x3);
-
-        const real_t *m0=_metric[n[0]].get_metric();
-        const real_t *m1=_metric[n[1]].get_metric();
-        const real_t *m2=_metric[n[2]].get_metric();
-        const real_t *m3=_metric[n[3]].get_metric();
-
-        real_t m00 = (m0[0]+m1[0]+m2[0]+m3[0])/4;
-        real_t m01 = (m0[1]+m1[1]+m2[1]+m3[1])/4;
-        real_t m02 = (m0[2]+m1[2]+m2[2]+m3[2])/4;
-        real_t m11 = (m0[4]+m1[4]+m2[4]+m3[4])/4;
-        real_t m12 = (m0[5]+m1[5]+m2[5]+m3[5])/4;
-        real_t m22 = (m0[8]+m1[8]+m2[8]+m3[8])/4;
-
-        real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
-        total_volume_metric += volume*sqrt(det);
-      }
-
-      // Ideal volume of triangle in metric space.
-      double ideal_volume = 1.0/sqrt(72.0);
-
-      predicted = total_volume_metric/ideal_volume;
     }
 
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      double lpredicted;
+      MPI_Allreduce(&predicted, &lpredicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
+      predicted = lpredicted;
+    }
+#endif
+    
     return predicted;
   }
 

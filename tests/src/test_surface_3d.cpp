@@ -50,10 +50,10 @@ using namespace std;
 
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
-  
+
   Surface<double, int> surface(*mesh);
 
-  VTKTools<double, int>::export_vtu("../data/test_surface_2d.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_surface_2d", &surface);
 
   std::set<int> unique_ids;
   for(int i=0;i<surface.get_number_facets();i++){

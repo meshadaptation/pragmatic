@@ -39,7 +39,12 @@ extern "C" {
   // Declarations needed from METIS
   typedef int idxtype;
   void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *);
-  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, int *numflag, int *nparts, int *edgecut, idxtype *epart, idxtype *npart);
+  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, 
+                           int *numflag, int *nparts, int *edgecut, idxtype *epart, idxtype *npart);
+  void METIS_PartGraphRecursive(int *n, idxtype *xadj, idxtype *adjncy,
+                                idxtype *vwgt, idxtype *adjwgt, int *wgtflag,
+                                int *numflag, int *nparts, int *options, int *edgecut, idxtype *part);
+
 }
 
 /*! \brief Class provides a specialised interface to some METIS

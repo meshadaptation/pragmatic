@@ -75,8 +75,8 @@ int main(int argc, char **argv){
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
   
-  VTKTools<double, int>::export_vtu("../data/test_refine_3d.vtu", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_refine_3d_surface.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_refine_3d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_refine_3d_surface", &surface);
 
   delete mesh;
 

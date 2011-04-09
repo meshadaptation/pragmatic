@@ -91,7 +91,7 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1]+0.1, 2) +
       pow(mesh->get_coords(i)[2]+0.1, 2);
 
-  VTKTools<double, int>::export_vtu("../data/test_hessian_3d.vtu", mesh, &(psi[0]));
+  VTKTools<double, int>::export_vtu("../data/test_hessian_3d", mesh, &(psi[0]));
 
   delete mesh;
 

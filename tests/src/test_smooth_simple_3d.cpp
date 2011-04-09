@@ -68,7 +68,7 @@ int main(int argc, char **argv){
   std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
   
   mesh->calc_edge_lengths();
-  VTKTools<double, int>::export_vtu("../data/test_smooth_simple_3d.vtu", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_smooth_simple_3d", mesh);
   delete mesh;
 
   if(niterations<100)

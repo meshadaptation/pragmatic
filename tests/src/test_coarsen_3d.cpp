@@ -64,8 +64,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d.vtu", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface.vtu", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
 
   delete mesh;
 

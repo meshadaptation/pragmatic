@@ -148,7 +148,7 @@ int main(int argc, char **argv){
     }
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_gradation_2d.vtu", mesh, &(psi[0]));
+  VTKTools<double, int>::export_vtu("../data/test_gradation_2d", mesh, &(psi[0]));
 
   delete mesh;
 

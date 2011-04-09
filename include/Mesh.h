@@ -36,10 +36,16 @@
 #include <vector>
 #include <set>
 
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 #ifdef HAVE_LIBNUMA
 #include <numa.h>
+#endif
+
+#ifdef HAVE_MPI
+#include <mpi.h>
 #endif
 
 #include "Metis.h"
@@ -52,8 +58,8 @@
 
 template<typename real_t, typename index_t> class Mesh{
  public:
-  
-  /*! 2D triangular mesh constructor.
+
+  /*! 2D triangular mesh constructor. This is for use when there is no MPI.
    * 
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
@@ -63,10 +69,30 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y){
-    _init(NNodes, NElements, ENList, x, y, NULL);
+    _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
   }
+  
+#ifdef HAVE_MPI  
+  /*! 2D triangular mesh constructor. This is used when parallelised with MPI.
+   * 
+   * @param NNodes number of nodes in the local mesh.
+   * @param NElements number of nodes in the local mesh.
+   * @param ENList array storing the global node number for each element.
+   * @param x is the X coordinate.
+   * @param y is the Y coordinate.
+   * @param lnn2gnn mapping of local node numbering to global node numbering.
+   * @param owner_range range of node id's owned by each partition.
+   * @param mpi_comm the mpi communicator.
+   */
+  Mesh(int NNodes, int NElements, const index_t *ENList,
+       const real_t *x, const real_t *y, const index_t *lnn2gnn,
+       const index_t *owner_range, MPI_Comm mpi_comm){
+    _mpi_comm = mpi_comm;
+    _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, owner_range);
+  }
+#endif
 
-  /*! 3D tetrahedra mesh constructor.
+  /*! 3D tetrahedra mesh constructor. This is for use when there is no MPI.
    * 
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
@@ -77,9 +103,29 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const real_t *z){
-    _init(NNodes, NElements, ENList,
-          x, y, z);
+    _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
   }
+
+#ifdef HAVE_MPI
+  /*! 3D tetrahedra mesh constructor. This is used when parallelised with MPI.
+   * 
+   * @param NNodes number of nodes in the local mesh.
+   * @param NElements number of nodes in the local mesh.
+   * @param ENList array storing the global node number for each element.
+   * @param x is the X coordinate.
+   * @param y is the Y coordinate.
+   * @param z is the Z coordinate.
+   * @param lnn2gnn mapping of local node numbering to global node numbering.
+   * @param owner_range range of node id's owned by each partition.
+   * @param mpi_comm the mpi communicator.
+   */
+  Mesh(int NNodes, int NElements, const index_t *ENList,
+       const real_t *x, const real_t *y, const real_t *z, const index_t *lnn2gnn,
+       const index_t *owner_range, MPI_Comm mpi_comm){
+    _mpi_comm = mpi_comm;
+    _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, owner_range);
+  }
+#endif
 
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significently
@@ -93,14 +139,14 @@ template<typename real_t, typename index_t> class Mesh{
 
     std::deque<index_t> active_vertex, active_element;
     for(size_t e=0;e<_NElements;e++){
-      index_t nid = _ENList[e*_nloc];
+      index_t nid = _ENList[e*nloc];
       if(nid<0)
         continue;
       active_element.push_back(e);
 
       (*active_vertex_map)[nid] = 0;
-      for(size_t j=1;j<_nloc;j++){
-        nid = _ENList[e*_nloc+j];
+      for(size_t j=1;j<nloc;j++){
+        nid = _ENList[e*nloc+j];
         (*active_vertex_map)[nid]=0;
       }
     }
@@ -115,17 +161,17 @@ template<typename real_t, typename index_t> class Mesh{
     node_towner.resize(_NNodes);
     _NElements = active_element.size();
     element_towner.resize(_NElements);
-    std::vector<index_t> defrag_ENList(_NElements*_nloc);
-    std::vector<real_t> defrag_coords(_NNodes*_ndims);
-    std::vector<real_t> defrag_metric(_NNodes*_ndims*_ndims);
+    std::vector<index_t> defrag_ENList(_NElements*nloc);
+    std::vector<real_t> defrag_coords(_NNodes*ndims);
+    std::vector<real_t> defrag_metric(_NNodes*ndims*ndims);
 
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
       for(int i=0;i<(int)_NElements;i++){
         index_t eid = active_element[i];
-        for(size_t j=0;j<_nloc;j++){
-          defrag_ENList[i*_nloc+j] = (*active_vertex_map)[_ENList[eid*_nloc+j]];
+        for(size_t j=0;j<nloc;j++){
+          defrag_ENList[i*nloc+j] = (*active_vertex_map)[_ENList[eid*nloc+j]];
         }
 #ifdef _OPENMP
         element_towner[i] = omp_get_thread_num();
@@ -138,10 +184,10 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp for schedule(static)
       for(int i=0;i<(int)_NNodes;i++){
         index_t nid=active_vertex[i];
-        for(size_t j=0;j<_ndims;j++)
-          defrag_coords[i*_ndims+j] = _coords[nid*_ndims+j];
-        for(size_t j=0;j<_ndims*_ndims;j++)
-          defrag_metric[i*_ndims*_ndims+j] = metric[nid*_ndims*_ndims+j];
+        for(size_t j=0;j<ndims;j++)
+          defrag_coords[i*ndims+j] = _coords[nid*ndims+j];
+        for(size_t j=0;j<ndims*ndims;j++)
+          defrag_metric[i*ndims*ndims+j] = metric[nid*ndims*ndims+j];
 #ifdef _OPENMP
         node_towner[i] = omp_get_thread_num();
 #else
@@ -166,10 +212,10 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Add a new vertex
   index_t append_vertex(const real_t *x, const real_t *m){
-    for(size_t i=0;i<_ndims;i++)
+    for(size_t i=0;i<ndims;i++)
       _coords.push_back(x[i]);
 
-    for(size_t i=0;i<_ndims*_ndims;i++)
+    for(size_t i=0;i<ndims*ndims;i++)
       metric.push_back(m[i]);
 
     node_towner.push_back(0);
@@ -181,7 +227,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Add a new element
   index_t append_element(const int *n){
-    for(size_t i=0;i<_nloc;i++)
+    for(size_t i=0;i<nloc;i++)
       _ENList.push_back(n[i]);
 
     element_towner.push_back(0);
@@ -193,13 +239,13 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Erase an element
   void erase_element(const index_t eid){
-    for(size_t i=0;i<_nloc;i++)
-      _ENList[eid*_nloc+i] = -1;
+    for(size_t i=0;i<nloc;i++)
+      _ENList[eid*nloc+i] = -1;
   }
 
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
-    assert(_NNodes == (_coords.size()/_ndims));
+    assert(_NNodes == (_coords.size()/ndims));
     return _NNodes;
   }
 
@@ -210,8 +256,15 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return the number of spatial dimensions.
   int get_number_dimensions() const{
-    return _ndims;
+    return ndims;
   }
+
+#ifdef HAVE_MPI
+  /// Return the MPI communicator.
+  MPI_Comm get_mpi_comm() const{
+    return _mpi_comm;
+  }
+#endif
 
   /// Return the thread that ownes the node.
   int get_node_towner(int i) const{
@@ -229,7 +282,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return a pointer to the element-node list.
   const int *get_element(size_t eid) const{
-    return &(_ENList[eid*_nloc]);
+    return &(_ENList[eid*nloc]);
   }
 
   /// Return the node id's connected to the specified node_id
@@ -268,13 +321,13 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return positions vector.
   const real_t *get_coords(size_t nid) const{
-    return &(_coords[nid*_ndims]);
+    return &(_coords[nid*ndims]);
   }
 
   /// Return metric at that vertex.
   const real_t *get_metric(size_t nid) const{
     assert(metric.size()>0);
-    return &(metric[nid*_ndims*_ndims]);
+    return &(metric[nid*ndims*ndims]);
   }
 
   /// Return new local node number given on original node number.
@@ -307,29 +360,29 @@ template<typename real_t, typename index_t> class Mesh{
   /// Calculates the edge lengths in metric space.
   real_t calc_edge_length(index_t nid0, index_t nid1){
     real_t length=-1.0;
-    if(_ndims==2){
-      real_t ml00 = (metric[nid0*_ndims*_ndims]+metric[nid1*_ndims*_ndims])*0.5;
-      real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
-      real_t ml11 = (metric[nid0*_ndims*_ndims+3]+metric[nid1*_ndims*_ndims+3])*0.5;
+    if(ndims==2){
+      real_t ml00 = (metric[nid0*ndims*ndims]+metric[nid1*ndims*ndims])*0.5;
+      real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
+      real_t ml11 = (metric[nid0*ndims*ndims+3]+metric[nid1*ndims*ndims+3])*0.5;
       
-      real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
-      real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
+      real_t x=_coords[nid1*ndims]-_coords[nid0*ndims];
+      real_t y=_coords[nid1*ndims+1]-_coords[nid0*ndims+1];
       
       length = sqrt((ml01*x + ml11*y)*y + 
                     (ml00*x + ml01*y)*x);
     }else{
-      real_t ml00 = (metric[nid0*_ndims*_ndims  ]+metric[nid1*_ndims*_ndims  ])*0.5;
-      real_t ml01 = (metric[nid0*_ndims*_ndims+1]+metric[nid1*_ndims*_ndims+1])*0.5;
-      real_t ml02 = (metric[nid0*_ndims*_ndims+2]+metric[nid1*_ndims*_ndims+2])*0.5;
+      real_t ml00 = (metric[nid0*ndims*ndims  ]+metric[nid1*ndims*ndims  ])*0.5;
+      real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
+      real_t ml02 = (metric[nid0*ndims*ndims+2]+metric[nid1*ndims*ndims+2])*0.5;
       
-      real_t ml11 = (metric[nid0*_ndims*_ndims+4]+metric[nid1*_ndims*_ndims+4])*0.5;
-      real_t ml12 = (metric[nid0*_ndims*_ndims+5]+metric[nid1*_ndims*_ndims+5])*0.5;
+      real_t ml11 = (metric[nid0*ndims*ndims+4]+metric[nid1*ndims*ndims+4])*0.5;
+      real_t ml12 = (metric[nid0*ndims*ndims+5]+metric[nid1*ndims*ndims+5])*0.5;
       
-      real_t ml22 = (metric[nid0*_ndims*_ndims+8]+metric[nid1*_ndims*_ndims+8])*0.5;
+      real_t ml22 = (metric[nid0*ndims*ndims+8]+metric[nid1*ndims*ndims+8])*0.5;
       
-      real_t x=_coords[nid1*_ndims]-_coords[nid0*_ndims];
-      real_t y=_coords[nid1*_ndims+1]-_coords[nid0*_ndims+1];
-      real_t z=_coords[nid1*_ndims+2]-_coords[nid0*_ndims+2];
+      real_t x=_coords[nid1*ndims]-_coords[nid0*ndims];
+      real_t y=_coords[nid1*ndims+1]-_coords[nid0*ndims+1];
+      real_t z=_coords[nid1*ndims+2]-_coords[nid0*ndims+2];
       
       length = sqrt((ml02*x + ml12*y + ml22*z)*z + 
                     (ml01*x + ml11*y + ml12*z)*y + 
@@ -357,74 +410,157 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend class VTKTools;
 
-  void _init(int NNodes, int NElements, const index_t *ENList,
-             const real_t *x, const real_t *y, const real_t *z){
+  void _init(int NNodes, int NElements, const index_t *globalENList,
+             const real_t *x, const real_t *y, const real_t *z,
+             const index_t *lnn2gnn, const index_t *owner_range){
+    mpi_nparts = 1;
+    int rank=0;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      MPI_Comm_size(_mpi_comm, &mpi_nparts);
+      MPI_Comm_rank(_mpi_comm, &rank);
+    }
+#endif
+
+    numa_nparts = 1;
+#ifdef HAVE_LIBNUMA
+    numa_nparts =numa_max_node()+1;
+#endif
+    
     int etype;
     if(z==NULL){
-      _nloc = 3;
-      _ndims = 2;
-      etype = 1; // triangles
+      nloc = 3;
+      ndims = 2;
+      etype = 1; // METIS: triangles
     }else{
-      _nloc = 4;
-      _ndims = 3;
-      etype = 2; // tetrahedra
+      nloc = 4;
+      ndims = 3;
+      etype = 2; // METIS: tetrahedra
     }
 
     _NNodes = NNodes;
     _NElements = NElements;
-    _ENList.resize(_NElements*_nloc);
-    _coords.resize(_NNodes*_ndims);
+
+    // From the globalENList, create the halo and a local ENList if mpi_nparts>1.
+    // ... create halo here
+    const index_t *ENList;
+    std::map<index_t, index_t> gnn2lnn;
+    if(mpi_nparts==1){
+      ENList = globalENList;
+    }else{
+      assert(lnn2gnn!=NULL);
+      for(size_t i=0;i<_NNodes;i++){
+        gnn2lnn[lnn2gnn[i]] = i;
+      }
+
+      std::vector< std::set<int> > recv_set(mpi_nparts);
+      index_t *localENList = new index_t[_NElements*nloc];
+      for(size_t i=0;i<_NElements*nloc;i++){
+        index_t gnn = globalENList[i];
+        for(int j=0;j<mpi_nparts;j++){
+          if(gnn<owner_range[j+1]){
+            if(j!=rank)
+              recv_set[j].insert(gnn);
+            break;
+          }
+        }
+        localENList[i] = gnn2lnn[gnn];
+      }
+      std::vector<int> recv_size(mpi_nparts);
+      recv.resize(mpi_nparts);
+      for(int j=0;j<mpi_nparts;j++){
+        for(typename std::set<int>::const_iterator it=recv_set[j].begin();it!=recv_set[j].end();++it){
+          recv[j].push_back(*it);
+        }
+        recv_size[j] = recv[j].size();
+      }
+      std::vector<int> send_size(mpi_nparts);
+      MPI_Alltoall(&(recv_size[0]), 1, MPI_INT,
+                   &(send_size[0]), 1, MPI_INT, _mpi_comm);
+      
+      // Setup non-blocking receives
+      send.resize(mpi_nparts);      
+      std::vector<MPI_Request> request(mpi_nparts*2);
+      for(int i=0;i<mpi_nparts;i++){
+        if((i==rank)||(send_size[i]==0)){
+          request[i] =  MPI_REQUEST_NULL;
+        }else{
+          send[i].resize(send_size[i]);
+          MPI_Irecv(&(send[i][0]), send_size[i], MPI_INT, i, 0, _mpi_comm, &(request[i]));
+        }
+      }
+      
+      // Non-blocking sends.
+      for(int i=0;i<mpi_nparts;i++){
+        if((i==rank)||(recv_size[i]==0)){
+          request[mpi_nparts+i] =  MPI_REQUEST_NULL;
+        }else{
+          MPI_Isend(&(recv[i][0]), recv_size[i], MPI_INT, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+        }
+      }
+      
+      std::vector<MPI_Status> status(mpi_nparts*2);
+      MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
+      MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+
+      for(int j=0;j<mpi_nparts;j++){
+        for(int k=0;k<recv_size[j];k++)
+          recv[j][k] = gnn2lnn[recv[j][k]];
+        
+        for(int k=0;k<send_size[j];k++)
+          send[j][k] = gnn2lnn[send[j][k]];
+      }
+
+      ENList = localENList;
+    }
+
+    _ENList.resize(_NElements*nloc);
+    _coords.resize(_NNodes*ndims);
 
     // Partition the nodes and elements so that the mesh can be
     // topologically mapped to the computer node topology. If we have
     // NUMA library dev support then we use the number of memory
     // nodes. Otherwise, play it save and use the number of threads.
-#ifdef HAVE_LIBNUMA
-    int nparts =numa_max_node()+1;
-#else
-    int nparts = 1;
-#endif
-
     std::vector<int> eid_new2old;
     std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
-    if(nparts>1){
+    if(numa_nparts>1){
       int numflag = 0;
       int edgecut;
       
-      std::vector<idxtype> metis_ENList(_NElements*_nloc);
-      for(size_t i=0;i<NElements*_nloc;i++)
+      std::vector<idxtype> metis_ENList(_NElements*nloc);
+      for(size_t i=0;i<NElements*nloc;i++)
         metis_ENList[i] = ENList[i];
-      METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
+      METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &numa_nparts,
                           &edgecut, &(epart[0]), &(npart[0]));
       metis_ENList.clear();
 
       // Create sets of nodes and elements in each partition
-      std::vector< std::deque<int> > nodes(nparts), elements(nparts);
+      std::vector< std::deque<int> > nodes(numa_nparts), elements(numa_nparts);
       for(int i=0;i<NNodes;i++)
         nodes[npart[i]].push_back(i);
       for(int i=0;i<NElements;i++)
         elements[epart[i]].push_back(i);
       
-      std::vector< std::set<int> > edomains(nparts);
+      std::vector< std::set<int> > edomains(numa_nparts);
       for(size_t i=0; i<_NElements; i++){
         edomains[epart[i]].insert(i);
       }
       
       // Create element renumbering
-      for(int i=0;i<nparts;i++){
+      for(int i=0;i<numa_nparts;i++){
         for(std::set<int>::const_iterator it=edomains[i].begin();it!=edomains[i].end();++it){
           eid_new2old.push_back(*it);
         }
       }
       
       // Create seperate graphs for each partition.
-      std::vector< std::map<index_t, std::set<index_t> > > pNNList(nparts);
+      std::vector< std::map<index_t, std::set<index_t> > > pNNList(numa_nparts);
       for(size_t i=0; i<_NElements; i++){
-        for(size_t j=0;j<_nloc;j++){
-          int jnid = ENList[i*_nloc+j];
+        for(size_t j=0;j<nloc;j++){
+          int jnid = ENList[i*nloc+j];
           int jpart = npart[jnid];
-          for(size_t k=j+1;k<_nloc;k++){
-            int knid = ENList[i*_nloc+k];
+          for(size_t k=j+1;k<nloc;k++){
+            int knid = ENList[i*nloc+k];
             int kpart = npart[knid];
             if(jpart!=kpart)
               continue;
@@ -435,7 +571,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
       
       // Renumber nodes within each partition.
-      for(int p=0;p<nparts;p++){
+      for(int p=0;p<numa_nparts;p++){
         // Create mapping from node numbering to local thread partition numbering, and it's inverse.
         std::map<index_t, index_t> nid2tnid;
         std::deque<index_t> tnid2nid(pNNList[p].size());
@@ -462,10 +598,10 @@ template<typename real_t, typename index_t> class Mesh{
     }else{
       std::vector< std::set<index_t> > lNNList(_NNodes);
       for(size_t i=0; i<_NElements; i++){
-        for(size_t j=0;j<_nloc;j++){
-          index_t nid_j = ENList[i*_nloc+j];
-          for(size_t k=j+1;k<_nloc;k++){
-            index_t nid_k = ENList[i*_nloc+k];
+        for(size_t j=0;j<nloc;j++){
+          index_t nid_j = ENList[i*nloc+j];
+          for(size_t k=j+1;k<nloc;k++){
+            index_t nid_k = ENList[i*nloc+k];
             lNNList[nid_j].insert(nid_k);
             lNNList[nid_k].insert(nid_j);
           }
@@ -491,23 +627,23 @@ template<typename real_t, typename index_t> class Mesh{
     {
 #pragma omp for schedule(static)
       for(int i=0;i<(int)_NElements;i++){
-        for(size_t j=0;j<_nloc;j++){
-          _ENList[i*_nloc+j] = nid_old2new[ENList[eid_new2old[i]*_nloc+j]];
+        for(size_t j=0;j<nloc;j++){
+          _ENList[i*nloc+j] = nid_old2new[ENList[eid_new2old[i]*nloc+j]];
         }
         element_towner[i] = epart[eid_new2old[i]];
       }
-      if(_ndims==2){
+      if(ndims==2){
 #pragma omp for schedule(static)
         for(int i=0;i<(int)_NNodes;i++){
-          _coords[i*_ndims  ] = x[nid_new2old[i]];
-          _coords[i*_ndims+1] = y[nid_new2old[i]];
+          _coords[i*ndims  ] = x[nid_new2old[i]];
+          _coords[i*ndims+1] = y[nid_new2old[i]];
         }
       }else{
 #pragma omp for schedule(static)
         for(int i=0;i<(int)_NNodes;i++){
-          _coords[i*_ndims  ] = x[nid_new2old[i]];
-          _coords[i*_ndims+1] = y[nid_new2old[i]];
-          _coords[i*_ndims+2] = z[nid_new2old[i]];
+          _coords[i*ndims  ] = x[nid_new2old[i]];
+          _coords[i*ndims+1] = y[nid_new2old[i]];
+          _coords[i*ndims+2] = z[nid_new2old[i]];
         }
       }
 #pragma omp for schedule(static)
@@ -515,7 +651,25 @@ template<typename real_t, typename index_t> class Mesh{
         node_towner[i] = npart[nid_new2old[i]];
     }
 
+    if(mpi_nparts>11){
+      delete [] ENList;
+    }
+
     create_adjancy();
+  }
+
+  void halo_update(real_t *vec, int block){
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized())
+      return;
+    
+    int rank;
+    MPI_Comm_rank(_mpi_comm, &rank);
+    std::vector< std::set<index_t> > send, recv;
+    for(size_t i=0;i<_NNodes;i++){
+      
+    }
+#endif
   }
 
   /// Create required adjancy lists.
@@ -526,13 +680,13 @@ template<typename real_t, typename index_t> class Mesh{
     NEList.resize(_NNodes);
     Edges.clear();
     for(size_t i=0; i<_NElements; i++){
-      for(size_t j=0;j<_nloc;j++){
-        index_t nid_j = _ENList[i*_nloc+j];
+      for(size_t j=0;j<nloc;j++){
+        index_t nid_j = _ENList[i*nloc+j];
         if(nid_j<0)
           break;
         NEList[nid_j].insert(i);
-        for(size_t k=j+1;k<_nloc;k++){
-          index_t nid_k = _ENList[i*_nloc+k];
+        for(size_t k=j+1;k<nloc;k++){
+          index_t nid_k = _ENList[i*nloc+k];
           NNList_set[nid_j].insert(nid_k);
           NNList_set[nid_k].insert(nid_j);
           
@@ -558,7 +712,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
 
-  size_t _NNodes, _NElements, _ndims, _nloc;
+  size_t _NNodes, _NElements, ndims, nloc;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
   
@@ -572,5 +726,12 @@ template<typename real_t, typename index_t> class Mesh{
 
   // Metric tensor field.
   std::vector<real_t> metric;
+
+  // Parallel support.
+  int mpi_nparts, numa_nparts;
+  std::vector< std::vector<int> > send, recv;
+#ifdef HAVE_MPI
+  MPI_Comm _mpi_comm;
+#endif
 };
 #endif

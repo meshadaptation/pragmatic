@@ -87,18 +87,17 @@ template<typename real_t, typename index_t> class VTKTools{
     }
     reader->Delete();
     
+    int nparts=1;
     Mesh<real_t, index_t> *mesh=NULL;
-    //        partition                    gnn       pnn
-    std::map< index_t, std::set< std::pair<index_t, index_t> > > halo;
+    std::vector<index_t> owner_range;
+    std::vector<index_t> lnn2gnn;
     { // Handle mpi parallel run.
-      int nparts=1;
       if(MPI::Is_initialized()){
         nparts = MPI::COMM_WORLD.Get_size();
       }
 
       if(nparts>1){
         std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
-        
         int rank = MPI::COMM_WORLD.Get_rank();
         if(rank==0){
           int numflag = 0, edgecut;
@@ -111,80 +110,77 @@ template<typename real_t, typename index_t> class VTKTools{
             metis_ENList[i] = ENList[i];
           int intNElements = NElements;
           int intNNodes = NNodes;
-          METIS_PartMeshNodal(&intNElements, &intNNodes, &(metis_ENList[0]), &etype, &numflag, &nparts,
-                              &edgecut, &(epart[0]), &(npart[0]));
+          METIS_PartMeshNodal(&intNElements, &intNNodes, &(metis_ENList[0]), &etype,
+                              &numflag, &nparts, &edgecut, &(epart[0]), &(npart[0]));
         }
         
         // This is a bug right here if idxtype is not of size int.
         MPI::COMM_WORLD.Bcast(&(epart[0]), NElements, MPI_INT, 0);
         MPI::COMM_WORLD.Bcast(&(npart[0]), NNodes, MPI_INT, 0);
         
-        std::deque<index_t> node_partition;
+        // Seperate out owned nodes.
+        std::vector< std::deque<index_t> > node_partition(nparts);
         for(size_t i=0;i<NNodes;i++)
-          if(npart[i]==rank)
-            node_partition.push_back(i);
-        
+          node_partition[npart[i]].push_back(i);
+
+        std::map<index_t, index_t> renumber;
+        {
+          index_t pos=0;
+          owner_range.push_back(0);
+          for(int i=0;i<nparts;i++){
+            int pNNodes = node_partition[i].size();
+            owner_range.push_back(owner_range[i]+pNNodes);
+            for(int j=0;j<pNNodes;j++)
+              renumber[node_partition[i][j]] = pos++;
+          }
+        }
         std::deque<index_t> element_partition;
+        std::set<index_t> halo_nodes;
         for(size_t i=0;i<NElements;i++){
-          if(epart[i]==rank)
-            element_partition.push_back(i);
-          
           std::set<index_t> residency;
           for(int j=0;j<nloc;j++)
             residency.insert(npart[ENList[i*nloc+j]]);
           
-          if((residency.count(rank)>0)&&(residency.size()>1)){
-            if(epart[i]!=rank)
-              element_partition.push_back(i);
+          if(residency.count(rank)){
+            element_partition.push_back(i);
             
             for(int j=0;j<nloc;j++){
               index_t nid = ENList[i*nloc+j];
-              int owner = npart[nid];
-              if(owner!=rank)
-                halo[owner].insert(std::pair<index_t, index_t>(nid, -1));
+              if(npart[nid]!=rank)
+                halo_nodes.insert(nid);
             }
           }
         }
-
-        // Append halo nodes.
-        for(typename std::map<index_t, std::set< std::pair<index_t, index_t> > >::iterator it=halo.begin();it!=halo.end();++it){
-          for(typename std::set< std::pair<index_t, index_t> >::iterator jt=it->second.begin();jt!=it->second.end();++jt){
-            node_partition.push_back(jt->first);
-          }
+        
+        // Append halo nodes to local node partition.
+        for(typename std::set<index_t>::const_iterator it=halo_nodes.begin();it!=halo_nodes.end();++it){
+          node_partition[rank].push_back(*it);
         }
         
         // Global numbering to partition numbering look up table.
-        NNodes = node_partition.size();
-        std::map<index_t, index_t> gnn2pnn; 
-        for(size_t i=0;i<NNodes;i++)
-          gnn2pnn[node_partition[i]] = i;
-        
-        // Add partitioning numbering to halo.
-        for(typename std::map<index_t, std::set< std::pair<index_t, index_t> > >::iterator it=halo.begin();it!=halo.end();++it){
-          for(typename std::set< std::pair<index_t, index_t> >::iterator jt=it->second.begin();jt!=it->second.end();){
-            std::pair<index_t, index_t> new_pair(jt->first, gnn2pnn[jt->first]);
-            typename std::set< std::pair<index_t, index_t> >::iterator old_pair = jt++;
-            it->second.erase(old_pair);
-            it->second.insert(new_pair);
-          }
+        NNodes = node_partition[rank].size();
+        std::map<index_t, index_t> gnn2lnn;
+        lnn2gnn.resize(NNodes);
+        for(size_t i=0;i<NNodes;i++){
+          index_t gnn = renumber[node_partition[rank][i]];
+          gnn2lnn[gnn] = i;
+          lnn2gnn[i] = gnn;
         }
         
         // Construct local mesh.
         std::vector<real_t> lx(NNodes), ly(NNodes), lz(NNodes);
         for(size_t i=0;i<NNodes;i++){
-          lx[i] = x[node_partition[i]];
-          ly[i] = y[node_partition[i]];
+          lx[i] = x[node_partition[rank][i]];
+          ly[i] = y[node_partition[rank][i]];
           if(ndims==3)
-            lz[i] = z[node_partition[i]];
+            lz[i] = z[node_partition[rank][i]];
         }
         
         NElements = element_partition.size();
         std::vector<index_t> lENList(NElements*nloc);
         for(size_t i=0;i<NElements;i++){
           for(int j=0;j<nloc;j++){
-            index_t nid = gnn2pnn[ENList[element_partition[i]*nloc+j]];
-            assert(nid>=0);
-            assert(nid<(index_t)NNodes);
+            index_t nid = renumber[ENList[element_partition[i]*nloc+j]];
             lENList[i*nloc+j] = nid;
           }
         }
@@ -195,16 +191,30 @@ template<typename real_t, typename index_t> class VTKTools{
         if(ndims==3)
           z.swap(lz);
         ENList.swap(lENList);
-
-        std::cout<<"rank "<<rank<<" : "<<NNodes<<", "<<NElements<<std::endl;
       }
     }
-    
+
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      MPI_Comm comm = MPI_COMM_WORLD;
+      if(ndims==2)
+        mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]),
+                                         &(lnn2gnn[0]), &(owner_range[0]), comm);
+      else
+        mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]),
+                                         &(lnn2gnn[0]), &(owner_range[0]), comm);
+    }else{
+      if(ndims==2)
+        mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+      else
+        mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+    }
+#else
     if(ndims==2)
       mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
     else
       mesh = new Mesh<real_t, index_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
-    std::cout<<"imported mesh\n";
+#endif
 
     return mesh;
   }

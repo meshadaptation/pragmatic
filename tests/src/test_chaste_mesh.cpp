@@ -163,7 +163,7 @@ int main(int argc, char **argv){
   }
 
   vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("../data/test_chaste_mesh.vtu");
+  writer->SetFileName("../data/test_chaste_mesh");
   writer->SetInput(ug);
   writer->Write();
 
