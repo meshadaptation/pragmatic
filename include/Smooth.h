@@ -281,7 +281,7 @@ template<typename real_t, typename index_t>
       int coids_size = coids->size();
       
       delete coids;
-      delete patch;
+       delete patch;
       
       if(coids_size>1){
         // Test if this is a corner node, in which case it cannot be moved.
@@ -600,15 +600,12 @@ template<typename real_t, typename index_t>
 
     int NNodes = _mesh->get_number_elements();
     std::vector<index_t> colour(NNodes, -1);
-    if(omp_get_max_threads()>1)
-      Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
     
     for(int i=0;i<NNodes;i++){
-      if(colour[i]<0)
+      if((colour[i]<0)||(_mesh->is_halo_node(i)))
         continue;
-      
-      if(!_mesh->is_halo_node(i))
-        colour_sets[colour[i]].push_back(i);
+      colour_sets[colour[i]].push_back(i);
     }
 
     return;
