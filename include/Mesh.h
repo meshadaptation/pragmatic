@@ -651,7 +651,18 @@ template<typename real_t, typename index_t> class Mesh{
         node_towner[i] = npart[nid_new2old[i]];
     }
 
-    if(mpi_nparts>11){
+    if(mpi_nparts>1){
+      // Take into account renumbering for halo.
+      for(int j=0;j<mpi_nparts;j++){
+        for(size_t k=0;k<recv[j].size();k++)
+          recv[j][k] = nid_old2new[recv[j][k]];
+        
+        for(size_t k=0;k<send[j].size();k++)
+          send[j][k] = nid_old2new[send[j][k]];
+      }
+    }
+
+    if(mpi_nparts>1){
       delete [] ENList;
     }
 
@@ -660,14 +671,48 @@ template<typename real_t, typename index_t> class Mesh{
 
   void halo_update(real_t *vec, int block){
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized())
+    if(!MPI::Is_initialized())
       return;
     
     int rank;
     MPI_Comm_rank(_mpi_comm, &rank);
-    std::vector< std::set<index_t> > send, recv;
-    for(size_t i=0;i<_NNodes;i++){
-      
+    
+    std::vector< std::vector<real_t> > recv_buff(mpi_nparts);
+    
+    // Setup non-blocking receives
+    std::vector<MPI_Request> request(mpi_nparts*2);
+    for(int i=0;i<mpi_nparts;i++){
+      if((i==rank)||(recv[i].size()==0)){
+        request[i] =  MPI_REQUEST_NULL;
+      }else{
+        recv_buff[i].resize(recv[i].size()*block);  
+        MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[i]));
+      }
+    }
+    
+    // Non-blocking sends.
+    std::vector< std::vector<real_t> > send_buff(mpi_nparts);
+    for(int i=0;i<mpi_nparts;i++){
+      if((i==rank)||(send[i].size()==0)){
+        request[mpi_nparts+i] = MPI_REQUEST_NULL;
+      }else{
+        for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
+          for(int j=0;j<block;j++){
+            send_buff[i].push_back(vec[(*it)*block+j]);
+          }
+        MPI_Isend(&(send_buff[i][0]), send_buff.size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+      }
+    }
+    
+    std::vector<MPI_Status> status(mpi_nparts*2);
+    MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
+    MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+    
+    for(int i=0;i<mpi_nparts;i++){
+      int k=0;
+      for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
+        for(int j=0;j<block;j++)
+          vec[(*it)*block+j] = recv_buff[i][k*block+j];
     }
 #endif
   }

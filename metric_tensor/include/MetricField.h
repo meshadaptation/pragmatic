@@ -148,6 +148,8 @@ template<typename real_t, typename index_t>
       }
     }
 
+    // _mesh->halo_update(&(_mesh->metric[0]), _ndims*_ndims);
+
     _mesh->calc_edge_lengths();
   }
 
