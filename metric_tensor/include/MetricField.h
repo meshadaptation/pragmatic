@@ -76,11 +76,20 @@ template<typename real_t, typename index_t>
     _mesh = &mesh;
 
     if(_ndims==2){
-      real_t bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
+      double bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
       for(int i=1;i<_NNodes;i++){
         bbox[0] = min(bbox[0], get_x(i)); bbox[1] = max(bbox[1], get_x(i));
         bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
       }
+#ifdef HAVE_MPI
+      if(MPI::Is_initialized()){
+        MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
+        MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
+        
+        MPI_Allreduce(&(bbox[2]), &(bbox[2]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
+        MPI_Allreduce(&(bbox[3]), &(bbox[3]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
+      }
+#endif
       _metric = new MetricTensor<real_t>[_NNodes];
       // Enforce first-touch policy
 #pragma omp parallel
@@ -98,6 +107,18 @@ template<typename real_t, typename index_t>
         bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
         bbox[4] = min(bbox[4], get_z(i)); bbox[5] = max(bbox[5], get_z(i));
       }
+#ifdef HAVE_MPI
+      if(MPI::Is_initialized()){
+        MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
+        MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
+        
+        MPI_Allreduce(&(bbox[2]), &(bbox[2]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
+        MPI_Allreduce(&(bbox[3]), &(bbox[3]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
+
+        MPI_Allreduce(&(bbox[4]), &(bbox[4]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
+        MPI_Allreduce(&(bbox[5]), &(bbox[5]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
+      }
+#endif
       _metric = new MetricTensor<real_t>[_NNodes];
       // Enforce first-touch policy
 #pragma omp parallel
@@ -148,7 +169,8 @@ template<typename real_t, typename index_t>
       }
     }
 
-    // _mesh->halo_update(&(_mesh->metric[0]), _ndims*_ndims);
+    // Halo update if parallel
+    _mesh->halo_update(&(_mesh->metric[0]), _ndims*_ndims);
 
     _mesh->calc_edge_lengths();
   }

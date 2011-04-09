@@ -607,7 +607,8 @@ template<typename real_t, typename index_t>
       if(colour[i]<0)
         continue;
       
-      colour_sets[colour[i]].push_back(i);
+      if(!_mesh->is_halo_node(i))
+        colour_sets[colour[i]].push_back(i);
     }
 
     return;

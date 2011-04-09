@@ -335,6 +335,11 @@ template<typename real_t, typename index_t> class Mesh{
     return nid_new2old[nid];
   }
 
+  /// Returns true if the node is in the halo.
+  bool is_halo_node(int nid){
+    return halo.count(nid)>0;
+  }
+
   /// Default destructor.
   ~Mesh(){
   }
@@ -442,7 +447,6 @@ template<typename real_t, typename index_t> class Mesh{
     _NElements = NElements;
 
     // From the globalENList, create the halo and a local ENList if mpi_nparts>1.
-    // ... create halo here
     const index_t *ENList;
     std::map<index_t, index_t> gnn2lnn;
     if(mpi_nparts==1){
@@ -654,11 +658,16 @@ template<typename real_t, typename index_t> class Mesh{
     if(mpi_nparts>1){
       // Take into account renumbering for halo.
       for(int j=0;j<mpi_nparts;j++){
-        for(size_t k=0;k<recv[j].size();k++)
-          recv[j][k] = nid_old2new[recv[j][k]];
-        
-        for(size_t k=0;k<send[j].size();k++)
-          send[j][k] = nid_old2new[send[j][k]];
+        for(size_t k=0;k<recv[j].size();k++){
+          int nid = nid_old2new[recv[j][k]];
+          recv[j][k] = nid;
+          halo.insert(nid);
+        }
+        for(size_t k=0;k<send[j].size();k++){
+          int nid = nid_old2new[send[j][k]];
+          send[j][k] = nid;
+          halo.insert(nid);
+        }
       }
     }
 
@@ -676,11 +685,12 @@ template<typename real_t, typename index_t> class Mesh{
     
     int rank;
     MPI_Comm_rank(_mpi_comm, &rank);
-    
-    std::vector< std::vector<real_t> > recv_buff(mpi_nparts);
-    
-    // Setup non-blocking receives
+
+    // MPI_Requests for all non-blocking communications.
     std::vector<MPI_Request> request(mpi_nparts*2);
+    
+    // Setup non-blocking receives.
+    std::vector< std::vector<real_t> > recv_buff(mpi_nparts);
     for(int i=0;i<mpi_nparts;i++){
       if((i==rank)||(recv[i].size()==0)){
         request[i] =  MPI_REQUEST_NULL;
@@ -700,7 +710,7 @@ template<typename real_t, typename index_t> class Mesh{
           for(int j=0;j<block;j++){
             send_buff[i].push_back(vec[(*it)*block+j]);
           }
-        MPI_Isend(&(send_buff[i][0]), send_buff.size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
       }
     }
     
@@ -775,6 +785,8 @@ template<typename real_t, typename index_t> class Mesh{
   // Parallel support.
   int mpi_nparts, numa_nparts;
   std::vector< std::vector<int> > send, recv;
+  std::set<int> halo;
+
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
 #endif
