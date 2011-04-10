@@ -122,8 +122,8 @@ template<typename real_t, typename index_t> class Coarsen{
    * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
    */
   int coarsen_kernel(index_t rm_vertex, real_t L_low, real_t L_max){    
-    // If this is a corner vertex then return immediately.
-    if(_surface->is_corner_vertex(rm_vertex))
+    // If this is a corner vertex then return immediately or a halo node.
+    if(_surface->is_corner_vertex(rm_vertex)||_mesh->is_halo_node(rm_vertex))
       return -1;
     
     // Identify edge to be removed. We choose the shortest edge.

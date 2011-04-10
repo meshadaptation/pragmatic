@@ -29,8 +29,8 @@
 #include <iostream>
 #include <vector>
 
-#include <stdlib.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -45,21 +45,21 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 
-#include "Smooth.h"
+#include "Coarsen.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);
-
+  
   // Undo some MPI init shenanigans.
   if(chdir(getenv("PWD"))){
     perror("");
     exit(-1);
   }
-
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -67,35 +67,28 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 3) + pow(mesh->get_coords(i)[1], 3);
-  
-  metric_field.add_field(&(psi[0]), 0.6);
-
-  size_t NElements = mesh->get_number_elements();
-
-  metric_field.apply_nelements(NElements);
+  vector<double> psi(NNodes, 0);
+  metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
   
-  Smooth<double, int> smooth(*mesh, surface);
+  Coarsen<double, int> adapt(*mesh, surface);
+
   double tic = omp_get_wtime();
-  int niterations = smooth.smooth(1.0e-4, 500);
+  adapt.coarsen(0.4, sqrt(2));
   double toc = omp_get_wtime();
-
-  mesh->calc_edge_lengths();
-
-  VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_2d_surface", &surface);
+  
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+  
+  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_3d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_3d_surface", &surface);
 
   delete mesh;
 
   if(MPI::COMM_WORLD.Get_rank()==0){
-    std::cout<<"Smooth loop time = "<<toc-tic<<std::endl;
-    if(niterations<80)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+    std::cout<<"Coarsen time = "<<toc-tic<<std::endl;
+    std::cout<<"pass"<<std::endl;
   }
 
   MPI::Finalize();
