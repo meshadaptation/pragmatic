@@ -433,7 +433,7 @@ template<typename real_t, typename index_t> class Refine{
 #ifdef HAVE_MPI
     // All edges have been refined. Time to reconstruct the halo.
     if(nprocs>1){
-      typename std::map< int, std::vector<int> > send_buffer, recv_buffer;      
+      typename std::vector< std::vector<int> > send_buffer(nprocs), recv_buffer(nprocs);      
       for(typename std::map<int, std::set< Edge<real_t, index_t> > >::const_iterator rh=new_recv_halo.begin();rh!=new_recv_halo.end();++rh){
         int proc = rh->first;
         for(typename std::set< Edge<real_t, index_t> >::const_iterator ed=rh->second.begin();ed!=rh->second.end();++ed){
@@ -462,7 +462,7 @@ template<typename real_t, typename index_t> class Refine{
       // Setup non-blocking receives
       std::vector<MPI_Request> request(nprocs*2);
       for(int i=0;i<nprocs;i++){
-        if(send_buffer_size[i]==0){
+        if(recv_buffer_size[i]==0){
           request[i] =  MPI_REQUEST_NULL;
         }else{
           recv_buffer[i].resize(recv_buffer_size[i]);
@@ -486,7 +486,10 @@ template<typename real_t, typename index_t> class Refine{
       // Unpack halo's
       for(int i=0;i<nprocs;i++){
         for(int j=0;j<recv_buffer_size[i];j+=2){
+          assert(gnn2lnn.count(recv_buffer[i][j]));
           index_t lnn0 = gnn2lnn[recv_buffer[i][j]];
+          
+          assert(gnn2lnn.count(recv_buffer[i][j+1]));
           index_t lnn1 = gnn2lnn[recv_buffer[i][j+1]];
 
           index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
@@ -672,7 +675,9 @@ template<typename real_t, typename index_t> class Refine{
     // Fix orientations of new elements.
     for(int i=NElements;i<_mesh->get_number_elements();i++){
       int *n=&(_mesh->_ENList[i*nloc]);
-      
+      if(n[0]<0)
+        continue;
+
       real_t av;
       if(ndims==2)
         av = property->area(_mesh->get_coords(n[0]),
