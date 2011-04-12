@@ -727,6 +727,55 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
   }
 
+  void halo_update(index_t *vec, int block){
+#ifdef HAVE_MPI
+    if(mpi_nparts<2)
+      return;
+    
+    int rank;
+    MPI_Comm_rank(_mpi_comm, &rank);
+
+    // MPI_Requests for all non-blocking communications.
+    std::vector<MPI_Request> request(mpi_nparts*2);
+    
+    // Setup non-blocking receives.
+    std::vector< std::vector<index_t> > recv_buff(mpi_nparts);
+    for(int i=0;i<mpi_nparts;i++){
+      if((i==rank)||(recv[i].size()==0)){
+        request[i] =  MPI_REQUEST_NULL;
+      }else{
+        recv_buff[i].resize(recv[i].size()*block);  
+        MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), MPI_INT, i, 0, _mpi_comm, &(request[i]));
+      }
+    }
+    
+    // Non-blocking sends.
+    std::vector< std::vector<index_t> > send_buff(mpi_nparts);
+    for(int i=0;i<mpi_nparts;i++){
+      if((i==rank)||(send[i].size()==0)){
+        request[mpi_nparts+i] = MPI_REQUEST_NULL;
+      }else{
+        for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
+          for(int j=0;j<block;j++){
+            send_buff[i].push_back(vec[(*it)*block+j]);
+          }
+        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_INT, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+      }
+    }
+    
+    std::vector<MPI_Status> status(mpi_nparts*2);
+    MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
+    MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+    
+    for(int i=0;i<mpi_nparts;i++){
+      int k=0;
+      for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
+        for(int j=0;j<block;j++)
+          vec[(*it)*block+j] = recv_buff[i][k*block+j];
+    }
+#endif
+  }
+
   /// Create required adjancy lists.
   void create_adjancy(){
     // Create new NNList, NEList and edges
