@@ -399,11 +399,16 @@ template<typename real_t, typename index_t> class Mesh{
   real_t maximal_edge_length(){
     calc_edge_lengths();
     
-    real_t L_max=0;
+    double L_max=0;
     for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin();it!=Edges.end();++it){
-      L_max = std::max(L_max, it->length);
+      L_max = std::max(L_max, (double)it->length);
     }
     
+#ifdef HAVE_MPI
+    if(mpi_nparts>1)
+      MPI_Allreduce(&L_max, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+#endif
+
     return L_max;
   }
 

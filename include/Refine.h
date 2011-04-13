@@ -94,7 +94,7 @@ template<typename real_t, typename index_t> class Refine{
       int refine_cnt = refine_level(L_max);
       _mesh->create_adjancy();
       _mesh->calc_edge_lengths();
-      
+
       if(refine_cnt==0)
         break;
     }
@@ -449,6 +449,8 @@ template<typename real_t, typename index_t> class Refine{
           index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
           
           _mesh->recv[proc].push_back(lnn);
+          _mesh->halo.insert(lnn);
+
           node_owner[lnn] = proc;
         }
       }
@@ -494,6 +496,7 @@ template<typename real_t, typename index_t> class Refine{
 
           index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
           _mesh->send[i].push_back(lnn);
+          _mesh->halo.insert(lnn);
         }
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
