@@ -232,11 +232,25 @@ template<typename real_t, typename index_t>
       }
     }else{      
       for(int i=0;i<lNSElements;i++){
-        // Check if this element has been erased - if so continue to next element.
+        /* Check if this element has been erased - if so continue to
+           next element.*/
         int *n=&(SENList[i*snloc]);
         if(n[0]<0)
           continue;
-        
+    
+        /* Delete this facet if it's parent element has been deleted.*/
+        bool erase_facet=true;
+        for(size_t j=0;j<3;j++)
+          if(!_mesh->is_halo_node(n[j])){
+            erase_facet = false;
+            break;
+          }
+        if(erase_facet){
+          for(size_t j=0;j<3;j++)
+            n[j] = -1;
+          continue;
+        }
+
         std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
         for(size_t j=0;j<3;j++)
           for(size_t k=j+1;k<3;k++){
