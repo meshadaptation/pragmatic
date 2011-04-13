@@ -64,8 +64,8 @@ int main(int argc, char **argv){
     rank = MPI::COMM_WORLD.Get_rank();
     nprocs = MPI::COMM_WORLD.Get_size();
   }
-  
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -75,7 +75,10 @@ int main(int argc, char **argv){
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
+    psi[i] = 
+      pow(mesh->get_coords(i)[0], 4) + 
+      pow(mesh->get_coords(i)[1], 4) + 
+      pow(mesh->get_coords(i)[2], 4);
   
   metric_field.add_field(&(psi[0]), 0.01);
   metric_field.update_mesh();
@@ -87,13 +90,13 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"Coarsen1: "<<omp_get_wtime()-start_tic<<std::endl;
   
   start_tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
   int iter = smooth.smooth(1.0e-1, 100);
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
   
   double L_max = mesh->maximal_edge_length();
@@ -138,13 +141,13 @@ int main(int argc, char **argv){
   iter = smooth.smooth(1.0e-5, 100, true);
   if(rank==0)
     std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
-  
+    
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  VTKTools<double, int>::export_vtu("../data/test_mpi_adapt_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_adapt_2d_surface", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_mpi_adapt_3d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_mpi_adapt_3d_surface", &surface);
   
   delete mesh;
   
