@@ -79,6 +79,7 @@ int main(int argc, char **argv){
 
   int adapt_iter=0;
   double alpha = sqrt(2)/2;
+  Refine<double, int> refine(*mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
     
@@ -88,7 +89,6 @@ int main(int argc, char **argv){
              <<"Num elements = "<<mesh->get_number_elements()<<std::endl;
 
     start_tic = omp_get_wtime();
-    Refine<double, int> refine(*mesh, surface);
     refine.refine(L_ref);
     std::cout<<"Refine: "<<omp_get_wtime()-start_tic<<std::endl;
     
