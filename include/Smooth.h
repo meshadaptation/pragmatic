@@ -311,7 +311,7 @@ template<typename real_t, typename index_t>
           tol = min_l;
           best_e = *ie;
         }
-        if(tol>=0){
+        if(tol<0){ // ie found at least one inverted element
           break;
         }
       }
@@ -324,7 +324,7 @@ template<typename real_t, typename index_t>
     }
     if((l[0]<0)||(l[1]<0)||(l[2]<0))
       return;
-    
+
     {
       const index_t *n=_mesh->get_element(best_e);
       assert(n[0]>=0);
