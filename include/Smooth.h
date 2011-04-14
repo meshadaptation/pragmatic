@@ -290,10 +290,19 @@ template<typename real_t, typename index_t>
     }
     
     // Interpolate metric at this new position.
-    real_t mp[4], l[3];
-    int best_e=*_mesh->NEList[node].begin();
-    for(size_t b=0;b<5;b++){
+    real_t mp[4], l[3], L;
+    int best_e;
+    bool inverted;
+    // 5 bisections along the search line
+    for(size_t bisections=0;bisections<5;bisections++){
+      // Reset values
+      for(int i=0;i<3;i++)
+        l[i]=-1.0;
+      L=-1;
+      best_e=-1;
+      inverted=false;
       real_t tol=-1;
+
       for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
         const index_t *n=_mesh->get_element(*ie);
         assert(n[0]>=0);
@@ -302,40 +311,61 @@ template<typename real_t, typename index_t>
         const real_t *x1 = _mesh->get_coords(n[1]);
         const real_t *x2 = _mesh->get_coords(n[2]);
         
-        l[0] = property->area(p,  x1, x2);
-        l[1] = property->area(x0, p,  x2);
-        l[2] = property->area(x0, x1, p);
-        
-        real_t min_l = min(l[0], min(l[1], l[2]));
-        if(min_l>tol){
-          tol = min_l;
-          best_e = *ie;
+        /* Check for inversion by looking at the area of element who
+           node is being moved.*/
+        real_t area;
+        if(n[0]==node){
+          area = property->area(p, x1, x2);
+        }else if(n[1]==node){
+          area = property->area(x0, p, x2);
+        }else{
+          area = property->area(x0, x1, p);
         }
-        if(tol<0){ // ie found at least one inverted element
+        if(area<=0){
+          inverted = true;
           break;
         }
+        
+        real_t ll[3];
+        ll[0] = property->area(p,  x1, x2);
+        ll[1] = property->area(x0, p,  x2);
+        ll[2] = property->area(x0, x1, p);
+        
+        real_t min_l = min(ll[0], min(ll[1], ll[2]));
+        if(best_e<0){
+          tol = min_l;
+          best_e = *ie;
+          for(int i=0;i<3;i++)
+            l[i] = ll[i];
+          L = property->area(x0, x1, x2);
+        }else{
+          if(min_l>tol){
+            tol = min_l;
+            best_e = *ie;
+            for(int i=0;i<3;i++)
+              l[i] = ll[i];
+            L = property->area(x0, x1, x2);
+          }
+        }
       }
-      if(tol>=0){
-        break;
-      }else{
+      if(inverted){
         p[0] = (get_x(node)+p[0])/2;
         p[1] = (get_y(node)+p[1])/2;
+      }else{
+        break;
       }
     }
-    if((l[0]<0)||(l[1]<0)||(l[2]<0))
+    
+    if(inverted){
+      std::cout<<".";
       return;
+    }
 
+    assert(best_e>=0);
     {
       const index_t *n=_mesh->get_element(best_e);
       assert(n[0]>=0);
-
-      const real_t *x0 = _mesh->get_coords(n[0]);
-      const real_t *x1 = _mesh->get_coords(n[1]);
-      const real_t *x2 = _mesh->get_coords(n[2]);
-      real_t L = property->area(x0, x1, x2);
-      if(L<0){
-        std::cerr<<"negative area :: "<<node<<", "<<L<<std::endl;
-      }
+     
       for(size_t i=0;i<4;i++)
         mp[i] = (l[0]*_mesh->metric[n[0]*4+i]+
                  l[1]*_mesh->metric[n[1]*4+i]+
@@ -478,11 +508,19 @@ template<typename real_t, typename index_t>
     }
     
     // Interpolate metric at this new position.
-    real_t mp[9], l[4];
-    int best_e=*_mesh->NEList[node].begin();
+    real_t mp[9], l[4], L;
+    int best_e;
     bool inverted=false;
-    for(size_t bisections=0;bisections<5;bisections++){ // 5 bisections along the search line
+    // 5 bisections along the search line
+    for(size_t bisections=0;bisections<5;bisections++){ 
+      // Reset values
+      for(int i=0;i<4;i++)
+        l[i]=-1.0;
+      L=-1;
+      best_e=-1;
+      inverted=false;
       real_t tol=-1;
+
       for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
         const index_t *n=_mesh->get_element(*ie);
         assert(n[0]>=0);
@@ -498,31 +536,39 @@ template<typename real_t, typename index_t>
         
         real_t *r[4];
         for(int iloc=0;iloc<4;iloc++)
-          if(n[iloc]==(node)){
+          if(n[iloc]==node){
             r[iloc] = p;
           }else{
             r[iloc] = vectors+3*iloc;
           }
+        /* Check for inversion by looking at the volume of element who
+           node is being moved.*/
         real_t volume = property->volume(r[0], r[1], r[2], r[3]);
         if(volume<=0){
           inverted = true;
           break;
         }
         
-        if(tol<0){
-          real_t L = property->volume(x0, x1, x2, x3);
-          if(L<0)
-            std::cerr<<"negative volume :: "<<node<<", "<<L<<std::endl;
-          
-          l[0] = property->volume(p,  x1, x2, x3)/L;
-          l[1] = property->volume(x0, p,  x2, x3)/L;
-          l[2] = property->volume(x0, x1, p,  x3)/L;
-          l[3] = property->volume(x0, x1, x2, p)/L;
-          
-          real_t min_l = min(min(l[0], l[1]), min(l[2], l[3]));
+        real_t ll[4];
+        ll[0] = property->volume(p,  x1, x2, x3);
+        ll[1] = property->volume(x0, p,  x2, x3);
+        ll[2] = property->volume(x0, x1, p,  x3);
+        ll[3] = property->volume(x0, x1, x2, p);
+        
+        real_t min_l = min(min(ll[0], ll[1]), min(ll[2], ll[3]));
+        if(best_e<0){
+          tol = min_l;
+          best_e = *ie;
+          for(int i=0;i<4;i++)
+            l[i] = ll[i];
+          L = property->volume(x0, x1, x2, x3);
+        }else{
           if(min_l>tol){
             tol = min_l;
             best_e = *ie;
+            for(int i=0;i<4;i++)
+              l[i] = ll[i];
+            L = property->volume(x0, x1, x2, x3);
           }
         }
       }
@@ -544,10 +590,10 @@ template<typename real_t, typename index_t>
 
       for(size_t i=0;i<9;i++)
         mp[i] =
-          l[0]*_mesh->metric[n[0]*9+i]+
-          l[1]*_mesh->metric[n[1]*9+i]+
-          l[2]*_mesh->metric[n[2]*9+i]+
-          l[3]*_mesh->metric[n[3]*9+i];
+          (l[0]*_mesh->metric[n[0]*9+i]+
+           l[1]*_mesh->metric[n[1]*9+i]+
+           l[2]*_mesh->metric[n[2]*9+i]+
+           l[3]*_mesh->metric[n[3]*9+i])/L;
       
       MetricTensor<real_t>::positive_definiteness(3, mp);
     }
