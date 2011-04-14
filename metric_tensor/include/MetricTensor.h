@@ -123,6 +123,9 @@ class MetricTensor{
         metric[0], metric[1],
         metric[2], metric[3];
 
+      if(M2.isZero())
+        return;
+
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
 
       Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
@@ -137,6 +140,9 @@ class MetricTensor{
         metric[0], metric[1], metric[2],
         metric[3], metric[4], metric[5],
         metric[6], metric[7], metric[8];
+
+      if(M2.isZero())
+        return;
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
 
@@ -181,7 +187,6 @@ class MetricTensor{
       // The input matrix could be zero if there is zero curvature in the local solution.
       if(M2.isZero())
         return;
-
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver2(M2);
 
