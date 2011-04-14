@@ -123,7 +123,7 @@ class MetricTensor{
         metric[0], metric[1],
         metric[2], metric[3];
 
-      if(M2.isZero())
+      if(M.isZero())
         return;
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
@@ -141,7 +141,7 @@ class MetricTensor{
         metric[3], metric[4], metric[5],
         metric[6], metric[7], metric[8];
 
-      if(M2.isZero())
+      if(M.isZero())
         return;
 
       Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
