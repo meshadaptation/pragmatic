@@ -35,6 +35,7 @@
 #include <deque>
 #include <vector>
 #include <set>
+#include <cmath>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -50,6 +51,7 @@
 
 #include "Metis.h"
 #include "Edge.h"
+#include "ElementProperty.h"
 
 /*! \brief Manages mesh data.
  *
@@ -257,6 +259,47 @@ template<typename real_t, typename index_t> class Mesh{
   /// Return the number of spatial dimensions.
   int get_number_dimensions() const{
     return ndims;
+  }
+
+  /// Get the edge length RMS value in metric space, where the ideal edge length is unity.
+  real_t get_lrms(){
+    calc_edge_lengths();
+    
+    double rms=0;
+    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it){
+      rms+=pow(it->length - 1.0, 2);
+    }
+    int nedges = Edges.size();
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(&rms, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(&nedges, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+    }
+#endif
+    
+    rms = sqrt(rms/nedges);
+
+    return rms;
+  }
+
+  /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
+  real_t get_qrms() const{
+    real_t rms=0;
+    int nele=0;
+    for(size_t i=0;i<_NElements;i++){
+      const index_t *n=get_element(i);
+      if(n[0]<0)
+        continue;
+
+      real_t q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+      
+      rms += pow(q-1, 2);
+      nele++;
+    }
+    rms = sqrt(rms/nele);
+
+    return rms;
   }
 
 #ifdef HAVE_MPI
@@ -681,6 +724,25 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     create_adjancy();
+
+    // Set the orientation of elements.
+    property = NULL;
+    for(size_t i=0;i<_NElements;i++){
+      const int *n=get_element(i);
+      if(n[0]<0)
+        continue;
+      
+      if(ndims==2)
+        property = new ElementProperty<real_t>(get_coords(n[0]),
+                                               get_coords(n[1]),
+                                               get_coords(n[2]));
+      else
+        property = new ElementProperty<real_t>(get_coords(n[0]),
+                                               get_coords(n[1]),
+                                               get_coords(n[2]),
+                                               get_coords(n[3]));
+      break;
+    }
   }
 
   void halo_update(real_t *vec, int block){
@@ -832,6 +894,8 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector< std::set<index_t> > NEList;
   std::vector< std::deque<index_t> > NNList;
   std::set< Edge<real_t, index_t> > Edges;
+
+  ElementProperty<real_t> *property;
 
   // Metric tensor field.
   std::vector<real_t> metric;
