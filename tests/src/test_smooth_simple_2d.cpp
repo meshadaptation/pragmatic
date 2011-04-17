@@ -77,7 +77,6 @@ int main(int argc, char **argv){
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
   
-  mesh->calc_edge_lengths();
   VTKTools<double, int>::export_vtu("../data/test_smooth_simple_2d", mesh);
   delete mesh;
 

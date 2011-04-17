@@ -49,12 +49,16 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
   
-  vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 3) +
-      pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
-
-  metric_field.add_field(&(psi[0]), 0.6);
+  for(size_t i=0;i<NNodes;i++){
+    double hx=0.025 + 0.09*mesh->get_coords(i)[0];
+    double hy=0.025 + 0.09*mesh->get_coords(i)[1];
+    double hz=0.025 + 0.09*mesh->get_coords(i)[2];
+    double m[] =
+      {1.0/pow(hx, 2), 0.0,            0.0,
+       0.0,            1.0/pow(hy, 2), 0.0,
+       0.0,            0.0,            1.0/pow(hz, 2)};
+    metric_field.set_metric(m, i);
+  }
 
   size_t NElements = mesh->get_number_elements();
   
@@ -63,15 +67,22 @@ int main(int argc, char **argv){
   
   Smooth<double, int> smooth(*mesh, surface);
   
-  double start_tic = omp_get_wtime();
+  double tic = omp_get_wtime();
   int niterations = smooth.smooth(1.0e-4, 500);
-  std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  double toc = omp_get_wtime();
+
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
   
-  mesh->calc_edge_lengths();
+  std::cout<<"Smooth loop time:     "<<toc-tic<<std::endl
+           <<"Number of iterations: "<<niterations<<std::endl
+           <<"Edge length RMS:      "<<lrms<<std::endl
+           <<"Quality RMS:          "<<qrms<<std::endl;
+  
   VTKTools<double, int>::export_vtu("../data/test_smooth_simple_3d", mesh);
   delete mesh;
-
-  if(niterations<100)
+  
+  if((niterations<60)&&(lrms<0.3)&&(qrms<2.5))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

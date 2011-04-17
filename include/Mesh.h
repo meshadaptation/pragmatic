@@ -291,9 +291,14 @@ template<typename real_t, typename index_t> class Mesh{
       if(n[0]<0)
         continue;
 
-      real_t q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
-                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-      
+      real_t q;
+      if(ndims==2)
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+      else
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+
       rms += pow(q-1, 2);
       nele++;
     }

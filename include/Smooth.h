@@ -256,10 +256,12 @@ template<typename real_t, typename index_t>
         coids.insert(_surface->get_coplanar_id(*e));
 
       if(coids.size()==1){
-        // We will need this later when making sure that point is on the surface to within roundoff.
+        /* We will need the normal later when making sure that point
+           is on the surface to within roundoff.*/
         normal = _surface->get_normal(*patch.begin());
 
-        std::set<index_t> adj_nodes_set;;
+        // Find the adjacent nodes that are on this surface.
+        std::set<index_t> adj_nodes_set;
         for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e){
           const index_t *facet = _surface->get_facet(*e);
           adj_nodes_set.insert(facet[0]);
@@ -473,64 +475,93 @@ template<typename real_t, typename index_t>
       }
       mean_q/=_mesh->NEList[node].size();
     }
-    real_t A00=0, A01=0, A02=0, A11=0, A12=0, A22=0, q0=0, q1=0, q2=0;
-    for(typename std::deque<index_t>::const_iterator il=_mesh->NNList[node].begin();il!=_mesh->NNList[node].end();++il){
-      real_t ml00 = 0.5*(_mesh->metric[node*9  ] + _mesh->metric[*il*9  ]);
-      real_t ml01 = 0.5*(_mesh->metric[node*9+1] + _mesh->metric[*il*9+1]);
-      real_t ml02 = 0.5*(_mesh->metric[node*9+2] + _mesh->metric[*il*9+2]);
-      real_t ml11 = 0.5*(_mesh->metric[node*9+4] + _mesh->metric[*il*9+4]);
-      real_t ml12 = 0.5*(_mesh->metric[node*9+5] + _mesh->metric[*il*9+5]);
-      real_t ml22 = 0.5*(_mesh->metric[node*9+8] + _mesh->metric[*il*9+8]);
-      
-      q0 += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
-      q1 += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
-      q2 += ml02*get_x(*il) + ml12*get_y(*il) + ml22*get_z(*il);
-      
-      A00 += ml00;
-      A01 += ml01;
-      A02 += ml02;
-      A11 += ml11;
-      A12 += ml12;
-      A22 += ml22;
-    }
-    // Want to solve the system Ap=q to find the new position, p.
-    real_t p[] = {-(((A01*A02/A00 - A12)*A01/((A01*A01/A00 - A11)*A00) - A02/A00)*(A01*A02/A00 - A12)/((A01*A01/A00 - A11)*(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)) - A01/((A01*A01/A00 - A11)*A00))*q1 + (pow((A01*A02/A00 - A12)*A01/((A01*A01/A00 - A11)*A00) - A02/A00, 2)/(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22) - A01*A01/((A01*A01/A00 - A11)*A00*A00) + 1/A00)*q0 + ((A01*A02/A00 - A12)*A01/((A01*A01/A00 - A11)*A00) - A02/A00)*q2/(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22),
-                  (pow(A01*A02/A00 - A12, 2)/(pow(A01*A01/A00 - A11, 2)*(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)) - 1/(A01*A01/A00 - A11))*q1 - (((A01*A02/A00 - A12)*A01/((A01*A01/A00 - A11)*A00) - A02/A00)*(A01*A02/A00 - A12)/((A01*A01/A00 - A11)*(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)) - A01/((A01*A01/A00 - A11)*A00))*q0 - (A01*A02/A00 - A12)*q2/((A01*A01/A00 - A11)*(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)),
-                  ((A01*A02/A00 - A12)*A01/((A01*A01/A00 - A11)*A00) - A02/A00)*q0/(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22) - (A01*A02/A00 - A12)*q1/((A01*A01/A00 - A11)*(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)) + q2/(pow(A01*A02/A00 - A12, 2)/(A01*A01/A00 - A11) - A02*A02/A00 + A22)};
-    
+
+    real_t p[3], mp[9];
+    const real_t *normal[]={NULL, NULL};
+    std::deque<index_t> adj_nodes;
     if(_surface->contains_node(node)){
-      // If this node is on the surface then we have to project
-      // this position back onto the surface.
-      std::set<index_t> *patch;
-      patch = new std::set<index_t>;
-      *patch = _surface->get_surface_patch(node);
+      // Check how many different planes intersect at this node.
+      std::set<index_t> patch = _surface->get_surface_patch(node);
+      std::map<int, std::set<int> > coids;
+      for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e)
+        coids[_surface->get_coplanar_id(*e)].insert(*e);
       
-      std::map<int, std::set<int> > *coids;
-      coids = new std::map<int, std::set<int> >;
-      
-      for(typename std::set<index_t>::const_iterator e=patch->begin();e!=patch->end();++e)
-        (*coids)[_surface->get_coplanar_id(*e)].insert(*e);
-      
-      if(coids->size()<3)
-        for(std::map<int, std::set<int> >::const_iterator ic=coids->begin();ic!=coids->end();++ic){
-          const real_t *normal = _surface->get_normal(*(ic->second.begin()));
-          p[0] -= (p[0]-get_x(node))*fabs(normal[0]);
-          p[1] -= (p[1]-get_y(node))*fabs(normal[1]);
-          p[2] -= (p[2]-get_z(node))*fabs(normal[2]);
+      int loc=0;
+      if(coids.size()<3){
+        /* We will need the normals later when making sure that point
+           is on the surface to within roundoff.*/
+        for(std::map<int, std::set<int> >::const_iterator ic=coids.begin();ic!=coids.end();++ic){
+          normal[loc++] = _surface->get_normal(*(ic->second.begin()));
         }
-      
-      size_t coids_size = coids->size();
-      
-      delete patch;
-      delete coids;
-      
-      // Test if this is a corner node, or edge node in which case it cannot be moved.
-      if(coids_size>2)
+        
+        // Find the adjacent nodes that are on this surface.
+        std::set<index_t> adj_nodes_set;
+        for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e){
+          const index_t *facet = _surface->get_facet(*e);
+          if(facet[0]<0)
+            continue;
+
+          adj_nodes_set.insert(facet[0]); assert(_mesh->NNList[facet[0]].size()>0);
+          adj_nodes_set.insert(facet[1]); assert(_mesh->NNList[facet[1]].size()>0);
+          adj_nodes_set.insert(facet[2]); assert(_mesh->NNList[facet[2]].size()>0);
+        }
+        for(typename std::set<index_t>::const_iterator il=adj_nodes_set.begin();il!=adj_nodes_set.end();++il){
+          if((*il)!=node)
+            adj_nodes.push_back(*il);
+        }
+      }else{
+        // Corner node, in which case it cannot be moved.
         return;
+      }
+    }else{
+      adj_nodes.insert(adj_nodes.end(), _mesh->NNList[node].begin(), _mesh->NNList[node].end());
     }
+      
+    Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+    for(typename std::deque<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
+      const real_t *m0 = _mesh->get_metric(node);
+      const real_t *m1 = _mesh->get_metric(*il);
+      
+      real_t ml00 = 0.5*(m0[0] + m1[0]);
+      real_t ml01 = 0.5*(m0[1] + m1[1]);
+      real_t ml02 = 0.5*(m0[2] + m1[2]);
+      real_t ml11 = 0.5*(m0[4] + m1[4]);
+      real_t ml12 = 0.5*(m0[5] + m1[5]);
+      real_t ml22 = 0.5*(m0[8] + m1[8]);
+      
+      q[0] += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
+      q[1] += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
+      q[2] += ml02*get_x(*il) + ml12*get_y(*il) + ml22*get_z(*il);
+      
+      A[0] += ml00;
+      A[1] += ml01;
+      A[2] += ml02;
+      A[4] += ml11;
+      A[5] += ml12;
+      A[8] += ml22;
+    }
+    A[3] = A[1];
+    A[6] = A[2];
+    A[7] = A[5];
+    
+    // Want to solve the system Ap=q to find the new position, p.
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+    A.ldlt().solve(q, &b);
+    
+    for(int i=0;i<3;i++)
+      p[i] = b[i];
+
+    // If this is on the surface or edge, then make a roundoff correction.
+    for(int i=0;i<2;i++)
+      if(normal[i]!=NULL){
+        p[0] -= (p[0]-get_x(node))*fabs(normal[i][0]);
+        p[1] -= (p[1]-get_y(node))*fabs(normal[i][1]);
+        p[2] -= (p[2]-get_z(node))*fabs(normal[i][2]);
+      }
     
     // Interpolate metric at this new position.
-    real_t mp[9], l[4], L;
+    real_t l[4], L;
     int best_e;
     bool inverted=false;
     // 5 bisections along the search line
@@ -616,10 +647,10 @@ template<typename real_t, typename index_t>
            l[1]*_mesh->metric[n[1]*9+i]+
            l[2]*_mesh->metric[n[2]*9+i]+
            l[3]*_mesh->metric[n[3]*9+i])/L;
-      
-      MetricTensor<real_t>::positive_definiteness(3, mp);
     }
     
+    MetricTensor<real_t>::positive_definiteness(3, mp);
+        
     bool improvement=true;
     if(qconstrain){
       // Check if this positions improves the local mesh quality.
