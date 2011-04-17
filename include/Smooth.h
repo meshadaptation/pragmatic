@@ -36,6 +36,9 @@
 #include <vector>
 #include <deque>
 
+#include <Eigen/Core>
+#include <Eigen/Dense>
+
 #include "ElementProperty.h"
 #include "Surface.h"
 #include "Mesh.h"
@@ -241,56 +244,76 @@ template<typename real_t, typename index_t>
       }
       mean_q/=_mesh->NEList[node].size();
     }
-    real_t A00=0, A01=0, A11=0, q0=0, q1=0;
-    for(typename std::deque<index_t>::const_iterator il=_mesh->NNList[node].begin();il!=_mesh->NNList[node].end();++il){
-      real_t ml00 = 0.5*(_mesh->metric[node*4  ] + _mesh->metric[*il*4  ]);
-      real_t ml01 = 0.5*(_mesh->metric[node*4+1] + _mesh->metric[*il*4+1]);
-      real_t ml11 = 0.5*(_mesh->metric[node*4+3] + _mesh->metric[*il*4+3]);
-      
-      q0 += ml00*get_x(*il) + ml01*get_y(*il);
-      q1 += ml01*get_x(*il) + ml11*get_y(*il);
-      
-      A00 += ml00;
-      A01 += ml01;
-      A11 += ml11;
-    }
-    // Want to solve the system Ap=q to find the new position, p.
-    real_t p[] = {-(pow(A01, 2)/((pow(A01, 2)/A00 - A11)*pow(A00, 2)) - 1/A00)*q0 + 
-                  A01*q1/((pow(A01, 2)/A00 - A11)*A00),
-                  A01*q0/((pow(A01, 2)/A00 - A11)*A00) - q1/(pow(A01, 2)/A00 - A11)};
-    
+
+    real_t p[2], mp[4];
+    const real_t *normal=NULL;
+    std::deque<index_t> adj_nodes;
     if(_surface->contains_node(node)){
-      // If this node is on the surface then we have to project
-      // this position back onto the surface.
-      std::set<index_t> *patch;
-      patch = new std::set<index_t>;
-      *patch = _surface->get_surface_patch(node);
-      
-      std::set<int> *coids;
-      coids = new std::set<int>;
-      
-      for(typename std::set<index_t>::const_iterator e=patch->begin();e!=patch->end();++e)
-        coids->insert(_surface->get_coplanar_id(*e));
-      
-      if(coids->size()<2){
-        const real_t *normal = _surface->get_normal(*patch->begin());
-        p[0] -= (p[0]-get_x(node))*fabs(normal[0]);
-        p[1] -= (p[1]-get_y(node))*fabs(normal[1]);
-      }
-      
-      int coids_size = coids->size();
-      
-      delete coids;
-       delete patch;
-      
-      if(coids_size>1){
-        // Test if this is a corner node, in which case it cannot be moved.
+      // Check how many different planes intersect at this node.
+      std::set<int> coids;
+      std::set<index_t> patch = _surface->get_surface_patch(node);
+      for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e)
+        coids.insert(_surface->get_coplanar_id(*e));
+
+      if(coids.size()==1){
+        // We will need this later when making sure that point is on the surface to within roundoff.
+        normal = _surface->get_normal(*patch.begin());
+
+        std::set<index_t> adj_nodes_set;;
+        for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e){
+          const index_t *facet = _surface->get_facet(*e);
+          adj_nodes_set.insert(facet[0]);
+          adj_nodes_set.insert(facet[1]);
+        }
+        for(typename std::set<index_t>::const_iterator il=adj_nodes_set.begin();il!=adj_nodes_set.end();++il){
+          if((*il)!=node)
+            adj_nodes.push_back(*il);
+        }
+        assert(adj_nodes.size()==2);
+      }else{
+        // Corner node, in which case it cannot be moved.
         return;
       }
+    }else{
+      adj_nodes.insert(adj_nodes.end(), _mesh->NNList[node].begin(), _mesh->NNList[node].end());
     }
     
+    Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(2, 2);
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
+    for(typename std::deque<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
+      const real_t *m0 = _mesh->get_metric(node);
+      const real_t *m1 = _mesh->get_metric(*il);
+      
+      real_t ml00 = 0.5*(m0[0]+m1[0]);
+      real_t ml01 = 0.5*(m0[1]+m1[1]);
+      real_t ml11 = 0.5*(m0[3]+m1[3]);
+      
+      q[0] += (ml00*get_x(*il) + ml01*get_y(*il));
+      q[1] += (ml01*get_x(*il) + ml11*get_y(*il));
+      
+      A[0] += ml00;
+      A[1] += ml01;
+      A[3] += ml11;
+    }
+    A[2]=A[1];
+    
+    // Want to solve the system Ap=q to find the new position, p.
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
+    A.ldlt().solve(q, &b);
+    //A.llt().solve(q, &b);
+    //A.lu().solve(q, &b);
+    
+    p[0] = b[0];
+    p[1] = b[1];
+
+    // If this is on the surface, then make a roundoff correction.
+    if(normal!=NULL){
+      p[0] -= (p[0]-get_x(node))*fabs(normal[0]);
+      p[1] -= (p[1]-get_y(node))*fabs(normal[1]);
+    }
+
     // Interpolate metric at this new position.
-    real_t mp[4], l[3], L;
+    real_t l[3], L;
     int best_e;
     bool inverted;
     // 5 bisections along the search line
@@ -302,11 +325,11 @@ template<typename real_t, typename index_t>
       best_e=-1;
       inverted=false;
       real_t tol=-1;
-
+      
       for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
         const index_t *n=_mesh->get_element(*ie);
         assert(n[0]>=0);
-
+        
         const real_t *x0 = _mesh->get_coords(n[0]);
         const real_t *x1 = _mesh->get_coords(n[1]);
         const real_t *x2 = _mesh->get_coords(n[2]);
@@ -357,23 +380,22 @@ template<typename real_t, typename index_t>
     }
     
     if(inverted){
-      std::cout<<".";
       return;
     }
-
+    
     assert(best_e>=0);
     {
       const index_t *n=_mesh->get_element(best_e);
       assert(n[0]>=0);
-     
+      
       for(size_t i=0;i<4;i++)
         mp[i] = (l[0]*_mesh->metric[n[0]*4+i]+
                  l[1]*_mesh->metric[n[1]*4+i]+
                  l[2]*_mesh->metric[n[2]*4+i])/L;
-      
-      MetricTensor<real_t>::positive_definiteness(2, mp);
     }
     
+    MetricTensor<real_t>::positive_definiteness(2, mp);
+  
     bool improvement = true;
     if(qconstrain){
       // Check if this positions improves the local mesh quality.
@@ -404,12 +426,12 @@ template<typename real_t, typename index_t>
       improvement = (mean_q_new>mean_q)||(min_q_new>min_q);
     }  
     if(improvement){
-      for(size_t j=0;j<ndims;j++)
-        _mesh->_coords[node*ndims+j] = p[j];
+      for(size_t j=0;j<2;j++)
+        _mesh->_coords[node*2+j] = p[j];
       
       _mesh->metric[node*4  ] = mp[0];
       _mesh->metric[node*4+1] = mp[1];
-      _mesh->metric[node*4+2] = mp[1];
+      _mesh->metric[node*4+2] = mp[2];
       _mesh->metric[node*4+3] = mp[3];
     }
   }

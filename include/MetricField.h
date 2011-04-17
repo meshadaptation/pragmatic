@@ -155,6 +155,13 @@ template<typename real_t, typename index_t>
     }
   }
 
+  /*! Set the metric tensor field.
+   * @param metric is a pointer to the buffer where the metric field is to be copied from.
+   */
+  void set_metric(const real_t *metric, int i){
+    _metric[i].set_metric(metric);
+  }
+
   /// Update the metric field on the mesh.
   void update_mesh(){
     _mesh->metric.clear();

@@ -1,7 +1,7 @@
 SHELL = /bin/bash
 
 CXX = @CXX@
-CPPFLAGS = @CPPFLAGS@ -I../eigen-2.0 -I../metric_tensor/include -I../include -I../functionals/include
+CPPFLAGS = @CPPFLAGS@ -I../eigen-2.0 -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 
