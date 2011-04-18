@@ -50,74 +50,86 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
+  size_t NElements = mesh->get_number_elements();
 
-  vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = 
-      pow(mesh->get_coords(i)[0], 4) + 
-      pow(mesh->get_coords(i)[1], 4) +
-      pow(mesh->get_coords(i)[2], 4);
-  
-  metric_field.add_field(&(psi[0]), 0.01);
+  for(size_t i=0;i<NNodes;i++){
+    double hx=0.025 + 0.09*mesh->get_coords(i)[0];
+    double hy=0.025 + 0.09*mesh->get_coords(i)[1];
+    double hz=0.025 + 0.09*mesh->get_coords(i)[2];
+    double m[] =
+      {1.0/pow(hx, 2), 0.0,            0.0,
+       0.0,            1.0/pow(hy, 2), 0.0,
+       0.0,            0.0,            1.0/pow(hz, 2)};
+    metric_field.set_metric(m, i);
+  }
+  metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
-  double L_low = 0.4;
-  double L_up = sqrt(2);
+  double L_up = 1.0; // sqrt(2);
+  double L_low = L_up/2;
 
-  double start_tic = omp_get_wtime();
+
+  double tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
-  std::cout<<"Coarsen1: "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Coarsen1: "<<omp_get_wtime()-tic<<std::endl;
 
-  start_tic = omp_get_wtime();
+  tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
-  int iter = smooth.smooth(1.0e-1, 100);
-  std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
+  int iter = smooth.smooth(1.0e-2, 100);
+  std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
 
   double L_max = mesh->maximal_edge_length();
 
   int adapt_iter=0;
-  double alpha = sqrt(2)/2;
+  double alpha = 0.95; //sqrt(2)/2;
   Refine<double, int> refine(*mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
     
     std::cout<<"#####################\nAdapt iteration "<<adapt_iter++<<std::endl
              <<"L_max = "<<L_max<<", "
-             <<"L_ref = "<<L_ref<<", "
-             <<"Num elements = "<<mesh->get_number_elements()<<std::endl;
+             <<"L_ref = "<<L_ref<<std::endl;
 
-    start_tic = omp_get_wtime();
+    tic = omp_get_wtime();
     refine.refine(L_ref);
-    std::cout<<"Refine: "<<omp_get_wtime()-start_tic<<std::endl;
+    std::cout<<"Refine: "<<omp_get_wtime()-tic<<std::endl;
     
-    start_tic = omp_get_wtime();
-    coarsen.coarsen(L_low, L_max);
-    std::cout<<"Coarsen2: "<<omp_get_wtime()-start_tic<<std::endl;
-    
-    start_tic = omp_get_wtime();
-    iter = smooth.smooth(1.0e-4, 50);
-    std::cout<<"Smooth 2 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
-    
+    tic = omp_get_wtime();
+    coarsen.coarsen(L_low, L_ref);
+    std::cout<<"Coarsen2: "<<omp_get_wtime()-tic<<std::endl;
+
     L_max = mesh->maximal_edge_length();
-  }while((L_max>L_up)&&(adapt_iter<10));
+  }while((L_max>L_up)&&(adapt_iter<20));
   
-  start_tic = omp_get_wtime();
-  iter = smooth.smooth(1.0e-6, 100);
-  iter += smooth.smooth(1.0e-7, 100, true);
-  std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
+  tic = omp_get_wtime();
+  iter = smooth.smooth(1.0e-7, 100);
+  iter += smooth.smooth(1.0e-8, 100, true);
+  std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
   
+ double lrms = mesh->get_lrms();
+ double qrms = mesh->get_qrms();
+ 
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
+  
+  int nelements = mesh->get_number_elements();
+
+  std::cout<<"Number elements:      "<<nelements<<std::endl
+           <<"Edge length RMS:      "<<lrms<<std::endl
+           <<"Quality RMS:          "<<qrms<<std::endl;
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
 
   delete mesh;
 
-  std::cout<<"pass"<<std::endl;
+ if((nelements>33000)&&(nelements<34000)&&(lrms<0.4)&&(qrms<6))
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail"<<std::endl;
 
   return 0;
 }
