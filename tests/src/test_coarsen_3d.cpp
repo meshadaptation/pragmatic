@@ -80,7 +80,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements<110)&&(lrms<0.5)&&(qrms<0.7))
+  if((nelements<110)&&(lrms<0.5)&&(qrms<0.75))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
