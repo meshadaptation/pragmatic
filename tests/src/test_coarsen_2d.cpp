@@ -55,20 +55,33 @@ int main(int argc, char **argv){
   
   Coarsen<double, int> adapt(*mesh, surface);
 
-  double start_tic = omp_get_wtime();
-  adapt.coarsen(0.4, sqrt(2));
-  std::cout<<"Coarsen time = "<<omp_get_wtime()-start_tic<<std::endl;
+  double tic = omp_get_wtime();
+  adapt.coarsen(0.6, sqrt(2));
+  double toc = omp_get_wtime();
+
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-  
+
+  int nelements = mesh->get_number_elements();
+
+  std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+           <<"Number elements:      "<<nelements<<std::endl
+           <<"Edge length RMS:      "<<lrms<<std::endl
+           <<"Quality RMS:          "<<qrms<<std::endl;
+      
   VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 
-  std::cout<<"pass"<<std::endl;
+  if((nelements==2)&&(lrms<0.2)&&(qrms<0.15))
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"pass"<<std::endl;
 
   return 0;
 }
