@@ -39,7 +39,10 @@
 
 #include "MetricField.h"
 #include "Smooth.h"
+#include "Coarsen.h"
+#include "Refine.h"
 #include "Surface.h"
+#include "VTKTools.h"
 
 using namespace std;
 
@@ -75,100 +78,73 @@ int main(int argc, char **argv){
   Surface<double, int> surface(mesh);
 
   MetricField<double, int> metric_field(mesh, surface);
-
+  
   vector<double> psi(NNodes);
-
+  
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray("Vm");
   for(int i=0;i<NNodes;i++){
     psi[i] = p_scalars->GetTuple(mesh.new2old(i))[0];
   }
-
+  
   reader->Delete();
-
-  metric_field.add_field(&(psi[0]), 1.0);
-
-  //metric_field.apply_gradation(1.3);
-  metric_field.apply_nelements(NElements);
+  
+  metric_field.add_field(&(psi[0]), 0.5);
+  
+  // metric_field.apply_gradation(1.3);
   metric_field.update_mesh();
-
+  
+  // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+  double L_up = 1.0; // sqrt(2);
+  double L_low = L_up/2;
+    
+  double tic = omp_get_wtime();
+  Coarsen<double, int> coarsen(mesh, surface);
+  coarsen.coarsen(L_low, L_up);
+  
+  tic = omp_get_wtime();
   Smooth<double, int> smooth(mesh, surface);
-
-  double start_tic = omp_get_wtime();
-  int iter = smooth.smooth(1.0e-4, 500);
-  std::cout<<"Simple smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  if(iter<500)
-    std::cout<<"pass\n";
+  int iter = smooth.smooth(1.0e-2, 100);  
+  double L_max = mesh.maximal_edge_length();
+  
+  int adapt_iter=0;
+  double alpha = 0.95; //sqrt(2)/2;
+  Refine<double, int> refine(mesh, surface);
+  do{
+    double L_ref = std::max(alpha*L_max, L_up);
+      
+    tic = omp_get_wtime();
+    refine.refine(L_ref);
+      
+    tic = omp_get_wtime();
+    coarsen.coarsen(L_low, L_ref);
+      
+    L_max = mesh.maximal_edge_length();
+  }while((L_max>L_up)&&(adapt_iter<20));
+  
+  tic = omp_get_wtime();
+  iter = smooth.smooth(1.0e-7, 100);
+  iter += smooth.smooth(1.0e-8, 100, true);
+  
+  double lrms = mesh.get_lrms();
+  double qrms = mesh.get_qrms();
+  
+  std::map<int, int> active_vertex_map;
+  mesh.defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+  
+  int nelements = mesh.get_number_elements();
+  
+  std::cout<<"Number elements:      "<<nelements<<std::endl
+           <<"Edge length RMS:      "<<lrms<<std::endl
+           <<"Quality RMS:          "<<qrms<<std::endl;
+  
+  VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
+    
+  if((nelements>56000)&&(nelements<57000)&&(lrms<0.45)&&(qrms<0.65))
+    std::cout<<"pass"<<std::endl;
   else
-    std::cout<<"fail\n";
-
-  start_tic = omp_get_wtime();
-  smooth.smooth(1.0e-5, 500, true);
-  std::cout<<"Constrained smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
-  if(iter<500)
-    std::cout<<"pass\n";
-  else
-    std::cout<<"fail\n";
-
-  // Export
-  ug = vtkUnstructuredGrid::New();
-
-  vtkPoints *vtk_points = vtkPoints::New();
-  assert(NNodes==(int)mesh.get_number_nodes());
-  vtk_points->SetNumberOfPoints(NNodes);
-
-  vtkIntArray *vtk_numbering = vtkIntArray::New();
-  vtk_numbering->SetNumberOfComponents(1);
-  vtk_numbering->SetNumberOfTuples(NNodes);
-  vtk_numbering->SetName("nid");
-
-  size_t ndims = mesh.get_number_dimensions();
-
-  vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
-  vtk_metric->SetNumberOfComponents(ndims*ndims);
-  vtk_metric->SetNumberOfTuples(NNodes);
-  vtk_metric->SetName("Metric");
-
-  vector<double> metric(NNodes*9);
-  metric_field.get_metric(&(metric[0]));
-  for(int i=0;i<NNodes;i++){
-    const double *r = mesh.get_coords(i);
-    vtk_numbering->SetTuple1(i, i);
-
-    vtk_points->SetPoint(i, r[0], r[1], r[2]);
-    vtk_metric->SetTuple9(i,
-                          metric[i*9],   metric[i*9+1], metric[i*9+2],
-                          metric[i*9+3], metric[i*9+4], metric[i*9+5],
-                          metric[i*9+6], metric[i*9+7], metric[i*9+8]);
-  }
-
-  ug->SetPoints(vtk_points);
-  vtk_points->Delete();
-
-  ug->GetPointData()->AddArray(vtk_numbering);
-  vtk_numbering->Delete();
-
-  ug->GetPointData()->AddArray(vtk_metric);
-  vtk_metric->Delete();
-
-  assert(NElements==(int)mesh.get_number_elements());
-  for(int i=0;i<NElements;i++){
-    vtkIdType pts[] = {mesh.get_element(i)[0],
-                       mesh.get_element(i)[1],
-                       mesh.get_element(i)[2],
-                       mesh.get_element(i)[3]};
-    ug->InsertNextCell(VTK_TETRA, 4, pts);
-  }
-
-  vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-  writer->SetFileName("../data/test_chaste_mesh");
-  writer->SetInput(ug);
-  writer->Write();
-
-  writer->Delete();
-  ug->Delete();
+    std::cout<<"fail"<<std::endl;
 
   return 0;
 }
