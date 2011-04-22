@@ -126,7 +126,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
- if((nelements>33000)&&(nelements<34000)&&(lrms<0.4)&&(qrms<0.6))
+ if((nelements>39000)&&(nelements<40000)&&(lrms<1.6)&&(qrms<0.6))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

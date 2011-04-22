@@ -41,7 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -55,8 +55,11 @@ int main(int argc, char **argv){
   
   Coarsen<double, int> adapt(*mesh, surface);
 
+  double L_up = sqrt(2);
+  double L_low = L_up/2;
+
   double tic = omp_get_wtime();
-  adapt.coarsen(0.6, sqrt(2));
+  adapt.coarsen(L_low, L_up);
   double toc = omp_get_wtime();
 
   double lrms = mesh->get_lrms();
@@ -81,7 +84,7 @@ int main(int argc, char **argv){
   if((nelements==2)&&(lrms<0.2)&&(qrms<0.15))
     std::cout<<"pass"<<std::endl;
   else
-    std::cout<<"pass"<<std::endl;
+    std::cout<<"fail"<<std::endl;
 
   return 0;
 }

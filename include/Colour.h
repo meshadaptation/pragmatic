@@ -77,6 +77,41 @@ class Colour{
     }
   }
 
+  /*! This routine colours a undirected graph using the greedy colouring algorithm.
+   * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
+   * @param active indicates which nodes are turned on in the graph.
+   * @param colour array that the node colouring is copied into.
+   */
+  static void greedy(std::vector< std::deque<index_t> > &NNList, std::vector<bool> &active, index_t *colour){
+    size_t NNodes = NNList.size();
+    
+    // Colour first active node.
+    size_t node;
+    for(node=0;node<NNodes;node++){
+      if(active[node]){
+        colour[node] = 0;
+        break;
+      }
+    }
+    
+    // Colour remaining active nodes.
+    for(;node<NNodes;node++){
+      if(!active[node])
+        continue;
+      
+      std::set<index_t> used_colours;
+      for(typename std::deque<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it)
+        if(*it<(int)node)
+          used_colours.insert(colour[*it]);
+      
+      for(index_t i=0;;i++)
+        if(used_colours.count(i)==0){
+          colour[node] = i;
+          break;
+        }
+    }
+  }
+
 #ifdef HAVE_ZOLTAN
   static void colour_zoltan(std::vector< std::set<index_t> > &NNList, ZOLTAN_ID_PTR global_ids, int nprivate_nodes, int *colour){
     int ierr;

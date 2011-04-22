@@ -35,13 +35,13 @@
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
-
+#include "Smooth.h"
 #include "Coarsen.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5x5.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -55,9 +55,15 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   
   Coarsen<double, int> adapt(*mesh, surface);
+  Smooth<double, int> smooth(*mesh, surface);
+
+  double L_up = sqrt(2);
+  double L_low = L_up/2;
 
   double tic = omp_get_wtime();
-  adapt.coarsen(0.6, sqrt(2));
+  adapt.coarsen(L_low, L_up);
+//  smooth.smooth(1.0e-2, 100);
+//  adapt.coarsen(L_low, L_up);
   double toc = omp_get_wtime();
 
   double lrms = mesh->get_lrms();
@@ -80,7 +86,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements<110)&&(lrms<0.5)&&(qrms<0.75))
+  if((nelements<60)&&(lrms<0.4)&&(qrms<0.7))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

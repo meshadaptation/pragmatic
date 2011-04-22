@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "ElementProperty.h"
+#include "Colour.h"
 #include "Mesh.h"
 
 /*! \brief Performs mesh coarsening.
@@ -82,37 +83,46 @@ template<typename real_t, typename index_t> class Coarsen{
   void coarsen(real_t L_low, real_t L_max){
     // Initialise a dynamic vertex list
     size_t NNodes = _mesh->get_number_nodes();
-    std::vector<bool> dynamic_vertex(NNodes, false);
-    for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
-      if(it->length<L_low){
-        dynamic_vertex[it->edge.first] = true;
-        dynamic_vertex[it->edge.second] = true;
-      }
-    }
     
     for(;;){
-      // Vertex under consideration for removal: rm_vertex
-      for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
-        if(dynamic_vertex[rm_vertex])
-          dynamic_vertex[rm_vertex] = false; 
-        else
-          continue;
-        
-        int nid = coarsen_kernel(rm_vertex, L_low, L_max);
-        if(nid>=0){
-          dynamic_vertex[nid] = true;
-          for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[nid].begin();nn!=_mesh->NNList[nid].end();++nn){
-            dynamic_vertex[*nn] = true;
-          }
+      std::vector<bool> dynamic_vertex(NNodes, false);
+      for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
+        if(it->length<L_low){
+          dynamic_vertex[it->edge.first] = true;
+          dynamic_vertex[it->edge.second] = true;
         }
       }
       
-      int ccnt=0;
-      for(size_t i=0;i<NNodes;i++){
-        if(dynamic_vertex[i])
-          ccnt++;
+      std::vector<index_t> colour(NNodes, -1);
+      Colour<index_t>::greedy(_mesh->NNList, dynamic_vertex, &(colour[0]));
+      
+      // Create sets of nodes based on colour.
+      std::map<int, std::deque<index_t> > colour_sets;
+      for(size_t i=0;i<NNodes;i++)
+        if(colour[i]>=0)
+          colour_sets[colour[i]].push_back(i);
+
+      // Loop over colours
+      int nupdates=0;
+      for(typename std::map<int, std::deque<index_t> >::const_iterator ic=colour_sets.begin();ic!=colour_sets.end();++ic){
+
+        // Parallel loop --- this is disabled now until the list of edges is made thread safe.
+        // #pragma omp parallel
+        {
+          int node_set_size = ic->second.size();
+          // #pragma omp for schedule(static) reduction(+:nupdates)
+          for(int i=0;i<node_set_size;i++){
+            // Vertex under consideration for removal: rm_vertex
+            int rm_vertex=ic->second[i];
+            
+            // Call the coarsening kernel.
+            if(coarsen_kernel(rm_vertex, L_low, L_max)>=0)
+              nupdates++;
+          }
+        }
       }
-      if(ccnt==0)
+
+      if(nupdates==0)
         break;
     }
   }
@@ -126,82 +136,90 @@ template<typename real_t, typename index_t> class Coarsen{
     if(_surface->is_corner_vertex(rm_vertex)||_mesh->is_halo_node(rm_vertex))
       return -1;
     
-    // Identify edge to be removed. We choose the shortest edge.
-    const Edge<real_t, index_t> *target_edge=NULL;
-    {
-      // Find shortest edge connected to vertex.
-      std::map<real_t, const Edge<real_t, index_t>* > short_edges;
-      for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-        // First check if this edge can be collapsed
-        if(!_surface->is_collapsible(rm_vertex, *nn))
+    /* Soft the edges according to length. We want to collapse the
+       shortest. If it's not possible to collapse the edge then move
+       onto the next shortest.*/
+    std::map<real_t, const Edge<real_t, index_t>* > short_edges;
+    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+      // First check if this edge can be collapsed
+      if(!_surface->is_collapsible(rm_vertex, *nn))
+        continue;
+      
+      typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
+      assert(edge!=_mesh->Edges.end());
+      if(short_edges.begin()->first <= L_low)
+        short_edges[edge->length] = &(*edge);
+    }
+    
+    bool reject_collapse;
+    const Edge<real_t, index_t> *target_edge = NULL;
+    index_t target_vertex;
+    std::set<index_t> deleted_elements;
+    while(short_edges.size()){
+      // Get the next shortest edge.
+      target_edge = short_edges.begin()->second;
+      short_edges.erase(short_edges.begin());
+
+      // Assume the best.
+      reject_collapse=false;
+
+      // Identify vertex that will be collapsed onto.
+      target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
+      
+      // Cache elements to be deleted.
+      deleted_elements = target_edge->adjacent_elements;
+      
+      // Check the properties of new elements. If the new properties
+      // are not acceptable when continue.
+      for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+        if(deleted_elements.count(*ee))
           continue;
         
-        typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
-        assert(edge!=_mesh->Edges.end());
-        short_edges[edge->length] = &(*edge);
-      }
-      
-      if(short_edges.size()==0)
-        return -1;
-      
-      if(short_edges.begin()->first > L_low)
-        return -1;
-      
-      target_edge = short_edges.begin()->second;
-    }
-    
-    // Identify vertex that will be collapsed onto.
-    index_t target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
-    
-    // Cache elements to be deleted.
-    std::set<index_t> deleted_elements = target_edge->adjacent_elements;
-    
-    // Check the properties of new elements. If the new properties
-    // are not acceptable when continue.
-    bool reject_collapse=false;
-    for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-      if(deleted_elements.count(*ee))
-        continue;
-      
-      // Create a copy of the proposed element
-      int n[nloc];
-      for(size_t i=0;i<nloc;i++){
-        int nid = _mesh->_ENList[nloc*(*ee)+i];
-        if(nid==rm_vertex)
-          n[i] = target_vertex;
-        else
-          n[i] = nid;
-      }
-      
-      // Check the volume of this new element.
-      double volume;
-      if(ndims==2)
-        volume = property->area(_mesh->get_coords(n[0]),
-                                _mesh->get_coords(n[1]),
-                                _mesh->get_coords(n[2]));
-      else
-        volume = property->volume(_mesh->get_coords(n[0]),
+        // Create a copy of the proposed element
+        int n[nloc];
+        for(size_t i=0;i<nloc;i++){
+          int nid = _mesh->_ENList[nloc*(*ee)+i];
+          if(nid==rm_vertex)
+            n[i] = target_vertex;
+          else
+            n[i] = nid;
+        }
+        
+        // Check the volume of this new element.
+        double volume;
+        if(ndims==2)
+          volume = property->area(_mesh->get_coords(n[0]),
                                   _mesh->get_coords(n[1]),
-                                  _mesh->get_coords(n[2]),
-                                  _mesh->get_coords(n[3]));
-      
-      if(volume<=0.0){
-        reject_collapse=true;
-        break;
+                                  _mesh->get_coords(n[2]));
+        else
+          volume = property->volume(_mesh->get_coords(n[0]),
+                                    _mesh->get_coords(n[1]),
+                                    _mesh->get_coords(n[2]),
+                                    _mesh->get_coords(n[3]));
+        
+        if(volume<=0.0){
+          reject_collapse=true;
+          break;
+        }
       }
+
+      // Check of any of the new edges are longer than L_max.
+      for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+        if(target_vertex==*nn)
+          continue;
+        
+        if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
+          reject_collapse=true;
+          break;
+        }
+      }
+      
+      // If this edge is ok to collapse then jump out.
+      if(!reject_collapse)
+        break;
     }
     
-    // Check of any of the new edges are longer than L_max.
-    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      if(target_vertex==*nn)
-        continue;
-      
-      if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
-        reject_collapse=true;
-        break;
-      }
-    }
-
+    // If we're checked all edges and none are collapsible then return.
     if(reject_collapse)
       return -1;
     
