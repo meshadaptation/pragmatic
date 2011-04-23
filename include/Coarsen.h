@@ -92,7 +92,7 @@ template<typename real_t, typename index_t> class Coarsen{
           dynamic_vertex[it->edge.second] = true;
         }
       }
-      
+
       std::vector<index_t> colour(NNodes, -1);
       Colour<index_t>::greedy(_mesh->NNList, dynamic_vertex, &(colour[0]));
       
@@ -151,7 +151,7 @@ template<typename real_t, typename index_t> class Coarsen{
         short_edges[edge->length] = &(*edge);
     }
     
-    bool reject_collapse;
+    bool reject_collapse = false;
     const Edge<real_t, index_t> *target_edge = NULL;
     index_t target_vertex;
     std::set<index_t> deleted_elements;
@@ -178,7 +178,7 @@ template<typename real_t, typename index_t> class Coarsen{
         // Create a copy of the proposed element
         int n[nloc];
         for(size_t i=0;i<nloc;i++){
-          int nid = _mesh->_ENList[nloc*(*ee)+i];
+          int nid = _mesh->get_element(*ee)[i];
           if(nid==rm_vertex)
             n[i] = target_vertex;
           else
@@ -233,62 +233,68 @@ template<typename real_t, typename index_t> class Coarsen{
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       // Delete if element is to be collapsed.
       if(target_edge->adjacent_elements.count(*ee)){
+        _mesh->erase_element(*ee);
+      }else{
+        // Renumber
         for(size_t i=0;i<nloc;i++){
-          _mesh->_ENList[nloc*(*ee)+i]=-1;
+          if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
+            _mesh->_ENList[nloc*(*ee)+i]=target_vertex;
+            break;
+          }
         }
-        continue;
+        
+        // Add element to target node-elemement adjancy list.
+        _mesh->NEList[target_vertex].insert(*ee);
       }
-      
-      // Renumber
-      for(size_t i=0;i<nloc;i++){
-        if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
-          _mesh->_ENList[nloc*(*ee)+i]=target_vertex;
-          break;
-        }
-      }
-      
-      // Add element to target node-elemement adjancy list.
-      _mesh->NEList[target_vertex].insert(*ee);
     }
-    // Remove elements from node-elemement adjancy list.
+
+    // Remove deleted elements from node-elemement adjancy list.
     for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de)
       _mesh->NEList[target_vertex].erase(*de);
     
     // Update Edges.
-    _mesh->Edges.erase(*target_edge);
     std::set<index_t> adj_nodes_target = _mesh->get_node_patch(target_vertex);
-    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      // This edge already deleted.
+    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){      
+      // We have to extract a copy of the edge being edited.
+      typename std::set< Edge<real_t, index_t> >::iterator iedge_modify = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
+      assert(iedge_modify!=_mesh->Edges.end());
+      Edge<real_t, index_t> edge_modify = *iedge_modify;
+      _mesh->Edges.erase(iedge_modify);
+      
+      // Continue is this is the target edge.
       if(target_vertex==*nn)
         continue;
-      
-      // We have to extract a copy of the edge being edited.
-      Edge<real_t, index_t> edge_modify = *_mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
-      _mesh->Edges.erase(edge_modify);
-      
+  
       // Update vertex id's for this edge.
       edge_modify.edge.first = std::min(target_vertex, *nn);
       edge_modify.edge.second = std::max(target_vertex, *nn);
       
       // Check if this edge is being collapsed onto an existing edge connected to target vertex.
       if(adj_nodes_target.count(*nn)){
-        Edge<real_t, index_t> edge_duplicate = *_mesh->Edges.find(Edge<real_t, index_t>(target_vertex, *nn));
-        _mesh->Edges.erase(edge_duplicate);
-        
+        typename std::set< Edge<real_t, index_t> >::iterator iedge_duplicate = _mesh->Edges.find(Edge<real_t, index_t>(target_vertex, *nn));
+        assert(iedge_duplicate!=_mesh->Edges.end());
+        Edge<real_t, index_t> edge_duplicate = *iedge_duplicate;
+        _mesh->Edges.erase(iedge_duplicate);
+
         // Add in additional elements from edge being merged onto.
         edge_modify.adjacent_elements.insert(edge_duplicate.adjacent_elements.begin(),
                                              edge_duplicate.adjacent_elements.end());
         
-        // Remove deleted elements from the adjancy
-        for(typename std::set<index_t>::const_iterator ee=deleted_elements.begin();ee!=deleted_elements.end();++ee){
-          typename std::set<index_t>::const_iterator ele = edge_modify.adjacent_elements.find(*ee);
-          if(ele!=edge_modify.adjacent_elements.end())
-            edge_modify.adjacent_elements.erase(ele);
-        }
+        // Copy the length
+        edge_modify.length = edge_duplicate.length;
       }else{
         // Update the length of the edge in metric space.
         edge_modify.length = _mesh->calc_edge_length(target_vertex, *nn);
       }
+      
+      /* Remove deleted elements from the adjancy. In 3D the deleted
+         elements are not removed from all effected edges.*/
+      for(typename std::set<index_t>::iterator ele=edge_modify.adjacent_elements.begin();ele!=edge_modify.adjacent_elements.end();){
+        typename std::set<index_t>::iterator ele_d = ele++;
+        if(_mesh->get_element(*ele_d)[0]<0)
+          edge_modify.adjacent_elements.erase(ele_d);
+      }
+
       // Add in modified edge back in.
       _mesh->Edges.insert(edge_modify);
     }

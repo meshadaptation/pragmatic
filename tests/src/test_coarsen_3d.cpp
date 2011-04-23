@@ -62,8 +62,6 @@ int main(int argc, char **argv){
 
   double tic = omp_get_wtime();
   adapt.coarsen(L_low, L_up);
-//  smooth.smooth(1.0e-2, 100);
-//  adapt.coarsen(L_low, L_up);
   double toc = omp_get_wtime();
 
   double lrms = mesh->get_lrms();
@@ -86,7 +84,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements<60)&&(lrms<0.4)&&(qrms<0.7))
+  if((nelements<30)&&(lrms<0.4)&&(qrms<1.0))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

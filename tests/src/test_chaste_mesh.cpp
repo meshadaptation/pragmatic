@@ -141,7 +141,7 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
     
-  if((nelements>87000)&&(nelements<88000)&&(lrms<0.5)&&(qrms<0.65))
+  if((nelements>93000)&&(nelements<94000)&&(lrms<0.51)&&(qrms<0.66))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
