@@ -87,13 +87,13 @@ int main(int argc, char **argv){
   double start_tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"Coarsen1: "<<omp_get_wtime()-start_tic<<std::endl;
   
   start_tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
   int iter = smooth.smooth(1.0e-1, 100);
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-start_tic<<std::endl;
   
   double L_max = mesh->maximal_edge_length();
@@ -148,7 +148,7 @@ int main(int argc, char **argv){
   
   delete mesh;
   
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"pass"<<std::endl;
   
   MPI::Finalize();

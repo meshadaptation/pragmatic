@@ -151,7 +151,7 @@ int main(int argc, char **argv){
   
   delete mesh;
   
-  if(MPI::COMM_WORLD.Get_rank()==0)
+  if(rank==0)
     std::cout<<"pass"<<std::endl;
   
   MPI::Finalize();

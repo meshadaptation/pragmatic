@@ -75,6 +75,14 @@ template<typename real_t, typename index_t>
     _surface = &surface;
     _mesh = &mesh;
 
+    rank = 0;
+    nprocs = 1;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
+      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
+    }
+#endif
     if(_ndims==2){
       double bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
       for(int i=1;i<_NNodes;i++){
@@ -82,7 +90,7 @@ template<typename real_t, typename index_t>
         bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
       }
 #ifdef HAVE_MPI
-      if(MPI::Is_initialized()){
+      if(nprocs>1){
         MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
         MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
         
@@ -108,7 +116,7 @@ template<typename real_t, typename index_t>
         bbox[4] = min(bbox[4], get_z(i)); bbox[5] = max(bbox[5], get_z(i));
       }
 #ifdef HAVE_MPI
-      if(MPI::Is_initialized()){
+      if(nprocs>1){
         MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
         MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
         
@@ -684,7 +692,7 @@ template<typename real_t, typename index_t>
     }
 
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
+    if(nprocs>1){
       double lpredicted;
       MPI_Allreduce(&predicted, &lpredicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
       predicted = lpredicted;
@@ -718,6 +726,7 @@ template<typename real_t, typename index_t>
     return sqrt(l);
   }
 
+  int rank, nprocs;
   int _NNodes, _NElements, _ndims, _nloc;
   MetricTensor<real_t> *_metric;
   Surface<real_t, index_t> *_surface;
