@@ -4,6 +4,3 @@ List of known issues:
 - defragmentation should also defragment the halo
 - export function required which will support global node numbering
 - a README is required with some build/test instructions
-- disable intel compiler warnings when --enable-debugging is not specified.
-
-
