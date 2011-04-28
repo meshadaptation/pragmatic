@@ -326,8 +326,7 @@ class MetricTensor{
       _metric[i] *= scale_factor;
   }
 
-  double average_length() const
-  {
+  double average_length() const{
     double D[_dimension], V[_dimension*_dimension];
     eigen_decomp(D, V);
 
@@ -339,52 +338,67 @@ class MetricTensor{
     return sqrt(1.0/average);
   }
 
-  void eigen_decomp(double *eigenvalues, double *eigenvectors) const
-  {
-    if(_dimension==2)
-    {
-        Eigen::Matrix<real_t, 2, 2> M;
-        M <<
-          _metric[0], _metric[1],
-          _metric[2], _metric[3];
+  double max_length() const{
+    double D[_dimension], V[_dimension*_dimension];
+    eigen_decomp(D, V);
 
-        Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
+    double min = D[0];
+    for(size_t i=1; i<_dimension; i++)
+      min = std::min(min, D[i]);
 
-        Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
-        Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
+    return sqrt(1.0/min); // ie, the max
+  }
 
-        for (size_t i=0;i<2;i++)
-            eigenvalues[i] = evalues[i];
+  double min_length() const{
+    double D[_dimension], V[_dimension*_dimension];
+    eigen_decomp(D, V);
 
-        Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose();
-        for(size_t i=0;i<4;i++)
-            eigenvectors[i] = Mp[i];
-    }
-    else if (_dimension==3)
-    {
-        Eigen::Matrix<real_t, 3, 3> M;
-        M <<
-          _metric[0], _metric[1], _metric[2],
-          _metric[3], _metric[4], _metric[5],
-          _metric[6], _metric[7], _metric[8];
+    double max = D[0];
+    for(size_t i=1; i<_dimension; i++)
+      max = std::max(max, D[i]);
 
-        Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
+    return sqrt(1.0/max); // ie, the min
+  }
 
-        Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
-        Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
-
-        for (size_t i=0;i<3;i++)
-            eigenvalues[i] = evalues[i];
-
-        Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose();
-        for(size_t i=0;i<9;i++)
-          eigenvectors[i] = Mp[i];
-    }
-    else
-    {
-        std::cerr<<"ERROR: unsupported dimension: " << _dimension << " (must be 2 or 3)" << endl;
-    }
-
+  void eigen_decomp(double *eigenvalues, double *eigenvectors) const{
+    if(_dimension==2){
+      Eigen::Matrix<real_t, 2, 2> M;
+      M <<
+        _metric[0], _metric[1],
+        _metric[2], _metric[3];
+      
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 2, 2> > solver(M);
+      
+      Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
+      Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
+      
+      for (size_t i=0;i<2;i++)
+        eigenvalues[i] = evalues[i];
+      
+      Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose();
+      for(size_t i=0;i<4;i++)
+        eigenvectors[i] = Mp[i];
+    }else if (_dimension==3){
+      Eigen::Matrix<real_t, 3, 3> M;
+      M <<
+        _metric[0], _metric[1], _metric[2],
+        _metric[3], _metric[4], _metric[5],
+        _metric[6], _metric[7], _metric[8];
+      
+      Eigen::EigenSolver< Eigen::Matrix<real_t, 3, 3> > solver(M);
+      
+      Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
+      Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
+      
+      for (size_t i=0;i<3;i++)
+        eigenvalues[i] = evalues[i];
+      
+      Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose();
+      for(size_t i=0;i<9;i++)
+        eigenvectors[i] = Mp[i];
+    }else{
+      std::cerr<<"ERROR: unsupported dimension: " << _dimension << " (must be 2 or 3)" << std::endl;
+    } 
   }
 
   int eigen_undecomp(const double *D, const double *V){

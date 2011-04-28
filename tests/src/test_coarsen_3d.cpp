@@ -67,6 +67,8 @@ int main(int argc, char **argv){
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
 
+  mesh->verify();
+
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -81,13 +83,13 @@ int main(int argc, char **argv){
 
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
-
-  delete mesh;
-
+  
   if((nelements<30)&&(lrms<0.4)&&(qrms<1.0))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
+  
+  delete mesh;
 
   return 0;
 }

@@ -390,6 +390,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Default destructor.
   ~Mesh(){
+    delete property;
   }
 
   /// Calculates the edge lengths in metric space.
@@ -458,6 +459,161 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
 
     return L_max;
+  }
+  
+  /// This is used to verify that the mesh and its metadata is correct.
+  void verify() const{
+    // Check for the correctness of number of elements.
+    std::cout<<"VERIFY: NElements........";
+    if(_ENList.size()/nloc==_NElements)
+      std::cout<<"pass\n";
+    else
+      std::cout<<"fail\n";
+
+    // Check for the correctness of number of nodes.
+    std::cout<<"VERIFY: NNodes...........";
+    if(_coords.size()/ndims==_NNodes)
+      std::cout<<"pass\n";
+    else
+      std::cout<<"fail\n";
+
+    // Check for the correctness of NNList, NEList and Edges.
+    std::vector< std::set<index_t> > local_NEList(_NNodes);
+    std::vector< std::set<index_t> > local_NNList(_NNodes);
+    std::set< Edge<real_t, index_t> > local_Edges;
+    for(size_t i=0; i<_NElements; i++){
+      for(size_t j=0;j<nloc;j++){
+        index_t nid_j = _ENList[i*nloc+j];
+        if(nid_j<0)
+          break;
+        local_NEList[nid_j].insert(i);
+        for(size_t k=j+1;k<nloc;k++){
+          index_t nid_k = _ENList[i*nloc+k];
+          local_NNList[nid_j].insert(nid_k);
+          local_NNList[nid_k].insert(nid_j);
+          
+          Edge<real_t, index_t> edge(nid_j, nid_k);
+          typename std::set< Edge<real_t, index_t> >::iterator edge_ptr = local_Edges.find(edge);
+          if(edge_ptr!=local_Edges.end()){
+            edge.adjacent_elements = edge_ptr->adjacent_elements;
+            local_Edges.erase(edge_ptr);
+          }
+          edge.adjacent_elements.insert(i);
+          local_Edges.insert(edge);
+        }
+      }
+    }
+    {
+      std::cout<<"VERIFY: NNList...........";
+      if(NNList.size()==0){
+        std::cout<<"empty\n";
+      }else{
+        bool valid_nnlist=true;
+        for(size_t i=0;i<_NNodes;i++){
+          size_t active_cnt=0;
+          for(size_t j=0;j<NNList[i].size();j++){
+            if(NNList[i][j]>=0){
+              active_cnt++;
+              if(local_NNList[i].count(NNList[i][j])==0){
+                valid_nnlist=false;
+              }
+            }
+          }
+          if(active_cnt!=local_NNList[i].size()){
+            valid_nnlist=false;
+          }
+        }
+        if(valid_nnlist)
+          std::cout<<"pass\n";
+        else
+          std::cout<<"fail\n";
+      }
+    }
+    {
+      std::cout<<"VERIFY: NEList...........";
+      std::string result="pass\n";
+      if(NEList.size()==0){
+        result = "empty\n";
+      }else{
+        if(NEList.size()!=local_NEList.size()){
+          result = "fail (NEList.size()!=local_NEList.size())\n";
+        }else{
+          for(size_t i=0;i<_NNodes;i++){
+            if(local_NEList[i].size()!=NEList[i].size()){
+              result = "fail (NEList[i].size()!=local_NEList[i].size())\n";
+              break;
+            }
+            if(local_NEList[i].size()==0)
+              continue;
+            if(local_NEList[i]!=NEList[i]){
+              result = "fail (local_NEList[i]!=NEList[i])\n";
+              break;
+            }
+          }
+        }
+      }
+      std::cout<<result;
+    }
+    {
+      std::cout<<"VERIFY: Edges............";
+      std::string result="pass\n";
+      if(Edges.size()==0){
+        result="empty\n";
+      }else{
+        bool valid_edges=true;
+        if(local_Edges.size()!=Edges.size()){
+          valid_edges = false;
+        }else{
+          for(typename
+                std::set< Edge<real_t, index_t> >::iterator it=Edges.begin(), jt=local_Edges.begin();
+              it!=Edges.end(); ++it, ++jt){
+            if(it->edge != jt->edge){
+              result = "fail (it->edge != jt->edge)\n";
+              break;
+            }
+            if(it->adjacent_elements != jt->adjacent_elements){
+              result = "fail (it->adjacent_elements != jt->adjacent_elements)\n";
+              break;
+            }
+          }
+        }
+      }
+      std::cout<<result;
+    }
+    if(ndims==2){
+    }else{
+      real_t volume=0, min_ele_vol=0, max_ele_vol=0;
+      size_t i=0;
+      for(;i<_NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        volume = property->volume(get_coords(n[0]),
+                                  get_coords(n[1]),
+                                  get_coords(n[2]),
+                                  get_coords(n[3]));
+        min_ele_vol = volume;
+        max_ele_vol = volume;
+        break;
+      }
+      for(;i<_NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        real_t lvolume = property->volume(get_coords(n[0]),
+                                          get_coords(n[1]),
+                                          get_coords(n[2]),
+                                          get_coords(n[3]));
+        volume += lvolume;
+        min_ele_vol = std::min(min_ele_vol, lvolume);
+        max_ele_vol = std::max(max_ele_vol, lvolume);
+      }
+      std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
+      std::cout<<"VERIFY: minimum element volume...."<<min_ele_vol<<std::endl;
+      std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
+    }
   }
 
  private:

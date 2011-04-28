@@ -398,7 +398,7 @@ template<typename real_t, typename index_t>
 
       for(std::multimap<double, size_t>::const_iterator n=ordered_edges.begin(); n!=ordered_edges.end(); n++)
       {
-        std::cout << "n->second: " << n->second << "\n";
+        // std::cout << "n->second: " << n->second << "\n";
         // Used to ensure that the front cannot go back on itself.
         std::set<size_t> swept;
 
@@ -409,7 +409,7 @@ template<typename real_t, typename index_t>
         while(!front.empty())
         {
           index_t p=*(front.begin());
-          std::cout << "p: " << p << "\n";
+          // std::cout << "p: " << p << "\n";
           front.erase(p);
           swept.insert(p);
 
@@ -423,7 +423,7 @@ template<typename real_t, typename index_t>
                 it++)
           {
             index_t q=*it;
-            std::cout << "q: " << q << "\n";
+            // std::cout << "q: " << q << "\n";
 
             if(swept.count(q))
               continue;
@@ -484,7 +484,7 @@ template<typename real_t, typename index_t>
               double hp = 1.0/sqrt(Dp[k]);
               double hq = 1.0/sqrt(Dq[pairs[k]]);
               double gamma = exp(fabs(hp - hq)/Lpq);
-              std::cout << "gamma = " << gamma << "\n";
+              // std::cout << "gamma = " << gamma << "\n";
 
               if(isinf(gamma))
                 gamma = DBL_MAX;
@@ -493,7 +493,7 @@ template<typename real_t, typename index_t>
                 if(hp>hq)
                 {
                   hp = hq + dh;
-                  std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
+                  // std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   Dp[k] = 1.0/(hp*hp);
                   add_p = true;
                 }
@@ -501,7 +501,7 @@ template<typename real_t, typename index_t>
                 {
                   hq = hp + dh;
                   Dq[pairs[k]] = 1.0/(hq*hq);
-                  std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
+                  // std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   add_q = true;
                 }
               }
@@ -529,7 +529,7 @@ template<typename real_t, typename index_t>
         }
       }
 
-      std::cout << "Hits: " << hits.size() << "\n\n";
+      // std::cout << "Hits: " << hits.size() << "\n\n";
       if(hits.empty())
         break;
     }

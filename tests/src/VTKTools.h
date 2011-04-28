@@ -31,8 +31,10 @@
 
 #include <vector>
 #include <string>
+#include <cfloat>
 
 #include "Mesh.h"
+#include "MetricTensor.h"
 #include "Surface.h"
 #include "Metis.h"
 #include "vtk.h"
@@ -258,6 +260,16 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_edge_length->SetNumberOfTuples(NNodes);
     vtk_edge_length->SetName("mean_edge_length");
 
+    vtkDoubleArray *vtk_max_desired_length = vtkDoubleArray::New();
+    vtk_max_desired_length->SetNumberOfComponents(1);
+    vtk_max_desired_length->SetNumberOfTuples(NNodes);
+    vtk_max_desired_length->SetName("max_desired_edge_length");
+
+    vtkDoubleArray *vtk_min_desired_length = vtkDoubleArray::New();
+    vtk_min_desired_length->SetNumberOfComponents(1);
+    vtk_min_desired_length->SetNumberOfTuples(NNodes);
+    vtk_min_desired_length->SetName("min_desired_edge_length");
+
     for(size_t i=0;i<NNodes;i++){
       const real_t *r = mesh->get_coords(i);
       const real_t *m = mesh->get_metric(i);
@@ -268,30 +280,34 @@ template<typename real_t, typename index_t> class VTKTools{
       vtk_node_tpartition->SetTuple1(i, mesh->get_node_towner(i));
       if(ndims==2){
         vtk_points->SetPoint(i, r[0], r[1], 0.0);
-        if(vtk_metric!=NULL)
-          vtk_metric->SetTuple4(i,
-                                m[0], m[1],
-                                m[2], m[3]);
+        vtk_metric->SetTuple4(i,
+                              m[0], m[1],
+                              m[2], m[3]);
       }else{
         vtk_points->SetPoint(i, r[0], r[1], r[2]);
-        if(vtk_metric!=NULL)
-          vtk_metric->SetTuple9(i,
-                                m[0], m[1], m[2],
-                                m[3], m[4], m[5],
-                                m[6], m[7], m[8]); 
+        vtk_metric->SetTuple9(i,
+                              m[0], m[1], m[2],
+                              m[3], m[4], m[5],
+                              m[6], m[7], m[8]); 
       }
-      if(vtk_edge_length!=NULL){
-        int nedges=mesh->NNList[i].size();
-        real_t mean_edge_length=0;
-        for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
-          Edge<real_t, index_t> edge(i, *it);
-          mean_edge_length+=mesh->Edges.find(edge)->get_length();
-        }
-        mean_edge_length/=nedges;
-        vtk_edge_length->SetTuple1(i, mean_edge_length);
+      int nedges=mesh->NNList[i].size();
+      real_t mean_edge_length=0;
+      real_t max_desired_edge_length=0;
+      real_t min_desired_edge_length=DBL_MAX;
+      for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+        Edge<real_t, index_t> edge(i, *it);
+        mean_edge_length+=mesh->Edges.find(edge)->get_length();
+        
+        MetricTensor<real_t> M(ndims, m);
+        max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
+        min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
       }
+      mean_edge_length/=nedges;
+      vtk_edge_length->SetTuple1(i, mean_edge_length);
+      vtk_max_desired_length->SetTuple1(i, max_desired_edge_length);
+      vtk_min_desired_length->SetTuple1(i, min_desired_edge_length);
     }
-  
+    
     ug->SetPoints(vtk_points);
     vtk_points->Delete();
 
@@ -306,15 +322,17 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetPointData()->AddArray(vtk_node_tpartition);
     vtk_node_tpartition->Delete();
 
-    if(vtk_metric!=NULL){
-      ug->GetPointData()->AddArray(vtk_metric);
-      vtk_metric->Delete();
-    }
+    ug->GetPointData()->AddArray(vtk_metric);
+    vtk_metric->Delete();
+    
+    ug->GetPointData()->AddArray(vtk_edge_length);
+    vtk_edge_length->Delete();
 
-    if(vtk_edge_length!=NULL){
-      ug->GetPointData()->AddArray(vtk_edge_length);
-      vtk_edge_length->Delete();
-    }
+    ug->GetPointData()->AddArray(vtk_max_desired_length);
+    vtk_max_desired_length->Delete();
+
+    ug->GetPointData()->AddArray(vtk_min_desired_length);
+    vtk_min_desired_length->Delete();
 
     size_t NElements = mesh->get_number_elements();
 

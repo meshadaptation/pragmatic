@@ -54,7 +54,7 @@ int main(int argc, char **argv){
   
   // Undo some MPI init shenanigans.
   if(chdir(getenv("PWD"))){
-    perror("");
+    perror("choked on MPI init shenanigans");
     exit(-1);
   }
 

@@ -93,16 +93,16 @@ int main(int argc, char **argv){
   
   // metric_field.apply_gradation(1.3);
   metric_field.update_mesh();
+
+  VTKTools<double, int>::export_vtu("../data/test_chaste_metric", &mesh, &(psi[0]));
   
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
     
-  double tic = omp_get_wtime();
   Coarsen<double, int> coarsen(mesh, surface);
   coarsen.coarsen(L_low, L_up);
   
-  tic = omp_get_wtime();
   Smooth<double, int> smooth(mesh, surface);
   int iter = smooth.smooth(1.0e-2, 100);  
   double L_max = mesh.maximal_edge_length();
@@ -113,16 +113,13 @@ int main(int argc, char **argv){
   do{
     double L_ref = std::max(alpha*L_max, L_up);
       
-    tic = omp_get_wtime();
-    refine.refine(L_ref);
-      
-    tic = omp_get_wtime();
+    refine.refine(L_ref);    
     coarsen.coarsen(L_low, L_ref);
-      
+    smooth.smooth(1.0e-2, 100);
+
     L_max = mesh.maximal_edge_length();
-  }while((L_max>L_up)&&(adapt_iter<20));
+  }while((L_max>L_up)&&(adapt_iter++<20));
   
-  tic = omp_get_wtime();
   iter = smooth.smooth(1.0e-7, 100);
   iter += smooth.smooth(1.0e-8, 100, true);
   
@@ -141,7 +138,7 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
     
-  if((nelements>93000)&&(nelements<94000)&&(lrms<0.51)&&(qrms<0.66))
+  if((nelements>4700)&&(nelements<4800)&&(lrms<0.85)&&(qrms<3.1))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

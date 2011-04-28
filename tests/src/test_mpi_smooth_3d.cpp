@@ -28,6 +28,7 @@
  */
 #include <iostream>
 #include <vector>
+#include <cerrno>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -41,7 +42,6 @@
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
-
 #include "Smooth.h"
 
 using namespace std;
@@ -51,8 +51,10 @@ int main(int argc, char **argv){
   MPI::Init(argc,argv);
 
   // Undo some MPI init shenanigans.
-  chdir(getenv("PWD"));
-
+  if(chdir(getenv("PWD"))){
+    perror("choked on MPI init shenanigans");
+    exit(-1);
+  }
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
   Surface<double, int> surface(*mesh);

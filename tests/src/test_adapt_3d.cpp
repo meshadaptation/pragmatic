@@ -69,17 +69,14 @@ int main(int argc, char **argv){
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
 
-
-  double tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
-  std::cout<<"Coarsen1: "<<omp_get_wtime()-tic<<std::endl;
+  mesh->verify();
 
-  tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
-  int iter = smooth.smooth(1.0e-2, 100);
-  std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
-
+  smooth.smooth(1.0e-2, 100);
+  mesh->verify();
+  
   double L_max = mesh->maximal_edge_length();
 
   int adapt_iter=0;
@@ -88,29 +85,20 @@ int main(int argc, char **argv){
   do{
     double L_ref = std::max(alpha*L_max, L_up);
     
-    std::cout<<"#####################\nAdapt iteration "<<adapt_iter++<<std::endl
-             <<"L_max = "<<L_max<<", "
-             <<"L_ref = "<<L_ref<<std::endl;
-
-    tic = omp_get_wtime();
     refine.refine(L_ref);
-    std::cout<<"Refine: "<<omp_get_wtime()-tic<<std::endl;
-    
-    tic = omp_get_wtime();
     coarsen.coarsen(L_low, L_ref);
-    std::cout<<"Coarsen2: "<<omp_get_wtime()-tic<<std::endl;
 
     L_max = mesh->maximal_edge_length();
-  }while((L_max>L_up)&&(adapt_iter<20));
+  }while((L_max>L_up)&&(adapt_iter++<20));
   
-  tic = omp_get_wtime();
-  iter = smooth.smooth(1.0e-7, 100);
-  iter += smooth.smooth(1.0e-8, 100, true);
-  std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
+  mesh->verify();
+  smooth.smooth(1.0e-7, 100);
+  smooth.smooth(1.0e-8, 100, true);
+  mesh->verify();
+    
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
   
- double lrms = mesh->get_lrms();
- double qrms = mesh->get_qrms();
- 
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -123,13 +111,13 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
-
-  delete mesh;
-
- if((nelements>39000)&&(nelements<40000)&&(lrms<0.6)&&(qrms<0.65))
+  
+  if((nelements>39000)&&(nelements<40000)&&(lrms<0.6)&&(qrms<0.65))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
+
+  delete mesh;
 
   return 0;
 }
