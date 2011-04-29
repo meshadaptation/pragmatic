@@ -860,7 +860,7 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
 #pragma omp for schedule(static)
-      for(size_t i=0;i<_NNodes;i++)
+      for(int i=0;i<(int)_NNodes;i++)
         node_towner[i] = npart[nid_new2old[i]];
     }
 
