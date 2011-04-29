@@ -61,11 +61,6 @@ test -n "$ARFLAGS" || ARFLAGS="cr"
 AC_PROG_RANLIB
 AC_CHECK_PROG(MAKE, gmake, gmake, make, $PATH)
 
-# Various GCC options
-if test "$ac_compiler_gnu" = yes ; then
-   CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
-fi
-
 AC_ARG_ENABLE(debugging,
     [AC_HELP_STRING([--enable-debugging],
 	    [turns on debugging flags])])
@@ -76,7 +71,7 @@ AC_ARG_ENABLE(gprof,
 
 if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
-        CXXFLAGS="-g -O0 $CXXFLAGS"
+        CXXFLAGS="-g -O0 -Wall $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
     elif test "$enable_gprof" = "yes" ; then
         CXXFLAGS="-p -g -O2 $CXXFLAGS"
@@ -86,6 +81,7 @@ if test "x$ICPC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
+    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"

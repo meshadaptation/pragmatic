@@ -4088,11 +4088,6 @@ fi
 
 
 
-# Various GCC options
-if test "$ac_compiler_gnu" = yes ; then
-   CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
-fi
-
 # Check whether --enable-debugging was given.
 if test "${enable_debugging+set}" = set; then :
   enableval=$enable_debugging;
@@ -4107,7 +4102,7 @@ fi
 
 if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
-        CXXFLAGS="-g -O0 $CXXFLAGS"
+        CXXFLAGS="-g -O0 -Wall $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
     elif test "$enable_gprof" = "yes" ; then
         CXXFLAGS="-p -g -O2 $CXXFLAGS"
@@ -4117,6 +4112,7 @@ if test "x$ICPC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
+    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"
