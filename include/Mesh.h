@@ -241,8 +241,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Erase an element
   void erase_element(const index_t eid){
-    for(size_t i=0;i<nloc;i++)
-      _ENList[eid*nloc+i] = -1;
+    _ENList[eid*nloc] = -1;
   }
 
   /// Return the number of nodes in the mesh.
