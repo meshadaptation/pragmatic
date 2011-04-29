@@ -91,6 +91,10 @@ int main(int argc, char **argv){
     L_max = mesh->maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter++<20));
   
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+
   mesh->verify();
   smooth.smooth(1.0e-7, 100);
   smooth.smooth(1.0e-8, 100, true);
@@ -98,11 +102,7 @@ int main(int argc, char **argv){
     
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
-  
-  std::map<int, int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
-  
+    
   int nelements = mesh->get_number_elements();
 
   std::cout<<"Number elements:      "<<nelements<<std::endl
