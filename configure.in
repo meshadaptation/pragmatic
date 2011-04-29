@@ -77,7 +77,7 @@ if test "x$ICPC" = "xyes" ; then
         CXXFLAGS="-p -g -O2 $CXXFLAGS"
         LDFLAGS="-p -g $LDFLAGS"
     else
-        CXXFLAGS="-O2 $CXXFLAGS -diag-disable all"
+        CXXFLAGS="-O2 $CXXFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
