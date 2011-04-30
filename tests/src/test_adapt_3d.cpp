@@ -95,7 +95,6 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  mesh->verify();
   smooth.smooth(1.0e-7, 100);
   smooth.smooth(1.0e-8, 100, true);
   mesh->verify();

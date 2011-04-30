@@ -67,16 +67,12 @@ int main(int argc, char **argv){
   double L_up = sqrt(2);
   double L_low = L_up/2;
 
-  double tic = omp_get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
-  std::cout<<"Coarsen 1: "<<omp_get_wtime()-tic<<std::endl;
 
-  tic = omp_get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
-  int iter = smooth.smooth(1.0e-2, 100);
-  std::cout<<"Smooth 1 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
-
+  smooth.smooth(1.0e-2, 100);
+  
   double L_max = mesh->maximal_edge_length();
 
   int adapt_iter=0;
@@ -84,34 +80,24 @@ int main(int argc, char **argv){
   Refine<double, int> refine(*mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
-    
-    std::cout<<"#####################\nAdapt iteration "<<adapt_iter++<<std::endl
-             <<"L_max = "<<L_max<<", "
-             <<"L_ref = "<<L_ref<<std::endl;
 
-    tic = omp_get_wtime();
     refine.refine(L_ref);
-    std::cout<<"Refine: "<<omp_get_wtime()-tic<<std::endl;
-    
-    tic = omp_get_wtime();
     coarsen.coarsen(L_low, L_up);
-    std::cout<<"Coarsen2: "<<omp_get_wtime()-tic<<std::endl;
-
+    
     L_max = mesh->maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter<20));
-  
-  tic = omp_get_wtime();
-  iter = smooth.smooth(1.0e-5, 100);
-  iter = smooth.smooth(1.0e-6, 100, true);
-  std::cout<<"Smooth 3 (Iterations="<<iter<<"): "<<omp_get_wtime()-tic<<std::endl;
-
-  double lrms = mesh->get_lrms();
-  double qrms = mesh->get_qrms();
 
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-  
+    
+  smooth.smooth(1.0e-5, 100);
+  smooth.smooth(1.0e-6, 100, true);
+  mesh->verify();
+
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
+
   int nelements = mesh->get_number_elements();
   
   std::cout<<"Number elements:      "<<nelements<<std::endl
