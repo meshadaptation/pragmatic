@@ -227,6 +227,12 @@ template<typename real_t, typename index_t> class Mesh{
     return _NNodes-1;
   }
 
+  /// Erase a vertex
+  void erase_vertex(const index_t nid){
+    NNList[nid].clear();
+    NEList[nid].clear();
+  }
+
   /// Add a new element
   index_t append_element(const int *n){
     for(size_t i=0;i<nloc;i++)

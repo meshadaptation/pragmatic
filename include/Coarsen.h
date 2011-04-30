@@ -136,7 +136,7 @@ template<typename real_t, typename index_t> class Coarsen{
     if(_surface->is_corner_vertex(rm_vertex)||_mesh->is_halo_node(rm_vertex))
       return -1;
     
-    /* Soft the edges according to length. We want to collapse the
+    /* Sort the edges according to length. We want to collapse the
        shortest. If it's not possible to collapse the edge then move
        onto the next shortest.*/
     std::map<real_t, const Edge<real_t, index_t>* > short_edges;
@@ -346,9 +346,7 @@ template<typename real_t, typename index_t> class Coarsen{
       }
     }
     
-    // Delete enteries from adjancy lists.
-    _mesh->NNList[rm_vertex].clear();
-    _mesh->NEList[rm_vertex].clear();
+    _mesh->erase_vertex(rm_vertex);
   
     return target_vertex;
   }
