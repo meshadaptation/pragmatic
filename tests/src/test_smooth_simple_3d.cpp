@@ -41,7 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50x50.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv){
   
   Smooth<double, int> smooth(*mesh, surface);
   
-  double tic = omp_get_wtime();
+ double tic = omp_get_wtime();
   int niterations = smooth.smooth(1.0e-4, 500);
   double toc = omp_get_wtime();
 
