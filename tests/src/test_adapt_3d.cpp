@@ -88,6 +88,8 @@ int main(int argc, char **argv){
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
 
+    //  smooth.smooth(1.0e-2, 100);
+
     L_max = mesh->maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter++<20));
   

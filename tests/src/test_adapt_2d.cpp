@@ -39,6 +39,7 @@
 #include "Coarsen.h"
 #include "Refine.h"
 #include "Smooth.h"
+#include "Swapping.h"
 
 using namespace std;
 
@@ -67,49 +68,50 @@ int main(int argc, char **argv){
   double L_up = sqrt(2);
   double L_low = L_up/2;
 
-  Coarsen<double, int> coarsen(*mesh, surface);
-  coarsen.coarsen(L_low, L_up);
-
+  Coarsen<double, int> coarsen(*mesh, surface);  
   Smooth<double, int> smooth(*mesh, surface);
-  smooth.smooth(1.0e-2, 100);
-  
-  double L_max = mesh->maximal_edge_length();
-
-  int adapt_iter=0;
-  double alpha = 0.95; //sqrt(2)/2;
   Refine<double, int> refine(*mesh, surface);
-  do{
-    double L_ref = std::max(alpha*L_max, L_up);
+  Swapping<double, int> swapping(*mesh, surface);
 
+  coarsen.coarsen(L_low, L_up);
+  double L_max = mesh->maximal_edge_length();
+  
+  double alpha = 0.95; //sqrt(2)/2;  
+  for(size_t i=0;i<20;i++){
+    double L_ref = std::max(alpha*L_max, L_up);
+    
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_up);
-    
-    L_max = mesh->maximal_edge_length();
-  }while((L_max>L_up)&&(adapt_iter<20));
+    swapping.swap(9.0);
 
+    L_max = mesh->maximal_edge_length();
+
+    if(L_max<L_up)
+      break;
+  }
+  
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-    
-  smooth.smooth(1.0e-5, 100);
-  smooth.smooth(1.0e-6, 100, true);
-  mesh->verify();
+  
+  smooth.smooth(1.0e-4, 20, true);
 
+  mesh->verify();
+  
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
 
   int nelements = mesh->get_number_elements();
   
-  std::cout<<"Number elements:      "<<nelements<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
+  std::cout<<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
 
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   delete mesh;
-  
-  if((nelements>900)&&(nelements<1100)&&(lrms<0.45)&&(qrms<0.45))
+
+  if((nelements>900)&&(nelements<1000)&&(lrms<0.2)&&(qrms<0.15))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

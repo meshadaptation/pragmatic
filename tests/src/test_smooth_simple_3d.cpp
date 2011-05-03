@@ -41,7 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50x50.vtu");
 
   Surface<double, int> surface(*mesh);
 

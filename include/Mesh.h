@@ -35,6 +35,7 @@
 #include <deque>
 #include <vector>
 #include <set>
+#include <stack>
 #include <cmath>
 
 #ifdef _OPENMP
@@ -214,40 +215,67 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Add a new vertex
   index_t append_vertex(const real_t *x, const real_t *m){
-    for(size_t i=0;i<ndims;i++)
-      _coords.push_back(x[i]);
+    if(recycle_nid.empty()){
+      for(size_t i=0;i<ndims;i++)
+        _coords.push_back(x[i]);
+      
+      for(size_t i=0;i<ndims*ndims;i++)
+        metric.push_back(m[i]);
+      
+      node_towner.push_back(0);
+      
+      _NNodes++;
+      
+      return _NNodes-1;
+    }else{
+      size_t nid = recycle_nid.top();
+      recycle_nid.pop();
 
-    for(size_t i=0;i<ndims*ndims;i++)
-      metric.push_back(m[i]);
-
-    node_towner.push_back(0);
-    
-    _NNodes++;
-    
-    return _NNodes-1;
+      for(size_t i=0;i<ndims;i++)
+        _coords[nid*ndims+i] = x[i];
+      
+      for(size_t i=0;i<ndims*ndims;i++)
+        metric[nid*ndims*ndims+i] = m[i];
+            
+      return nid;
+    }
   }
 
   /// Erase a vertex
   void erase_vertex(const index_t nid){
     NNList[nid].clear();
     NEList[nid].clear();
+
+    recycle_nid.push(nid);
   }
 
   /// Add a new element
   index_t append_element(const int *n){
-    for(size_t i=0;i<nloc;i++)
-      _ENList.push_back(n[i]);
-
-    element_towner.push_back(0);
-
-    _NElements++;
-    
-    return _NElements-1;
+    //if(recycle_eid.empty()){ // not yet a good idea - probably a bug in the NEList
+    if(true){
+      for(size_t i=0;i<nloc;i++)
+        _ENList.push_back(n[i]);
+      
+      element_towner.push_back(0);
+      
+      _NElements++;
+      
+      return _NElements-1;
+    }else{
+      size_t eid = recycle_eid.top();
+      recycle_eid.pop();
+      
+      for(size_t i=0;i<nloc;i++)
+        _ENList[eid*nloc+i] = n[i];
+      
+      return eid;
+    }
   }
 
   /// Erase an element
   void erase_element(const index_t eid){
     _ENList[eid*nloc] = -1;
+    recycle_eid.push(eid);
   }
 
   /// Return the number of nodes in the mesh.
@@ -469,14 +497,14 @@ template<typename real_t, typename index_t> class Mesh{
   /// This is used to verify that the mesh and its metadata is correct.
   void verify() const{
     // Check for the correctness of number of elements.
-    std::cout<<"VERIFY: NElements........";
+    std::cout<<"VERIFY: NElements...............";
     if(_ENList.size()/nloc==_NElements)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
     // Check for the correctness of number of nodes.
-    std::cout<<"VERIFY: NNodes...........";
+    std::cout<<"VERIFY: NNodes..................";
     if(_coords.size()/ndims==_NNodes)
       std::cout<<"pass\n";
     else
@@ -509,7 +537,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
     {
-      std::cout<<"VERIFY: NNList...........";
+      std::cout<<"VERIFY: NNList..................";
       if(NNList.size()==0){
         std::cout<<"empty\n";
       }else{
@@ -521,10 +549,30 @@ template<typename real_t, typename index_t> class Mesh{
               active_cnt++;
               if(local_NNList[i].count(NNList[i][j])==0){
                 valid_nnlist=false;
+                std::cerr<<"local_NNList[i].count(NNList[i][j])==0\n";
+                std::cerr<<"NNList[i] =       ";
+                for(size_t j=0;j<NNList[i].size();j++)
+                  std::cerr<<NNList[i][j]<<" ";
+                std::cerr<<std::endl;
+                std::cerr<<"local_NNList[i] = ";
+                for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
+                  std::cerr<<*kt<<" ";
+                std::cerr<<std::endl;
               }
             }
           }
           if(active_cnt!=local_NNList[i].size()){
+            std::cerr<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
+            std::cerr<<"local_NNList[i].count(NNList[i][j])==0\n";
+            std::cerr<<"NNList["<<i<<"] =       ";
+            for(size_t j=0;j<NNList[i].size();j++)
+              std::cerr<<NNList[i][j]<<" ";
+            std::cerr<<std::endl;
+            std::cerr<<"local_NNList["<<i<<"] = ";
+            for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
+              std::cerr<<*kt<<" ";
+            std::cerr<<std::endl;
+            
             valid_nnlist=false;
           }
         }
@@ -535,7 +583,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
     {
-      std::cout<<"VERIFY: NEList...........";
+      std::cout<<"VERIFY: NEList..................";
       std::string result="pass\n";
       if(NEList.size()==0){
         result = "empty\n";
@@ -560,7 +608,7 @@ template<typename real_t, typename index_t> class Mesh{
       std::cout<<result;
     }
     {
-      std::cout<<"VERIFY: Edges............";
+      std::cout<<"VERIFY: Edges...................";
       std::string result="pass\n";
       if(Edges.size()==0){
         result="empty\n";
@@ -578,6 +626,15 @@ template<typename real_t, typename index_t> class Mesh{
             }
             if(it->adjacent_elements != jt->adjacent_elements){
               result = "fail (it->adjacent_elements != jt->adjacent_elements)\n";
+              std::cerr<<"it->adjacent_elements = {";
+              for(typename std::set<index_t>::iterator kt=it->adjacent_elements.begin();kt!=it->adjacent_elements.end();++kt)
+                std::cerr<<*kt<<" ";
+              std::cerr<<"}\n";
+              
+              std::cerr<<"jt->adjacent_elements = {";
+              for(typename std::set<index_t>::iterator kt=jt->adjacent_elements.begin();kt!=jt->adjacent_elements.end();++kt)
+                std::cerr<<*kt<<" ";
+              std::cerr<<"}\n";
               break;
             }
           }
@@ -586,6 +643,35 @@ template<typename real_t, typename index_t> class Mesh{
       std::cout<<result;
     }
     if(ndims==2){
+      real_t area=0, min_ele_area=0, max_ele_area=0;
+      size_t i=0;
+      for(;i<_NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        area = property->area(get_coords(n[0]),
+                              get_coords(n[1]),
+                              get_coords(n[2]));
+        min_ele_area = area;
+        max_ele_area = area;
+        break;
+      }
+      for(;i<_NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        real_t larea = property->area(get_coords(n[0]),
+                                      get_coords(n[1]),
+                                      get_coords(n[2]));
+        area += larea;
+        min_ele_area = std::min(min_ele_area, larea);
+        max_ele_area = std::max(max_ele_area, larea);
+      }
+      std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
+      std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
+      std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
     }else{
       real_t volume=0, min_ele_vol=0, max_ele_vol=0;
       size_t i=0;
@@ -624,6 +710,7 @@ template<typename real_t, typename index_t> class Mesh{
  private:
   template<typename _real_t, typename _index_t> friend class MetricField;
   template<typename _real_t, typename _index_t> friend class Smooth;
+  template<typename _real_t, typename _index_t> friend class Swapping;
   template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend class Refine;
   template<typename _real_t, typename _index_t> friend class Surface;
@@ -1051,8 +1138,11 @@ template<typename real_t, typename index_t> class Mesh{
 
   size_t _NNodes, _NElements, ndims, nloc;
   std::vector<index_t> _ENList;
+  std::stack<int> recycle_eid;
+
   std::vector<real_t> _coords;
-  
+  std::stack<int> recycle_nid;
+
   std::vector<index_t> nid_new2old;
   std::vector<int> element_towner, node_towner;
 

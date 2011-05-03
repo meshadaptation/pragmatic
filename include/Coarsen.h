@@ -229,22 +229,20 @@ template<typename real_t, typename index_t> class Coarsen{
 
 
     // Remove deleted elements from node-elemement adjancy list.
-    if(ndims==3){
-      for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
-        const int *n=_mesh->get_element(*de);
-        assert(n[0]>=0);
-        for(size_t i=0;i<nloc;i++){
-          for(size_t j=i+1;j<nloc;j++){
-            typename std::set< Edge<real_t, index_t> >::iterator iother_edge = _mesh->Edges.find(Edge<real_t, index_t>(n[i], n[j]));
-            if(*iother_edge==*target_edge)
-              continue;
-            assert(iother_edge!=_mesh->Edges.end());
-            Edge<real_t, index_t> new_edge = *iother_edge;
-            _mesh->Edges.erase(iother_edge);
-            
-            new_edge.adjacent_elements.erase(*de);
-            _mesh->Edges.insert(new_edge);
-          }
+    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
+      const int *n=_mesh->get_element(*de);
+      assert(n[0]>=0);
+      for(size_t i=0;i<nloc;i++){
+        for(size_t j=i+1;j<nloc;j++){
+          typename std::set< Edge<real_t, index_t> >::iterator iother_edge = _mesh->Edges.find(Edge<real_t, index_t>(n[i], n[j]));
+          if(*iother_edge==*target_edge)
+            continue;
+          assert(iother_edge!=_mesh->Edges.end());
+          Edge<real_t, index_t> new_edge = *iother_edge;
+          _mesh->Edges.erase(iother_edge);
+          
+          new_edge.adjacent_elements.erase(*de);
+          _mesh->Edges.insert(new_edge);
         }
       }
     }
