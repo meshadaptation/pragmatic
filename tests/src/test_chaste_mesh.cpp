@@ -104,7 +104,7 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   
   Smooth<double, int> smooth(mesh, surface);
-  int iter = smooth.smooth(1.0e-2, 100);  
+  smooth.smooth("smart Laplacian");  
   double L_max = mesh.maximal_edge_length();
   
   int adapt_iter=0;
@@ -115,14 +115,11 @@ int main(int argc, char **argv){
       
     refine.refine(L_ref);    
     coarsen.coarsen(L_low, L_ref);
-    smooth.smooth(1.0e-2, 100);
+    smooth.smooth("smart Laplacian");
 
     L_max = mesh.maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter++<20));
-  
-  iter = smooth.smooth(1.0e-7, 100);
-  iter += smooth.smooth(1.0e-8, 100, true);
-  
+    
   double lrms = mesh.get_lrms();
   double qrms = mesh.get_qrms();
   
@@ -138,7 +135,7 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
     
-  if((nelements>4500)&&(nelements<4900)&&(lrms<0.85)&&(qrms<3.2))
+  if((lrms<0.8)&&(qrms<2.2))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

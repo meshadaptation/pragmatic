@@ -80,8 +80,12 @@ int main(int argc, char **argv){
   
   Smooth<double, int> smooth(*mesh, surface);
   double tic = omp_get_wtime();
-  int niterations = smooth.smooth(1.0e-4, 500);
+  smooth.smooth("Laplacian");
+  smooth.smooth("smart Laplacian");
   double toc = omp_get_wtime();
+
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
 
   mesh->calc_edge_lengths();
 
@@ -91,8 +95,11 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(MPI::COMM_WORLD.Get_rank()==0){
-    std::cout<<"Smooth loop time = "<<toc-tic<<std::endl;
-    if(niterations<80)
+    std::cout<<"Smooth loop time:     "<<toc-tic<<std::endl
+             <<"Edge length RMS:      "<<lrms<<std::endl
+             <<"Quality RMS:          "<<qrms<<std::endl;
+    
+    if((lrms<0.35)&&(qrms<0.25))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

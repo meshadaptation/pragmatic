@@ -78,10 +78,14 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   
   Smooth<double, int> smooth(*mesh, surface);
-  double start_tic = omp_get_wtime();
-  int niterations = smooth.smooth(1.0e-4, 500);
-  std::cout<<"Smooth loop time = "<<omp_get_wtime()-start_tic<<std::endl;
-
+  double tic = omp_get_wtime();
+  smooth.smooth("Laplacian");
+  smooth.smooth("smart Laplacian");
+  double toc = omp_get_wtime();
+  
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms();
+  
   mesh->calc_edge_lengths();
 
   VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_3d", mesh);
@@ -89,10 +93,16 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if(niterations<80)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(MPI::COMM_WORLD.Get_rank()==0){
+    std::cout<<"Smooth loop time:     "<<toc-tic<<std::endl
+             <<"Edge length RMS:      "<<lrms<<std::endl
+             <<"Quality RMS:          "<<qrms<<std::endl;
+    
+    if((lrms<0.45)&&(qrms<2.0))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
   
   MPI::Finalize();
 #else

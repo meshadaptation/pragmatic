@@ -74,31 +74,30 @@ int main(int argc, char **argv){
   mesh->verify();
 
   Smooth<double, int> smooth(*mesh, surface);
-  smooth.smooth(1.0e-2, 100);
+  smooth.smooth("smart Laplacian");
   mesh->verify();
   
   double L_max = mesh->maximal_edge_length();
 
-  int adapt_iter=0;
   double alpha = 0.95; //sqrt(2)/2;
   Refine<double, int> refine(*mesh, surface);
-  do{
+  for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
-
-    //  smooth.smooth(1.0e-2, 100);
+    smooth.smooth("smart Laplacian");
 
     L_max = mesh->maximal_edge_length();
-  }while((L_max>L_up)&&(adapt_iter++<20));
+    if(L_max<L_up)
+      break;
+  }
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  smooth.smooth(1.0e-7, 100);
-  smooth.smooth(1.0e-8, 100, true);
+  smooth.smooth("smart Laplacian");
   mesh->verify();
     
   double lrms = mesh->get_lrms();
@@ -113,7 +112,7 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
   
-  if((nelements>39000)&&(nelements<40000)&&(lrms<0.6)&&(qrms<0.65))
+  if((nelements>39000)&&(nelements<48000)&&(lrms<0.6)&&(qrms<0.65))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

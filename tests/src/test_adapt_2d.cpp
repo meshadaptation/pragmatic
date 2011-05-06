@@ -94,14 +94,12 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  smooth.smooth(1.0e-4, 20, true);
+  smooth.smooth("smart Laplacian");
 
   mesh->verify();
   
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
-
-  int nelements = mesh->get_number_elements();
   
   std::cout<<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
@@ -111,7 +109,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements>900)&&(nelements<1000)&&(lrms<0.2)&&(qrms<0.15))
+  if((lrms<0.22)&&(qrms<0.16))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
