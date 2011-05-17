@@ -32,6 +32,7 @@
 
 #include "confdefs.h"
 
+#include <algorithm>
 #include <deque>
 #include <vector>
 #include <set>
@@ -294,13 +295,34 @@ template<typename real_t, typename index_t> class Mesh{
     return ndims;
   }
 
-  /// Get the edge length RMS value in metric space, where the ideal edge length is unity.
-  real_t get_lrms(){
+  /// Get the mean edge length metric space.
+  real_t get_lmean(){
     calc_edge_lengths();
+    
+    double sum=0;
+    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it)
+      sum+=it->length;
+
+    int nedges = Edges.size();
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(&sum, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(&nedges, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+    }
+#endif
+    
+    double mean = sum/nedges;
+
+    return mean;
+  }
+
+  /// Get the edge length RMS value in metric space.
+  real_t get_lrms(){
+    double mean = get_lmean();
     
     double rms=0;
     for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it){
-      rms+=pow(it->length - 1.0, 2);
+      rms+=pow(it->length - mean, 2);
     }
     int nedges = Edges.size();
 #ifdef HAVE_MPI
@@ -315,8 +337,61 @@ template<typename real_t, typename index_t> class Mesh{
     return rms;
   }
 
+  /// Get the element mean quality in metric space.
+  real_t get_qmean() const{
+    real_t sum=0;
+    int nele=0;
+    for(size_t i=0;i<_NElements;i++){
+      const index_t *n=get_element(i);
+      if(n[0]<0)
+        continue;
+
+      if(ndims==2)
+        sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+      else
+        sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+      nele++;
+    }
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(&sum, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(&nele, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
+    }
+#endif
+    double mean = sum/nele;
+
+    return mean;
+  }
+
+  /// Get the element minimum quality in metric space.
+  real_t get_qmin() const{
+    double qmin=1; // Where 1 is ideal.
+    for(size_t i=0;i<_NElements;i++){
+      const index_t *n=get_element(i);
+      if(n[0]<0)
+        continue;
+      
+      if(ndims==2)
+        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
+      else
+        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
+    }
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(&qmin, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+    }
+#endif
+    return qmin;
+  }
+
   /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
   real_t get_qrms() const{
+    double mean = get_qmean();
+
     real_t rms=0;
     int nele=0;
     for(size_t i=0;i<_NElements;i++){
@@ -332,7 +407,7 @@ template<typename real_t, typename index_t> class Mesh{
         q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
                                get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
 
-      rms += pow(q-1, 2);
+      rms += pow(q-mean, 2);
       nele++;
     }
     rms = sqrt(rms/nele);
