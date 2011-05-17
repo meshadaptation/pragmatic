@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <omp.h>
+#include <errno.h>
 
 #include "Mesh.h"
 #include "Surface.h"
@@ -63,7 +64,7 @@ int main(int argc, char **argv){
   Smooth<double, int> smooth(*mesh, surface);
 
   double tic = omp_get_wtime();
-  smooth.smooth("smart Laplacian");
+  smooth.smooth("optimisation");
   double toc = omp_get_wtime();
   
   double lmean = mesh->get_lmean();
@@ -80,10 +81,10 @@ int main(int argc, char **argv){
            <<"Quality min:          "<<qmin<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
   
-  VTKTools<double, int>::export_vtu("../data/test_smart_Laplacian_2d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_optimise_smooth_2d", mesh);
   delete mesh;
 
-  if((lrms<0.4)&&(qrms<0.35))
+  if((lrms<0.4)&&(qrms<0.1))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

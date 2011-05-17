@@ -94,14 +94,21 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  smooth.smooth("smart Laplacian");
+  smooth.smooth("optimisation");
 
   mesh->verify();
   
+  double lmean = mesh->get_lmean();
   double lrms = mesh->get_lrms();
+
+  double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
+  double qmin = mesh->get_qmin();
   
-  std::cout<<"Edge length RMS:      "<<lrms<<std::endl
+  std::cout<<"Edge length mean:      "<<lmean<<std::endl
+           <<"Edge length RMS:      "<<lrms<<std::endl
+           <<"Quality mean:          "<<qmean<<std::endl
+           <<"Quality min:          "<<qmin<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
 
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh);
