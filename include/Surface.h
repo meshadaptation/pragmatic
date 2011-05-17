@@ -34,6 +34,8 @@
 #include <set>
 #include <map>
 
+#include <errno.h>
+
 #include "Mesh.h"
 
 /*! \brief Manages surface information and classification.
@@ -455,6 +457,7 @@ template<typename real_t, typename index_t>
         normals[i*2] = sqrt(1 - pow((get_x(SENList[2*i+1]) - get_x(SENList[2*i]))
                                     /(get_y(SENList[2*i+1]) - get_y(SENList[2*i])), 2));
         if(isnan(normals[i*2])){
+          errno = 0;
           normals[i*2] = 0;
           normals[i*2+1] = 1;
         }else{
