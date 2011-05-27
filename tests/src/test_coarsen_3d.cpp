@@ -37,6 +37,7 @@
 #include "MetricField.h"
 #include "Smooth.h"
 #include "Coarsen.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -57,12 +58,12 @@ int main(int argc, char **argv){
   Coarsen<double, int> adapt(*mesh, surface);
   Smooth<double, int> smooth(*mesh, surface);
 
-  double L_up = sqrt(2);
-  double L_low = L_up/2;
+  double L_up = sqrt(2.0);
+  double L_low = L_up*0.5;
 
-  double tic = omp_get_wtime();
+  double tic = get_wtime();
   adapt.coarsen(L_low, L_up);
-  double toc = omp_get_wtime();
+  double toc = get_wtime();
 
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
@@ -84,7 +85,7 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
   
-  if((nelements<30)&&(lrms<0.4)&&(qrms<1.0))
+  if((nelements<60)&&(lrms<0.4)&&(qrms<1.0))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

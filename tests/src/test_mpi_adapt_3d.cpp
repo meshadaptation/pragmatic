@@ -28,6 +28,7 @@
  */
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -98,15 +99,14 @@ int main(int argc, char **argv){
   smooth.smooth("smart Laplacian");
   
   double L_max = mesh->maximal_edge_length();
-  double alpha = sqrt(2)/2;
+  double alpha = 0.95; //sqrt(2.0)*0.5;
   Refine<double, int> refine(*mesh, surface);
   for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
-
-    smooth.smooth("smart Laplacian");
+    smooth.smooth("smart Laplacian", 1);
 
     L_max = mesh->maximal_edge_length();
     if(L_max<L_up)

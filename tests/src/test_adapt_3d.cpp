@@ -112,7 +112,7 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
   
-  if((nelements>39000)&&(nelements<48000)&&(lrms<0.6)&&(qrms<0.65))
+  if((nelements>36000)&&(nelements<48000)&&(lrms<0.6)&&(qrms<0.65))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
