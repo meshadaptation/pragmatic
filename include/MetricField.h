@@ -439,10 +439,10 @@ template<typename real_t, typename index_t>
               swept.insert(q);
 
             MetricTensor<real_t> Mp(_ndims, _metric[p].get_metric());
-            Mp.eigen_decomp(&(Dp[0]), &(Vp[0]));
+            Mp.eigen_decomp(Dp, Vp);
 
             MetricTensor<real_t> Mq(_ndims, _metric[q].get_metric());
-            Mq.eigen_decomp(&(Dq[0]), &(Vq[0]));
+            Mq.eigen_decomp(Dq, Vq);
 
             // Pair the eigenvectors between p and q by minimising the angle between them.
             std::vector<int> pairs(_ndims, -1);

@@ -692,8 +692,7 @@ template<typename real_t, typename index_t> class Mesh{
         if(local_Edges.size()!=Edges.size()){
           valid_edges = false;
         }else{
-          for(typename
-                std::set< Edge<real_t, index_t> >::iterator it=Edges.begin(), jt=local_Edges.begin();
+          for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin(), jt=local_Edges.begin();
               it!=Edges.end(); ++it, ++jt){
             if(it->edge != jt->edge){
               result = "fail (it->edge != jt->edge)\n";
@@ -702,12 +701,12 @@ template<typename real_t, typename index_t> class Mesh{
             if(it->adjacent_elements != jt->adjacent_elements){
               result = "fail (it->adjacent_elements != jt->adjacent_elements)\n";
               std::cerr<<"it->adjacent_elements = {";
-              for(typename std::set<index_t>::iterator kt=it->adjacent_elements.begin();kt!=it->adjacent_elements.end();++kt)
+              for(typename std::set<index_t>::const_iterator kt=it->adjacent_elements.begin();kt!=it->adjacent_elements.end();++kt)
                 std::cerr<<*kt<<" ";
               std::cerr<<"}\n";
               
               std::cerr<<"jt->adjacent_elements = {";
-              for(typename std::set<index_t>::iterator kt=jt->adjacent_elements.begin();kt!=jt->adjacent_elements.end();++kt)
+              for(typename std::set<index_t>::const_iterator kt=jt->adjacent_elements.begin();kt!=jt->adjacent_elements.end();++kt)
                 std::cerr<<*kt<<" ";
               std::cerr<<"}\n";
               break;

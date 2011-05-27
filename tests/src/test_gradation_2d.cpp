@@ -36,6 +36,7 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "MetricTensor.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -61,14 +62,14 @@ int main(int argc, char **argv){
     }
   }
 
-  double start_tic = omp_get_wtime();
+  double start_tic = get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
 
   double gradation = 1.3;
   metric_field.apply_gradation(gradation);
   metric_field.update_mesh();
 
-  std::cout<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*4);
   metric_field.get_metric(&(metric[0]));
@@ -82,7 +83,7 @@ int main(int argc, char **argv){
 
     MetricTensor<double> metric_tensor_0(2,&(metric[4*nid0]));
     std::vector<double> D0(2), V0(4);
-    metric_tensor_0.eigen_decomp(&(D0[0]), &(V0[0]));
+    metric_tensor_0.eigen_decomp(D0, V0);
 
     for (std::set<int>::iterator it = adjacent_nodes.begin(); it != adjacent_nodes.end(); it++)
     {
@@ -90,7 +91,7 @@ int main(int argc, char **argv){
       
       MetricTensor<double> metric_tensor_1(2,&(metric[4*nid1]));
       std::vector<double> D1(2), V1(4);
-      metric_tensor_1.eigen_decomp(&(D1[0]), &(V1[0]));
+      metric_tensor_1.eigen_decomp(D1, V1);
 
       // Pair the eigenvectors by minimising the angle between them.
       std::vector<int> pairs(2, -1);

@@ -28,6 +28,7 @@
  */
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 #include <stdlib.h>
 #include <errno.h>
@@ -46,6 +47,7 @@
 #include "MetricField.h"
 
 #include "Smooth.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -79,10 +81,10 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   
   Smooth<double, int> smooth(*mesh, surface);
-  double tic = omp_get_wtime();
+  double tic = get_wtime();
   smooth.smooth("Laplacian");
   smooth.smooth("smart Laplacian");
-  double toc = omp_get_wtime();
+  double toc = get_wtime();
 
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();

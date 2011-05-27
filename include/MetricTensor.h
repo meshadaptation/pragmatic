@@ -327,7 +327,7 @@ class MetricTensor{
   }
 
   double average_length() const{
-    double D[_dimension], V[_dimension*_dimension];
+    std::vector<double> D(_dimension), V(_dimension*_dimension);
     eigen_decomp(D, V);
 
     double sum = D[0];
@@ -339,7 +339,7 @@ class MetricTensor{
   }
 
   double max_length() const{
-    double D[_dimension], V[_dimension*_dimension];
+    std::vector<double> D(_dimension), V(_dimension*_dimension);
     eigen_decomp(D, V);
 
     double min = D[0];
@@ -350,7 +350,7 @@ class MetricTensor{
   }
 
   double min_length() const{
-    double D[_dimension], V[_dimension*_dimension];
+    std::vector<double> D(_dimension), V(_dimension*_dimension);
     eigen_decomp(D, V);
 
     double max = D[0];
@@ -360,7 +360,7 @@ class MetricTensor{
     return sqrt(1.0/max); // ie, the min
   }
 
-  void eigen_decomp(double *eigenvalues, double *eigenvectors) const{
+  void eigen_decomp(std::vector<double> &eigenvalues, std::vector<double> &eigenvectors) const{
     if(_dimension==2){
       Eigen::Matrix<real_t, 2, 2> M;
       M <<
@@ -403,7 +403,7 @@ class MetricTensor{
 
   int eigen_undecomp(const double *D, const double *V){
     // Insure eigenvalues are positive
-    double eigenvalues[_dimension];
+    std::vector<double> eigenvalues(_dimension);
     for(size_t i=0;i<_dimension;i++)
       eigenvalues[i] = fabs(D[i]);
 

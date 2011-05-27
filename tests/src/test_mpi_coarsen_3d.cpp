@@ -28,6 +28,7 @@
  */
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 #include <errno.h>
 #include <stdlib.h>
@@ -46,6 +47,7 @@
 #include "MetricField.h"
 
 #include "Coarsen.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -73,9 +75,9 @@ int main(int argc, char **argv){
   
   Coarsen<double, int> adapt(*mesh, surface);
 
-  double tic = omp_get_wtime();
-  adapt.coarsen(0.4, sqrt(2));
-  double toc = omp_get_wtime();
+  double tic = get_wtime();
+  adapt.coarsen(0.4, sqrt(2.0));
+  double toc = get_wtime();
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);

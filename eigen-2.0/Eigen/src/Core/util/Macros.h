@@ -190,7 +190,8 @@ using Eigen::ei_cos;
 #elif (defined _MSC_VER)
 #define EIGEN_ALIGN_128 __declspec(align(16))
 #else
-#error Please tell me what is the equivalent of __attribute__((aligned(16))) for your compiler
+// #error Please tell me what is the equivalent of __attribute__((aligned(16))) for your compiler
+#define EIGEN_ALIGN_128 __attribute__((aligned(16)))
 #endif
 
 #ifdef EIGEN_DONT_USE_RESTRICT_KEYWORD

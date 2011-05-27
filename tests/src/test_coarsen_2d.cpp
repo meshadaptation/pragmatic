@@ -37,6 +37,7 @@
 #include "MetricField.h"
 
 #include "Coarsen.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -55,12 +56,12 @@ int main(int argc, char **argv){
   
   Coarsen<double, int> adapt(*mesh, surface);
 
-  double L_up = sqrt(2);
-  double L_low = L_up/2;
+  double L_up = sqrt(2.0);
+  double L_low = L_up*0.5;
 
-  double tic = omp_get_wtime();
+  double tic = get_wtime();
   adapt.coarsen(L_low, L_up);
-  double toc = omp_get_wtime();
+  double toc = get_wtime();
 
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();

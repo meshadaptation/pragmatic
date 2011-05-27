@@ -35,6 +35,7 @@
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -54,10 +55,10 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1]+0.1, 2) +
       pow(mesh->get_coords(i)[2]+0.1, 2);
   
-  double start_tic = omp_get_wtime();
+  double start_tic = get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
-  std::cout<<"Hessian loop time = "<<omp_get_wtime()-start_tic<<std::endl;
+  std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
 
   vector<double> metric(NNodes*9);
   metric_field.get_metric(&(metric[0]));

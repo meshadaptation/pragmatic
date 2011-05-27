@@ -40,6 +40,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <errno.h>
 
 #include "ElementProperty.h"
 #include "Surface.h"
@@ -513,6 +514,11 @@ template<typename real_t, typename index_t>
     
     for(int i=0;i<3;i++)
       p[i] = b[i];
+
+    if(isnan(p[0])||isnan(p[1])||isnan(p[2])){
+      errno = 0;
+      return false;
+    }
 
     // If this is on the surface or edge, then make a roundoff correction.
     for(int i=0;i<2;i++)

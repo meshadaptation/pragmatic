@@ -176,7 +176,7 @@ template<typename real_t, typename index_t> class Coarsen{
           continue;
         
         // Create a copy of the proposed element
-        int n[nloc];
+        std::vector<int> n(nloc);
         for(size_t i=0;i<nloc;i++){
           int nid = _mesh->get_element(*ee)[i];
           if(nid==rm_vertex)
@@ -326,7 +326,7 @@ template<typename real_t, typename index_t> class Coarsen{
       }else if(adj_nodes_target.count(*nn)){
         // Delete element adjancies from NEList.
         for(typename std::set<index_t>::const_iterator de=deleted_elements.begin();de!=deleted_elements.end();++de){
-          typename std::set<index_t>::const_iterator ele = _mesh->NEList[*nn].find(*de);
+          typename std::set<index_t>::iterator ele = _mesh->NEList[*nn].find(*de);
           if(ele!=_mesh->NEList[*nn].end())
             _mesh->NEList[*nn].erase(ele);
         }

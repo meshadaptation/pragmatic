@@ -156,9 +156,9 @@ class ElementProperty{
     real_t a_m = a*sqrt(m00*m11 - m01*m01);
 
     // Function
-    real_t f = min(l/3, 3/l);
-    real_t F = pow(f * (2.0 - f), 3);
-    real_t quality = 12*sqrt(3)*a_m*F/(l*l);
+    real_t f = min(l/3.0, 3.0/l);
+    real_t F = pow(f * (2.0 - f), 3.0);
+    real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l);
 
     return quality;
   }

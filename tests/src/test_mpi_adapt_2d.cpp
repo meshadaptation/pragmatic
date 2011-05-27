@@ -28,6 +28,7 @@
  */
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -45,6 +46,7 @@
 #include "Coarsen.h"
 #include "Refine.h"
 #include "Smooth.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -84,17 +86,17 @@ int main(int argc, char **argv){
   double L_low = 0.4;
   double L_up = 1.0;
 
-  double start_tic = omp_get_wtime();
+  double start_tic = get_wtime();
   Coarsen<double, int> coarsen(*mesh, surface);
   coarsen.coarsen(L_low, L_up);
   if(rank==0)
-    std::cout<<"Coarsen1: "<<omp_get_wtime()-start_tic<<std::endl;
+    std::cout<<"Coarsen1: "<<get_wtime()-start_tic<<std::endl;
   
-  start_tic = omp_get_wtime();
+  start_tic = get_wtime();
   Smooth<double, int> smooth(*mesh, surface);
   smooth.smooth("smart Laplacian");
   if(rank==0)
-    std::cout<<"Smooth 1: "<<omp_get_wtime()-start_tic<<std::endl;
+    std::cout<<"Smooth 1: "<<get_wtime()-start_tic<<std::endl;
   
   double L_max = mesh->maximal_edge_length();
   int long_edges;
@@ -102,7 +104,7 @@ int main(int argc, char **argv){
     MPI_Allreduce(&long_edges, &long_edges, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
   
   int adapt_iter=0;
-  double alpha = sqrt(2)/2;
+  double alpha = sqrt(2.0)*0.5;
   Refine<double, int> refine(*mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
@@ -112,20 +114,20 @@ int main(int argc, char **argv){
                <<"L_ref = "<<L_ref<<", "
                <<"Num elements = "<<mesh->get_number_elements()<<std::endl;
     
-    start_tic = omp_get_wtime();
+    start_tic = get_wtime();
     refine.refine(L_ref);
     if(rank==0)
-      std::cout<<"Refine: "<<omp_get_wtime()-start_tic<<std::endl;
+      std::cout<<"Refine: "<<get_wtime()-start_tic<<std::endl;
     
-    start_tic = omp_get_wtime();
+    start_tic = get_wtime();
     coarsen.coarsen(L_low, L_max);
     if(rank==0)
-      std::cout<<"Coarsen2: "<<omp_get_wtime()-start_tic<<std::endl;
+      std::cout<<"Coarsen2: "<<get_wtime()-start_tic<<std::endl;
     
-    start_tic = omp_get_wtime();
+    start_tic = get_wtime();
     smooth.smooth("smart Laplacian");
     if(rank==0)
-      std::cout<<"Smooth 2: "<<omp_get_wtime()-start_tic<<std::endl;
+      std::cout<<"Smooth 2: "<<get_wtime()-start_tic<<std::endl;
     
     L_max = mesh->maximal_edge_length();
     long_edges=(L_max>L_up)?1:0;
@@ -134,10 +136,10 @@ int main(int argc, char **argv){
     
   }while((long_edges>0)&&(adapt_iter++<10));
   
-  start_tic = omp_get_wtime();
+  start_tic = get_wtime();
   smooth.smooth("smart Laplacian");
   if(rank==0)
-    std::cout<<"Smooth 3: "<<omp_get_wtime()-start_tic<<std::endl;
+    std::cout<<"Smooth 3: "<<get_wtime()-start_tic<<std::endl;
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);

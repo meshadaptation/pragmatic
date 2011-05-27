@@ -5,10 +5,11 @@ CPPFLAGS = @CPPFLAGS@ -I../eigen-2.0 -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 
-LIBS = @LIBS@
+LIBS = ticker.o @LIBS@
 
 TEST_SRC = $(wildcard src/*.cpp)
 TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
+VPATH = ./:./src
 
 .SUFFIXES: .cpp .o
 
@@ -17,12 +18,12 @@ TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
 
 default: test
 
-test: $(TEST_BIN)
+test: ticker.o $(TEST_BIN)
 	python ./unittest bin
 
-binaries: $(TEST_BIN)
+binaries: ticker.o $(TEST_BIN)
 
-bin/%: src/%.cpp
+bin/%: src/%.cpp 
 	@echo "    CXX $@"
 	@$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
 

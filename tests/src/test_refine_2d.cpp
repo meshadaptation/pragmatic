@@ -37,6 +37,7 @@
 #include "MetricField.h"
 
 #include "Refine.h"
+#include "ticker.h"
 
 using namespace std;
 
@@ -58,9 +59,9 @@ int main(int argc, char **argv){
   
   Refine<double, int> adapt(*mesh, surface);
 
-  double tic = omp_get_wtime();
-  adapt.refine(sqrt(2));
-  double toc = omp_get_wtime();
+  double tic = get_wtime();
+  adapt.refine(sqrt(2.0));
+  double toc = get_wtime();
 
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
