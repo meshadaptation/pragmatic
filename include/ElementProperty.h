@@ -134,12 +134,12 @@ class ElementProperty{
    * @param m2 2x2 metric tensor for third point.
    */
   real_t lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
-                   const real_t *m0, const real_t *m1, const real_t *m2){
+                  const real_t *m0, const real_t *m1, const real_t *m2){
     // Metric tensor averaged over the element
     real_t m00 = (m0[0] + m1[0] + m2[0])/3;
     real_t m01 = (m0[1] + m1[1] + m2[1])/3;
     real_t m11 = (m0[3] + m1[3] + m2[3])/3;
-
+    
     // l is the length of the perimeter, measured in metric space
     real_t l =
       sqrt((x0[1] - x1[1])*((x0[1] - x1[1])*m11 + (x0[0] - x1[0])*m01) + 
@@ -151,14 +151,28 @@ class ElementProperty{
 
     // Area in physical space
     real_t a=area(x0, x1, x2);
-
+    
     // Area in metric space
     real_t a_m = a*sqrt(m00*m11 - m01*m01);
-
+    
     // Function
-    real_t f = min(l/3.0, 3.0/l);
-    real_t F = pow(f * (2.0 - f), 3.0);
-    real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l);
+
+    // Original expression - but this is non-differentiable
+    // real_t f = min(l/3.0, 3.0/l);
+    // real_t F = pow(f * (2.0 - f), 3.0);
+
+    // This is a modified version that's continuously differentiable.
+    // real_t f = exp(-1.75818939*pow(l/3.0 - 1.0, 2));    
+    // real_t F = pow(f * (2.0 - f), 3.0);
+
+    // Cauchy distribution ** pretty good
+    // const double pi = 3.141592653589793;
+    // real_t F = (1.9/pi)*(0.64/(pow(l/3-1.0, 2) + pow(0.64, 2)));
+
+    // Inverse-gamma distribution ** best so far
+    real_t F = 1.63416547*pow(3.83669838, 3)*pow(l/3, -4)*exp(-3.83669838/(l/3))/2;
+
+    real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l); 
 
     return quality;
   }

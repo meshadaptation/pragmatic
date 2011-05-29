@@ -1,0 +1,2 @@
+default:
+	sage functional.sage

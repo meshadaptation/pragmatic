@@ -82,7 +82,7 @@ int main(int argc, char **argv){
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_up);
-    swapping.swap(9.0);
+    swapping.swap(0.90);
 
     L_max = mesh->maximal_edge_length();
 

@@ -106,10 +106,10 @@ elif test "x$GCC" = "xyes" ; then
     fi
 fi
 
-AC_CHECK_LIB(stdc++,main,,) 
-AC_CHECK_LIB(m,main,,)
-AC_CHECK_LIB(numa,main,,AC_MSG_WARN([No NUMA support available.]))
-AC_CHECK_LIB(metis,main,,AC_MSG_ERROR([METIS required]))
+AC_CHECK_LIB(stdc++,fclose,,) 
+AC_CHECK_LIB(m,sin,,)
+AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
+AC_CHECK_LIB(metis,METIS_EdgeND,,AC_MSG_ERROR([METIS required]))
 
 # Zoltan
 AC_ARG_ENABLE(zoltan,[AC_HELP_STRING([--enable-zoltan], [Enables Zoltan support])])
@@ -145,13 +145,13 @@ if test "$enable_vtk" != "no" ; then
     if test "x$search_for_vtk" == "xyes" ; then
         # Usually the location of the libraries is not a mystery. The
         # header files are another matter.
-        AC_CHECK_LIB(dl, main)
-        AC_CHECK_LIB(vtksys, main)
-        AC_CHECK_LIB(vtkCommon, main, [], 
+        AC_CHECK_LIB(dl, dlopen)
+        AC_CHECK_LIB(vtksys, vtksysProcess_New)
+        AC_CHECK_LIB(vtkCommon, vtkSortDataArrayComponentCompare_VTK_CHAR, [], 
             [if test "x$VTK_LIBS" != "x" ; then
                 LIBS="$LIBS -L$VTK_LIBS"
                 unset ac_cv_lib_vtkCommon_main
-                AC_CHECK_LIB(vtkCommon, main, [], 
+                AC_CHECK_LIB(vtkCommon, vtkSortDataArrayComponentCompare_VTK_CHAR, [], 
                    [
                       AC_MSG_ERROR([Cannot find vtk installation.])
                       exit -1
@@ -161,11 +161,11 @@ if test "$enable_vtk" != "no" ; then
                 exit -1
              fi
             ])
-        AC_CHECK_LIB(vtkzlib, main)
-        AC_CHECK_LIB(vtkexpat, main)
-        AC_CHECK_LIB(vtkFiltering, main)
-        AC_CHECK_LIB(vtkGraphics, main)
-        AC_CHECK_LIB(vtkIO, main)
+        AC_CHECK_LIB(vtkzlib, vtk_zlib_zlibVersion)
+        AC_CHECK_LIB(vtkexpat, vtk_expat_XML_ExpatVersion)
+        AC_CHECK_LIB(vtkFiltering, vtkSortOnIds)
+        AC_CHECK_LIB(vtkGraphics, vtkCompareClipValues)
+        AC_CHECK_LIB(vtkIO, vtkXMLWriterC_New)
         
         # check at the usual places:
         for i in $(ls -d /usr/include/vtk*) $VTK_INCLUDE; do
