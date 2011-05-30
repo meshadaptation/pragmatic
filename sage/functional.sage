@@ -193,8 +193,8 @@ def generate_Lipnikov2_2d():
     a_m = sqrt(M.det())*matrix(SR, 2, 2, [x1-x, y1-y, x2-x, y2-y]).det()/2
 
     F = 1.63416547*3.83669838**3*(l/3)**-4*exp(-3.83669838/(l/3))/2
-
-    q = 12.0*sqrt(3.0)*a_m*F/(l*l)
+    F = 7.5854552/((l-1.5)**2 + 1.89199003)
+    q = F*a_m
     
     dqdx = diff(q, x)
     dqdy = diff(q, y)

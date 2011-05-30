@@ -7,7 +7,7 @@ from math import pi
 # Data to fit
 num = 100
 x = linspace(0.01, 10.0, num=num)
-y = [(min(i, 1.0/i) * (2.0 - min(i, 1.0/i)))**3  for i in x]
+y = [(12.0*sqrt(3.0)*(min(l/3., 3./l) * (2.0 - min(l/3., 3./l)))**3)/(l**2) for l in x]
 
 # Fit polynomial
 # Parametric function: 'v' is the parameter vector, 'x' the independent varible
@@ -27,22 +27,22 @@ y = [(min(i, 1.0/i) * (2.0 - min(i, 1.0/i)))**3  for i in x]
 #p0 = [1.13156567]
 
 # Cauchy distribution **best so far
-# x0 = 1.0
-# fp = lambda p, x: (p[1]/pi)*(p[0]/((x-x0)**2 + p[0]**2))
-# p0 = [0.6, 1.9]
+x0 = 1.5
+fp = lambda p, x: p[0]/((x-x0)**2 + p[1])
+p0 = [0.6, 1.9]
 
 # Gamma distribution
 #fp = lambda p, x: x*exp(-x/p[0])/p[0]
 #p0 = [2.0]
 
 # Inverse-gamma distribution
-fp = lambda p, x: p[1]*p[0]**3*x**-4*exp(-p[0]/x)/2
-p0 = [3.0, 1.0]
+#fp = lambda p, x: p[1]*x**(-p[2])*exp(-p[0]/x)
+#p0 = [3.0, 83.0, 2.5]
 
 # Error function
 e = lambda p, x, y: (fp(p,x)-y)
 
-p, success = leastsq(e, p0, args=(x,y), maxfev=10000)
+p, success = leastsq(e, p0, args=(x,y), maxfev=100000)
 
 ## Plot
 def plot_fit():

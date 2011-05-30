@@ -170,9 +170,9 @@ class ElementProperty{
     // real_t F = (1.9/pi)*(0.64/(pow(l/3-1.0, 2) + pow(0.64, 2)));
 
     // Inverse-gamma distribution ** best so far
-    real_t F = 1.63416547*pow(3.83669838, 3)*pow(l/3, -4)*exp(-3.83669838/(l/3))/2;
+    real_t F = 7.5854552/(pow(l-1.5, 2) + 1.89199003);
 
-    real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l); 
+    real_t quality = F*a_m; 
 
     return quality;
   }
