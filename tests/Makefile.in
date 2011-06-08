@@ -1,14 +1,22 @@
 SHELL = /bin/bash
 
 CXX = @CXX@
+CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
+
 CPPFLAGS = @CPPFLAGS@ -I../eigen-2.0 -I../include
 
-CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
+NVCC = @NVCC@
+NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
+CUDA_LIBS = @CUDA_LIBS@
 
 LIBS = ticker.o @LIBS@
 
 TEST_SRC = $(wildcard src/*.cpp)
 TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
+
+TEST_SRC_CUDA = $(wildcard src/*.cu)
+TEST_BIN_CUDA = $(patsubst src/%.cu,bin/%,$(TEST_SRC_CUDA))
+
 VPATH = ./:./src
 
 .SUFFIXES: .cpp .o
@@ -18,14 +26,22 @@ VPATH = ./:./src
 
 default: test
 
-test: ticker.o $(TEST_BIN)
+test: binaries
 	python ./unittest bin
 
+ifeq (@ENABLE_CUDA@,yes)
+binaries: ticker.o $(TEST_BIN) $(TEST_BIN_CUDA)
+else
 binaries: ticker.o $(TEST_BIN)
+endif
 
 bin/%: src/%.cpp 
 	@echo "    CXX $@"
 	@$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+
+bin/%: src/%.cu 
+	@echo "    NVCC $@"
+	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
 
 clean:
 	rm -rf *.o $(TEST_BIN) bin/test*

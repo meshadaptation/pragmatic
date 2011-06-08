@@ -595,6 +595,11 @@ ac_subst_vars='VERSION
 LTLIBOBJS
 LIBOBJS
 ARFLAGS
+NVCCFLAGS
+ENABLE_CUDA
+CUDA_LIBS
+CUDA_CFLAGS
+NVCC
 EGREP
 GREP
 CXXCPP
@@ -674,6 +679,8 @@ enable_gprof
 enable_zoltan
 with_zoltan
 enable_vtk
+enable_cuda
+enable_emu
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1307,6 +1314,10 @@ Optional Features:
   --enable-gprof          enables profiling with gprof
   --enable-zoltan         Enables Zoltan support
   --enable-vtk            Only use to disable vtk
+  --enable-cuda=ARCH      Enable cuda based modules for architecture ARCH (see
+                          nvcc option -arch).
+  --enable-emu            Enable device emulation for cuda modules (nvcc
+                          version <= 3.0 only).
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -5418,6 +5429,148 @@ else
   as_fn_error $? "Cannot find vtk instillation." "$LINENO" 5
 fi
 
+
+
+# CUDA support
+############################################
+# NVIDIA Cuda Compiler detection and setup #
+############################################
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda;
+
+        # Search nvcc compiler
+        # Extract the first word of "nvcc", so it can be a program name with args.
+set dummy nvcc; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if test "${ac_cv_path_NVCC+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  case $NVCC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_NVCC="$NVCC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
+    ac_cv_path_NVCC="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_NVCC" && ac_cv_path_NVCC=""no""
+  ;;
+esac
+fi
+NVCC=$ac_cv_path_NVCC
+if test -n "$NVCC"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $NVCC" >&5
+$as_echo "$NVCC" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+        if test "x$NVCC" = "xno"; then :
+
+                        as_fn_error $? "NVCC compiler not found!" "$LINENO" 5
+
+fi
+
+        # Check nvcc version, should be 4.x
+        if nvcc --version | grep -q "release 4"; then :
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: NVCC compiler version is NOT 3.0!" >&5
+$as_echo "$as_me: WARNING: NVCC compiler version is NOT 3.0!" >&2;}
+
+fi
+
+        # If $with_cuda is not empty, set to CUDA_ARCH to
+        # supplied value, else set to value sm_11
+        if test "x$enableval" = "xyes"; then :
+
+                        CUDA_ARCH=" -arch=sm_11"
+
+else
+
+                CUDA_ARCH=" -arch=$enableval"
+
+fi
+
+                # Set CUDA_CFLAGS to $NVCC, where substring "bin/nvcc"
+                # is substituted by "include".
+                CUDA_CFLAGS=" -I${NVCC/'bin/nvcc'/include}"
+
+                #Set CUDA_CFLAGS to $NVCC, where substring "bin/nvcc"
+                #is substituted by "lib".
+                CUDA_LIBS=" -L${NVCC/'bin/nvcc'/lib}"
+
+                # If $build_cpu contains "_64", append "64" to CUDA_LIBS
+        if echo $build_cpu | grep -q "_64"; then :
+  CUDA_LIBS+="64"
+fi
+
+                # Append " -lcudart" to CUDA_LIBS
+                CUDA_LIBS+=" -lcudart"
+
+        # Symbolize that cuda is wanted
+        with_cuda=$enableval
+
+        # Make variables available in Makefile.am
+
+
+
+
+fi
+
+# Set this conditional if cuda is wanted
+if test -n "$with_cuda" ; then
+    ENABLE_CUDA=yes
+
+fi
+
+# Check whether to use device emulation mode for cuda (if no cuda capable gpu is available)
+# Check whether --enable-emu was given.
+if test "${enable_emu+set}" = set; then :
+  enableval=$enable_emu; EMULATION=true
+else
+  EMULATION=false
+fi
+
+
+# Set up compilation flags for cuda compiler nvcc, if with_cuda is set
+if test -n "$with_cuda"; then :
+
+
+        # If debug flag is set apply debugging compilation flags, otherwise build compilation flags
+        if test "x$DEBUG" = "xtrue"; then :
+  NVCCFLAGS="-g --compiler-options -fno-strict-aliasing --compiler-options -fno-inline"
+else
+  NVCCFLAGS="-O3 -use_fast_math --compiler-options -fno-strict-aliasing --compiler-options -fno-inline"
+fi
+
+        # Add architecture to flags
+        NVCCFLAGS+=" $CUDA_ARCH"
+
+        # If device emulation was set, add deviceemu flag
+        if test "x$EMULATION" = "xtrue"; then :
+  NVCCFLAGS+=" -deviceemu"
+fi
+
+
+fi
+# Make NVCCFLAGS available in Makefile.am
 
 
 

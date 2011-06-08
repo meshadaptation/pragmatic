@@ -244,6 +244,81 @@ EOF
 AC_CHECK_HEADER(vtkCellData.h,[],
 [AC_MSG_ERROR([Cannot find vtk instillation.])])
 
+# CUDA support
+############################################
+# NVIDIA Cuda Compiler detection and setup #
+############################################
+AC_ARG_ENABLE(cuda, 
+        AS_HELP_STRING([--enable-cuda=ARCH], [Enable cuda based modules for architecture ARCH (see nvcc option -arch).]),[
+
+        # Search nvcc compiler
+        AC_PATH_PROG(NVCC, nvcc, "no")
+        AS_IF([test "x$NVCC" = "xno"],[
+                        AC_MSG_ERROR([NVCC compiler not found!])
+        ])
+
+        # Check nvcc version, should be 4.x
+        AS_IF([nvcc --version | grep -q "release 4"],
+                        [],
+                        [AC_MSG_WARN([NVCC compiler version is NOT 3.0!])
+        ])
+
+        # If $with_cuda is not empty, set to CUDA_ARCH to
+        # supplied value, else set to value sm_11
+        AS_IF([test "x$enableval" = "xyes"],[
+                        CUDA_ARCH=" -arch=sm_11"
+        ],[
+                CUDA_ARCH=" -arch=$enableval"
+        ])
+
+                # Set CUDA_CFLAGS to $NVCC, where substring "bin/nvcc"
+                # is substituted by "include".
+                CUDA_CFLAGS=" -I${NVCC/'bin/nvcc'/include}"
+
+                #Set CUDA_CFLAGS to $NVCC, where substring "bin/nvcc"
+                #is substituted by "lib".
+                CUDA_LIBS=" -L${NVCC/'bin/nvcc'/lib}"
+
+                # If $build_cpu contains "_64", append "64" to CUDA_LIBS
+        AS_IF([echo $build_cpu | grep -q "_64"],
+                [CUDA_LIBS+="64"])
+
+                # Append " -lcudart" to CUDA_LIBS
+                CUDA_LIBS+=" -lcudart"
+
+        # Symbolize that cuda is wanted
+        with_cuda=$enableval
+
+        # Make variables available in Makefile.am
+        AC_SUBST(CUDA_CFLAGS)
+        AC_SUBST(CUDA_LIBS)
+        AC_SUBST(NVCC)
+])
+# Set this conditional if cuda is wanted
+if test -n "$with_cuda" ; then
+    ENABLE_CUDA=yes
+    AC_SUBST(ENABLE_CUDA)
+fi
+
+# Set up compilation flags for cuda compiler nvcc, if with_cuda is set
+AS_IF([test -n "$with_cuda"],[
+
+        # If debug flag is set apply debugging compilation flags, otherwise build compilation flags
+        AS_IF([test "x$DEBUG" = "xtrue"],
+                [NVCCFLAGS="-g --compiler-options -fno-strict-aliasing --compiler-options -fno-inline"],
+                [NVCCFLAGS="-O3 -use_fast_math --compiler-options -fno-strict-aliasing --compiler-options -fno-inline"])
+
+        # Add architecture to flags
+        NVCCFLAGS+=" $CUDA_ARCH"
+
+        # If device emulation was set, add deviceemu flag
+        AS_IF([test "x$EMULATION" = "xtrue"],
+                [NVCCFLAGS+=" -deviceemu"])
+
+])
+# Make NVCCFLAGS available in Makefile.am
+AC_SUBST(NVCCFLAGS)
+
 AC_SUBST(ARFLAGS)
 AC_C_CONST
 AC_C_INLINE
