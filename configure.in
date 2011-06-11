@@ -132,7 +132,20 @@ done
 AC_CHECK_HEADER(vtkVersion.h,
     [AC_DEFINE([HAVE_VTK])])
 
-# AC_CHECK_LIB(vtksys, vtksysProcess_New)
+AC_MSG_CHECKING([for libvtksys])
+old_libs="$LIBS"
+LIBS="-lvtksys $LIBS"
+AC_LINK_IFELSE([
+        AC_LANG_PROGRAM(
+            [[
+#include "vtksys/Directory.hxx"
+                    ]],
+            [[      
+                    vtksys::Directory dir;
+                    ]])
+        ],
+    [AC_MSG_RESULT([yes])],
+    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
 
 AC_MSG_CHECKING([for libvtkCommon])
 old_libs="$LIBS"
