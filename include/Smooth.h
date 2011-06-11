@@ -825,7 +825,7 @@ template<typename real_t, typename index_t>
     }
     
     // Find the distance we have to step to reach the local quality maximum.
-    real_t alpha;
+    real_t alpha=0.0;
     {
       // Initialise alpha.
       typename std::map<index_t, std::vector<real_t> >::iterator lg=local_gradients.begin();

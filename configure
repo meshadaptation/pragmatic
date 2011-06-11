@@ -678,9 +678,7 @@ enable_debugging
 enable_gprof
 enable_zoltan
 with_zoltan
-enable_vtk
 enable_cuda
-enable_emu
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1313,11 +1311,8 @@ Optional Features:
   --enable-debugging      turns on debugging flags
   --enable-gprof          enables profiling with gprof
   --enable-zoltan         Enables Zoltan support
-  --enable-vtk            Only use to disable vtk
   --enable-cuda=ARCH      Enable cuda based modules for architecture ARCH (see
                           nvcc option -arch).
-  --enable-emu            Enable device emulation for cuda modules (nvcc
-                          version <= 3.0 only).
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -4477,55 +4472,8 @@ echo $LIBS
 
 fi
 
-vtk_header_relative_path=""
-# Check whether --enable-vtk was given.
-if test "${enable_vtk+set}" = set; then :
-  enableval=$enable_vtk;
-fi
-
-if test "$enable_vtk" != "no" ; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: Checking for VTK automagic." >&5
-$as_echo "$as_me: Checking for VTK automagic." >&6;}
-    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-#include <vtkVersion.h>
-#include <vtkUnstructuredGrid.h>
-
-int
-main ()
-{
-
-                        vtkVersion::GetVTKMajorVersion();
-                        vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-
-            { $as_echo "$as_me:${as_lineno-$LINENO}: VTK automagic works." >&5
-$as_echo "$as_me: VTK automagic works." >&6;}
-	    CPPFLAGS="$CPPFLAGS -DHAVE_VTK"
-            VTK=yes
-            search_for_vtk=no
-
-else
-
-            { $as_echo "$as_me:${as_lineno-$LINENO}: No VTK automagic" >&5
-$as_echo "$as_me: No VTK automagic" >&6;}
-	    search_for_vtk=yes
-
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-
-    if test "x$search_for_vtk" == "xyes" ; then
-        # Usually the location of the libraries is not a mystery. The
-        # header files are another matter.
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
+# Detect VTK
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
 $as_echo_n "checking for dlopen in -ldl... " >&6; }
 if test "${ac_cv_lib_dl_dlopen+set}" = set; then :
   $as_echo_n "(cached) " >&6
@@ -4570,388 +4518,17 @@ _ACEOF
 
 fi
 
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtksysProcess_New in -lvtksys" >&5
-$as_echo_n "checking for vtksysProcess_New in -lvtksys... " >&6; }
-if test "${ac_cv_lib_vtksys_vtksysProcess_New+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtksys  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
 
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtksysProcess_New ();
-int
-main ()
-{
-return vtksysProcess_New ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtksys_vtksysProcess_New=yes
-else
-  ac_cv_lib_vtksys_vtksysProcess_New=no
+if test -n "$VTK_LIBS" ; then
+    LIBS="$LIBS -L$VTK_LIBS"
 fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtksys_vtksysProcess_New" >&5
-$as_echo "$ac_cv_lib_vtksys_vtksysProcess_New" >&6; }
-if test "x$ac_cv_lib_vtksys_vtksysProcess_New" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKSYS 1
-_ACEOF
+for i in $VTK_INCLUDE $(ls -d /usr/include/vtk*); do
+    if test -r $i/vtkCellData.h; then
+        CPPFLAGS="-I$i $CPPFLAGS"
+    fi
+done
 
-  LIBS="-lvtksys $LIBS"
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtkSortDataArrayComponentCompare_VTK_CHAR in -lvtkCommon" >&5
-$as_echo_n "checking for vtkSortDataArrayComponentCompare_VTK_CHAR in -lvtkCommon... " >&6; }
-if test "${ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkCommon  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtkSortDataArrayComponentCompare_VTK_CHAR ();
-int
-main ()
-{
-return vtkSortDataArrayComponentCompare_VTK_CHAR ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR=yes
-else
-  ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" >&5
-$as_echo "$ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" >&6; }
-if test "x$ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKCOMMON 1
-_ACEOF
-
-  LIBS="-lvtkCommon $LIBS"
-
-else
-  if test "x$VTK_LIBS" != "x" ; then
-                LIBS="$LIBS -L$VTK_LIBS"
-                unset ac_cv_lib_vtkCommon_main
-                { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtkSortDataArrayComponentCompare_VTK_CHAR in -lvtkCommon" >&5
-$as_echo_n "checking for vtkSortDataArrayComponentCompare_VTK_CHAR in -lvtkCommon... " >&6; }
-if test "${ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkCommon  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtkSortDataArrayComponentCompare_VTK_CHAR ();
-int
-main ()
-{
-return vtkSortDataArrayComponentCompare_VTK_CHAR ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR=yes
-else
-  ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" >&5
-$as_echo "$ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" >&6; }
-if test "x$ac_cv_lib_vtkCommon_vtkSortDataArrayComponentCompare_VTK_CHAR" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKCOMMON 1
-_ACEOF
-
-  LIBS="-lvtkCommon $LIBS"
-
-else
-
-                      as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-                      exit -1
-
-fi
-
-             else
-                as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-                exit -1
-             fi
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtk_zlib_zlibVersion in -lvtkzlib" >&5
-$as_echo_n "checking for vtk_zlib_zlibVersion in -lvtkzlib... " >&6; }
-if test "${ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkzlib  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtk_zlib_zlibVersion ();
-int
-main ()
-{
-return vtk_zlib_zlibVersion ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion=yes
-else
-  ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion" >&5
-$as_echo "$ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion" >&6; }
-if test "x$ac_cv_lib_vtkzlib_vtk_zlib_zlibVersion" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKZLIB 1
-_ACEOF
-
-  LIBS="-lvtkzlib $LIBS"
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtk_expat_XML_ExpatVersion in -lvtkexpat" >&5
-$as_echo_n "checking for vtk_expat_XML_ExpatVersion in -lvtkexpat... " >&6; }
-if test "${ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkexpat  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtk_expat_XML_ExpatVersion ();
-int
-main ()
-{
-return vtk_expat_XML_ExpatVersion ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion=yes
-else
-  ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" >&5
-$as_echo "$ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" >&6; }
-if test "x$ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKEXPAT 1
-_ACEOF
-
-  LIBS="-lvtkexpat $LIBS"
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtkSortOnIds in -lvtkFiltering" >&5
-$as_echo_n "checking for vtkSortOnIds in -lvtkFiltering... " >&6; }
-if test "${ac_cv_lib_vtkFiltering_vtkSortOnIds+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkFiltering  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtkSortOnIds ();
-int
-main ()
-{
-return vtkSortOnIds ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkFiltering_vtkSortOnIds=yes
-else
-  ac_cv_lib_vtkFiltering_vtkSortOnIds=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkFiltering_vtkSortOnIds" >&5
-$as_echo "$ac_cv_lib_vtkFiltering_vtkSortOnIds" >&6; }
-if test "x$ac_cv_lib_vtkFiltering_vtkSortOnIds" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKFILTERING 1
-_ACEOF
-
-  LIBS="-lvtkFiltering $LIBS"
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtkCompareClipValues in -lvtkGraphics" >&5
-$as_echo_n "checking for vtkCompareClipValues in -lvtkGraphics... " >&6; }
-if test "${ac_cv_lib_vtkGraphics_vtkCompareClipValues+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkGraphics  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtkCompareClipValues ();
-int
-main ()
-{
-return vtkCompareClipValues ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkGraphics_vtkCompareClipValues=yes
-else
-  ac_cv_lib_vtkGraphics_vtkCompareClipValues=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkGraphics_vtkCompareClipValues" >&5
-$as_echo "$ac_cv_lib_vtkGraphics_vtkCompareClipValues" >&6; }
-if test "x$ac_cv_lib_vtkGraphics_vtkCompareClipValues" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKGRAPHICS 1
-_ACEOF
-
-  LIBS="-lvtkGraphics $LIBS"
-
-fi
-
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtkXMLWriterC_New in -lvtkIO" >&5
-$as_echo_n "checking for vtkXMLWriterC_New in -lvtkIO... " >&6; }
-if test "${ac_cv_lib_vtkIO_vtkXMLWriterC_New+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lvtkIO  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char vtkXMLWriterC_New ();
-int
-main ()
-{
-return vtkXMLWriterC_New ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_vtkIO_vtkXMLWriterC_New=yes
-else
-  ac_cv_lib_vtkIO_vtkXMLWriterC_New=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkIO_vtkXMLWriterC_New" >&5
-$as_echo "$ac_cv_lib_vtkIO_vtkXMLWriterC_New" >&6; }
-if test "x$ac_cv_lib_vtkIO_vtkXMLWriterC_New" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBVTKIO 1
-_ACEOF
-
-  LIBS="-lvtkIO $LIBS"
-
-fi
-
-
-        # check at the usual places:
-        for i in $(ls -d /usr/include/vtk*) $VTK_INCLUDE; do
-            if test -r $i/vtkCellData.h; then
-                CPPFLAGS="-I$i $CPPFLAGS"
-            fi
-        done
-        ac_ext=cpp
+ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
@@ -5344,32 +4921,175 @@ fi
 done
 
 
-ac_fn_cxx_check_header_mongrel "$LINENO" "vtkCellData.h" "ac_cv_header_vtkCellData_h" "$ac_includes_default"
-if test "x$ac_cv_header_vtkCellData_h" = x""yes; then :
-  CPPFLAGS="$CPPFLAGS -DHAVE_VTK=1"
-                VTK=yes
+ac_fn_cxx_check_header_mongrel "$LINENO" "vtkVersion.h" "ac_cv_header_vtkVersion_h" "$ac_includes_default"
+if test "x$ac_cv_header_vtkVersion_h" = x""yes; then :
+  $as_echo "#define HAVE_VTK 1" >>confdefs.h
 
+fi
+
+
+
+# AC_CHECK_LIB(vtksys, vtksysProcess_New)
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkFiltering" >&5
+$as_echo_n "checking for libvtkFiltering... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkFiltering $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <vtkVersion.h>
+#include <vtkUnstructuredGrid.h>
+
+int
+main ()
+{
+
+                    vtkVersion::GetVTKMajorVersion();
+                    vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
 else
-  ac_fn_cxx_check_header_mongrel "$LINENO" "vtk-5.0/vtkCellData.h" "ac_cv_header_vtk_5_0_vtkCellData_h" "$ac_includes_default"
-if test "x$ac_cv_header_vtk_5_0_vtkCellData_h" = x""yes; then :
-  CPPFLAGS="$CPPFLAGS -DHAVE_VTK=1"
-                        VTK=yes
-                        vtk_header_relative_path="vtk-5.0/"
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkCommon" >&5
+$as_echo_n "checking for libvtkCommon... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkCommon $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <vtkQuadric.h>
+
+int
+main ()
+{
+
+                    vtkQuadric *q=vtkQuadric::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
 else
-
-                        as_fn_error $? "Cannot find vtk installation." "$LINENO" 5
-                        exit -1
-
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkzlib" >&5
+$as_echo_n "checking for libvtkzlib... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkzlib $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
 
 
+#include <vtkZLibDataCompressor.h>
 
+int
+main ()
+{
+
+                    vtkZLibDataCompressor *c=vtkZLibDataCompressor::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+# AC_CHECK_LIB(vtkexpat, vtk_expat_XML_ExpatVersion)
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkGraphics" >&5
+$as_echo_n "checking for libvtkGraphics... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkGraphics $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
 
 
-    fi
+#include <vtkCellDataToPointData.h>
+
+int
+main ()
+{
+
+                    vtkCellDataToPointData *c=vtkCellDataToPointData::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkIO" >&5
+$as_echo_n "checking for libvtkIO... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkIO $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <vtkXMLUnstructuredGridWriter.h>
+
+int
+main ()
+{
+
+                    vtkXMLUnstructuredGridWriter *c=vtkXMLUnstructuredGridWriter::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
 cat > include/vtk.h <<EOF
 #ifndef VTK_H
 #define VTK_H
@@ -5421,15 +5141,6 @@ typedef float vtkFloatingPointType;
 #endif
 #endif
 EOF
-
-ac_fn_cxx_check_header_mongrel "$LINENO" "vtkCellData.h" "ac_cv_header_vtkCellData_h" "$ac_includes_default"
-if test "x$ac_cv_header_vtkCellData_h" = x""yes; then :
-
-else
-  as_fn_error $? "Cannot find vtk instillation." "$LINENO" 5
-fi
-
-
 
 # CUDA support
 ############################################
@@ -5539,15 +5250,6 @@ if test -n "$with_cuda" ; then
     ENABLE_CUDA=yes
 
 fi
-
-# Check whether to use device emulation mode for cuda (if no cuda capable gpu is available)
-# Check whether --enable-emu was given.
-if test "${enable_emu+set}" = set; then :
-  enableval=$enable_emu; EMULATION=true
-else
-  EMULATION=false
-fi
-
 
 # Set up compilation flags for cuda compiler nvcc, if with_cuda is set
 if test -n "$with_cuda"; then :

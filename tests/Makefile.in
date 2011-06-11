@@ -22,7 +22,7 @@ VPATH = ./:./src
 .SUFFIXES: .cpp .o
 
 .cpp.o:
-	$(CXX) $(CXXFLAGS) -c $<
+	@$(CXX) $(CXXFLAGS) -c $<
 
 default: test
 
