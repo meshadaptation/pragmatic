@@ -179,23 +179,6 @@ AC_LINK_IFELSE([
     [AC_MSG_RESULT([yes])],
     [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
 
-AC_MSG_CHECKING([for libvtkzlib])
-old_libs="$LIBS"
-LIBS="-lvtkzlib $LIBS"
-AC_LINK_IFELSE([
-        AC_LANG_PROGRAM(
-            [[
-#include <vtkZLibDataCompressor.h>
-                    ]],
-            [[
-                    vtkZLibDataCompressor *c=vtkZLibDataCompressor::New();
-                    ]])
-        ],
-    [AC_MSG_RESULT([yes])],
-    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
-
-# AC_CHECK_LIB(vtkexpat, vtk_expat_XML_ExpatVersion)
-
 AC_MSG_CHECKING([for libvtkGraphics])
 old_libs="$LIBS"
 LIBS="-lvtkGraphics $LIBS"
@@ -210,6 +193,9 @@ AC_LINK_IFELSE([
         ],
     [AC_MSG_RESULT([yes])],
     [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
+
+AC_CHECK_LIB(vtkzlib, vtk_zlib_gzopen,,)
+AC_CHECK_LIB(vtkexpat, vtk_expat_XML_ExpatVersion)
 
 AC_MSG_CHECKING([for libvtkIO])
 old_libs="$LIBS"

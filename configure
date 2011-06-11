@@ -5024,39 +5024,6 @@ fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkzlib" >&5
-$as_echo_n "checking for libvtkzlib... " >&6; }
-old_libs="$LIBS"
-LIBS="-lvtkzlib $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <vtkZLibDataCompressor.h>
-
-int
-main ()
-{
-
-                    vtkZLibDataCompressor *c=vtkZLibDataCompressor::New();
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-
-# AC_CHECK_LIB(vtkexpat, vtk_expat_XML_ExpatVersion)
-
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkGraphics" >&5
 $as_echo_n "checking for libvtkGraphics... " >&6; }
 old_libs="$LIBS"
@@ -5087,6 +5054,97 @@ $as_echo "no" >&6; }
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtk_zlib_gzopen in -lvtkzlib" >&5
+$as_echo_n "checking for vtk_zlib_gzopen in -lvtkzlib... " >&6; }
+if test "${ac_cv_lib_vtkzlib_vtk_zlib_gzopen+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lvtkzlib  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char vtk_zlib_gzopen ();
+int
+main ()
+{
+return vtk_zlib_gzopen ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_vtkzlib_vtk_zlib_gzopen=yes
+else
+  ac_cv_lib_vtkzlib_vtk_zlib_gzopen=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkzlib_vtk_zlib_gzopen" >&5
+$as_echo "$ac_cv_lib_vtkzlib_vtk_zlib_gzopen" >&6; }
+if test "x$ac_cv_lib_vtkzlib_vtk_zlib_gzopen" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBVTKZLIB 1
+_ACEOF
+
+  LIBS="-lvtkzlib $LIBS"
+
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for vtk_expat_XML_ExpatVersion in -lvtkexpat" >&5
+$as_echo_n "checking for vtk_expat_XML_ExpatVersion in -lvtkexpat... " >&6; }
+if test "${ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lvtkexpat  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char vtk_expat_XML_ExpatVersion ();
+int
+main ()
+{
+return vtk_expat_XML_ExpatVersion ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion=yes
+else
+  ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" >&5
+$as_echo "$ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" >&6; }
+if test "x$ac_cv_lib_vtkexpat_vtk_expat_XML_ExpatVersion" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBVTKEXPAT 1
+_ACEOF
+
+  LIBS="-lvtkexpat $LIBS"
+
+fi
+
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkIO" >&5
 $as_echo_n "checking for libvtkIO... " >&6; }
