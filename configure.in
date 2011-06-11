@@ -134,6 +134,21 @@ AC_CHECK_HEADER(vtkVersion.h,
 
 # AC_CHECK_LIB(vtksys, vtksysProcess_New)
 
+AC_MSG_CHECKING([for libvtkCommon])
+old_libs="$LIBS"
+LIBS="-lvtkCommon $LIBS"
+AC_LINK_IFELSE([
+        AC_LANG_PROGRAM(
+            [[
+#include <vtkQuadric.h>
+                    ]],
+            [[
+                    vtkQuadric *q=vtkQuadric::New();
+                    ]])
+        ],
+    [AC_MSG_RESULT([yes])],
+    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
+
 AC_MSG_CHECKING([for libvtkFiltering])
 old_libs="$LIBS"
 LIBS="-lvtkFiltering $LIBS"
@@ -146,21 +161,6 @@ AC_LINK_IFELSE([
             [[
                     vtkVersion::GetVTKMajorVersion();
                     vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
-                    ]])
-        ],
-    [AC_MSG_RESULT([yes])],
-    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
-
-AC_MSG_CHECKING([for libvtkCommon])
-old_libs="$LIBS"
-LIBS="-lvtkCommon $LIBS"
-AC_LINK_IFELSE([
-        AC_LANG_PROGRAM(
-            [[
-#include <vtkQuadric.h>
-                    ]],
-            [[
-                    vtkQuadric *q=vtkQuadric::New();
                     ]])
         ],
     [AC_MSG_RESULT([yes])],

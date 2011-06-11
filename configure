@@ -4931,6 +4931,37 @@ fi
 
 # AC_CHECK_LIB(vtksys, vtksysProcess_New)
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkCommon" >&5
+$as_echo_n "checking for libvtkCommon... " >&6; }
+old_libs="$LIBS"
+LIBS="-lvtkCommon $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <vtkQuadric.h>
+
+int
+main ()
+{
+
+                    vtkQuadric *q=vtkQuadric::New();
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkFiltering" >&5
 $as_echo_n "checking for libvtkFiltering... " >&6; }
 old_libs="$LIBS"
@@ -4948,37 +4979,6 @@ main ()
 
                     vtkVersion::GetVTKMajorVersion();
                     vtkUnstructuredGrid *ug=vtkUnstructuredGrid::New();
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libvtkCommon" >&5
-$as_echo_n "checking for libvtkCommon... " >&6; }
-old_libs="$LIBS"
-LIBS="-lvtkCommon $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <vtkQuadric.h>
-
-int
-main ()
-{
-
-                    vtkQuadric *q=vtkQuadric::New();
 
   ;
   return 0;
