@@ -72,6 +72,7 @@ template<typename real_t, typename index_t>
 
   /// True if surface contains vertex nid.
   bool contains_node(index_t nid){
+    assert(nid>=0); assert(nid<(index_t)surface_nodes.size()); 
     return surface_nodes[nid];
   }
 
@@ -89,6 +90,11 @@ template<typename real_t, typename index_t>
     if(!surface_nodes[nid_free])
       return true;
 
+    // However, is nid_free is on the surface then nid_target must
+    // also lie on a surface for it to be considered for collapse.
+    if(!surface_nodes[nid_target])
+      return false;
+    
     std::set<int> incident_plane_free;
     for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
       incident_plane_free.insert(coplanar_ids[*it]);
@@ -120,7 +126,9 @@ template<typename real_t, typename index_t>
 
   void collapse(index_t nid_free, index_t nid_target){
     assert(is_collapsible(nid_free, nid_target));
-    
+    assert(SNEList.count(nid_free));
+    assert(SNEList.count(nid_target));
+
     surface_nodes[nid_free] = false; 
     
     // Find deleted facets.

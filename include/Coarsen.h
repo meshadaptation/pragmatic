@@ -92,7 +92,6 @@ template<typename real_t, typename index_t> class Coarsen{
           dynamic_vertex[it->edge.second] = true;
         }
       }
-
       std::vector<index_t> colour(NNodes, -1);
       Colour<index_t>::greedy(_mesh->NNList, dynamic_vertex, &(colour[0]));
       
@@ -139,7 +138,7 @@ template<typename real_t, typename index_t> class Coarsen{
     /* Sort the edges according to length. We want to collapse the
        shortest. If it's not possible to collapse the edge then move
        onto the next shortest.*/
-    std::map<real_t, const Edge<real_t, index_t>* > short_edges;
+    std::multimap<real_t, const Edge<real_t, index_t>* > short_edges;
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
       // First check if this edge can be collapsed
       if(!_surface->is_collapsible(rm_vertex, *nn))
@@ -147,13 +146,13 @@ template<typename real_t, typename index_t> class Coarsen{
       
       typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
       assert(edge!=_mesh->Edges.end());
-      if(short_edges.begin()->first <= L_low)
-        short_edges[edge->length] = &(*edge);
+      if(edge->length<L_low)
+        short_edges.insert(std::pair< real_t, const Edge<real_t, index_t>*  >(edge->length, &(*edge)));
     }
     
     bool reject_collapse = false;
     const Edge<real_t, index_t> *target_edge = NULL;
-    index_t target_vertex;
+    index_t target_vertex=-1;
     std::set<index_t> deleted_elements;
     while(short_edges.size()){
       // Get the next shortest edge.
@@ -165,7 +164,7 @@ template<typename real_t, typename index_t> class Coarsen{
 
       // Identify vertex that will be collapsed onto.
       target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
-      
+
       // Cache elements to be deleted.
       deleted_elements = target_edge->adjacent_elements;
       
@@ -220,13 +219,12 @@ template<typename real_t, typename index_t> class Coarsen{
     }
     
     // If we're checked all edges and none are collapsible then return.
-    if(reject_collapse)
+    if(reject_collapse ||(target_vertex==-1))
       return -1;
     
     // Perform coarsening on surface if necessary.
-    if(_surface->contains_node(rm_vertex))
+    if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex))
       _surface->collapse(rm_vertex, target_vertex);
-
 
     // Remove deleted elements from node-elemement adjancy list.
     for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
@@ -252,7 +250,7 @@ template<typename real_t, typename index_t> class Coarsen{
     // target_vertex.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       // Delete if element is to be collapsed.
-      if(target_edge->adjacent_elements.count(*ee)){
+      if(deleted_elements.count(*ee)){
         _mesh->erase_element(*ee);
       }else{
         // Renumber

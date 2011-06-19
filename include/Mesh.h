@@ -443,6 +443,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return the node id's connected to the specified node_id
   std::set<index_t> get_node_patch(index_t nid) const{
+    assert(nid<(index_t)NNList.size());
     std::set<index_t> patch;
     for(typename std::deque<index_t>::const_iterator it=NNList[nid].begin();it!=NNList[nid].end();++it)
       patch.insert(patch.end(), *it);

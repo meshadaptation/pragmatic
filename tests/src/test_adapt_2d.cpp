@@ -44,15 +44,13 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
 
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  size_t NElements = mesh->get_number_elements();
-
   for(size_t i=0;i<NNodes;i++){
     double hx=0.025 + 0.09*mesh->get_coords(i)[0];
     double hy=0.025 + 0.09*mesh->get_coords(i)[1];
@@ -61,7 +59,6 @@ int main(int argc, char **argv){
        0.0,            1.0/pow(hy, 2)};
     metric_field.set_metric(m, i);
   }
-  metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -76,17 +73,17 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   double L_max = mesh->maximal_edge_length();
   
-  double alpha = 0.95; //sqrt(2)/2;  
-  for(size_t i=0;i<20;i++){
+  double alpha = sqrt(2)/2;  
+  for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
-    coarsen.coarsen(L_low, L_up);
-    swapping.swap(0.90);
+    coarsen.coarsen(L_low, L_ref);
+    swapping.swap(0.95);
 
     L_max = mesh->maximal_edge_length();
 
-    if(L_max<L_up)
+    if(fabs(L_max-L_up)<0.01)
       break;
   }
   
@@ -116,7 +113,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((lrms<0.22)&&(qrms<0.16))
+  if((lrms<0.2)&&(qrms<0.1))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
