@@ -113,6 +113,7 @@ class MetricTensor{
   void set_metric(const real_t *metric){
     for(size_t i=0;i<_dimension*_dimension;i++)
       _metric[i] = metric[i];
+    positive_definiteness(_dimension, _metric);
   }
 
   // Enforce positive definiteness
