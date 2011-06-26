@@ -54,6 +54,7 @@
 #include "Metis.h"
 #include "Edge.h"
 #include "ElementProperty.h"
+#include "MetricTensor.h"
 
 /*! \brief Manages mesh data.
  *
@@ -527,12 +528,9 @@ template<typename real_t, typename index_t> class Mesh{
       real_t ml00 = (metric[nid0*ndims*ndims]+metric[nid1*ndims*ndims])*0.5;
       real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
       real_t ml11 = (metric[nid0*ndims*ndims+3]+metric[nid1*ndims*ndims+3])*0.5;
-      
-      real_t x=_coords[nid1*ndims]-_coords[nid0*ndims];
-      real_t y=_coords[nid1*ndims+1]-_coords[nid0*ndims+1];
-      
-      length = sqrt((ml01*x + ml11*y)*y + 
-                    (ml00*x + ml01*y)*x);
+      real_t m[] = {ml00, ml01, ml01, ml11};
+
+      length = property->length(get_coords(nid0), get_coords(nid1), m);
     }else{
       real_t ml00 = (metric[nid0*ndims*ndims  ]+metric[nid1*ndims*ndims  ])*0.5;
       real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
