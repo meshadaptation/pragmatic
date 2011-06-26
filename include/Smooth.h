@@ -701,7 +701,7 @@ template<typename real_t, typename index_t>
       for(;ie!=_mesh->NEList[node].end();++ie)
         patch_quality = std::min(patch_quality, quality[*ie]);
     }
-    if(patch_quality>0.6)
+    if(patch_quality>0.8)
       return node_updated;
 
     real_t dq_tol=0.0;
@@ -809,7 +809,7 @@ template<typename real_t, typename index_t>
         }
       }
       }*/
-
+    
     // Focus on improving the worst element.
     index_t target_element;
     {
@@ -825,7 +825,7 @@ template<typename real_t, typename index_t>
     }
     
     // Find the distance we have to step to reach the local quality maximum.
-    real_t alpha=0.0;
+    real_t alpha=-1.0;
     {
       // Initialise alpha.
       typename std::map<index_t, std::vector<real_t> >::iterator lg=local_gradients.begin();
@@ -835,14 +835,19 @@ template<typename real_t, typename index_t>
         
         std::vector<real_t> hat = lg->second;
         real_t mag = sqrt((double)hat[0]*hat[0]+hat[1]*hat[1]);
+        
         hat[0]/=mag;
         hat[1]/=mag;
         alpha = (quality[lg->first]-quality[target_element])/
           (hat[0]*(local_gradients[target_element][0]-lg->second[0])+
            hat[1]*(local_gradients[target_element][1]-lg->second[1]));
+        
+        if(isnan(alpha))
+          continue;
+
         break;
       }
-      
+
       // Adjust alpha to the nearest point where the patch functional intersects with another.
       for(;lg!=local_gradients.end();++lg){
         if(lg->first == target_element)
@@ -850,16 +855,25 @@ template<typename real_t, typename index_t>
         
         std::vector<real_t> hat = lg->second;
         real_t mag = sqrt((double)hat[0]*hat[0]+hat[1]*hat[1]);
+        
         hat[0]/=mag;
         hat[1]/=mag;
         real_t new_alpha = (quality[lg->first]-quality[target_element])/
           (hat[0]*(local_gradients[target_element][0]-lg->second[0])+
            hat[1]*(local_gradients[target_element][1]-lg->second[1]));
+        
+        if(isnan(new_alpha))
+          continue;
+        
         if(fabs(new_alpha)<fabs(alpha))
           alpha = new_alpha;
       }
     }
     
+    // Check that there is a valid search direction.
+    if((isnan(alpha))||(alpha<0.0))
+      return false;
+      
     real_t p[2], mp[4];
     {
       std::vector<real_t> hat = local_gradients[target_element];
@@ -877,7 +891,8 @@ template<typename real_t, typename index_t>
       mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0]+b5;
       mp[2] = mp[1];
       mp[3] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0]+c5;
-      
+      MetricTensor<real_t>::positive_definiteness(2, mp);
+
       // Check if this positions improves the local mesh quality.  
       for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
         const index_t *n=_mesh->get_element(*ie);
@@ -922,9 +937,13 @@ template<typename real_t, typename index_t>
         break;
       }
     }
+    
+    assert((!isnan(p[0]))&&(!isnan(p[1])));
+    assert((!isnan(mp[0]))&&(!isnan(mp[1]))&&(!isnan(mp[3])));
+    
     if(!improvement)
       return node_updated;
-
+    
     /* I want to come back to this for plotting
     std::cout<<"What an improvement looks like = "<<alpha<<" :: "<<target_element<<std::endl;
     for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
