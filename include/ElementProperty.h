@@ -108,16 +108,20 @@ class ElementProperty{
    */
   real_t length(const real_t *x0, const real_t *x1, const real_t *m){
     // l is the length of the perimeter, measured in metric space
-    if(dimension==1)
-      return
-        sqrt((x0[1] - x1[1])*((x0[1] - x1[1])*m[3] + (x0[0] - x1[0])*m[1]) + 
-             (x0[0] - x1[0])*((x0[1] - x1[1])*m[1] + (x0[0] - x1[0])*m[2]));
-    else
+    if(dimension==2){
+      real_t x=x0[0] - x1[0];
+      real_t y=x0[1] - x1[1];
+      
+      real_t l = sqrt(((m[1]*x + m[3]*y)*y + (m[0]*x + m[1]*y)*x));
+      
+      return l;
+        
+    }else{
       return
         sqrt((x0[2] - x1[2])*((x0[2] - x1[2])*m[8] + (x0[1] - x1[1])*m[5] + (x0[0] - x1[0])*m[2]) +
              (x0[1] - x1[1])*((x0[2] - x1[2])*m[5] + (x0[1] - x1[1])*m[4] + (x0[0] - x1[0])*m[1]) +
              (x0[0] - x1[0])*((x0[2] - x1[2])*m[2] + (x0[1] - x1[1])*m[1] + (x0[0] - x1[0])*m[0]));
-    
+    }
   }
   
   /*! Evaluates the 2D Lipnikov functional. The description for the
