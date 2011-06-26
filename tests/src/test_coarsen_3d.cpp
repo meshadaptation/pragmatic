@@ -85,7 +85,7 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
   
-  if((nelements<60)&&(lrms<0.4)&&(qrms<1.0))
+  if((nelements<60)&&(lrms<0.4)&&(qrms<1.1))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
