@@ -176,8 +176,9 @@ template<typename real_t, typename index_t> class Coarsen{
         
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
+        const int *orig_n=_mesh->get_element(*ee);
         for(size_t i=0;i<nloc;i++){
-          int nid = _mesh->get_element(*ee)[i];
+          int nid = orig_n[i];
           if(nid==rm_vertex)
             n[i] = target_vertex;
           else
