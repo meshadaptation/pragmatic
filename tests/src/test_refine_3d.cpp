@@ -85,7 +85,7 @@ int main(int argc, char **argv){
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
 
-  if((nelements>110000)&&(nelements<125000)&&(lrms<0.5)&&(qrms<0.7))
+  if((lrms<0.5)&&(qrms<1.0))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

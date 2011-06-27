@@ -85,23 +85,6 @@ template<typename real_t, typename index_t> class Refine{
     delete property;
   }
 
-  void refine(real_t L_max){
-    cache_create();
-
-    for(int i=0;i<10;i++){
-      /* The limit is set to 10 doublings of resolution. If it reaches
-         this limit there is something unusual going.*/
-      int refine_cnt = refine_level(L_max);
-      _mesh->create_adjancy();
-      _mesh->calc_edge_lengths();
-
-      if(refine_cnt==0)
-        break;
-    }
-
-    cache_clear();
-  }
-
   /*! Perform one level of refinement See Figure 25; X Li et al, Comp
    * Methods Appl Mech Engrg 194 (2005) 4915-4950. The actual
    * templates used for 3D refinement follows Rupak Biswas, Roger
@@ -109,7 +92,9 @@ template<typename real_t, typename index_t> class Refine{
    * three-dimensional unstructured grids", Applied Numerical
    * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
    */
-  int refine_level(real_t L_max){
+  int refine(real_t L_max){
+    cache_create();
+
     /* Establish global node numbering. Here it doesn't need to be
        continuous so we take various shortcuts.*/
     index_t NNodes = _mesh->get_number_nodes();
@@ -726,7 +711,12 @@ template<typename real_t, typename index_t> class Refine{
     if(nprocs>1)
       MPI_Allreduce(&refined_edges_size, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 #endif
-    
+
+    // Tidy up. Need to look at efficiencies here.
+    _mesh->create_adjancy();
+    _mesh->calc_edge_lengths();
+    cache_clear();
+  
     return refined_edges_size;
   }
 

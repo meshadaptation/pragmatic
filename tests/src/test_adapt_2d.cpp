@@ -100,7 +100,7 @@ int main(int argc, char **argv){
     swapping.swap(0.95);
     
     L_max = mesh->maximal_edge_length();
-
+    std::cout<<i<<": "<<L_max<<" - "<<L_up<<std::endl;
     if((L_max-L_up)<0.01)
       break;
   }
