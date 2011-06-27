@@ -89,7 +89,7 @@ int main(int argc, char **argv){
     smooth.smooth("smart Laplacian");
 
     L_max = mesh->maximal_edge_length();
-    if(L_max<L_up)
+    if((L_max-L_up)<0.01)
       break;
   }
   

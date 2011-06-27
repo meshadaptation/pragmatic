@@ -101,7 +101,7 @@ int main(int argc, char **argv){
     
     L_max = mesh->maximal_edge_length();
 
-    if(fabs(L_max-L_up)<0.01)
+    if((L_max-L_up)<0.01)
       break;
   }
 
