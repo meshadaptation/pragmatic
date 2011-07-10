@@ -254,6 +254,9 @@ template<typename real_t, typename index_t>
 
           Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
           A.ldlt().solve(b, &a);
+          if(isnan(a[0]*y*y+a[1]*x*x+a[2]*x*y+a[3]*y+a[4]*x+a[5]))
+            A.svd().solve(b, &a);
+          assert(!isnan(a[0]*y*y+a[1]*x*x+a[2]*x*y+a[3]*y+a[4]*x+a[5]));
 
           Hessian[i*4  ] = 2*a[1]; // d2/dx2
           Hessian[i*4+1] = a[2];   // d2/dxdy
@@ -300,6 +303,9 @@ template<typename real_t, typename index_t>
 
           Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
           A.ldlt().solve(b, &a);
+          if(isnan(a[0]+a[1]*x+a[2]*y+a[3]*z+a[4]*pow(x,2)+a[5]*x*y+a[6]*x*z+a[7]*pow(y,2)+a[8]*y*z+a[9]*pow(z,2)))
+            A.svd().solve(b, &a);
+          assert(!isnan(a[0]+a[1]*x+a[2]*y+a[3]*z+a[4]*pow(x,2)+a[5]*x*y+a[6]*x*z+a[7]*pow(y,2)+a[8]*y*z+a[9]*pow(z,2)));
 
           Hessian[i*9  ] = a[4]*2.0; // d2/dx2
           Hessian[i*9+1] = a[5];     // d2/dxdy
@@ -562,7 +568,7 @@ template<typename real_t, typename index_t>
   }
 
   /*! Apply minimum edge length constraint.
-   * @param min_len specifies the minimum allowed edge length.
+   * @param min_len specifies the minimum allowed edge length globally.
    */
   void apply_min_edge_length(real_t min_len){
     real_t M[_ndims*_ndims];
@@ -575,6 +581,25 @@ template<typename real_t, typename index_t>
 
     for(int i=0;i<_NNodes;i++)
       _metric[i].constrain(M, false);
+  }
+
+  /*! Apply minimum edge length constraint.
+   * @param min_len specifies the minimum allowed edge length locally at each vertex.
+   */
+  void apply_min_edge_length(const real_t *min_len){
+    real_t M[_ndims*_ndims];
+    for(int n=0;n<_NNodes;n++){
+      for(int i=0;i<_ndims;i++){
+        for(int j=0;j<_ndims;j++){
+          if(i==j)
+            M[i*_ndims+j] = 1.0/(min_len[n]*min_len[n]);
+          else
+            M[i*_ndims+j] = 0.0;
+        }
+      }
+      
+      _metric[n].constrain(M, false);
+    }
   }
 
   /*! Apply maximum aspect ratio constraint.
