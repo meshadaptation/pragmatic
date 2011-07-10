@@ -34,13 +34,6 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-extern"C"
-{
-//    void test_calling_fortran_function_(int int_to_c[]);
-
-    void dspev_(char*, char*, size_t*, double*, double*, double*, size_t*, double*, int*);
-}
-
 template<typename real_t>
 class MetricTensor;
 
@@ -164,6 +157,11 @@ class MetricTensor{
    * @param perserved_small_edges when true causes small edge lengths to be preserved (default). Otherwise long edge are perserved.
    */
   void constrain(const real_t *M, bool perserved_small_edges=true){
+    for(size_t i=0;i<_dimension;i++)
+      for(size_t j=i;j<_dimension;j++)
+        if(isnan(M[i*_dimension+j]))
+          return;
+    
     MetricTensor<real_t> metric(_dimension, M);
 
     // Make the tensor with the smallest aspect ratio the reference space Mr.
