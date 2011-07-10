@@ -413,7 +413,7 @@ template<typename real_t, typename index_t> class Refine{
         }
 #endif
       }
-    } //;;
+    }
     
 #ifdef HAVE_MPI
     // All edges have been refined. Time to reconstruct the halo.
@@ -763,9 +763,16 @@ template<typename real_t, typename index_t> class Refine{
       x[i] = x0[i]+weight*(x1[i] - x0[i]);
     
     // Interpolate new metric
-    for(size_t i=0;i<ndims*ndims;i++)
+    for(size_t i=0;i<ndims*ndims;i++){
       m[i] = m0[i]+weight*(m1[i] - m0[i]);
-    
+      if(isnan(m[i]))
+        std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
+                 <<"m0[i] = "<<m0[i]<<std::endl
+                 <<"m1[i] = "<<m1[i]<<std::endl
+                 <<"weight = "<<weight<<std::endl;
+    }
+    MetricTensor<real_t>::positive_definiteness(ndims, m);
+
     // Append this new vertex and metric into mesh data structures.
     index_t nid = _mesh->append_vertex(x, m);
     
