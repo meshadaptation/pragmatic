@@ -93,7 +93,9 @@ template<typename real_t, typename index_t> class VTKTools{
     Mesh<real_t, index_t> *mesh=NULL;
     std::vector<index_t> owner_range;
     std::vector<index_t> lnn2gnn;
-    { // Handle mpi parallel run.
+    {
+#ifdef HAVE_MPI
+      // Handle mpi parallel run.
       if(MPI::Is_initialized()){
         nparts = MPI::COMM_WORLD.Get_size();
       }
@@ -194,6 +196,7 @@ template<typename real_t, typename index_t> class VTKTools{
           z.swap(lz);
         ENList.swap(lENList);
       }
+#endif
     }
 
 #ifdef HAVE_MPI
@@ -367,10 +370,11 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_cell_tpartition->Delete();
     
     int nparts=1;
+#ifdef HAVE_MPI
     if(MPI::Is_initialized()){
       nparts = MPI::COMM_WORLD.Get_size();
     }
-    
+#endif
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".vtu");
@@ -380,6 +384,7 @@ template<typename real_t, typename index_t> class VTKTools{
       
       writer->Delete();
     }else{
+#ifdef HAVE_MPI
       int rank = MPI::COMM_WORLD.Get_rank();
       int nparts = MPI::COMM_WORLD.Get_size();
       
@@ -393,6 +398,7 @@ template<typename real_t, typename index_t> class VTKTools{
       writer->SetInput(ug);
       writer->Write();
       writer->Delete();
+#endif
     }
     ug->Delete();
     
@@ -454,10 +460,11 @@ template<typename real_t, typename index_t> class VTKTools{
     normal->Delete();
 
     int nparts=1;
+#ifdef HAVE_MPI
     if(MPI::Is_initialized()){
       nparts = MPI::COMM_WORLD.Get_size();
     }
-    
+#endif
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".vtu");
@@ -467,6 +474,7 @@ template<typename real_t, typename index_t> class VTKTools{
       
       writer->Delete();
     }else{
+#ifdef HAVE_MPI
       int rank = MPI::COMM_WORLD.Get_rank();
       int nparts = MPI::COMM_WORLD.Get_size();
       
@@ -480,6 +488,7 @@ template<typename real_t, typename index_t> class VTKTools{
       writer->SetInput(ug);
       writer->Write();
       writer->Delete();
+#endif
     }
     
     ug->Delete();
