@@ -47,9 +47,7 @@
 #include <numa.h>
 #endif
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 #include "Metis.h"
 #include "Edge.h"
@@ -301,8 +299,24 @@ template<typename real_t, typename index_t> class Mesh{
     calc_edge_lengths();
     
     double sum=0;
-    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it)
+    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it){
+      if(isnan(it->length)){
+        std::cerr<<"ERROR: Edge length is NaN\n"
+                 <<"Node id's = "<<it->edge.first<<", "<<it->edge.second<<std::endl
+                 <<get_metric(it->edge.first)[0]<<", "
+                 <<get_metric(it->edge.first)[1]<<", "
+                 <<get_metric(it->edge.first)[3]<<std::endl
+                 <<get_metric(it->edge.second)[0]<<", "
+                 <<get_metric(it->edge.second)[1]<<", "
+                 <<get_metric(it->edge.second)[3]<<std::endl
+                 <<get_coords(it->edge.first)[0]<<", "
+                 <<get_coords(it->edge.first)[1]<<std::endl
+                 <<get_coords(it->edge.second)[0]<<", "
+                 <<get_coords(it->edge.second)[1]<<std::endl;
+          
+          }
       sum+=it->length;
+    }
 
     int nedges = Edges.size();
 #ifdef HAVE_MPI
@@ -312,6 +326,8 @@ template<typename real_t, typename index_t> class Mesh{
     }
 #endif
     
+    if(nedges==0)
+      std::cerr<<"ERROR: apparently zero edges present.\n";
     double mean = sum/nedges;
 
     return mean;
@@ -442,6 +458,13 @@ template<typename real_t, typename index_t> class Mesh{
     return &(_ENList[eid*nloc]);
   }
 
+  /// Return copy of element-node list.
+  void get_element(size_t eid, int *ele) const{
+    for(size_t i=0;i<nloc;i++)
+      ele[i] = _ENList[eid*nloc+i];
+    return;
+  }
+
   /// Return the node id's connected to the specified node_id
   std::set<index_t> get_node_patch(index_t nid) const{
     assert(nid<(index_t)NNList.size());
@@ -480,6 +503,13 @@ template<typename real_t, typename index_t> class Mesh{
   /// Return positions vector.
   const real_t *get_coords(size_t nid) const{
     return &(_coords[nid*ndims]);
+  }
+
+  /// Return copy of the coordinate.
+  void get_coords(size_t nid, real_t *x) const{
+    for(size_t i=0;i<ndims;i++)
+      x[i] = _coords[nid*ndims+i];
+    return;
   }
 
   /// Return metric at that vertex.
@@ -738,6 +768,10 @@ template<typename real_t, typename index_t> class Mesh{
         real_t larea = property->area(get_coords(n[0]),
                                       get_coords(n[1]),
                                       get_coords(n[2]));
+        if(isnan(larea)){
+          std::cerr<<"ERROR: Bad element "<<n[0]<<", "<<n[1]<<", "<<n[2]<<std::endl;
+        }
+
         area += larea;
         min_ele_area = std::min(min_ele_area, larea);
         max_ele_area = std::max(max_ele_area, larea);
@@ -826,6 +860,7 @@ template<typename real_t, typename index_t> class Mesh{
     if(mpi_nparts==1){
       ENList = globalENList;
     }else{
+#ifdef HAVE_MPI
       assert(lnn2gnn!=NULL);
       for(size_t i=0;i<_NNodes;i++){
         gnn2lnn[lnn2gnn[i]] = i;
@@ -890,6 +925,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
 
       ENList = localENList;
+#endif
     }
 
     _ENList.resize(_NElements*nloc);
