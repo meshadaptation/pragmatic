@@ -15,7 +15,7 @@ test:
 
 clean:
 	@echo "  CLEAN docs"
-	@rm -rf docs include/confdefs.h
+	@rm -rf docs
 	@echo "  CLEAN tests"
 	@(cd tests && $(MAKE) clean)
 
