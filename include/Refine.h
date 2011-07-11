@@ -162,8 +162,8 @@ template<typename real_t, typename index_t> class Refine{
     /* If there are no edges to be refined globally then we can return
        at this point.
      */
-#ifdef HAVE_MPI
     int refined_edges_size = refined_edges.size();
+#ifdef HAVE_MPI
     if(nprocs>1)
       MPI_Allreduce(&refined_edges_size, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 #endif
@@ -411,8 +411,8 @@ template<typename real_t, typename index_t> class Refine{
             }
           }
         }
-#endif
       }
+#endif
     }
     
 #ifdef HAVE_MPI

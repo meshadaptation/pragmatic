@@ -47,7 +47,9 @@
 #include <numa.h>
 #endif
 
+#ifdef HAVE_MPI
 #include <mpi.h>
+#endif
 
 #include "Metis.h"
 #include "Edge.h"
