@@ -353,4 +353,4 @@ cat >> confdefs.h << EOF
 #define __PRAGMATIC_VERSION__ "$VERSION"
 EOF
 
-cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" > include/confdefs.h
+cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/confdefs.h
