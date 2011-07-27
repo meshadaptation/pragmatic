@@ -111,6 +111,30 @@ AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 AC_CHECK_LIB(metis,METIS_EdgeND,,AC_MSG_ERROR([METIS required]))
 
+AC_MSG_CHECKING([for libCGAL])
+old_libs="$LIBS"
+LIBS="-lCGAL -lgmp $LIBS"
+AC_LINK_IFELSE([
+        AC_LANG_PROGRAM(
+            [[
+#include <iostream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/convex_hull_2.h>
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_2 Point_2;
+                    ]],
+            [[
+  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
+  Point_2 result[5];
+
+  CGAL::convex_hull_2( points, points+5, result );
+                    ]])
+        ],
+        [AC_DEFINE([HAVE_LIBCGAL])
+         AC_MSG_RESULT([yes])],
+    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
+
 # Zoltan
 AC_ARG_ENABLE(zoltan,[AC_HELP_STRING([--enable-zoltan], [Enables Zoltan support])])
 if test "x$enable_zoltan" = "xyes"; then
@@ -164,6 +188,7 @@ AC_LINK_IFELSE([
 
 AC_MSG_CHECKING([for libvtkFiltering])
 old_libs="$LIBS"
+
 LIBS="-lvtkFiltering $LIBS"
 AC_LINK_IFELSE([
         AC_LANG_PROGRAM(
