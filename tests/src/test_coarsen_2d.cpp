@@ -82,7 +82,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements==2)&&(lrms<0.2)&&(qrms<0.15))
+  if((nelements==2)&&(lrms==0)&&(qrms==0))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

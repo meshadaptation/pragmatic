@@ -75,6 +75,8 @@ template<typename real_t, typename index_t>
     _surface = &surface;
     _mesh = &mesh;
 
+    set_hessian_method("qls");
+    
     rank = 0;
     nprocs = 1;
 #ifdef HAVE_MPI
@@ -83,63 +85,8 @@ template<typename real_t, typename index_t>
       MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
     }
 #endif
-    if(_ndims==2){
-      double bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0)};
-      for(int i=1;i<_NNodes;i++){
-        bbox[0] = min(bbox[0], get_x(i)); bbox[1] = max(bbox[1], get_x(i));
-        bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
-      }
-#ifdef HAVE_MPI
-      if(nprocs>1){
-        MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
-        MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
-        
-        MPI_Allreduce(&(bbox[2]), &(bbox[2]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
-        MPI_Allreduce(&(bbox[3]), &(bbox[3]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
-      }
-#endif
-      _metric = new MetricTensor<real_t>[_NNodes];
-      // Enforce first-touch policy
-#pragma omp parallel
-      {
-        real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0, 1.0/pow(bbox[3]-bbox[2], 2)};
-#pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
-          _metric[i].set(_ndims, m);
-        }
-      }
-    }else{
-      real_t bbox[] = {get_x(0), get_x(0), get_y(0), get_y(0), get_z(0), get_z(0)};
-      for(int i=1;i<_NNodes;i++){
-        bbox[0] = min(bbox[0], get_x(i)); bbox[1] = max(bbox[1], get_x(i));
-        bbox[2] = min(bbox[2], get_y(i)); bbox[3] = max(bbox[3], get_y(i));
-        bbox[4] = min(bbox[4], get_z(i)); bbox[5] = max(bbox[5], get_z(i));
-      }
-#ifdef HAVE_MPI
-      if(nprocs>1){
-        MPI_Allreduce(&(bbox[0]), &(bbox[0]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
-        MPI_Allreduce(&(bbox[1]), &(bbox[1]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
-        
-        MPI_Allreduce(&(bbox[2]), &(bbox[2]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
-        MPI_Allreduce(&(bbox[3]), &(bbox[3]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
 
-        MPI_Allreduce(&(bbox[4]), &(bbox[4]), 1, MPI_DOUBLE, MPI_MIN, _mesh->get_mpi_comm());
-        MPI_Allreduce(&(bbox[5]), &(bbox[5]), 1, MPI_DOUBLE, MPI_MAX, _mesh->get_mpi_comm());
-      }
-#endif
-      _metric = new MetricTensor<real_t>[_NNodes];
-      // Enforce first-touch policy
-#pragma omp parallel
-      {
-        real_t m[] = {1.0/pow(bbox[1]-bbox[0], 2), 0, 0,
-                      0, 1.0/pow(bbox[3]-bbox[2], 2), 0,
-                      0, 0, 1.0/pow(bbox[5]-bbox[4], 2)};
-#pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
-          _metric[i].set(_ndims, m);
-        }
-      }
-    }
+    _metric = NULL;
   }
 
   /*! Default destructor.
@@ -167,7 +114,10 @@ template<typename real_t, typename index_t>
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
    */
   void set_metric(const real_t *metric, int i){
-    _metric[i].set_metric(metric);
+    if(_metric==NULL)
+      _metric = new MetricTensor<real_t>[_NNodes];
+
+    _metric[i].set_metric(_ndims, metric);
   }
 
   /// Update the metric field on the mesh.
@@ -197,152 +147,41 @@ template<typename real_t, typename index_t>
    */
   void add_field(const real_t *psi, const real_t target_error, real_t sigma_psi=-1.0){
     bool relative = sigma_psi>0.0;
-
-    int ndims2 = _ndims*_ndims;
-
+    
+    int ndims2=_ndims*_ndims;
     real_t *Hessian = new real_t[_NNodes*ndims2];
-    real_t *_psi = new real_t[_NNodes];
-
-    // Number of points required for least squares fit.
-    const size_t min_patch_size = (_ndims==2)?6:9;
+    
+    bool add_to=true;
+    if(_metric==NULL){
+      add_to = false;
+      _metric = new MetricTensor<real_t>[_NNodes];
+    }
 
 #pragma omp parallel
     {
-      // Enforce first touch
-#pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
-        _psi[i] = psi[i];
-      }
-
       // Calculate Hessian at each point.
 #pragma omp for schedule(static)
       for(int i=0; i<_NNodes; i++){
-        size_t lmin_patch_size = _surface->contains_node(i)?min_patch_size*2:min_patch_size;
-        std::set<index_t> patch = _mesh->get_node_patch(i, lmin_patch_size);
-        patch.erase(i);
-
-        if(_ndims==2){
-          // Form quadratic system to be solved. The quadratic fit is:
-          // P = a0+a1x+a2y+a3xy+a4x^2+a5y^2
-          // A = P^TP
-          double x=get_x(i), y=get_y(i);
-          Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(6,6);
-
-          A[0]+=pow(y,4); A[1]+=pow(x,2)*pow(y,2); A[2]+=x*pow(y,3); A[3]+=pow(y,3); A[4]+=x*pow(y,2); A[5]+=pow(y,2);
-          A[6]+=pow(x,2)*pow(y,2); A[7]+=pow(x,4); A[8]+=pow(x,3)*y; A[9]+=pow(x,2)*y; A[10]+=pow(x,3); A[11]+=pow(x,2);
-          A[12]+=x*pow(y,3); A[13]+=pow(x,3)*y; A[14]+=pow(x,2)*pow(y,2); A[15]+=x*pow(y,2); A[16]+=pow(x,2)*y; A[17]+=x*y;
-          A[18]+=pow(y,3); A[19]+=pow(x,2)*y; A[20]+=x*pow(y,2); A[21]+=pow(y,2); A[22]+=x*y; A[23]+=y;
-          A[24]+=x*pow(y,2); A[25]+=pow(x,3); A[26]+=pow(x,2)*y; A[27]+=x*y; A[28]+=pow(x,2); A[29]+=x;
-          A[30]+=pow(y,2); A[31]+=pow(x,2); A[32]+=x*y; A[33]+=y; A[34]+=x; A[35]+=1;
-
-          Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
-
-          b[0]+=psi[i]*pow(y,2); b[1]+=psi[i]*pow(x,2); b[2]+=psi[i]*x*y; b[3]+=psi[i]*y; b[4]+=psi[i]*x; b[5]+=psi[i]*1;
-
-          for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
-            x=get_x(*n); y=get_y(*n);
-
-            A[0]+=pow(y,4); A[1]+=pow(x,2)*pow(y,2); A[2]+=x*pow(y,3); A[3]+=pow(y,3); A[4]+=x*pow(y,2); A[5]+=pow(y,2);
-            A[6]+=pow(x,2)*pow(y,2); A[7]+=pow(x,4); A[8]+=pow(x,3)*y; A[9]+=pow(x,2)*y; A[10]+=pow(x,3); A[11]+=pow(x,2);
-            A[12]+=x*pow(y,3); A[13]+=pow(x,3)*y; A[14]+=pow(x,2)*pow(y,2); A[15]+=x*pow(y,2); A[16]+=pow(x,2)*y; A[17]+=x*y;
-            A[18]+=pow(y,3); A[19]+=pow(x,2)*y; A[20]+=x*pow(y,2); A[21]+=pow(y,2); A[22]+=x*y; A[23]+=y;
-            A[24]+=x*pow(y,2); A[25]+=pow(x,3); A[26]+=pow(x,2)*y; A[27]+=x*y; A[28]+=pow(x,2); A[29]+=x;
-            A[30]+=pow(y,2); A[31]+=pow(x,2); A[32]+=x*y; A[33]+=y; A[34]+=x; A[35]+=1;
-
-            b[0]+=psi[*n]*pow(y,2); b[1]+=psi[*n]*pow(x,2); b[2]+=psi[*n]*x*y; b[3]+=psi[*n]*y; b[4]+=psi[*n]*x; b[5]+=psi[*n]*1;
-          }
-
-          Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
-          A.ldlt().solve(b, &a);
-          if(isnan(a[0]*y*y+a[1]*x*x+a[2]*x*y+a[3]*y+a[4]*x+a[5]))
-            A.svd().solve(b, &a);
-          assert(!isnan(a[0]*y*y+a[1]*x*x+a[2]*x*y+a[3]*y+a[4]*x+a[5]));
-
-          Hessian[i*4  ] = 2*a[1]; // d2/dx2
-          Hessian[i*4+1] = a[2];   // d2/dxdy
-          Hessian[i*4+2] = a[2];   // d2/dxdy
-          Hessian[i*4+3] = 2*a[0]; // d2/dy2
-        }else{
-          // Form quadratic system to be solved. The quadratic fit is:
-          // P = 1 + x + y + z + x^2 + y^2 + z^2 + xy + xz + yz
-          // A = P^TP
-          double x=get_x(i), y=get_y(i), z=get_z(i);
-          Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(10,10);
-
-          A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=z; A[4]+=pow(x,2); A[5]+=x*y; A[6]+=x*z; A[7]+=pow(y,2); A[8]+=y*z; A[9]+=pow(z,2);
-          A[10]+=x; A[11]+=pow(x,2); A[12]+=x*y; A[13]+=x*z; A[14]+=pow(x,3); A[15]+=pow(x,2)*y; A[16]+=pow(x,2)*z; A[17]+=x*pow(y,2); A[18]+=x*y*z; A[19]+=x*pow(z,2);
-          A[20]+=y; A[21]+=x*y; A[22]+=pow(y,2); A[23]+=y*z; A[24]+=pow(x,2)*y; A[25]+=x*pow(y,2); A[26]+=x*y*z; A[27]+=pow(y,3); A[28]+=pow(y,2)*z; A[29]+=y*pow(z,2);
-          A[30]+=z; A[31]+=x*z; A[32]+=y*z; A[33]+=pow(z,2); A[34]+=pow(x,2)*z; A[35]+=x*y*z; A[36]+=x*pow(z,2); A[37]+=pow(y,2)*z; A[38]+=y*pow(z,2); A[39]+=pow(z,3);
-          A[40]+=pow(x,2); A[41]+=pow(x,3); A[42]+=pow(x,2)*y; A[43]+=pow(x,2)*z; A[44]+=pow(x,4); A[45]+=pow(x,3)*y; A[46]+=pow(x,3)*z; A[47]+=pow(x,2)*pow(y,2); A[48]+=pow(x,2)*y*z; A[49]+=pow(x,2)*pow(z,2);
-          A[50]+=x*y; A[51]+=pow(x,2)*y; A[52]+=x*pow(y,2); A[53]+=x*y*z; A[54]+=pow(x,3)*y; A[55]+=pow(x,2)*pow(y,2); A[56]+=pow(x,2)*y*z; A[57]+=x*pow(y,3); A[58]+=x*pow(y,2)*z; A[59]+=x*y*pow(z,2);
-          A[60]+=x*z; A[61]+=pow(x,2)*z; A[62]+=x*y*z; A[63]+=x*pow(z,2); A[64]+=pow(x,3)*z; A[65]+=pow(x,2)*y*z; A[66]+=pow(x,2)*pow(z,2); A[67]+=x*pow(y,2)*z; A[68]+=x*y*pow(z,2); A[69]+=x*pow(z,3);
-          A[70]+=pow(y,2); A[71]+=x*pow(y,2); A[72]+=pow(y,3); A[73]+=pow(y,2)*z; A[74]+=pow(x,2)*pow(y,2); A[75]+=x*pow(y,3); A[76]+=x*pow(y,2)*z; A[77]+=pow(y,4); A[78]+=pow(y,3)*z; A[79]+=pow(y,2)*pow(z,2);
-          A[80]+=y*z; A[81]+=x*y*z; A[82]+=pow(y,2)*z; A[83]+=y*pow(z,2); A[84]+=pow(x,2)*y*z; A[85]+=x*pow(y,2)*z; A[86]+=x*y*pow(z,2); A[87]+=pow(y,3)*z; A[88]+=pow(y,2)*pow(z,2); A[89]+=y*pow(z,3);
-          A[90]+=pow(z,2); A[91]+=x*pow(z,2); A[92]+=y*pow(z,2); A[93]+=pow(z,3); A[94]+=pow(x,2)*pow(z,2); A[95]+=x*y*pow(z,2); A[96]+=x*pow(z,3); A[97]+=pow(y,2)*pow(z,2); A[98]+=y*pow(z,3); A[99]+=pow(z,4);
-
-          Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
-
-          b[0]+=psi[i]*1; b[1]+=psi[i]*x; b[2]+=psi[i]*y; b[3]+=psi[i]*z; b[4]+=psi[i]*pow(x,2); b[5]+=psi[i]*x*y; b[6]+=psi[i]*x*z; b[7]+=psi[i]*pow(y,2); b[8]+=psi[i]*y*z; b[9]+=psi[i]*pow(z,2);
-
-          for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
-            x=get_x(*n); y=get_y(*n); z=get_z(*n);
-
-            A[0]+=1; A[1]+=x; A[2]+=y; A[3]+=z; A[4]+=pow(x,2); A[5]+=x*y; A[6]+=x*z; A[7]+=pow(y,2); A[8]+=y*z; A[9]+=pow(z,2);
-            A[10]+=x; A[11]+=pow(x,2); A[12]+=x*y; A[13]+=x*z; A[14]+=pow(x,3); A[15]+=pow(x,2)*y; A[16]+=pow(x,2)*z; A[17]+=x*pow(y,2); A[18]+=x*y*z; A[19]+=x*pow(z,2);
-            A[20]+=y; A[21]+=x*y; A[22]+=pow(y,2); A[23]+=y*z; A[24]+=pow(x,2)*y; A[25]+=x*pow(y,2); A[26]+=x*y*z; A[27]+=pow(y,3); A[28]+=pow(y,2)*z; A[29]+=y*pow(z,2);
-            A[30]+=z; A[31]+=x*z; A[32]+=y*z; A[33]+=pow(z,2); A[34]+=pow(x,2)*z; A[35]+=x*y*z; A[36]+=x*pow(z,2); A[37]+=pow(y,2)*z; A[38]+=y*pow(z,2); A[39]+=pow(z,3);
-            A[40]+=pow(x,2); A[41]+=pow(x,3); A[42]+=pow(x,2)*y; A[43]+=pow(x,2)*z; A[44]+=pow(x,4); A[45]+=pow(x,3)*y; A[46]+=pow(x,3)*z; A[47]+=pow(x,2)*pow(y,2); A[48]+=pow(x,2)*y*z; A[49]+=pow(x,2)*pow(z,2);
-            A[50]+=x*y; A[51]+=pow(x,2)*y; A[52]+=x*pow(y,2); A[53]+=x*y*z; A[54]+=pow(x,3)*y; A[55]+=pow(x,2)*pow(y,2); A[56]+=pow(x,2)*y*z; A[57]+=x*pow(y,3); A[58]+=x*pow(y,2)*z; A[59]+=x*y*pow(z,2);
-            A[60]+=x*z; A[61]+=pow(x,2)*z; A[62]+=x*y*z; A[63]+=x*pow(z,2); A[64]+=pow(x,3)*z; A[65]+=pow(x,2)*y*z; A[66]+=pow(x,2)*pow(z,2); A[67]+=x*pow(y,2)*z; A[68]+=x*y*pow(z,2); A[69]+=x*pow(z,3);
-            A[70]+=pow(y,2); A[71]+=x*pow(y,2); A[72]+=pow(y,3); A[73]+=pow(y,2)*z; A[74]+=pow(x,2)*pow(y,2); A[75]+=x*pow(y,3); A[76]+=x*pow(y,2)*z; A[77]+=pow(y,4); A[78]+=pow(y,3)*z; A[79]+=pow(y,2)*pow(z,2);
-            A[80]+=y*z; A[81]+=x*y*z; A[82]+=pow(y,2)*z; A[83]+=y*pow(z,2); A[84]+=pow(x,2)*y*z; A[85]+=x*pow(y,2)*z; A[86]+=x*y*pow(z,2); A[87]+=pow(y,3)*z; A[88]+=pow(y,2)*pow(z,2); A[89]+=y*pow(z,3);
-            A[90]+=pow(z,2); A[91]+=x*pow(z,2); A[92]+=y*pow(z,2); A[93]+=pow(z,3); A[94]+=pow(x,2)*pow(z,2); A[95]+=x*y*pow(z,2); A[96]+=x*pow(z,3); A[97]+=pow(y,2)*pow(z,2); A[98]+=y*pow(z,3); A[99]+=pow(z,4);
-
-            b[0]+=psi[*n]*1; b[1]+=psi[*n]*x; b[2]+=psi[*n]*y; b[3]+=psi[*n]*z; b[4]+=psi[*n]*pow(x,2); b[5]+=psi[*n]*x*y; b[6]+=psi[*n]*x*z; b[7]+=psi[*n]*pow(y,2); b[8]+=psi[*n]*y*z; b[9]+=psi[*n]*pow(z,2);
-          }
-
-          Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
-          A.ldlt().solve(b, &a);
-          if(isnan(a[0]+a[1]*x+a[2]*y+a[3]*z+a[4]*pow(x,2)+a[5]*x*y+a[6]*x*z+a[7]*pow(y,2)+a[8]*y*z+a[9]*pow(z,2)))
-            A.svd().solve(b, &a);
-          assert(!isnan(a[0]+a[1]*x+a[2]*y+a[3]*z+a[4]*pow(x,2)+a[5]*x*y+a[6]*x*z+a[7]*pow(y,2)+a[8]*y*z+a[9]*pow(z,2)));
-
-          Hessian[i*9  ] = a[4]*2.0; // d2/dx2
-          Hessian[i*9+1] = a[5];     // d2/dxdy
-          Hessian[i*9+2] = a[6];     // d2/dxdz
-          Hessian[i*9+3] = a[5];     // d2/dydx
-          Hessian[i*9+4] = a[7]*2.0; // d2/dy2
-          Hessian[i*9+5] = a[8];     // d2/dydz
-          Hessian[i*9+6] = a[6];     // d2/dzdx
-          Hessian[i*9+7] = a[8];     // d2/dzdy
-          Hessian[i*9+8] = a[9]*2.0; // d2/dz2
-        }
-      }
-
-      if(relative){
-#pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+        (this->*hessian_kernel)(psi, i, Hessian);
+        
+        if(relative){
           real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
-          for(int j=0;j<ndims2;j++)
+          for(int j=0;j<ndims2;j++){
             Hessian[i*ndims2+j]*=eta;
-        }
-      }else{
-#pragma omp for schedule(static)
-        for(int i=0;i<_NNodes;i++){
+          }
+        }else{
           real_t eta = 1.0/target_error;
           for(int j=0;j<ndims2;j++)
             Hessian[i*ndims2+j]*=eta;
         }
-      }
 
-      // Merge this metric with the existing metric field.
-#pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
-        _metric[i].constrain(Hessian+i*ndims2);
+        // Merge this metric with the existing metric field.
+        if(add_to)
+          _metric[i].constrain(Hessian+i*ndims2);
+        else
+          _metric[i].set_metric(_ndims, Hessian+i*ndims2);
       }
     }
-
-    delete [] _psi;
     delete [] Hessian;
   }
 
@@ -352,7 +191,7 @@ template<typename real_t, typename index_t>
     // Form NNlist.
     std::deque< std::set<index_t> > NNList( _NNodes );
     for(int e=0; e<_NElements; e++){
-      if( _ndims == 2)
+      if(_ndims == 2)
       {
         const index_t *n=_mesh->get_element(e);           // indices for element e start at _ENList[ nloc*e ]
         for(index_t i=0; i<3; i++){
@@ -396,7 +235,6 @@ template<typename real_t, typename index_t>
         {
           double l = _metric[n].average_length();
           ordered_edges.insert(std::pair<double, size_t>(l, n));
-          //std::cout << "(node, length) = (" << n << ", " << l << ")\n";
         }
       }
       else
@@ -412,7 +250,6 @@ template<typename real_t, typename index_t>
 
       for(std::multimap<double, size_t>::const_iterator n=ordered_edges.begin(); n!=ordered_edges.end(); n++)
       {
-        // std::cout << "n->second: " << n->second << "\n";
         // Used to ensure that the front cannot go back on itself.
         std::set<size_t> swept;
 
@@ -423,7 +260,6 @@ template<typename real_t, typename index_t>
         while(!front.empty())
         {
           index_t p=*(front.begin());
-          // std::cout << "p: " << p << "\n";
           front.erase(p);
           swept.insert(p);
 
@@ -437,7 +273,6 @@ template<typename real_t, typename index_t>
                 it++)
           {
             index_t q=*it;
-            // std::cout << "q: " << q << "\n";
 
             if(swept.count(q))
               continue;
@@ -498,7 +333,6 @@ template<typename real_t, typename index_t>
               double hp = 1.0/sqrt(Dp[k]);
               double hq = 1.0/sqrt(Dq[pairs[k]]);
               double gamma = exp(fabs(hp - hq)/Lpq);
-              // std::cout << "gamma = " << gamma << "\n";
 
               if(isinf(gamma))
                 gamma = DBL_MAX;
@@ -507,7 +341,6 @@ template<typename real_t, typename index_t>
                 if(hp>hq)
                 {
                   hp = hq + dh;
-                  // std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   Dp[k] = 1.0/(hp*hp);
                   add_p = true;
                 }
@@ -515,7 +348,6 @@ template<typename real_t, typename index_t>
                 {
                   hq = hp + dh;
                   Dq[pairs[k]] = 1.0/(hq*hq);
-                  // std::cout << "  new gamma = " << exp(fabs(hp-hq)/Lpq) << "\n";
                   add_q = true;
                 }
               }
@@ -528,7 +360,7 @@ template<typename real_t, typename index_t>
               front.insert(p);
 
               Mp.eigen_undecomp(&(Dp[0]), &(Vp[0]));
-              _metric[p].set_metric( Mp.get_metric() );
+              _metric[p].set_metric(_ndims, Mp.get_metric());
               hits.insert(p);
             }
             if(add_q)
@@ -536,14 +368,13 @@ template<typename real_t, typename index_t>
               front.insert(q);
 
               Mq.eigen_undecomp(&(Dq[0]), &(Vq[0]));
-              _metric[q].set_metric( Mq.get_metric() );
+              _metric[q].set_metric(_ndims, Mq.get_metric());
               hits.insert(p);
             } 
           }
         }
       }
 
-      // std::cout << "Hits: " << hits.size() << "\n\n";
       if(hits.empty())
         break;
     }
@@ -723,6 +554,37 @@ template<typename real_t, typename index_t>
     return predicted;
   }
 
+  /*! Choose method for evaluating Hessian of field.
+   * @param method - valid values are "qls", "qls2".
+   */
+  void set_hessian_method(const char *method){
+    if(_ndims==2){
+      if(std::string(method)=="qls"){
+        min_patch_size = 6;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_2d;
+      }else if(std::string(method)=="qls2"){
+        min_patch_size = 12;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_2d;
+      }else{
+        std::cerr<<"WARNING: unknown Hessian recovery method specified. Using default.\n";
+        min_patch_size = 6;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_2d;
+      }
+    }else{
+      if(std::string(method)=="qls"){
+        min_patch_size = 10;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_3d;
+      }else if(std::string(method)=="qls2"){
+        min_patch_size = 20;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_3d;
+      }else{
+        std::cerr<<"WARNING: unknown Hessian recovery method specified. Using default.\n";
+        min_patch_size = 10;
+        hessian_kernel = &MetricField<real_t, index_t>::hessian_qls_kernel_3d;
+      }
+    }
+  }
+
  private:
 
   inline real_t get_x(index_t nid){
@@ -746,12 +608,113 @@ template<typename real_t, typename index_t>
 //    l +=  (      x_i|n_0       -      x_1|n_1       )^2
     return sqrt(l);
   }
+  
+  /// Least squared Hessian recovery.
+  void hessian_qls_kernel_2d(const real_t *psi, int i, real_t *Hessian){
+    std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
+    patch.insert(i);
+
+    // Form quadratic system to be solved. The quadratic fit is:
+    // P = a0*y^2+a1*x^2+a2*x*y+a3*y+a4*x+a5
+    // A = P^TP
+    Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(6,6);
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
+    
+    double x0=get_x(i), y0=get_y(i);
+
+    for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
+      double x=get_x(*n)-x0, y=get_y(*n)-y0;
+      
+      A[0]+=y*y*y*y;
+      A[6]+=x*x*y*y;  A[7]+=x*x*x*x;  
+      A[12]+=x*y*y*y; A[13]+=x*x*x*y; A[14]+=x*x*y*y;
+      A[18]+=y*y*y;   A[19]+=x*x*y;   A[20]+=x*y*y;   A[21]+=y*y;
+      A[24]+=x*y*y;   A[25]+=x*x*x;   A[26]+=x*x*y;   A[27]+=x*y; A[28]+=x*x;
+      A[30]+=y*y;     A[31]+=x*x;     A[32]+=x*y;     A[33]+=y;   A[34]+=x;   A[35]+=1;
+      
+      b[0]+=psi[*n]*y*y; b[1]+=psi[*n]*x*x; b[2]+=psi[*n]*x*y; b[3]+=psi[*n]*y; b[4]+=psi[*n]*x; b[5]+=psi[*n];
+    }
+    A[1] = A[6]; A[2] = A[12]; A[3] = A[18]; A[4] = A[24]; A[5] = A[30];
+                 A[8] = A[13]; A[9] = A[19]; A[10]= A[25]; A[11]= A[31];
+                               A[15]= A[20]; A[16]= A[26]; A[17]= A[32];
+                                             A[22]= A[27]; A[23]= A[33];
+                                                           A[29]= A[34];
+
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(6);
+    A.svd().solve(b, &a);
+
+    Hessian[i*4  ] = 2*a[1]; // d2/dx2
+    Hessian[i*4+1] = a[2];   // d2/dxdy
+    Hessian[i*4+2] = a[2];   // d2/dxdy
+    Hessian[i*4+3] = 2*a[0]; // d2/dy2
+  }
+  
+  /// Least squared Hessian recovery.
+  void hessian_qls_kernel_3d(const real_t *psi, int i, real_t *Hessian){
+    std::set<index_t> patch;
+    if(_surface->contains_node(i))
+      patch = _mesh->get_node_patch(i, 2*min_patch_size);
+    else
+      patch = _mesh->get_node_patch(i, min_patch_size);
+    patch.insert(i);
+
+    // Form quadratic system to be solved. The quadratic fit is:
+    // P = 1 + x + y + z + x^2 + y^2 + z^2 + xy + xz + yz
+    // A = P^TP
+    Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(10,10);
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
+
+    double x0=get_x(i), y0=get_y(i), z0=get_z(i);
+    
+    for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
+      double x=get_x(*n)-x0, y=get_y(*n)-y0, z=get_z(*n)-z0;
+      
+      A[0]+=1;
+      A[10]+=x;   A[11]+=x*x;
+      A[20]+=y;   A[21]+=x*y;   A[22]+=y*y;
+      A[30]+=z;   A[31]+=x*z;   A[32]+=y*z;   A[33]+=z*z;
+      A[40]+=x*x; A[41]+=x*x*x; A[42]+=x*x*y; A[43]+=x*x*z; A[44]+=x*x*x*x;
+      A[50]+=x*y; A[51]+=x*x*y; A[52]+=x*y*y; A[53]+=x*y*z; A[54]+=x*x*x*y; A[55]+=x*x*y*y;
+      A[60]+=x*z; A[61]+=x*x*z; A[62]+=x*y*z; A[63]+=x*z*z; A[64]+=x*x*x*z; A[65]+=x*x*y*z; A[66]+=x*x*z*z;
+      A[70]+=y*y; A[71]+=x*y*y; A[72]+=y*y*y; A[73]+=y*y*z; A[74]+=x*x*y*y; A[75]+=x*y*y*y; A[76]+=x*y*y*z; A[77]+=y*y*y*y;
+      A[80]+=y*z; A[81]+=x*y*z; A[82]+=y*y*z; A[83]+=y*z*z; A[84]+=x*x*y*z; A[85]+=x*y*y*z; A[86]+=x*y*z*z; A[87]+=y*y*y*z; A[88]+=y*y*z*z;
+      A[90]+=z*z; A[91]+=x*z*z; A[92]+=y*z*z; A[93]+=z*z*z; A[94]+=x*x*z*z; A[95]+=x*y*z*z; A[96]+=x*z*z*z; A[97]+=y*y*z*z; A[98]+=y*z*z*z; A[99]+=z*z*z*z;
+      
+      b[0]+=psi[*n]*1; b[1]+=psi[*n]*x; b[2]+=psi[*n]*y; b[3]+=psi[*n]*z; b[4]+=psi[*n]*x*x; b[5]+=psi[*n]*x*y; b[6]+=psi[*n]*x*z; b[7]+=psi[*n]*y*y; b[8]+=psi[*n]*y*z; b[9]+=psi[*n]*z*z;
+    }
+    
+    A[1] = A[10]; A[2]  = A[20]; A[3]  = A[30]; A[4]  = A[40]; A[5]  = A[50]; A[6]  = A[60]; A[7]  = A[70]; A[8]  = A[80]; A[9]  = A[90];
+                  A[12] = A[21]; A[13] = A[31]; A[14] = A[41]; A[15] = A[51]; A[16] = A[61]; A[17] = A[71]; A[18] = A[81]; A[19] = A[91];
+                                 A[23] = A[32]; A[24] = A[42]; A[25] = A[52]; A[26] = A[62]; A[27] = A[72]; A[28] = A[82]; A[29] = A[92];
+                                                A[34] = A[43]; A[35] = A[53]; A[36] = A[63]; A[37] = A[73]; A[38] = A[83]; A[39] = A[93];
+                                                               A[45] = A[54]; A[46] = A[64]; A[47] = A[74]; A[48] = A[84]; A[49] = A[94];
+                                                                              A[56] = A[65]; A[57] = A[75]; A[58] = A[85]; A[59] = A[95];
+                                                                                             A[67] = A[76]; A[68] = A[86]; A[69] = A[96];
+                                                                                                            A[78] = A[87]; A[79] = A[97];
+                                                                                                                           A[89] = A[98];
+                  
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
+    A.svd().solve(b, &a);
+
+    Hessian[i*9  ] = a[4]*2.0; // d2/dx2
+    Hessian[i*9+1] = a[5];     // d2/dxdy
+    Hessian[i*9+2] = a[6];     // d2/dxdz
+    Hessian[i*9+3] = a[5];     // d2/dydx
+    Hessian[i*9+4] = a[7]*2.0; // d2/dy2
+    Hessian[i*9+5] = a[8];     // d2/dydz
+    Hessian[i*9+6] = a[6];     // d2/dzdx
+    Hessian[i*9+7] = a[8];     // d2/dzdy
+    Hessian[i*9+8] = a[9]*2.0; // d2/dz2
+  }
 
   int rank, nprocs;
   int _NNodes, _NElements, _ndims, _nloc;
+  size_t min_patch_size;
   MetricTensor<real_t> *_metric;
   Surface<real_t, index_t> *_surface;
   Mesh<real_t, index_t> *_mesh;
+
+  void (MetricField<real_t, index_t>::*hessian_kernel)(const real_t *psi, int i, real_t *Hessian);
 };
 
 #endif
