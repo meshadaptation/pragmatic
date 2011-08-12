@@ -38,6 +38,7 @@
 #include "Surface.h"
 #include "Metis.h"
 #include "vtk.h"
+#include "ElementProperty.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -225,6 +226,28 @@ template<typename real_t, typename index_t> class VTKTools{
   }
   
   static void export_vtu(const char *basename, const Mesh<real_t, index_t> *mesh, const real_t *psi=NULL){
+    size_t NElements = mesh->get_number_elements();
+    size_t ndims = mesh->get_number_dimensions();
+    
+    // Set the orientation of elements.
+    ElementProperty<real_t> *property = NULL;
+    for(size_t i=0;i<NElements;i++){
+      const int *n=mesh->get_element(i);
+      if(n[0]<0)
+        continue;
+      
+      if(ndims==2)
+        property = new ElementProperty<real_t>(mesh->get_coords(n[0]),
+                                               mesh->get_coords(n[1]),
+                                               mesh->get_coords(n[2]));
+      else
+        property = new ElementProperty<real_t>(mesh->get_coords(n[0]),
+                                               mesh->get_coords(n[1]),
+                                               mesh->get_coords(n[2]),
+                                               mesh->get_coords(n[3]));
+      break;
+    }
+
     // Create VTU object to write out.
     vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
     
@@ -250,8 +273,6 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_node_tpartition->SetNumberOfComponents(1);
     vtk_node_tpartition->SetNumberOfTuples(NNodes);
     vtk_node_tpartition->SetName("node_tpartition");
-
-    size_t ndims = mesh->get_number_dimensions();
 
     vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
     vtk_metric->SetNumberOfComponents(ndims*ndims);
@@ -337,8 +358,6 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetPointData()->AddArray(vtk_min_desired_length);
     vtk_min_desired_length->Delete();
 
-    size_t NElements = mesh->get_number_elements();
-
     vtkIntArray *vtk_cell_numbering = vtkIntArray::New();
     vtk_cell_numbering->SetNumberOfComponents(1);
     vtk_cell_numbering->SetNumberOfTuples(NElements);
@@ -349,6 +368,11 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_cell_tpartition->SetNumberOfTuples(NElements);
     vtk_cell_tpartition->SetName("cell_partition");
 
+    vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
+    vtk_quality->SetNumberOfComponents(1);
+    vtk_quality->SetNumberOfTuples(NElements);
+    vtk_quality->SetName("quality");
+
     for(size_t i=0;i<NElements;i++){
       vtk_cell_numbering->SetTuple1(i, i);
       vtk_cell_tpartition->SetTuple1(i, mesh->get_element_towner(i));
@@ -357,9 +381,15 @@ template<typename real_t, typename index_t> class VTKTools{
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
         ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
+        
+        vtk_quality->SetTuple1(i, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), 
+                                                     mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2])));
       }else{
         vtkIdType pts[] = {n[0], n[1], n[2], n[3]};
         ug->InsertNextCell(VTK_TETRA, 4, pts);
+        
+        vtk_quality->SetTuple1(i, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), 
+                                                     mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
       }
     }
 
@@ -368,6 +398,9 @@ template<typename real_t, typename index_t> class VTKTools{
   
     ug->GetCellData()->AddArray(vtk_cell_tpartition);
     vtk_cell_tpartition->Delete();
+
+    ug->GetCellData()->AddArray(vtk_quality);
+    vtk_quality->Delete();
     
     int nparts=1;
 #ifdef HAVE_MPI
@@ -401,7 +434,8 @@ template<typename real_t, typename index_t> class VTKTools{
 #endif
     }
     ug->Delete();
-    
+    delete property;
+
     return;
   }
 

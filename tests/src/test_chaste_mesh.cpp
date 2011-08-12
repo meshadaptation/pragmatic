@@ -104,7 +104,6 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   
   Smooth<double, int> smooth(mesh, surface);
-  smooth.smooth("smart Laplacian");  
   double L_max = mesh.maximal_edge_length();
   
   int adapt_iter=0;
@@ -115,7 +114,6 @@ int main(int argc, char **argv){
       
     refine.refine(L_ref);    
     coarsen.coarsen(L_low, L_ref);
-    smooth.smooth("smart Laplacian");
 
     L_max = mesh.maximal_edge_length();
   }while((L_max>L_up)&&(adapt_iter++<20));
@@ -126,6 +124,8 @@ int main(int argc, char **argv){
   std::map<int, int> active_vertex_map;
   mesh.defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
+
+  smooth.smooth("smart Laplacian");
   
   int nelements = mesh.get_number_elements();
   

@@ -93,7 +93,7 @@ elif test "x$FCC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
-    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
+    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated -frounding-math"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         LDFLAGS="-g $LDFLAGS"

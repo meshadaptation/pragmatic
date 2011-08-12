@@ -199,7 +199,7 @@ def generate_Lipnikov2_2d():
     dqdx = diff(q, x)
     dqdy = diff(q, y)
 
-    cxx_body = """  void grad_r(real_t x, real_t y,
+    cxx_body = """  void grad_r(
               real_t a0, real_t a1, real_t a2, real_t a3, real_t a4, real_t a5,
               real_t b0, real_t b1, real_t b2, real_t b3, real_t b4, real_t b5,
               real_t c0, real_t c1, real_t c2, real_t c3, real_t c4, real_t c5,
@@ -211,7 +211,7 @@ def generate_Lipnikov2_2d():
     
     return;
   }
-"""%(GenerateC(str(dqdx)), GenerateC(str(dqdy)))
+"""%(GenerateC(str(dqdx(x=0, y=0))), GenerateC(str(dqdy(x=0, y=0))))
 
     f = open('../include/dqdx_2d.h', 'w')
     f.write(cxx_head)

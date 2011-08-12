@@ -96,7 +96,6 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   
   Smooth<double, int> smooth(*mesh, surface);
-  smooth.smooth("smart Laplacian");
   
   double L_max = mesh->maximal_edge_length();
   double alpha = 0.95; //sqrt(2.0)*0.5;
@@ -106,7 +105,6 @@ int main(int argc, char **argv){
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
-    smooth.smooth("smart Laplacian", 1);
 
     L_max = mesh->maximal_edge_length();
     if(L_max<L_up)

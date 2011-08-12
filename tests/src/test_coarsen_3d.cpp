@@ -35,7 +35,6 @@
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
-#include "Smooth.h"
 #include "Coarsen.h"
 #include "ticker.h"
 
@@ -56,7 +55,6 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   
   Coarsen<double, int> adapt(*mesh, surface);
-  Smooth<double, int> smooth(*mesh, surface);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;

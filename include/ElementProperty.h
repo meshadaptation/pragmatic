@@ -123,12 +123,13 @@ class ElementProperty{
              (x0[0] - x1[0])*((x0[2] - x1[2])*m[2] + (x0[1] - x1[1])*m[1] + (x0[0] - x1[0])*m[0]));
     }
   }
-  
-  /*! Evaluates the 2D Lipnikov functional. The description for the
-   * functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov,
-   * An Adaptive Algorithm for Quasioptimal Mesh Generation,
-   * Computational Mathematics and Mathematical Physics, Vol. 39,
-   * No. 9, 1999, pp. 1468 - 1486.
+
+#if 0  
+  /*! Evaluates the regularised 2D Lipnikov functional. The
+   * description for the functional is taken from: Yu. V. Vasileskii
+   * and K. N. Lipnikov, An Adaptive Algorithm for Quasioptimal Mesh
+   * Generation, Computational Mathematics and Mathematical Physics,
+   * Vol. 39, No. 9, 1999, pp. 1468 - 1486.
    *
    * @param x0 pointer to 2D position for first point in triangle.
    * @param x1 pointer to 2D position for second point in triangle.
@@ -159,27 +160,74 @@ class ElementProperty{
     // Area in metric space
     real_t a_m = a*sqrt(m00*m11 - m01*m01);
     
-    // Function
-
-    // Original expression - but this is non-differentiable
-    // real_t f = min(l/3.0, 3.0/l);
-    // real_t F = pow(f * (2.0 - f), 3.0);
-
-    // This is a modified version that's continuously differentiable.
-    // real_t f = exp(-1.75818939*pow(l/3.0 - 1.0, 2));    
-    // real_t F = pow(f * (2.0 - f), 3.0);
-
-    // Cauchy distribution ** pretty good
-    // const double pi = 3.141592653589793;
-    // real_t F = (1.9/pi)*(0.64/(pow(l/3-1.0, 2) + pow(0.64, 2)));
-
-    // Inverse-gamma distribution ** best so far
-    real_t F = 7.5854552/(pow(l-1.5, 2) + 1.89199003);
-
-    real_t quality = F*a_m; 
+    // Function: Regularised using an inverse-gamma distribution.
+    real_t quality = a_m*7.5854552/(pow(l-1.5, 2) + 1.89199003);
 
     return quality;
   }
+#else
+
+  /*! Evaluates the 2D Lipnikov functional. The description for the
+   * functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov,
+   * An Adaptive Algorithm for Quasioptimal Mesh Generation,
+   * Computational Mathematics and Mathematical Physics, Vol. 39,
+   * No. 9, 1999, pp. 1468 - 1486.
+   *
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   * @param m0 2x2 metric tensor for first point.
+   * @param m1 2x2 metric tensor for second point.
+   * @param m2 2x2 metric tensor for third point.
+   */
+  real_t lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
+                  const real_t *m0, const real_t *m1, const real_t *m2){
+    // Metric tensor averaged over the element
+    real_t m00 = (m0[0] + m1[0] + m2[0])/3;
+    real_t m01 = (m0[1] + m1[1] + m2[1])/3;
+    real_t m11 = (m0[3] + m1[3] + m2[3])/3;
+    
+    return lipnikov(x0, x1, x2, m00, m01, m11);
+  }
+
+  /*! Evaluates the 2D Lipnikov functional. The description for the
+   * functional is taken from: Yu. V. Vasileskii and K. N. Lipnikov,
+   * An Adaptive Algorithm for Quasioptimal Mesh Generation,
+   * Computational Mathematics and Mathematical Physics, Vol. 39,
+   * No. 9, 1999, pp. 1468 - 1486.
+   *
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   * @param m00 metric index (0,0)
+   * @param m01 metric index (0,1)
+   * @param m11 metric index (1,1)
+   */
+  real_t lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
+                  real_t m00, real_t m01, real_t m11){
+    // l is the length of the perimeter, measured in metric space
+    real_t l =
+      sqrt((x0[1] - x1[1])*((x0[1] - x1[1])*m11 + (x0[0] - x1[0])*m01) + 
+           (x0[0] - x1[0])*((x0[1] - x1[1])*m01 + (x0[0] - x1[0])*m00))+
+      sqrt((x0[1] - x2[1])*((x0[1] - x2[1])*m11 + (x0[0] - x2[0])*m01) + 
+           (x0[0] - x2[0])*((x0[1] - x2[1])*m01 + (x0[0] - x2[0])*m00))+
+      sqrt((x2[1] - x1[1])*((x2[1] - x1[1])*m11 + (x2[0] - x1[0])*m01) + 
+           (x2[0] - x1[0])*((x2[1] - x1[1])*m01 + (x2[0] - x1[0])*m00));
+
+    // Area in physical space
+    real_t a=area(x0, x1, x2);
+
+    // Area in metric space
+    real_t a_m = a*sqrt(m00*m11 - m01*m01);
+
+    // Function
+    real_t f = min(l/3.0, 3.0/l);
+    real_t F = pow(f * (2.0 - f), 3.0);
+    real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l);
+
+    return quality;
+  }
+#endif
 
   /*! Evaluates the 3D Lipnikov functional. The description for the
    * functional is taken from: A. Agouzal, K Lipnikov,

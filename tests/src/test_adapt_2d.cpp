@@ -78,6 +78,16 @@ int main(int argc, char **argv){
   metric_field.apply_max_edge_length(1.0);
   metric_field.update_mesh();
 
+  double qmean = mesh->get_qmean();
+  double qrms = mesh->get_qrms();
+  double qmin = mesh->get_qmin();
+  
+  std::cout<<"Initial quality:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
+
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -109,22 +119,39 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  smooth.smooth("optimisation");
+  qmean = mesh->get_qmean();
+  qrms = mesh->get_qrms();
+  qmin = mesh->get_qmin();
+  
+  std::cout<<"Basic quality:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
+
+  smooth.smooth("smart Laplacian");
+
+  qmean = mesh->get_qmean();
+  qrms = mesh->get_qrms();
+  qmin = mesh->get_qmin();
+  
+  std::cout<<"After smart smoothing:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
+
+  smooth.smooth("optimisation Linf");
+  
+  qmean = mesh->get_qmean();
+  qrms = mesh->get_qrms();
+  qmin = mesh->get_qmin();
+  
+  std::cout<<"After optimisation smoothing:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
 
   mesh->verify();
-  
-  double lmean = mesh->get_lmean();
-  double lrms = mesh->get_lrms();
-
-  double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
-  double qmin = mesh->get_qmin();
-  
-  std::cout<<"Edge length mean:      "<<lmean<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
-           <<"Quality mean:          "<<qmean<<std::endl
-           <<"Quality min:          "<<qmin<<std::endl
-           <<"Quality RMS:          "<<qrms<<std::endl;
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -139,7 +166,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((lrms<0.3)&&(qrms<0.1))
+  if((qmean>0.8)&&(qmin>0.4))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

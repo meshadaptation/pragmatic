@@ -205,6 +205,18 @@ template<typename real_t, typename index_t> class Mesh{
     _coords.swap(defrag_coords);
     metric.swap(defrag_metric);
     
+    // Renumber halo
+    std::set<int> new_halo;
+    for(std::set<int>::iterator it=halo.begin();it!=halo.end();++it){
+      new_halo.insert((*active_vertex_map)[*it]);
+    }
+    halo.swap(new_halo);
+    for(std::vector< std::vector<int> >::iterator it=send.begin();it!=send.end();++it){
+      for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
+        *jt = (*active_vertex_map)[*jt];
+      }
+    }
+    
     create_adjancy();
     calc_edge_lengths();
 

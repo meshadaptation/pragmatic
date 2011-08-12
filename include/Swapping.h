@@ -135,6 +135,9 @@ template<typename real_t, typename index_t> class Swapping{
       if(target_edge.adjacent_elements.size()!=2)
         continue;
       
+      if(_mesh->is_halo_node(target_edge.edge.first) || _mesh->is_halo_node(target_edge.edge.second))
+        continue;
+
       int eid0 = *target_edge.adjacent_elements.begin();
       int eid1 = *target_edge.adjacent_elements.rbegin();
       
