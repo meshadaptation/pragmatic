@@ -92,7 +92,7 @@ template<typename real_t, typename index_t>
   
   // Smooth the mesh using a given method. Valid methods are:
   // "Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=100){
+  void smooth(std::string method, int max_iterations=10){
     init_cache(method);
     
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
@@ -618,8 +618,6 @@ template<typename real_t, typename index_t>
            l[2]*_mesh->metric[n[2]*9+i]+
            l[3]*_mesh->metric[n[3]*9+i])/L;
     }
-    
-    MetricTensor<real_t>::positive_definiteness(3, mp);
 
     return true;
   }
@@ -1389,8 +1387,6 @@ template<typename real_t, typename index_t>
         l[0]*_mesh->metric[n[0]*4+i]+
         l[1]*_mesh->metric[n[1]*4+i]+
         l[2]*_mesh->metric[n[2]*4+i];
-    
-    MetricTensor<real_t>::positive_definiteness(2, mp);
     
     return true;
   }

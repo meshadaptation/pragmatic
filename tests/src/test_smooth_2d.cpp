@@ -106,8 +106,8 @@ int main(int argc, char **argv){
   size_t NElements = enlist.size()/3;
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf", "combined"};
-  const double target_quality_mean[] = {0.06, 0.3,  0.3,  0.1,    0.3};
-  const double target_quality_min[]  = {0.0,  0.09, 0.0,  0.0004, 0.09};
+  const double target_quality_mean[] = {0.06, 0.2,  0.2, 0.1,    0.2};
+  const double target_quality_min[]  = {0.0,  0.008, 0.0, 0.0004, 0.008};
   for(int m=0;m<5;m++){
     const char *method = methods[m];
     

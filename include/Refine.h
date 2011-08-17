@@ -771,7 +771,6 @@ template<typename real_t, typename index_t> class Refine{
                  <<"m1[i] = "<<m1[i]<<std::endl
                  <<"weight = "<<weight<<std::endl;
     }
-    MetricTensor<real_t>::positive_definiteness(ndims, m);
 
     // Append this new vertex and metric into mesh data structures.
     index_t nid = _mesh->append_vertex(x, m);
