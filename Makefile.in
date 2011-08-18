@@ -25,6 +25,10 @@ clean:
 	@echo "  CLEAN tests"
 	@(cd tests && $(MAKE) clean)
 
+distclean:
+	@echo "   DISTCLEAN"
+	@rm -rf config.status config.log Makefile tests/Makefile
+
 install:
 	mkdir -p $(DESTDIR)$(include_dir)
 	rm -rf INSTALLED_FILES
