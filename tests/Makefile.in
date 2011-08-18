@@ -1,9 +1,9 @@
 SHELL = /bin/bash
 
 CXX = @CXX@
-CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
-
-CPPFLAGS = @CPPFLAGS@ -I../eigen-2.0 -I../include
+CPPFLAGS = @CPPFLAGS@ -I../include
+CXXFLAGS = @CXXFLAGS@ @OPENMP_CXXFLAGS@
+LDFLAGS = @LDFLAGS@
 
 NVCC = @NVCC@
 NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
@@ -22,7 +22,7 @@ VPATH = ./:./src
 .SUFFIXES: .cpp .o
 
 .cpp.o:
-	@$(CXX) $(CXXFLAGS) -c $<
+	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $<
 
 default: test
 
@@ -37,7 +37,7 @@ endif
 
 bin/%: src/%.cpp 
 	@echo "    CXX $@"
-	@$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIBS)
 
 bin/%: src/%.cu 
 	@echo "    NVCC $@"

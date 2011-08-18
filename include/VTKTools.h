@@ -29,6 +29,23 @@
 #ifndef VTK_TOOLS_H
 #define VTK_TOOLS_H
 
+#include <vtkCellType.h>
+#include <vtkXMLUnstructuredGridReader.h>
+#include <vtkXMLUnstructuredGridWriter.h>
+#include <vtkXMLPUnstructuredGridWriter.h>
+#include <vtkUnstructuredGrid.h>
+#include <vtkIntArray.h>
+#include <vtkDoubleArray.h>
+#include <vtkCell.h>
+#include <vtkPoints.h>
+#include <vtkPointData.h>
+#include <vtkCellData.h>
+
+#ifndef vtkFloatingPointType
+#define vtkFloatingPointType vtkFloatingPointType
+typedef float vtkFloatingPointType;
+#endif
+
 #include <vector>
 #include <string>
 #include <cfloat>
@@ -37,8 +54,8 @@
 #include "MetricTensor.h"
 #include "Surface.h"
 #include "Metis.h"
-#include "vtk.h"
 #include "ElementProperty.h"
+
 
 #ifdef HAVE_MPI
 #include <mpi.h>

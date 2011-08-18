@@ -1,13 +1,13 @@
 SHELL = /bin/bash
 
-CPPFLAGS = -I./eigen-2.0
+CPPFLAGS = 
 MAKE = make -s
 
 PREFIX = @prefix@
 include_dir = $(PREFIX)/include/pragmatic
 
 include_files = Coarsen.h Mesh.h MetricField.h Smooth.h Swapping.h \
-Edge.h ElementProperty.h MetricTensor.h Refine.h vtk.h Colour.h Metis.h Surface.h VTKTools.h
+Edge.h ElementProperty.h MetricTensor.h Refine.h Colour.h Metis.h Surface.h VTKTools.h
 
 default: doxygen
 

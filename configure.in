@@ -237,58 +237,6 @@ AC_LINK_IFELSE([
     [AC_MSG_RESULT([yes])],
     [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
 
-cat > include/vtk.h <<EOF
-#ifndef VTK_H
-#define VTK_H
-
-#ifdef HAVE_VTK
-#include <${vtk_header_relative_path}vtkBMPWriter.h>
-#include <${vtk_header_relative_path}vtkCellData.h>
-#include <${vtk_header_relative_path}vtkCellDataToPointData.h>
-#include <${vtk_header_relative_path}vtkCellDerivatives.h>
-#include <${vtk_header_relative_path}vtkCell.h>
-#include <${vtk_header_relative_path}vtkCellType.h>
-#include <${vtk_header_relative_path}vtkClipDataSet.h>
-#include <${vtk_header_relative_path}vtkContourGrid.h>
-#include <${vtk_header_relative_path}vtkDataArray.h>
-#include <${vtk_header_relative_path}vtkDataObject.h>
-#include <${vtk_header_relative_path}vtkDataSet.h>
-#include <${vtk_header_relative_path}vtkDataSetReader.h>
-#include <${vtk_header_relative_path}vtkDoubleArray.h>
-#include <${vtk_header_relative_path}vtkFloatArray.h>
-#include <${vtk_header_relative_path}vtkGenericCell.h>
-#include <${vtk_header_relative_path}vtkHexahedron.h>
-#include <${vtk_header_relative_path}vtkIdList.h>
-#include <${vtk_header_relative_path}vtkImageData.h>
-#include <${vtk_header_relative_path}vtkIntArray.h>
-#include <${vtk_header_relative_path}vtkPointData.h>
-#include <${vtk_header_relative_path}vtkPointLocator.h>
-#include <${vtk_header_relative_path}vtkPolyData.h>
-#include <${vtk_header_relative_path}vtkShortArray.h>
-#include <${vtk_header_relative_path}vtkStructuredGrid.h>
-#include <${vtk_header_relative_path}vtkTetra.h>
-#include <${vtk_header_relative_path}vtkUnsignedCharArray.h>
-#include <${vtk_header_relative_path}vtkUnsignedIntArray.h>
-#include <${vtk_header_relative_path}vtkUnstructuredGrid.h>
-#include <${vtk_header_relative_path}vtkUnstructuredGridReader.h>
-#include <${vtk_header_relative_path}vtkXMLImageDataWriter.h>
-#include <${vtk_header_relative_path}vtkXMLPolyDataWriter.h>
-#include <${vtk_header_relative_path}vtkXMLPUnstructuredGridReader.h>
-#include <${vtk_header_relative_path}vtkXMLPUnstructuredGridWriter.h>
-#include <${vtk_header_relative_path}vtkXMLStructuredGridWriter.h>
-#include <${vtk_header_relative_path}vtkXMLUnstructuredGridReader.h>
-#include <${vtk_header_relative_path}vtkXMLUnstructuredGridWriter.h>
-#include <${vtk_header_relative_path}vtkZLibDataCompressor.h>
-
-#ifndef vtkFloatingPointType
-#define vtkFloatingPointType vtkFloatingPointType
-typedef float vtkFloatingPointType;
-#endif
-
-#endif
-#endif
-EOF
-
 # CUDA support
 ############################################
 # NVIDIA Cuda Compiler detection and setup #
