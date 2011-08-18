@@ -27,14 +27,12 @@ make
 
 %install
 rm -rf $RPM_BUILD_ROOT
-mkdir -p $RPM_BUILD_ROOT/usr/bin
 make DESTDIR=$RPM_BUILD_ROOT install
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files -f INSTALLED_FILES
-/usr/bin/terreno.bin
 
 %defattr(-,root,root,-)
 
