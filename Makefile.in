@@ -9,7 +9,7 @@ include_dir = $(DESTDIR)$(PREFIX)/include/pragmatic
 include_files = Coarsen.h Mesh.h MetricField.h QuadraticFit.h Smooth.h Swapping.h \
 Edge.h ElementProperty.h MetricTensor.h Refine.h vtk.h Colour.h Metis.h Surface.h VTKTools.h
 
-default: doxygen test
+default: doxygen
 
 doxygen:
 	@echo "  DOXYGEN Doxyfile"
