@@ -6,7 +6,7 @@ MAKE = make -s
 PREFIX = @prefix@
 include_dir = $(DESTDIR)$(PREFIX)/include/pragmatic
 
-include_files = Coarsen.h Mesh.h MetricField.h QuadraticFit.h Smooth.h Swapping.h \
+include_files = Coarsen.h Mesh.h MetricField.h Smooth.h Swapping.h \
 Edge.h ElementProperty.h MetricTensor.h Refine.h vtk.h Colour.h Metis.h Surface.h VTKTools.h
 
 default: doxygen
