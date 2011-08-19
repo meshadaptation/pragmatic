@@ -30,7 +30,7 @@
 #ifndef H_EDGE
 #define H_EDGE
 
-#include "confdefs.h"
+#include "pragmatic_config.h"
 
 /*! \brief Edge object
  */

@@ -33,7 +33,9 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "confdefs.h"
+
+#include "pragmatic_config.h"
+
 #ifdef HAVE_ZOLTAN
 #include "zoltan_cpp.h"
 #endif

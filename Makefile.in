@@ -6,9 +6,6 @@ MAKE = make -s
 PREFIX = @prefix@
 include_dir = $(PREFIX)/include/pragmatic
 
-include_files = Coarsen.h Mesh.h MetricField.h Smooth.h Swapping.h \
-Edge.h ElementProperty.h MetricTensor.h Refine.h Colour.h Metis.h Surface.h VTKTools.h
-
 default: doxygen
 
 doxygen:
@@ -31,5 +28,4 @@ distclean:
 
 install:
 	mkdir -p $(DESTDIR)$(include_dir)
-	rm -rf INSTALLED_FILES
-	for inc in $(include_files) ; do cp include/$$inc $(DESTDIR)$(include_dir)/ ; echo $(include_dir)/$$inc >> INSTALLED_FILES ; done
+	cp -r include/* $(DESTDIR)$(include_dir)/

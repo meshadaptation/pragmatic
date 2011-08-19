@@ -30,7 +30,7 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "confdefs.h"
+#include "pragmatic_config.h"
 
 #include <algorithm>
 #include <deque>
