@@ -6,7 +6,8 @@ MAKE = make -s
 PREFIX = @prefix@
 include_dir = $(PREFIX)/include/pragmatic
 
-default: doxygen
+default:
+	@echo Nothing to be built.
 
 doxygen:
 	@echo "  DOXYGEN Doxyfile"
