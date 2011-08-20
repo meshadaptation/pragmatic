@@ -217,7 +217,7 @@ template<typename real_t, typename index_t>
       }
       else
       {
-        cerr<<"ERROR: unsupported dimension: " << _ndims << " (must be 2 or 3)" << endl;
+        std::cerr<<"ERROR: unsupported dimension: " << _ndims << " (must be 2 or 3)" << std::endl;
       }
     } 
 
