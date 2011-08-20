@@ -1,0 +1,37 @@
+SHELL = /bin/bash
+
+CXX = @CXX@
+FC = @FC@
+
+CPPFLAGS = @CPPFLAGS@ -I../include
+
+CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
+FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
+
+AR = @AR@
+ARFLAGS = @ARFLAGS@
+
+LIB = ../lib/libpragmatic.a
+
+VPATH = ./:./src
+
+objects = pragmatic_metric.o  pragmatic_metric_f.o
+
+.SUFFIXES: .F90 .cpp .o
+
+# cancel implicit rule that tries to make .o from .mod with m2c:
+%.o: %.mod
+
+.cpp.o:
+	@$(CXX) $(CXXFLAGS) -c $<
+.F90.o:
+	@$(FC) $(FCFLAGS) -c $<
+
+default: lib
+
+lib: $(objects)
+	mkdir -p ../lib
+	$(AR) $(ARFLAGS) $(LIB) $(objects)
+
+clean:
+	rm -rf *.o

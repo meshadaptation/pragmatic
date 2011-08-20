@@ -5,9 +5,13 @@ MAKE = make -s
 
 PREFIX = @prefix@
 include_dir = $(PREFIX)/include/pragmatic
+lib_dir = $(PREFIX)/lib
+
+LIB = lib/libpragmatic.a
 
 default:
-	@echo Nothing to be built.
+	@echo "  BUILD Fortran interface"
+	@(cd src && $(MAKE))
 
 doxygen:
 	@echo "  DOXYGEN Doxyfile"
@@ -20,13 +24,17 @@ test:
 clean:
 	@echo "  CLEAN docs"
 	@rm -rf docs
+	@echo "  CLEAN src"
+	@(cd src && $(MAKE) clean)
 	@echo "  CLEAN tests"
 	@(cd tests && $(MAKE) clean)
 
-distclean:
+distclean: clean
 	@echo "   DISTCLEAN"
-	@rm -rf config.status config.log Makefile tests/Makefile
+	@rm -rf config.status config.log Makefile src/Makefile tests/Makefile
 
 install:
 	mkdir -p $(DESTDIR)$(include_dir)
 	cp -r include/* $(DESTDIR)$(include_dir)/
+	mkdir -p $(DESTDIR)$(lib_dir)
+	cp -r $(LIB) $(DESTDIR)$(lib_dir)/

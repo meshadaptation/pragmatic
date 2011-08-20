@@ -33,16 +33,30 @@ AC_CANONICAL_HOST
 
 AC_LANG_PUSH([C++])
 
-# Override autoconf defaults for CXXFLAGS before searching for compiler
+# Override autoconf defaults for ...FLAGS before searching for compiler
+FCFLAGS="${FCFLAGS:''}"
 CXXFLAGS="${CXXFLAGS:''}"
+
+if test -z "$FC" && test -n "$MPIFC"; then
+    FC="$MPIFC"
+fi
 
 if test -z "$CXX" && test -n "$MPICXX"; then
     CXX="$MPICXX"
 fi
+
+
 AC_PROG_CXX([icpc FCC g++])
 AX_MPI
 CXX="$MPICXX"
 LIBS="$MPILIBS $LIBS"
+
+AC_LANG_PUSH([Fortran])
+AC_PROG_FC([ifort frt gfortran])
+AX_MPI
+FC="$MPIFC"
+LIBS="$MPILIBS $LIBS"
+AC_LANG_POP()
 
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.
@@ -55,6 +69,10 @@ CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
 
 AC_OPENMP()
+AC_LANG_PUSH([Fortran])
+AC_OPENMP()
+AC_LANG_POP()
+
 AC_SUBST(OPENMP_CXXFLAGS)
 
 AC_PROG_INSTALL
@@ -316,6 +334,7 @@ AC_C_CONST
 AC_C_INLINE
 
 AC_OUTPUT(Makefile
-	  tests/Makefile)
+    src/Makefile
+    tests/Makefile)
 
 cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h
