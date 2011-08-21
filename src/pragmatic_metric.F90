@@ -25,14 +25,21 @@
 !  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
 !  USA
 
+!> This module merely contains explicit interfaces to allow the
+!> convenient use of vtkfortran in fortran.
 module pragmatic_metric
-  !!< This module merely contains explicit interfaces to allow the
-  !!< convenient use of vtkfortran in fortran.
   use iso_c_binding
   
   private
-  public :: pragmatic_metric_begin
+  public :: pragmatic_metric_begin, pragmatic_metric_addfield, pragmatic_metric_end
   
+   !> Initialises metric calculation. This must be called first.
+   !
+   !> @param[in] NNodes Number of nodes in the mesh.
+   !> @param[in] NElements Number of elements in the mesh.
+   !> @param[in] enlists Element-node list.
+   !> @param[in] x X-cooardinates.
+   !> @param[in] y Y-cooardinates.
   interface pragmatic_metric_begin
      subroutine pragmatic_metric_2d_begin(NNodes, NElements, enlist, x, y) bind(c,name="pragmatic_metric_2d_begin")
        use iso_c_binding
@@ -55,6 +62,10 @@ module pragmatic_metric
      end subroutine pragmatic_metric_3d_begin
   end interface pragmatic_metric_begin
   
+   !> Add field to be included in the metric.
+   !
+   !> @param[in] psi Solutional variables stored at the mesh verticies.
+   !> @param[in] error Target error.
   interface pragmatic_metric_addfield
      subroutine pragmatic_metric_addfield(psi, error) bind(c,name="pragmatic_metric_addfield")
        use iso_c_binding
@@ -64,6 +75,9 @@ module pragmatic_metric
      end subroutine pragmatic_metric_addfield
   end interface pragmatic_metric_addfield
 
+   !> Get final metric field and free internal data structures.
+   !
+   !> @param[out] metric Metric tensor field.
   interface pragmatic_metric_end
      subroutine pragmatic_metric_end(metric) bind(c,name="pragmatic_metric_end")
        use iso_c_binding
