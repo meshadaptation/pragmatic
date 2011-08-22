@@ -1,6 +1,0 @@
-List of known issues:
-- a manual is lacking
-- Halo should be trimmed after refinement.
-- defragmentation should also defragment the halo
-- export function required which will support global node numbering
-- a README is required with some build/test instructions
