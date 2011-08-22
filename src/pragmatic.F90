@@ -98,6 +98,13 @@ module pragmatic
      end subroutine pragmatic_set_metric
   end interface pragmatic_set_metric
 
+  !> Adapt mesh.
+  interface pragmatic_adapt
+     subroutine pragmatic_adapt() bind(c,name="pragmatic_adapt")
+       use iso_c_binding
+     end subroutine pragmatic_adapt
+  end interface pragmatic_adapt
+
    !> Free internal data structures.
   interface pragmatic_end
      subroutine pragmatic_end() bind(c,name="pragmatic_end")

@@ -28,9 +28,15 @@
  */
 
 #include <cassert>
+
 #include "Mesh.h"
-#include "MetricField.h"
 #include "Surface.h"
+#include "MetricField.h"
+#include "Coarsen.h"
+#include "Refine.h"
+#include "Swapping.h"
+#include "Smooth.h"
+
 
 using namespace std;
 
@@ -84,6 +90,44 @@ extern "C" {
 
   void pragmatic_set_metric(const double *metric){
     ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+  }
+
+  void pragmatic_adapt(){
+    Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
+    Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
+    
+    // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+    double L_up = sqrt(2.0);
+    double L_low = L_up*0.5;
+    
+    Coarsen<double, int> coarsen(*mesh, *surface);
+    Smooth<double, int> smooth(*mesh, *surface);
+    Refine<double, int> refine(*mesh, *surface);
+    Swapping<double, int> swapping(*mesh, *surface);
+    
+    coarsen.coarsen(L_low, L_up);
+    
+    double L_max = mesh->maximal_edge_length();
+    
+    double alpha = sqrt(2)/2;  
+    for(size_t i=0;i<10;i++){
+      double L_ref = std::max(alpha*L_max, L_up);
+      
+      refine.refine(L_ref);
+      coarsen.coarsen(L_low, L_ref);
+      swapping.swap(0.95);
+      
+      L_max = mesh->maximal_edge_length();
+      
+      if((L_max-L_up)<0.01)
+        break;
+    }
+    
+    std::map<int, int> active_vertex_map;
+    mesh->defragment(&active_vertex_map);
+    surface->defragment(&active_vertex_map);
+    
+    smooth.smooth("smart Laplacian");
   }
 
   void pragmatic_end(){
