@@ -39,7 +39,7 @@ static void *_pragmatic_surface=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
-  void pragmatic_metric_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
+  void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
@@ -55,7 +55,7 @@ extern "C" {
     _pragmatic_metric_field = metric_field;
   }
 
-  void pragmatic_metric_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
+  void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
@@ -71,16 +71,22 @@ extern "C" {
     _pragmatic_metric_field = metric_field;
   }
   
-  void pragmatic_metric_addfield(const double *psi, const double *error){
+  void pragmatic_addfield(const double *psi, const double *error){
     assert(_pragmatic_metric_field!=NULL);
     
     ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
   }
   
-  void pragmatic_metric_end(double *metric){
-    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+  void pragmatic_get_metric(double *metric){
     ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
-    
+  }
+
+  void pragmatic_set_metric(const double *metric){
+    ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+  }
+
+  void pragmatic_end(){
     delete (Mesh<double, int> *)_pragmatic_mesh;
     delete (Surface<double, int> *)_pragmatic_surface;
     delete (MetricField<double, int> *)_pragmatic_metric_field;

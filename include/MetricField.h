@@ -112,6 +112,17 @@ template<typename real_t, typename index_t>
 
   /*! Set the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
+   */
+  void set_metric(const real_t *metric){
+    if(_metric==NULL)
+      _metric = new MetricTensor<real_t>[_NNodes];
+    
+    for(int i=0;i<_NNodes;i++)
+      _metric[i].set_metric(_ndims, metric);
+  }
+
+  /*! Set the metric tensor field.
+   * @param metric is a pointer to the buffer where the metric field is to be copied from.
    * @param id is the node index of the metric field being set.
    */
   void set_metric(const real_t *metric, int id){
