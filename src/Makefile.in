@@ -15,7 +15,7 @@ LIB = ../lib/libpragmatic.a
 
 VPATH = ./:./src
 
-objects = pragmatic_metric.o  pragmatic_metric_f.o
+objects = pragmatic.o  pragmatic_Fortran.o
 
 .SUFFIXES: .F90 .cpp .o
 
@@ -32,6 +32,7 @@ default: lib
 lib: $(objects)
 	mkdir -p ../lib
 	$(AR) $(ARFLAGS) $(LIB) $(objects)
+	cp *.mod ../include/
 
 clean:
-	rm -rf *.o
+	rm -rf *.o *.mod

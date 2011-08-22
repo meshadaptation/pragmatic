@@ -26,6 +26,8 @@ clean:
 	@rm -rf docs
 	@echo "  CLEAN src"
 	@(cd src && $(MAKE) clean)
+	@echo "  CLEAN include"
+	@(cd include && rm -rf *.mod)
 	@echo "  CLEAN tests"
 	@(cd tests && $(MAKE) clean)
 

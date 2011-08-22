@@ -34,44 +34,55 @@
 
 using namespace std;
 
-static Mesh<double, int> *mesh=NULL;
-static Surface<double, int> *surface=NULL;
-static MetricField<double, int> *metric_field=NULL;
+static void *_pragmatic_mesh=NULL;
+static void *_pragmatic_surface=NULL;
+static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
   void pragmatic_metric_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
-    assert(mesh==NULL);
-    mesh= new Mesh<double, int>(*NNodes, *NElements, enlist, x, y);
+    assert(_pragmatic_mesh==NULL);
+    assert(_pragmatic_surface==NULL);
+    assert(_pragmatic_metric_field==NULL);
     
-    assert(surface==NULL);
-    surface = new Surface<double, int>(*mesh);
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y);
+    _pragmatic_mesh = mesh;
     
-    assert(metric_field==NULL);
-    metric_field = new MetricField<double, int>(*mesh, *surface);
+    Surface<double, int> *surface = new Surface<double, int>(*mesh);
+    _pragmatic_surface = surface;
+
+    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
+    metric_field->set_hessian_method("qls");
+    _pragmatic_metric_field = metric_field;
   }
 
   void pragmatic_metric_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
-    assert(mesh==NULL);
-    mesh= new Mesh<double, int>(*NNodes, *NElements, enlist, x, y, z);
+    assert(_pragmatic_mesh==NULL);
+    assert(_pragmatic_surface==NULL);
+    assert(_pragmatic_metric_field==NULL);
     
-    assert(surface==NULL);
-    surface = new Surface<double, int>(*mesh);
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y, z);
+    _pragmatic_mesh = mesh;
     
-    assert(metric_field==NULL);
-    metric_field = new MetricField<double, int>(*mesh, *surface);
+    Surface<double, int> *surface = new Surface<double, int>(*mesh);
+    _pragmatic_surface = surface;
+    
+    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
+    metric_field->set_hessian_method("qls");
+    _pragmatic_metric_field = metric_field;
   }
   
   void pragmatic_metric_addfield(const double *psi, const double *error){
-    metric_field->set_hessian_method("qls");
-    metric_field->add_field(psi, *error);
+    assert(_pragmatic_metric_field!=NULL);
+    
+    ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error);
   }
   
   void pragmatic_metric_end(double *metric){
-    metric_field->update_mesh();
-    metric_field->get_metric(metric);
-
-    delete mesh;
-    delete surface;
-    delete metric_field;
+    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+    ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
+    
+    delete (Mesh<double, int> *)_pragmatic_mesh;
+    delete (Surface<double, int> *)_pragmatic_surface;
+    delete (MetricField<double, int> *)_pragmatic_metric_field;
   }
 }
