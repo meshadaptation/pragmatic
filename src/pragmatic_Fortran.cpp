@@ -130,6 +130,69 @@ extern "C" {
     smooth.smooth("smart Laplacian");
   }
 
+  void pragmatic_get_mesh_info(int *NNodes, int *NElements, int *NSElements){
+    *NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
+    *NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
+    *NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
+  }
+
+  void pragmatic_get_mesh_coords_2d(double *x, double *y){
+    size_t NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
+    for(size_t i=0;i<NNodes;i++){
+      x[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[0];
+      y[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[1];
+    }
+  }
+
+  void pragmatic_get_mesh_coords_3d(double *x, double *y, double *z){
+    size_t NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
+    for(size_t i=0;i<NNodes;i++){
+      x[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[0];
+      y[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[1];
+      z[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[2];
+    }
+  }
+
+  void pragmatic_get_mesh_elements_2d(int *enlist){
+    size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
+    for(size_t i=0;i<NElements;i++){
+      const int *n=((Mesh<double, int> *)_pragmatic_mesh)->get_element(i);
+      
+      for(size_t j=0;j<3;j++)
+        enlist[i*3+j] = n[j];
+    }
+  }
+
+  void pragmatic_get_mesh_elements_3d(int *enlist){
+    size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
+    for(size_t i=0;i<NElements;i++){
+      const int *n=((Mesh<double, int> *)_pragmatic_mesh)->get_element(i);
+      
+      for(size_t j=0;j<4;j++)
+        enlist[i*4+j] = n[j];
+    }
+  }
+
+  void pragmatic_get_mesh_surface_elements_2d(int *senlist){
+    size_t NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
+    for(size_t i=0;i<NSElements;i++){
+      const int *n=((Surface<double, int> *)_pragmatic_surface)->get_facet(i);
+      
+      for(size_t j=0;j<2;j++)
+        senlist[i*2+j] = n[j];
+    }
+  }
+
+  void pragmatic_get_mesh_surface_elements_3d(int *senlist){
+    size_t NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
+    for(size_t i=0;i<NSElements;i++){
+      const int *n=((Surface<double, int> *)_pragmatic_surface)->get_facet(i);
+      
+      for(size_t j=0;j<3;j++)
+        senlist[i*3+j] = n[j];
+    }
+  }
+
   void pragmatic_end(){
     delete (Mesh<double, int> *)_pragmatic_mesh;
     delete (Surface<double, int> *)_pragmatic_surface;
