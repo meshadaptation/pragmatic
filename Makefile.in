@@ -9,7 +9,9 @@ lib_dir = $(PREFIX)/lib
 
 LIB = lib/libpragmatic.a
 
-default:
+default: lib
+
+lib:
 	@echo "  BUILD Fortran interface"
 	@(cd src && $(MAKE))
 
@@ -17,7 +19,9 @@ doxygen:
 	@echo "  DOXYGEN Doxyfile"
 	@doxygen Doxyfile > doxygen.log
 
-test:
+test: basic_test
+
+basic_test:
 	@echo "  TEST"
 	@(cd tests && $(MAKE) test)
 
