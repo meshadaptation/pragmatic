@@ -1,8 +1,8 @@
 /* 
  *    Copyright (C) 2010 Imperial College London and others.
  *    
- *    Please see the AUTHORS file in the main source directory for a full list
- *    of copyright holders.
+ *    Please see the AUTHORS file in the main source directory for a
+ *    full list of copyright holders.
  *
  *    Gerard Gorman
  *    Applied Modelling and Computation Group
@@ -13,21 +13,23 @@
  *    
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
- *    License as published by the Free Software Foundation,
- *    version 2.1 of the License.
+ *    License as published by the Free Software Foundation, version
+ *    2.1 of the License.
  *
  *    This library is distributed in the hope that it will be useful,
  *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *    Lesser General Public License for more details.
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU Lesser General Public License for more details.
  *
  *    You should have received a copy of the GNU Lesser General Public
- *    License along with this library; if not, write to the Free Software
- *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
- *    USA
+ *    License along with this library; if not, write to the Free
+ *    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+ *    MA 02111-1307 USA
  */
+#include "pragmatic_config.h"
+
 #ifndef HAVE_LIBCGAL
-#warning No CGAL support. Cannot run test suite.
+#warning No CGAL support. Cannot run test (__FILE__).
 int main(){
       return 0;
 }
@@ -35,21 +37,18 @@ int main(){
 
 #include <iostream>
 #include <vector>
-
-#include <omp.h>
 #include <errno.h>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include "Mesh.h"
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
-
 #include "Smooth.h"
 #include "ticker.h"
-
-#ifndef HAVE_LIBCGAL
-#error No CGAL support. Cannot run test suite.
-#endif
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_triangulation_plus_2.h> 
@@ -122,11 +121,8 @@ int main(int argc, char **argv){
     Surface<double, int> surface(*mesh);
     
     MetricField<double, int> metric_field(*mesh, surface);
-    
-    size_t NNodes = mesh->get_number_nodes();
-    
-    for(size_t i=0;i<NNodes;i++){
-      // psi[i] = pow(mesh->get_coords(i)[0], 3) + pow(mesh->get_coords(i)[1], 3);
+        
+    for(int i=0;i<NNodes;i++){
       double hx = std::max(0.01, fabs(mesh->get_coords(i)[0]));
       double hy = std::max(0.01, fabs(mesh->get_coords(i)[1]));
       
@@ -135,8 +131,6 @@ int main(int argc, char **argv){
          0.0,       1/(hy*hy)};
       metric_field.set_metric(m, i);
     }
-    
-    size_t NElements = mesh->get_number_elements();
     
     metric_field.apply_nelements(NElements);
     metric_field.update_mesh();
