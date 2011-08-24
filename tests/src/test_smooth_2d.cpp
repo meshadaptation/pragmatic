@@ -193,7 +193,7 @@ int main(int argc, char **argv){
     }
     
     // Append halo nodes to local node partition.
-    for(typename std::set<int>::const_iterator it=halo_nodes.begin();it!=halo_nodes.end();++it){
+    for(std::set<int>::const_iterator it=halo_nodes.begin();it!=halo_nodes.end();++it){
       node_partition[rank].push_back(*it);
     }
     
