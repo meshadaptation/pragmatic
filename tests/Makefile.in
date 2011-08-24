@@ -9,7 +9,7 @@ NVCC = @NVCC@
 NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
 CUDA_LIBS = @CUDA_LIBS@
 
-LIBS = ticker.o @LIBS@
+LIBS = @LIBS@
 
 TEST_SRC = $(wildcard src/*.cpp)
 TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
@@ -30,18 +30,18 @@ test: binaries
 	python ./unittest bin
 
 ifeq (@ENABLE_CUDA@,yes)
-binaries: ticker.o $(TEST_BIN) $(TEST_BIN_CUDA)
+binaries: $(TEST_BIN) $(TEST_BIN_CUDA)
 else
-binaries: ticker.o $(TEST_BIN)
+binaries: $(TEST_BIN)
 endif
 
-bin/%: src/%.cpp 
+bin/%: src/%.cpp ticker.o 
 	@echo "    CXX $@"
-	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< ticker.o $(LIBS)
 
 bin/%: src/%.cu 
 	@echo "    NVCC $@"
-	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
+	@$(NVCC) $(NVCCFLAGS) -o $@ $< ticker.o $(CUDA_LIBS)
 
 clean:
 	rm -rf *.o $(TEST_BIN) bin/test*
