@@ -26,6 +26,13 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
+#ifndef HAVE_LIBCGAL
+#warning No CGAL support. Cannot run test suite.
+int main(){
+      return 0;
+}
+#else
+
 #include <iostream>
 #include <vector>
 
@@ -184,3 +191,4 @@ int main(int argc, char **argv){
 
   return 0;
 }
+#endif

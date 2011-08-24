@@ -26,6 +26,13 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
+#ifndef HAVE_LIBCGAL
+#warning No CGAL support. Cannot run test suite.
+int main(){
+    return 0;
+}
+#else
+
 #include <iostream>
 #include <vector>
 
@@ -36,10 +43,6 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "ticker.h"
-
-#ifndef HAVE_LIBCGAL
-#error No CGAL support. Cannot run test suite.
-#endif
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_triangulation_plus_2.h> 
@@ -158,3 +161,5 @@ int main(int argc, char **argv){
   
   return 0;
 }
+#endif
+
