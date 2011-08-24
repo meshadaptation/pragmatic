@@ -74,6 +74,9 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y){
+    if(MPI::Is_initialized()){
+      _mpi_comm = MPI_COMM_WORLD;      
+    }
     _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
   }
   
@@ -108,6 +111,9 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const real_t *z){
+    if(MPI::Is_initialized()){
+      _mpi_comm = MPI_COMM_WORLD;      
+    }
     _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
   }
 
