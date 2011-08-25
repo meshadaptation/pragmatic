@@ -434,7 +434,7 @@ template<typename real_t, typename index_t> class Refine{
           index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
           
           _mesh->recv[proc].push_back(lnn);
-          _mesh->halo.insert(lnn);
+          _mesh->recv_halo.insert(lnn);
 
           node_owner[lnn] = proc;
         }
@@ -481,7 +481,7 @@ template<typename real_t, typename index_t> class Refine{
 
           index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
           _mesh->send[i].push_back(lnn);
-          _mesh->halo.insert(lnn);
+          _mesh->send_halo.insert(lnn);
         }
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
