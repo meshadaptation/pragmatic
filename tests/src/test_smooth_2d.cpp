@@ -230,7 +230,7 @@ int main(int argc, char **argv){
   }
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf", "combined"};
-  const double target_quality_mean[] = {0.06, 0.2,  0.2, 0.1,    0.2};
+  const double target_quality_mean[] = {0.06, 0.2,   0.2, 0.07,   0.2};
   const double target_quality_min[]  = {0.0,  0.008, 0.0, 0.0004, 0.008};
   for(int m=0;m<5;m++){
     const char *method = methods[m];
@@ -266,10 +266,11 @@ int main(int argc, char **argv){
       double qrms = mesh->get_qrms();
       double qmin = mesh->get_qmin();
       
-      std::cout<<"Initial quality:"<<std::endl
-               <<"Quality mean:    "<<qmean<<std::endl
-               <<"Quality min:     "<<qmin<<std::endl
-               <<"Quality RMS:     "<<qrms<<std::endl;
+      if(rank==0)
+        std::cout<<"Initial quality:"<<std::endl
+                 <<"Quality mean:    "<<qmean<<std::endl
+                 <<"Quality min:     "<<qmin<<std::endl
+                 <<"Quality RMS:     "<<qrms<<std::endl;
     }
     
     Smooth<double, int> smooth(*mesh, surface);
@@ -290,22 +291,25 @@ int main(int argc, char **argv){
     double qrms = mesh->get_qrms();
     double qmin = mesh->get_qmin();
     
-    std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
-             <<"Edge length mean:      "<<lmean<<std::endl
-             <<"Edge length RMS:      "<<lrms<<std::endl
-             <<"Quality mean:          "<<qmean<<std::endl
-             <<"Quality min:          "<<qmin<<std::endl
-             <<"Quality RMS:          "<<qrms<<std::endl;
+    if(rank==0)
+      std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
+               <<"Edge length mean:      "<<lmean<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality mean:          "<<qmean<<std::endl
+               <<"Quality min:          "<<qmin<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
     
-    string vtu_filename = string("../data/test_mpi_smooth_2d_")+string(method);
+    string vtu_filename = string("../data/test_smooth_2d_")+string(method);
     VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh);
     delete mesh;
     
-    std::cout<<"Smooth - "<<methods[m]<<": ";
-    if((qmean>target_quality_mean[m])&&(qmin>target_quality_min[m]))
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+    if(rank==0){
+      std::cout<<"Smooth - "<<methods[m]<<": ";
+      if((qmean>target_quality_mean[m])&&(qmin>target_quality_min[m]))
+        std::cout<<"pass"<<std::endl;
+      else
+        std::cout<<"fail"<<std::endl;
+    }
   }
   
   MPI::Finalize();

@@ -92,7 +92,7 @@ template<typename real_t, typename index_t>
   
   // Smooth the mesh using a given method. Valid methods are:
   // "Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=10){
+  void smooth(std::string method, int max_iterations=20){
     init_cache(method);
     
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
@@ -147,8 +147,8 @@ template<typename real_t, typename index_t>
           
           if((this->*smooth_kernel)(node)){
             for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-              // Don't add node to the active set if it is a halo node.
-              if(_mesh->is_halo_node(*it))
+              // Don't add node to the active set if it is not owned.
+              if(_mesh->is_not_owned_node(*it))
                 continue;
 #ifdef _OPENMP
               partial_active_vertices[omp_get_thread_num()].insert(*it);
@@ -169,6 +169,8 @@ template<typename real_t, typename index_t>
 #endif
 
     for(int iter=1;iter<max_iterations;iter++){
+      _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+      _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
       for(size_t colour=0;colour<colour_sets.size(); colour++){
 #pragma omp parallel
         {
@@ -179,8 +181,8 @@ template<typename real_t, typename index_t>
 
             if((this->*smooth_kernel)(node)){
               for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                // Don't add node to the active set if it is a halo node.
-                if(_mesh->is_halo_node(*it))
+                // Don't add node to the active set if it is not owned.
+                if(_mesh->is_not_owned_node(*it))
                   continue;
 #ifdef _OPENMP
                 partial_active_vertices[omp_get_thread_num()].insert(*it);
@@ -200,10 +202,19 @@ template<typename real_t, typename index_t>
         partial_active_vertices[t].clear();
       }
 #endif
-      if(active_vertices.empty())
+      int nav = active_vertices.size();
+#ifdef HAVE_MPI
+      if(MPI::Is_initialized()){
+        int lnav = nav;
+        MPI_Allreduce(&lnav, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+      }
+#endif
+      if(nav==0)
         break;
     }
-    
+    _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+    _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+
     return;
   }
 
@@ -1155,7 +1166,7 @@ template<typename real_t, typename index_t>
     Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
     
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(_mesh->is_halo_node(i)))
+      if((colour[i]<0)||(_mesh->is_not_owned_node(i)))
         continue;
       colour_sets[colour[i]].push_back(i);
     }

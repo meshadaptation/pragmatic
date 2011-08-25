@@ -383,7 +383,7 @@ template<typename real_t, typename index_t> class VTKTools{
     vtkIntArray *vtk_cell_tpartition = vtkIntArray::New();
     vtk_cell_tpartition->SetNumberOfComponents(1);
     vtk_cell_tpartition->SetNumberOfTuples(NElements);
-    vtk_cell_tpartition->SetName("cell_partition");
+    vtk_cell_tpartition->SetName("cell_tpartition");
 
     vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
     vtk_quality->SetNumberOfComponents(1);

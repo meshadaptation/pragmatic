@@ -212,11 +212,20 @@ template<typename real_t, typename index_t> class Mesh{
     metric.swap(defrag_metric);
     
     // Renumber halo
-    std::set<int> new_halo;
-    for(std::set<int>::iterator it=halo.begin();it!=halo.end();++it){
-      new_halo.insert((*active_vertex_map)[*it]);
+    {
+      std::set<int> new_halo;
+      for(std::set<int>::iterator it=send_halo.begin();it!=send_halo.end();++it){
+        new_halo.insert((*active_vertex_map)[*it]);
+      }
+      send_halo.swap(new_halo);
     }
-    halo.swap(new_halo);
+    {
+      std::set<int> new_halo;
+      for(std::set<int>::iterator it=recv_halo.begin();it!=recv_halo.end();++it){
+        new_halo.insert((*active_vertex_map)[*it]);
+      }
+      recv_halo.swap(new_halo);
+    }
     for(std::vector< std::vector<int> >::iterator it=send.begin();it!=send.end();++it){
       for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
         *jt = (*active_vertex_map)[*jt];
@@ -543,9 +552,14 @@ template<typename real_t, typename index_t> class Mesh{
     return nid_new2old[nid];
   }
 
-  /// Returns true if the node is in the halo.
+  /// Returns true if the node is in any of the partitioned elements.
   bool is_halo_node(int nid){
-    return halo.count(nid)>0;
+    return (send_halo.count(nid)+recv_halo.count(nid))>0;
+  }
+
+  /// Returns true if the node is not owned by the local partition.
+  bool is_not_owned_node(int nid){
+    return recv_halo.count(nid)>0;
   }
 
   /// Default destructor.
@@ -1091,12 +1105,12 @@ template<typename real_t, typename index_t> class Mesh{
         for(size_t k=0;k<recv[j].size();k++){
           int nid = nid_old2new[recv[j][k]];
           recv[j][k] = nid;
-          halo.insert(nid);
+          recv_halo.insert(nid);
         }
         for(size_t k=0;k<send[j].size();k++){
           int nid = nid_old2new[send[j][k]];
           send[j][k] = nid;
-          halo.insert(nid);
+          send_halo.insert(nid);
         }
       }
     }
@@ -1288,7 +1302,7 @@ template<typename real_t, typename index_t> class Mesh{
   // Parallel support.
   int mpi_nparts, numa_nparts;
   std::vector< std::vector<int> > send, recv;
-  std::set<int> halo;
+  std::set<int> send_halo, recv_halo;
 
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
