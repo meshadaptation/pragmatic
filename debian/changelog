@@ -1,3 +1,10 @@
+pragmatic (0.1natty2) natty; urgency=low
+
+  * Extended Fortran interface.
+  * Enabled vertex smoothing on the halo.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Thu, 25 Aug 2011 09:06:28 +0100
+
 pragmatic (0.1natty1) natty; urgency=low
 
   * Initial beta release.
