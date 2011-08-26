@@ -1,3 +1,9 @@
+pragmatic (0.1.5) natty; urgency=low
+
+  * Updated package dependencies
+
+ -- Gerard Gorman <ggorman@cynic>  Fri, 26 Aug 2011 12:13:01 +0100
+
 pragmatic (0.1.4) natty; urgency=low
 
   * Updated package dependencies
