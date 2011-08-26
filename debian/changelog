@@ -1,8 +1,14 @@
+pragmatic (0.1.4) natty; urgency=low
+
+  * Updated package dependencies
+
+ -- Gerard Gorman <ggorman@imperial.ac.uk>  Fri, 26 Aug 2011 08:46:55 +0100
+
 pragmatic (0.1.3) natty; urgency=low
 
   * Additional support for smoothing and refinement in the halo.
 
- -- Gerard Gorman <ggorman@cynic>  Fri, 26 Aug 2011 01:06:31 +0100
+ -- Gerard Gorman <ggorman@imperial.ac.uk>  Fri, 26 Aug 2011 01:06:31 +0100
 
 pragmatic (0.1natty2) natty; urgency=low
 
