@@ -62,7 +62,8 @@ template<typename real_t, typename index_t>
     nloc = (ndims==2)?3:4;
     
     rtol = 0.001;
-    relax=1.0; // 0.001;
+    relax=1.0;
+    // relax=0.001;
 
     // Set the orientation of elements.
     property = NULL;
@@ -1158,10 +1159,11 @@ template<typename real_t, typename index_t>
   }
  private:
   void init_cache(std::string method){
-    if(!quality.empty())
-      return;
-    
+    colour_sets.clear();
+
     int NNodes = _mesh->get_number_nodes();
+    assert(NNodes==(int)_mesh->NNList.size());
+
     std::vector<index_t> colour(NNodes, -1);
     Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
     

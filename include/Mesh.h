@@ -142,6 +142,8 @@ template<typename real_t, typename index_t> class Mesh{
     structures. This is useful if the mesh has been significently
     coarsened. */
   void defragment(std::map<index_t, index_t> *active_vertex_map=NULL){
+    while (!recycle_nid.empty()){recycle_nid.pop();}
+
     // Discover which verticies and elements are active.
     bool local_active_vertex_map=(active_vertex_map==NULL);
     if(local_active_vertex_map){
@@ -149,18 +151,41 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     std::deque<index_t> active_vertex, active_element;
+    std::set<index_t> verified_send_halo;
     for(size_t e=0;e<_NElements;e++){
       index_t nid = _ENList[e*nloc];
+      
+      // Check if deleted.
       if(nid<0)
         continue;
+
+      // Check if wholly owned by another process or if halo node.
+      bool local=false, halo_element=false;
+      for(size_t j=0;j<nloc;j++){
+        nid = _ENList[e*nloc+j];
+        if(recv_halo.count(nid)){
+          halo_element = true;
+        }else{
+          local = true;
+        }
+      }
+      if(!local)
+        continue;
+      
+      // Need these mesh entities.
       active_element.push_back(e);
 
-      (*active_vertex_map)[nid] = 0;
-      for(size_t j=1;j<nloc;j++){
+      for(size_t j=0;j<nloc;j++){
         nid = _ENList[e*nloc+j];
         (*active_vertex_map)[nid]=0;
+
+        if(halo_element && (send_halo.count(nid)>0)){
+          verified_send_halo.insert(nid);
+        }
       }
     }
+
+    // Create a new numbering.
     index_t cnt=0;
     for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
       it->second = cnt++;
@@ -170,8 +195,10 @@ template<typename real_t, typename index_t> class Mesh{
     // Compress data structures.
     _NNodes = active_vertex.size();
     node_towner.resize(_NNodes);
+
     _NElements = active_element.size();
     element_towner.resize(_NElements);
+
     std::vector<index_t> defrag_ENList(_NElements*nloc);
     std::vector<real_t> defrag_coords(_NNodes*ndims);
     std::vector<real_t> defrag_metric(_NNodes*ndims*ndims);
@@ -182,7 +209,9 @@ template<typename real_t, typename index_t> class Mesh{
       for(int i=0;i<(int)_NElements;i++){
         index_t eid = active_element[i];
         for(size_t j=0;j<nloc;j++){
-          defrag_ENList[i*nloc+j] = (*active_vertex_map)[_ENList[eid*nloc+j]];
+          index_t nid = (*active_vertex_map)[_ENList[eid*nloc+j]];
+          assert(nid<(index_t)_NNodes);
+          defrag_ENList[i*nloc+j] = nid;
         }
 #ifdef _OPENMP
         element_towner[i] = omp_get_thread_num();
@@ -215,21 +244,35 @@ template<typename real_t, typename index_t> class Mesh{
     {
       std::set<int> new_halo;
       for(std::set<int>::iterator it=send_halo.begin();it!=send_halo.end();++it){
-        new_halo.insert((*active_vertex_map)[*it]);
+        if(verified_send_halo.count(*it))
+          new_halo.insert((*active_vertex_map)[*it]);
       }
       send_halo.swap(new_halo);
     }
     {
       std::set<int> new_halo;
       for(std::set<int>::iterator it=recv_halo.begin();it!=recv_halo.end();++it){
-        new_halo.insert((*active_vertex_map)[*it]);
+        if(active_vertex_map->count(*it))
+          new_halo.insert((*active_vertex_map)[*it]);
       }
       recv_halo.swap(new_halo);
     }
+
     for(std::vector< std::vector<int> >::iterator it=send.begin();it!=send.end();++it){
+      std::vector<int> new_halo;
       for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
-        *jt = (*active_vertex_map)[*jt];
+        if(verified_send_halo.count(*jt))
+          new_halo.push_back((*active_vertex_map)[*jt]);
       }
+      it->swap(new_halo);
+    }
+    for(std::vector< std::vector<int> >::iterator it=recv.begin();it!=recv.end();++it){
+      std::vector<int> new_halo;
+      for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
+        if(active_vertex_map->count(*jt))
+          new_halo.push_back((*active_vertex_map)[*jt]);
+      }
+      it->swap(new_halo);
     }
     
     create_adjancy();
@@ -315,6 +358,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Return the number of elements in the mesh.
   int get_number_elements() const{
+    assert(_NElements == (_ENList.size()/nloc));
     return _NElements;
   }
 

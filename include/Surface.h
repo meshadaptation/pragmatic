@@ -180,7 +180,20 @@ template<typename real_t, typename index_t>
     size_t NSElements = get_number_facets();
     for(size_t i=0;i<NSElements;i++){
       const int *n=get_facet(i);
+
+      // Check if deleted.
       if(n[0]<0)
+        continue;
+      
+      // Check all vertices are active.
+      bool valid_facet=true;
+      for(size_t j=0;j<snloc;j++){
+        if(active_vertex_map->count(n[j])==0){
+          valid_facet = false;
+          break;
+        }
+      }
+      if(!valid_facet)
         continue;
       
       for(size_t j=0;j<snloc;j++){

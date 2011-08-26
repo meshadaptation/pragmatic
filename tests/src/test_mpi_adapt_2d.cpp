@@ -68,7 +68,7 @@ int main(int argc, char **argv){
     nprocs = MPI::COMM_WORLD.Get_size();
   }
   
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -127,11 +127,11 @@ int main(int argc, char **argv){
   double alpha = sqrt(2)/2;  
   for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
-
+    
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
     swapping.swap(0.95);
-
+        
     L_max = mesh->maximal_edge_length();
     
     if((L_max-L_up)<0.01)
@@ -141,24 +141,24 @@ int main(int argc, char **argv){
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-
+  
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-
+  
   if(rank==0)
     std::cout<<"Basic quality:\n"
              <<"Quality mean:  "<<qmean<<std::endl
              <<"Quality min:   "<<qmin<<std::endl
              <<"Quality RMS:   "<<qrms<<std::endl;
   VTKTools<double, int>::export_vtu("../data/test_mpi_adapt_2d-basic", mesh);
-
+  
   smooth.smooth("smart Laplacian");
-
+  
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-
+  
   if(rank==0)
     std::cout<<"After smart smoothing:\n"
              <<"Quality mean:  "<<qmean<<std::endl
