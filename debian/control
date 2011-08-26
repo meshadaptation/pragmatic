@@ -7,7 +7,7 @@ Standards-Version: 3.7.2
 
 Package: pragmatic
 Architecture: any
-Depends: libvtk5-dev
+Depends: libvtk5-dev libscotchmetis-dev libnuma-dev
 Description: PRAgMaTIc (Parallel anisotRopic Adaptive Mesh ToolkIt) provides 2D/3D
  anisotropic mesh adaptivity for meshes of simplexes. The target
  applications are finite element and finite volume methods although the
