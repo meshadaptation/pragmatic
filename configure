@@ -5015,13 +5015,12 @@ fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 
-# Zoltan
+## Zoltan
 # Check whether --enable-zoltan was given.
 if test "${enable_zoltan+set}" = set; then :
   enableval=$enable_zoltan;
 fi
 
-if test "x$enable_zoltan" = "xyes"; then
 
 
 # Set variables...
@@ -5122,7 +5121,6 @@ ZOLTAN="yes"
 
 echo $LIBS
 
-fi
 
 # Detect VTK
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
