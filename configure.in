@@ -36,6 +36,7 @@ AC_LANG_PUSH([C++])
 # Override autoconf defaults for ...FLAGS before searching for compiler
 FCFLAGS="${FCFLAGS:''}"
 CXXFLAGS="${CXXFLAGS:''}"
+CFLAGS="${CFLAGS:''}"
 
 if test -z "$FC" && test -n "$MPIFC"; then
     FC="$MPIFC"
@@ -45,11 +46,21 @@ if test -z "$CXX" && test -n "$MPICXX"; then
     CXX="$MPICXX"
 fi
 
+if test -z "$CC" && test -n "$MPICC"; then
+    CC="$MPICC"
+fi
 
 AC_PROG_CXX([icpc FCC g++])
 AX_MPI
 CXX="$MPICXX"
 LIBS="$MPILIBS $LIBS"
+
+AC_LANG_PUSH([C])
+AC_PROG_FC([icc fc gcc])
+AX_MPI
+CC="$MPICC"
+LIBS="$MPILIBS $LIBS"
+AC_LANG_POP()
 
 AC_LANG_PUSH([Fortran])
 AC_PROG_FC([ifort frt gfortran])
@@ -69,6 +80,11 @@ CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
 
 AC_OPENMP()
+
+AC_LANG_PUSH([C])
+AC_OPENMP()
+AC_LANG_POP()
+
 AC_LANG_PUSH([Fortran])
 AC_OPENMP()
 AC_LANG_POP()

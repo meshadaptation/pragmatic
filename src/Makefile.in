@@ -1,11 +1,13 @@
 SHELL = /bin/bash
 
 CXX = @CXX@
+CC = @CC@
 FC = @FC@
 
 CPPFLAGS = @CPPFLAGS@ -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
+CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
 FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
 
 AR = @AR@
@@ -15,15 +17,17 @@ LIB = ../lib/libpragmatic.a
 
 VPATH = ./:./src
 
-objects = pragmatic.o  pragmatic_Fortran.o
+objects = zoltan_colour.o pragmatic.o  pragmatic_Fortran.o
 
-.SUFFIXES: .F90 .cpp .o
+.SUFFIXES: .F90 .cpp .c .o
 
 # cancel implicit rule that tries to make .o from .mod with m2c:
 %.o: %.mod
 
 .cpp.o:
 	@$(CXX) $(CXXFLAGS) -c $<
+.c.o:
+	@$(CC) $(CFLAGS) -c $<
 .F90.o:
 	@$(FC) $(FCFLAGS) -c $<
 
