@@ -9,6 +9,8 @@ lib_dir = $(PREFIX)/lib
 
 LIB = lib/libpragmatic.a
 
+.PHONY: lib test bin
+
 default: lib
 
 lib:
