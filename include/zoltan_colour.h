@@ -35,35 +35,44 @@
 #ifndef HAVE_ZOLTAN
 #error No Zoltan support.
 #endif
-#include "zoltan.h"
 
-typedef struct {
-  /* Number of nodes in the graph assigned to the local process.
-   */
-  size_t npnodes;
-
-  /* Total number of nodes on local process.
-   */
-  size_t nnodes;
+#ifdef __cplusplus
+extern "C" {
+#endif
   
-  /* Array storing the number of edges connected to each node.
-   */
-  size_t *nedges;
-
-  /* Array storing the edges in compressed row storage format.
-   */
-  size_t *csr_edges;
-
-  /* Mapping from local node numbers to global node numbers.
-   */
-  size_t *gid;
-
-  /* Process owner of each node.
-   */
-  size_t *owner;
-
-  /* Graph colouring.
-   */
-  int *colour;
-} zoltan_colour_graph_t;
+  typedef struct {
+    /* Number of nodes in the graph assigned to the local process.
+     */
+    size_t npnodes;
+    
+    /* Total number of nodes on local process.
+     */
+    size_t nnodes;
+    
+    /* Array storing the number of edges connected to each node.
+     */
+    size_t *nedges;
+    
+    /* Array storing the edges in compressed row storage format.
+     */
+    size_t *csr_edges;
+    
+    /* Mapping from local node numbers to global node numbers.
+     */
+    size_t *gid;
+    
+    /* Process owner of each node.
+     */
+    size_t *owner;
+    
+    /* Graph colouring.
+     */
+    int *colour;
+  } zoltan_colour_graph_t;
+  
+  void zoltan_colour(zoltan_colour_graph_t *graph);
+  
+#ifdef __cplusplus
+}
+#endif
 #endif

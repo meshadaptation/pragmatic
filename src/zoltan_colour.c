@@ -29,7 +29,10 @@
 
 #include <assert.h>
 #include <mpi.h>
+
 #include "zoltan_colour.h"
+
+#include "zoltan.h"
 
 /* A ZOLTAN_NUM_OBJ_FN query function returns the number of objects
    that are currently assigned to the processor. */
@@ -130,11 +133,10 @@ void zoltan_colour(zoltan_colour_graph_t *graph){
   for(i=0;i<num_obj;i++)
     global_ids[i] = graph->gid[i];
 
-  
-  /* Delete this for production.
-   */
+#ifndef NDEBUG 
   ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
-  
+#endif
+
   /* Register the callbacks.
    */
   ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (void *)&num_obj_fn, (void *)graph);
@@ -144,6 +146,6 @@ void zoltan_colour(zoltan_colour_graph_t *graph){
   
   ierr = Zoltan_Color(zz, num_gid_entries, num_obj, global_ids, graph->colour);
 
-  ZOLTAN_FREE(global_ids);
-  Zoltan_Distroy(zz);
+  ZOLTAN_FREE(&global_ids);
+  Zoltan_Destroy(&zz);
 }
