@@ -11,6 +11,8 @@ CUDA_LIBS = @CUDA_LIBS@
 
 LIBS = @LIBS@
 
+LIB = ../lib/libpragmatic.a
+
 TEST_SRC = $(wildcard src/*.cpp)
 TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
 
@@ -37,7 +39,7 @@ endif
 
 bin/%: src/%.cpp ticker.o 
 	@echo "    CXX $@"
-	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< ticker.o $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< ticker.o $(LIB) $(LIBS)
 
 bin/%: src/%.cu 
 	@echo "    NVCC $@"
