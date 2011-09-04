@@ -45,8 +45,9 @@
 #include "ElementProperty.h"
 #include "Surface.h"
 #include "Mesh.h"
-#include "Colour.h"
 #include "MetricTensor.h"
+
+#include "zoltan_colour.h"
 
 /*! \brief Applies Laplacian smoothen in metric space.
  */
@@ -93,7 +94,7 @@ template<typename real_t, typename index_t>
   
   // Smooth the mesh using a given method. Valid methods are:
   // "Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=20){
+  void smooth(std::string method, int max_iterations=10){
     init_cache(method);
     
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
@@ -138,48 +139,20 @@ template<typename real_t, typename index_t>
 
     // First sweep through all vertices. Add vertices adjancent to any
     // vertex moved into the active_vertex list.
-    for(size_t colour=0; colour<colour_sets.size(); colour++){
-#pragma omp parallel
-      {
-        int node_set_size = colour_sets[colour].size();
-#pragma omp for schedule(static)
-        for(int cn=0;cn<node_set_size;cn++){
-          index_t node = colour_sets[colour][cn];
-          
-          if((this->*smooth_kernel)(node)){
-            for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-              // Don't add node to the active set if it is not owned.
-              if(_mesh->is_not_owned_node(*it))
-                continue;
-#ifdef _OPENMP
-              partial_active_vertices[omp_get_thread_num()].insert(*it);
-#else
-              active_vertices.insert(*it);
-#endif
-            }
-          }
-        }
-      }
+    int max_colour = colour_sets.rbegin()->first;
+    if(MPI::Is_initialized()){
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
     }
 
-#ifdef _OPENMP
-    for(int t=0;t<omp_get_max_threads();t++){
-      active_vertices.insert(partial_active_vertices[t].begin(), partial_active_vertices[t].end());
-      partial_active_vertices[t].clear();
-    }
-#endif
-
-    for(int iter=1;iter<max_iterations;iter++){
-      _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-      _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
-      for(size_t colour=0;colour<colour_sets.size(); colour++){
+    for(int ic=1;ic<=max_colour;ic++){
+      if(colour_sets.count(ic)){
 #pragma omp parallel
         {
-          int node_set_size = colour_sets[colour].size();
+          int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(static)
           for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[colour][cn];
-
+            index_t node = colour_sets[ic][cn];
+            
             if((this->*smooth_kernel)(node)){
               for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                 // Don't add node to the active set if it is not owned.
@@ -195,6 +168,45 @@ template<typename real_t, typename index_t>
           }
         }
       }
+      _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+      _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+    }
+
+#ifdef _OPENMP
+    for(int t=0;t<omp_get_max_threads();t++){
+      active_vertices.insert(partial_active_vertices[t].begin(), partial_active_vertices[t].end());
+      partial_active_vertices[t].clear();
+    }
+#endif
+
+    for(int iter=1;iter<max_iterations;iter++){
+      for(int ic=1;ic<=max_colour;ic++){
+        if(colour_sets.count(ic)){
+#pragma omp parallel
+          {
+            int node_set_size = colour_sets[ic].size();
+#pragma omp for schedule(static)
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[ic][cn];
+              
+              if((this->*smooth_kernel)(node)){
+                for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                  // Don't add node to the active set if it is not owned.
+                  if(_mesh->is_not_owned_node(*it))
+                    continue;
+#ifdef _OPENMP
+                  partial_active_vertices[omp_get_thread_num()].insert(*it);
+#else
+                  active_vertices.insert(*it);
+#endif
+                }
+              }
+            }
+          }
+        }
+        _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+        _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+      }
       
 #ifdef _OPENMP
       active_vertices.clear();
@@ -206,8 +218,7 @@ template<typename real_t, typename index_t>
       int nav = active_vertices.size();
 #ifdef HAVE_MPI
       if(MPI::Is_initialized()){
-        int lnav = nav;
-        MPI_Allreduce(&lnav, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
       }
 #endif
       if(nav==0)
@@ -1102,12 +1113,15 @@ template<typename real_t, typename index_t>
       p[0] = x0 + alpha*hat[0];
       p[1] = y0 + alpha*hat[1];
 
-      valid = generate_location_2d(node, p, mp);
-      assert(valid);
-
       // Check if this positions improves the L2 norm.
-      functional = functional_Linf(node, p, mp);
-      
+      valid = generate_location_2d(node, p, mp);
+      if(valid){
+        functional = functional_Linf(node, p, mp);
+      }else{
+        functional = -1;
+        alpha_upper.first*=0.5;
+      }
+
       if(alpha_lower.second<functional){
         alpha_lower.first = alpha;
         alpha_lower.second = functional;
@@ -1124,7 +1138,8 @@ template<typename real_t, typename index_t>
         }
       }
     }
-    assert(valid);
+    if(!valid)
+      return false;
 
     //if((functional-orig_functional)/orig_functional<rtol)
     if(functional<relax*orig_functional)
@@ -1161,11 +1176,47 @@ template<typename real_t, typename index_t>
   void init_cache(std::string method){
     colour_sets.clear();
 
+    zoltan_colour_graph_t graph;
+    if(MPI::Is_initialized()){
+      MPI_Comm_rank(_mesh->get_mpi_comm(), &graph.rank);
+    }else{
+      graph.rank = 0; 
+    }
+
     int NNodes = _mesh->get_number_nodes();
     assert(NNodes==(int)_mesh->NNList.size());
+    graph.nnodes = NNodes;
+    
+    int NPNodes;
+    std::vector<index_t> lnn2gnn;
+    std::vector<size_t> owner;
+    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
+    graph.npnodes = NPNodes;
 
-    std::vector<index_t> colour(NNodes, -1);
-    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    std::vector<size_t> nedges(NNodes);
+    size_t sum = 0;
+    for(int i=0;i<NNodes;i++){
+      size_t cnt = _mesh->NNList[i].size();
+      nedges[i] = cnt;
+      sum+=cnt;
+    }
+    graph.nedges = &(nedges[0]);
+
+    std::vector<size_t> csr_edges(sum);
+    sum=0;
+    for(int i=0;i<NNodes;i++){
+      for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+        csr_edges[sum++] = *it;
+      }
+    }
+    graph.csr_edges = &(csr_edges[0]);
+
+    graph.gid = &(lnn2gnn[0]);
+    graph.owner = &(owner[0]);
+
+    std::vector<int> colour(NNodes);
+    graph.colour = &(colour[0]);
+    zoltan_colour(&graph);
     
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(_mesh->is_not_owned_node(i)))

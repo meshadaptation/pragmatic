@@ -42,6 +42,9 @@ int main(int argc, char **argv){
      3: 2, 0
   */
   zoltan_colour_graph_t graph;
+
+  graph.rank = 0;
+
   /* Number of nodes in the graph assigned to the local process.
    */
   graph.npnodes = 4;
@@ -62,7 +65,7 @@ int main(int argc, char **argv){
   
   /* Mapping from local node numbers to global node numbers.
    */
-  size_t gid[] = {0, 1, 2, 3};
+  int gid[] = {0, 1, 2, 3};
   graph.gid = gid;
   
   /* Process owner of each node.
@@ -80,8 +83,12 @@ int main(int argc, char **argv){
   if((graph.colour[0]==1)&&(graph.colour[1]==2)&&
      (graph.colour[2]==1)&&(graph.colour[3]==2))
     cout<<"pass\n";
-  else
+  else{
+    cout<<"Colouring = ";
+    for(int i=0;i<4;i++)
+      cout<<graph.colour[i]<<" ";
+    cout<<endl;
     cout<<"fail\n";
-
+  }
   return 0;
 }

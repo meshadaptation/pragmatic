@@ -34,6 +34,8 @@
 
 #include "zoltan.h"
 
+#include <stdio.h>
+
 /* A ZOLTAN_NUM_OBJ_FN query function returns the number of objects
    that are currently assigned to the processor. */
 int num_obj_fn(void* data, int* ierr){
@@ -55,14 +57,18 @@ int num_obj_fn(void* data, int* ierr){
 void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids,
                  ZOLTAN_ID_PTR local_ids, int wgt_dim, float* obj_wgts, int* ierr){
   int i;
+  int loc=0;
 
   *ierr = ZOLTAN_OK; 
   
   zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
-  
-  for(i=0;i<graph->npnodes;i++){
-    global_ids[i] = graph->gid[i];
-    local_ids[i] = i;
+
+  for(i=0;i<graph->nnodes;i++){
+    if(graph->owner[i]==graph->rank){
+      global_ids[loc] = graph->gid[i];
+      local_ids[loc] = loc;
+      loc++;
+    }
   }
 }
 
@@ -74,41 +80,44 @@ void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID
 void num_edges_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
                         ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, int* ierr){
   int i;
+  int loc=0;
 
   *ierr = ZOLTAN_OK; 
   
   zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
-
-  assert(num_obj==(int)graph->npnodes);
-  for(i=0;i<num_obj;i++){
-    num_edges[i] = graph->nedges[i];
+  
+  for(i=0;i<graph->nnodes;i++){
+    if(graph->owner[i]==graph->rank)
+      num_edges[loc++] = graph->nedges[i];
   }
 }
 
 void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
                         ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, ZOLTAN_ID_PTR nbor_global_ids,
                         int* nbor_procs, int wgt_dim, float *ewgts, int* ierr){
-  int i, j, lid;
+  int i, j, lid, loc=0, sum=0, sum2=0;
 
   *ierr = ZOLTAN_OK;
   
   zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
   
-  int sum = 0;
-  assert(num_obj==graph->npnodes);
-  for(i=0;i<num_obj;i++){
-    assert(num_edges[i]==(int)graph->nedges[i]);
-    for(j=0;j<num_edges[i];j++){
-      lid = graph->csr_edges[sum];
-      nbor_global_ids[sum] = graph->gid[lid];
-      nbor_procs[sum] = graph->owner[lid];
-      sum++;
+  for(i=0;i<graph->nnodes;i++){
+    if(graph->owner[i]==graph->rank){
+      assert(num_edges[loc]==graph->nedges[i]);
+      for(j=0;j<num_edges[loc];j++){
+        lid = graph->csr_edges[sum2+j];
+        nbor_global_ids[sum] = graph->gid[lid];
+        nbor_procs[sum] = graph->owner[lid];
+        sum++;
+      }
+      loc++;
     }
-  }  
+    sum2+=graph->nedges[i];
+  }
 }
 
 void zoltan_colour(zoltan_colour_graph_t *graph){
-  int ierr, i, j;
+  int ierr, i, j, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
   int num_gid_entries;
@@ -130,12 +139,13 @@ void zoltan_colour(zoltan_colour_graph_t *graph){
   /* An array of global IDs of objects for which we want to know the
      color on this processor. Size of this array must be num_obj. */
   global_ids = (ZOLTAN_ID_PTR) ZOLTAN_MALLOC(num_obj*sizeof(ZOLTAN_ID_TYPE));
-  for(i=0;i<num_obj;i++)
-    global_ids[i] = graph->gid[i];
-
+  for(i=0;i<graph->nnodes;i++)
+    global_ids[loc++] = graph->gid[i];
+  
 #ifndef NDEBUG 
   ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
 #endif
+  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "S");
 
   /* Register the callbacks.
    */

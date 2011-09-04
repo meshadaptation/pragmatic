@@ -41,6 +41,10 @@ extern "C" {
 #endif
   
   typedef struct {
+    /* Rank of local process.
+     */
+    int rank;
+
     /* Number of nodes in the graph assigned to the local process.
      */
     size_t npnodes;
@@ -59,7 +63,7 @@ extern "C" {
     
     /* Mapping from local node numbers to global node numbers.
      */
-    size_t *gid;
+    int *gid;
     
     /* Process owner of each node.
      */
