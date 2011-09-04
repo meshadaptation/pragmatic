@@ -74,9 +74,9 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y){
-    if(MPI::Is_initialized()){
+#ifdef HAVE_MPI
       _mpi_comm = MPI_COMM_WORLD;      
-    }
+#endif
     _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
   }
   
@@ -111,9 +111,9 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const real_t *z){
-    if(MPI::Is_initialized()){
+#ifdef HAVE_MPI
       _mpi_comm = MPI_COMM_WORLD;      
-    }
+#endif
     _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
   }
 
@@ -394,8 +394,8 @@ template<typename real_t, typename index_t> class Mesh{
     int nedges = Edges.size();
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
-      MPI_Allreduce(&sum, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-      MPI_Allreduce(&nedges, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
     
@@ -417,8 +417,8 @@ template<typename real_t, typename index_t> class Mesh{
     int nedges = Edges.size();
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
-      MPI_Allreduce(&rms, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-      MPI_Allreduce(&nedges, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
     
@@ -436,18 +436,19 @@ template<typename real_t, typename index_t> class Mesh{
       if(n[0]<0)
         continue;
 
-      if(ndims==2)
+      if(ndims==2){
         sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
                                   get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-      else
+      }else{
         sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
                                   get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+      }
       nele++;
     }
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
-      MPI_Allreduce(&sum, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-      MPI_Allreduce(&nele, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
     double mean = sum/nele;
@@ -472,7 +473,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
-      MPI_Allreduce(&qmin, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
     }
 #endif
     return qmin;
@@ -670,7 +671,7 @@ template<typename real_t, typename index_t> class Mesh{
     
 #ifdef HAVE_MPI
     if(mpi_nparts>1)
-      MPI_Allreduce(&L_max, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
 #endif
 
     return L_max;
@@ -1234,6 +1235,7 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
   }
 
+
   void halo_update(index_t *vec, int block){
 #ifdef HAVE_MPI
     if(mpi_nparts<2)
@@ -1319,6 +1321,52 @@ template<typename real_t, typename index_t> class Mesh{
     for(size_t i=0;i<_NNodes;i++){
       for(typename std::set<index_t>::const_iterator it=NNList_set[i].begin();it!=NNList_set[i].end();++it){
         NNList[i].push_back(*it);
+      }
+    }
+  }
+
+  void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){
+    int NNodes = get_number_nodes();
+
+    if(mpi_nparts>1){
+      NPNodes = NNodes - recv_halo.size();
+      
+      // Calculate the global numbering offset for this partition.
+      int gnn_offset;
+      MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+      gnn_offset-=NPNodes;
+
+      // Write global node numbering and ownership for nodes assigned to local process.
+      int rank;
+      MPI_Comm_rank(_mpi_comm, &rank);
+      lnn2gnn.resize(NNodes);
+      owner.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        if(recv_halo.count(i)){
+          lnn2gnn[i] = 0;
+        }else{
+          lnn2gnn[i] = gnn_offset++;
+          owner[i] = rank;
+        }
+      }
+      
+      // Update GNN's for the halo nodes.
+      halo_update(&(lnn2gnn[0]), 1);
+      
+      
+      // Finish writing node ownerships.
+      for(int i=0;i<mpi_nparts;i++){
+        for(std::vector<int>::const_iterator it=recv[i].begin();it!=recv[i].end();++it){
+          owner[*it] = i;
+        }
+      }
+    }else{
+      NPNodes = NNodes;
+      lnn2gnn.resize(NNodes);
+      owner.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        lnn2gnn[i] = i;
+        owner[i] = 0;
       }
     }
   }
