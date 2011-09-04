@@ -165,7 +165,7 @@ template<typename real_t, typename index_t> class Refine{
     int refined_edges_size = refined_edges.size();
 #ifdef HAVE_MPI
     if(nprocs>1)
-      MPI_Allreduce(&refined_edges_size, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 #endif
     if(refined_edges_size==0)
       return 0;
@@ -298,7 +298,7 @@ template<typename real_t, typename index_t> class Refine{
       int new_edges_size = new_edges.size();
 #ifdef HAVE_MPI
       if(nprocs>1){
-        MPI_Allreduce(&new_edges_size, &new_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &new_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
       }
 #endif
       if(new_edges_size==0)
@@ -709,7 +709,7 @@ template<typename real_t, typename index_t> class Refine{
 #ifdef HAVE_MPI
     refined_edges_size = refined_edges.size();
     if(nprocs>1)
-      MPI_Allreduce(&refined_edges_size, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &refined_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 #endif
 
     // Tidy up. Need to look at efficiencies here.
