@@ -557,9 +557,7 @@ template<typename real_t, typename index_t>
 
 #ifdef HAVE_MPI
     if(nprocs>1){
-      double lpredicted;
-      MPI_Allreduce(&predicted, &lpredicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
-      predicted = lpredicted;
+      MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
     }
 #endif
     
