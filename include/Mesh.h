@@ -602,9 +602,9 @@ template<typename real_t, typename index_t> class Mesh{
     return (send_halo.count(nid)+recv_halo.count(nid))>0;
   }
 
-  /// Returns true if the node is not owned by the local partition.
-  bool is_not_owned_node(int nid){
-    return recv_halo.count(nid)>0;
+  /// Returns true if the node is assigned to the local partition.
+  bool is_owned_node(int nid){
+    return recv_halo.count(nid)==0;
   }
 
   /// Default destructor.
@@ -837,7 +837,7 @@ template<typename real_t, typename index_t> class Mesh{
                               get_coords(n[2]));
         min_ele_area = area;
         max_ele_area = area;
-        break;
+        i++; break;
       }
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
@@ -872,7 +872,7 @@ template<typename real_t, typename index_t> class Mesh{
                                   get_coords(n[3]));
         min_ele_vol = volume;
         max_ele_vol = volume;
-        break;
+        i++; break;
       }
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
