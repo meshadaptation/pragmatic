@@ -116,7 +116,7 @@ template<typename real_t, typename index_t>
   void set_metric(const real_t *metric){
     if(_metric==NULL)
       _metric = new MetricTensor<real_t>[_NNodes];
-    
+
     for(int i=0;i<_NNodes;i++)
       _metric[i].set_metric(_ndims, metric);
   }
@@ -134,6 +134,8 @@ template<typename real_t, typename index_t>
 
   /// Update the metric field on the mesh.
   void update_mesh(){
+    assert(_metric!=NULL);
+
     _mesh->metric.clear();
     _mesh->metric.resize(_NNodes*_ndims*_ndims);
     
