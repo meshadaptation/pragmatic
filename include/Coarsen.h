@@ -115,10 +115,10 @@ template<typename real_t, typename index_t> class Coarsen{
       gnn2lnn[lnn2gnn[i]] = i;
     
     // Loop until the maximum independent set is NULL.
-    for(int l=0;l<2;l++){
+    for(int l=0;l<200;l++){
       std::cout<<"round "<<l<<std::endl;
       
-      if(l==99)
+      if(l==199)
         std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
       
       // Determine the maximal independent set.
