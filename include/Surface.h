@@ -92,16 +92,22 @@ template<typename real_t, typename index_t>
 
     // However, is nid_free is on the surface then nid_target must
     // also lie on a surface for it to be considered for collapse.
-    if(!surface_nodes[nid_target])
+    if(!surface_nodes[nid_target]){
+      std::cout<<"one vertex is on the surface - the other is not\n";
       return false;
-    
+    }
+
     std::set<int> incident_plane_free;
     for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
       incident_plane_free.insert(coplanar_ids[*it]);
     
     // Non-collapsible if nid_free is a corner node.
-    if(incident_plane_free.size()>=ndims)
+    if(incident_plane_free.size()>=ndims){
+      std::cout<<nid_free<<" :: corner node incident_plane_free.size()="
+               <<incident_plane_free.size()
+               <<", ndims="<<ndims<<std::endl;
       return false;
+    }
 
     std::set<int> incident_plane_target;
     for(typename std::set<index_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
@@ -121,6 +127,8 @@ template<typename real_t, typename index_t>
     // collapsed to any other vertex on that plane.
     assert(incident_plane_free.size()==1);
     
+    std::cout<<"incident_plane_target.count(*incident_plane_free.begin())>0\n";
+
     return incident_plane_target.count(*incident_plane_free.begin())>0;
   }
 
@@ -454,7 +462,16 @@ template<typename real_t, typename index_t>
             element.push_back(_mesh->_ENList[i*nloc+(j+1)%nloc]);
             element.push_back(_mesh->_ENList[i*nloc+(j+2)%nloc]);
           }
-          facets[facet] = element;
+
+          // Only recognise this as a valid boundary node if at least one node is owned.
+          bool interpartition_boundary=true;
+          for(std::vector<int>::const_iterator it=element.begin();it!=element.end();++it)
+            if(_mesh->is_owned_node(*it)){
+              interpartition_boundary=false;
+              break;
+            }
+          if(!interpartition_boundary)
+            facets[facet] = element;
         }
       }
     }

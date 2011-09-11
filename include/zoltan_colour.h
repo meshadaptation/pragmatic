@@ -30,6 +30,7 @@
 #ifndef ZOLTAN_COLOUR_H
 #define ZOLTAN_COLOUR_H
 
+#include <stddef.h>
 #include "pragmatic_config.h"
 
 #ifndef HAVE_ZOLTAN
@@ -74,7 +75,7 @@ extern "C" {
     int *colour;
   } zoltan_colour_graph_t;
   
-  void zoltan_colour(zoltan_colour_graph_t *graph);
+  void zoltan_colour(zoltan_colour_graph_t *graph, int distance);
   
 #ifdef __cplusplus
 }

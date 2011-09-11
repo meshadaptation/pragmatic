@@ -35,7 +35,7 @@
 #include <vector>
 
 #include "ElementProperty.h"
-#include "Colour.h"
+#include "zoltan_colour.h"
 #include "Mesh.h"
 
 /*! \brief Performs mesh coarsening.
@@ -81,60 +81,261 @@ template<typename real_t, typename index_t> class Coarsen{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
   void coarsen(real_t L_low, real_t L_max){
+    int nprocs = 1, rank = 0;
+    if(MPI::Is_initialized()){
+      nprocs = MPI::COMM_WORLD.Get_size();
+      rank = MPI::COMM_WORLD.Get_rank();
+    }
+
     // Initialise a dynamic vertex list
-    size_t NNodes = _mesh->get_number_nodes();
+    int NNodes = _mesh->get_number_nodes();
     
-    for(;;){
-      std::vector<bool> dynamic_vertex(NNodes, false);
-      for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
-        if(it->length<L_low){
-          dynamic_vertex[it->edge.first] = true;
-          dynamic_vertex[it->edge.second] = true;
-        }
+    // Initialise list of vertices to be collapsed.
+    std::vector<index_t> dynamic_vertex(NNodes, -1);
+    std::vector<bool> recalculate_collapse(NNodes, false);
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<NNodes;i++){
+        if(_mesh->is_owned_node(i))
+          dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
       }
-      std::vector<index_t> colour(NNodes, -1);
-      Colour<index_t>::greedy(_mesh->NNList, dynamic_vertex, &(colour[0]));
+    }
+
+    // Create the global node numbering.
+    int NPNodes = NNodes; // Default for non-mpi
+    std::vector<int> lnn2gnn;
+    std::vector<size_t> owner;
+    
+    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
+
+    // Create a reverse lookup to map received gnn's back to lnn's. 
+    std::map<int, int> gnn2lnn;
+    for(int i=0;i<NNodes;i++)
+      gnn2lnn[lnn2gnn[i]] = i;
+    
+    // Loop until the maximum independent set is NULL.
+    for(int l=0;l<2;l++){
+      std::cout<<"round "<<l<<std::endl;
       
-      // Create sets of nodes based on colour.
-      std::map<int, std::deque<index_t> > colour_sets;
-      for(size_t i=0;i<NNodes;i++)
-        if(colour[i]>=0)
-          colour_sets[colour[i]].push_back(i);
-
-      // Loop over colours
-      int nupdates=0;
-      for(typename std::map<int, std::deque<index_t> >::const_iterator ic=colour_sets.begin();ic!=colour_sets.end();++ic){
-
-        // Parallel loop --- this is disabled now until the list of edges is made thread safe.
-        // #pragma omp parallel
-        {
-          int node_set_size = ic->second.size();
-          // #pragma omp for schedule(static) reduction(+:nupdates)
-          for(int i=0;i<node_set_size;i++){
-            // Vertex under consideration for removal: rm_vertex
-            int rm_vertex=ic->second[i];
-            
-            // Call the coarsening kernel.
-            if(coarsen_kernel(rm_vertex, L_low, L_max)>=0)
-              nupdates++;
+      if(l==99)
+        std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
+      
+      // Determine the maximal independent set.
+      std::deque<index_t> maximal_independent_set;
+      {
+        // Colour.
+        std::vector<int> colour(NNodes);
+        zoltan_colour_graph_t graph;
+        if(MPI::Is_initialized()){
+          MPI_Comm_rank(_mesh->get_mpi_comm(), &graph.rank);
+        }else{
+          graph.rank = 0; 
+        }
+        
+        assert(NNodes==(int)_mesh->NNList.size());
+        graph.nnodes = NNodes;
+        
+        graph.npnodes = NPNodes;
+        
+        std::vector<size_t> nedges(NNodes);
+        size_t sum = 0;
+        for(int i=0;i<NNodes;i++){
+          size_t cnt = _mesh->NNList[i].size();
+          nedges[i] = cnt;
+          sum+=cnt;
+        }
+        graph.nedges = &(nedges[0]);
+        
+        std::vector<size_t> csr_edges(sum);
+        sum=0;
+        for(int i=0;i<NNodes;i++){
+          for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+            csr_edges[sum++] = *it;
           }
         }
+        graph.csr_edges = &(csr_edges[0]);
+        
+        graph.gid = &(lnn2gnn[0]);
+        graph.owner = &(owner[0]);
+        
+        graph.colour = &(colour[0]);
+        
+        zoltan_colour(&graph, 2);
+
+        // Given a colouring, determine the maximum independent set.
+
+        // Create sets of nodes based on colour.
+        std::map<int, std::deque<index_t> > colour_sets;
+        for(int i=0;i<NNodes;i++){
+          if(recalculate_collapse[i]){
+            recalculate_collapse[i] = false;
+            dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+          }
+          
+          if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
+            std::cout<<"colour[i]="<<colour[i]<<", dynamic_vertex[i]="<<dynamic_vertex[i]<<std::endl;
+            colour_sets[colour[i]].push_back(i);
+          }
+        }
+        
+        int max_colour = -1;
+        if(!colour_sets.empty())
+          max_colour = colour_sets.rbegin()->first;
+        if(MPI::Is_initialized())
+          MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+
+        // Check of all vertices have been processed.
+        std::cout<<"max colour "<<max_colour<<std::endl;
+        if(max_colour<0){
+          break;
+        }
+
+        std::vector<int> set_sizes(max_colour, 0);
+        for(typename std::map<int, std::deque<index_t> >::const_iterator it=colour_sets.begin();it!=colour_sets.end();++it)
+          set_sizes[it->first - 1] = it->second.size();
+        
+        if(MPI::Is_initialized())
+          MPI_Allreduce(MPI_IN_PLACE, &(set_sizes[0]), max_colour, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+
+        std::cout<<"colours: ";        
+        for(int i=0;i<max_colour;i++)
+          std::cout<<i+1<<":"<<set_sizes[i]<<" ";
+        std::cout<<std::endl;
+
+        int max_size=set_sizes[0];
+        int max_id=0;
+        for(int i=1;i<max_colour;i++)
+          if(set_sizes[i]>max_size){
+            max_size = set_sizes[i];
+            max_id = i;
+          }
+        
+        maximal_independent_set.swap(colour_sets[max_id+1]);
       }
 
-      if(nupdates==0)
-        break;
+      // Cache who knows what.
+      std::vector< std::set<int> > known_nodes(nprocs);
+      for(int p=0;p<nprocs;p++){
+        if(p==rank)
+          continue;
+        
+        for(std::vector<int>::const_iterator it=_mesh->send[p].begin();it!=_mesh->send[p].end();++it)
+          known_nodes[p].insert(*it);
+        
+        for(std::vector<int>::const_iterator it=_mesh->recv[p].begin();it!=_mesh->recv[p].end();++it)
+          known_nodes[p].insert(*it);
+      }
+
+      // Communicate collapses.
+      if(nprocs>1){
+        std::vector< std::vector<int> > send_buffer(nprocs);
+        
+        for(typename std::deque<index_t>::const_iterator it=maximal_independent_set.begin();it!=maximal_independent_set.end();++it){
+          // Is this edges contained in the halo.
+          if(_mesh->is_halo_node(*it)&&_mesh->is_halo_node(dynamic_vertex[*it])){ 
+            // At this point we know the edge is in the halo we have
+            // to discover where we have to send this edge.
+            for(int p=0;p<nprocs;p++){
+              if((known_nodes[p].count(*it)+known_nodes[p].count(dynamic_vertex[*it]))==2){
+                send_buffer[p].push_back(lnn2gnn[*it]);
+                send_buffer[p].push_back(lnn2gnn[dynamic_vertex[*it]]);
+                std::cout<<"sending "<<lnn2gnn[*it]<<", "<<lnn2gnn[dynamic_vertex[*it]]<<std::endl;
+              }
+            }
+          }
+        }
+        
+        std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
+        for(int p=0;p<nprocs;p++)
+          send_buffer_size[p] = send_buffer[p].size();
+        MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+        
+        // Setup non-blocking receives
+        std::vector< std::vector<int> > recv_buffer(nprocs);
+        std::vector<MPI_Request> request(nprocs*2);
+        for(int i=0;i<nprocs;i++){
+          if(recv_buffer_size[i]==0){
+            request[i] =  MPI_REQUEST_NULL;
+          }else{
+            recv_buffer[i].resize(recv_buffer_size[i]);
+            MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
+          }
+        }
+        
+        // Non-blocking sends.
+        for(int i=0;i<nprocs;i++){
+          if(send_buffer_size[i]==0){
+            request[nprocs+i] =  MPI_REQUEST_NULL;
+          }else{
+            MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
+          }
+        }
+        
+        // Wait for comms to finish.
+        std::vector<MPI_Status> status(nprocs*2);
+        MPI_Waitall(nprocs, &(request[0]), &(status[0]));
+        MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
+        
+        // Unpack received data into dynamic_vertex
+        for(int p=0;p<nprocs;p++)
+          for(size_t i=0;i<recv_buffer[p].size();i+=2){
+            int rm_vertex = gnn2lnn[recv_buffer[p][i]];
+            int target_vertex = gnn2lnn[recv_buffer[p][i+1]];
+            assert(dynamic_vertex[rm_vertex]<0);
+            dynamic_vertex[rm_vertex] = target_vertex;
+            maximal_independent_set.push_back(rm_vertex);
+            std::cout<<"receiving: "<<rm_vertex<<", "<<target_vertex<<std::endl;
+          }
+      }
+
+      // Perform collapse operations.
+      {
+        int node_set_size = maximal_independent_set.size();
+        std::cout<<"node_set_size = "<<node_set_size<<std::endl;
+        for(int i=0;i<node_set_size;i++){
+          // Vertex to be removed: rm_vertex
+          int rm_vertex=maximal_independent_set[i];
+          int target_vertex=dynamic_vertex[rm_vertex];
+          assert(target_vertex>=0);
+
+          std::cout<<rm_vertex<<" ---> "<<target_vertex<<std::endl;
+
+          if(target_vertex<0)
+            continue;
+          
+          // Call the coarsening kernel.
+          coarsen_kernel(rm_vertex, target_vertex);
+          
+          if(_mesh->is_owned_node(target_vertex)){
+            dynamic_vertex[target_vertex] = coarsen_identify_kernel(target_vertex, L_low, L_max);
+            assert(dynamic_vertex[target_vertex]!=rm_vertex);
+          }
+
+          for(typename std::deque<index_t>::iterator it=_mesh->NNList[target_vertex].begin();it!=_mesh->NNList[target_vertex].end();++it)
+            recalculate_collapse[*it] = true;
+          
+          dynamic_vertex[rm_vertex] = -1;
+        }
+      }
     }
+
+    return;
   }
   
-  /*! Kernel for perform coarsening.
+  /*! Kernel for identifying what if any vertex rm_vertex should be collapsed onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
-   * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
+   * Returns the node ID that rm_vertex should be collapsed onto, negative if no operation is to be performed.
    */
-  int coarsen_kernel(index_t rm_vertex, real_t L_low, real_t L_max){    
-    // If this is a corner-vertex or a halo-node then return immediately.
-    if(_surface->is_corner_vertex(rm_vertex)||_mesh->is_halo_node(rm_vertex))
-      return -1;
+  int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max){    
+    // If this is a corner-vertex then cannot collapse;
+    if(_surface->is_corner_vertex(rm_vertex))
+      return -2;
     
+    // If this is not owned then return -1.
+    if(!_mesh->is_owned_node(rm_vertex))
+      return -3;
+
     /* Sort the edges according to length. We want to collapse the
        shortest. If it's not possible to collapse the edge then move
        onto the next shortest.*/
@@ -153,7 +354,6 @@ template<typename real_t, typename index_t> class Coarsen{
     bool reject_collapse = false;
     const Edge<real_t, index_t> *target_edge = NULL;
     index_t target_vertex=-1;
-    std::set<index_t> deleted_elements;
     while(short_edges.size()){
       // Get the next shortest edge.
       target_edge = short_edges.begin()->second;
@@ -164,14 +364,11 @@ template<typename real_t, typename index_t> class Coarsen{
 
       // Identify vertex that will be collapsed onto.
       target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
-
-      // Cache elements to be deleted.
-      deleted_elements = target_edge->adjacent_elements;
       
       // Check the properties of new elements. If the new properties
       // are not acceptable when continue.
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-        if(deleted_elements.count(*ee))
+        if(target_edge->adjacent_elements.count(*ee))
           continue;
         
         // Create a copy of the proposed element
@@ -220,8 +417,26 @@ template<typename real_t, typename index_t> class Coarsen{
     }
     
     // If we're checked all edges and none are collapsible then return.
-    if(reject_collapse ||(target_vertex==-1))
-      return -1;
+    if(reject_collapse)
+      return -4;
+    
+    return target_vertex;
+  }
+
+  /*! Kernel for perform coarsening.
+   * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+   * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
+   */
+  int coarsen_kernel(index_t rm_vertex, index_t target_vertex){
+    std::cout<<"collapse edge : "<<rm_vertex<<", "<<target_vertex<<" rm_vertex = ("
+             <<_mesh->get_coords(rm_vertex)[0]<<", "<<_mesh->get_coords(rm_vertex)[1]<<"), "
+             <<" target_vertex = ("
+             <<_mesh->get_coords(target_vertex)[0]<<", "<<_mesh->get_coords(target_vertex)[1]<<")"<<std::endl;
+
+    assert(_mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, target_vertex))!=_mesh->Edges.end());
+    const Edge<real_t, index_t> *target_edge = &(*_mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, target_vertex)));
+    
+    std::set<index_t> deleted_elements = target_edge->adjacent_elements;
     
     // Perform coarsening on surface if necessary.
     if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex))
@@ -312,7 +527,7 @@ template<typename real_t, typename index_t> class Coarsen{
     }
     
     // Update surrounding NNList and add elements to ENList.
-    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){          
+    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
       if(*nn == target_vertex){
         std::set<index_t> new_patch = adj_nodes_target;
         for(typename std::deque<index_t>::const_iterator inn=_mesh->NNList[rm_vertex].begin();inn!=_mesh->NNList[rm_vertex].end();++inn)

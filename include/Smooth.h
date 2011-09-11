@@ -156,7 +156,7 @@ template<typename real_t, typename index_t>
             if((this->*smooth_kernel)(node)){
               for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                 // Don't add node to the active set if it is not owned.
-                if(_mesh->is_not_owned_node(*it))
+                if(!_mesh->is_owned_node(*it))
                   continue;
 #ifdef _OPENMP
                 partial_active_vertices[omp_get_thread_num()].insert(*it);
@@ -192,7 +192,7 @@ template<typename real_t, typename index_t>
               if((this->*smooth_kernel)(node)){
                 for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                   // Don't add node to the active set if it is not owned.
-                  if(_mesh->is_not_owned_node(*it))
+                  if(!_mesh->is_owned_node(*it))
                     continue;
 #ifdef _OPENMP
                   partial_active_vertices[omp_get_thread_num()].insert(*it);
@@ -677,6 +677,7 @@ template<typename real_t, typename index_t>
     {
       typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();
       min_q = quality[*ie];
+      ++ie;
       for(;ie!=_mesh->NEList[node].end();++ie)
         min_q = std::min(min_q, quality[*ie]);
     }
@@ -684,6 +685,7 @@ template<typename real_t, typename index_t>
     {
       typename std::map<int, real_t>::iterator ie=new_quality.begin();
       new_min_q = ie->second;
+      ++ie;
       for(;ie!=new_quality.end();++ie)
         new_min_q = std::min(new_min_q, ie->second);
     }
@@ -1216,10 +1218,10 @@ template<typename real_t, typename index_t>
 
     std::vector<int> colour(NNodes);
     graph.colour = &(colour[0]);
-    zoltan_colour(&graph);
+    zoltan_colour(&graph, 1);
     
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(_mesh->is_not_owned_node(i)))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i)))
         continue;
       colour_sets[colour[i]].push_back(i);
     }

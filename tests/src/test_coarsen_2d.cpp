@@ -42,18 +42,21 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5.vtu");
 
   Surface<double, int> surface(*mesh);
 
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-
-  vector<double> psi(NNodes, 0);
-  metric_field.add_field(&(psi[0]), 1.0);
+  for(size_t i=0;i<NNodes;i++){
+    double m[] =
+      {1.0, 0.0,
+       0.0, 1.0};
+    metric_field.set_metric(m, i);
+  }
   metric_field.update_mesh();
-  
+
   Coarsen<double, int> adapt(*mesh, surface);
 
   double L_up = sqrt(2.0);
@@ -82,7 +85,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if((nelements==2)&&(lrms==0))
+  if(nelements==2)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

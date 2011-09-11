@@ -48,10 +48,14 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
+  for(size_t i=0;i<NNodes;i++){
+    double m[] =
+      {0.1, 0.0, 0.0,
+       0.0, 0.1, 0.0,
+       0.0, 0.0, 0.1};
 
-  vector<double> psi(NNodes, 0);
-  
-  metric_field.add_field(&(psi[0]), 1.0);
+    metric_field.set_metric(m, i);
+  }
   metric_field.update_mesh();
   
   Coarsen<double, int> adapt(*mesh, surface);
@@ -83,7 +87,7 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
   
-  if((nelements<60)&&(lrms==0))
+  if(nelements==6)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;

@@ -116,7 +116,7 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
   }
 }
 
-void zoltan_colour(zoltan_colour_graph_t *graph){
+void zoltan_colour(zoltan_colour_graph_t *graph, int distance){
   int ierr, i, j, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
@@ -146,6 +146,13 @@ void zoltan_colour(zoltan_colour_graph_t *graph){
   ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
 #endif
   ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "S");
+  if(distance==1){
+    ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
+  }else if(distance==2){
+    ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-2");
+  }else{
+    fprintf(stderr, "WARNING unexpected distance for coloring graph.\n");
+  }
 
   /* Register the callbacks.
    */
