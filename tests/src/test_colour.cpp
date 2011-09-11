@@ -78,7 +78,7 @@ int main(int argc, char **argv){
   int colour[] = {0, 0, 0, 0};
   graph.colour = colour;
 
-  zoltan_colour(&graph);
+  zoltan_colour(&graph, 1);
   
   if((graph.colour[0]==1)&&(graph.colour[1]==2)&&
      (graph.colour[2]==1)&&(graph.colour[3]==2))
