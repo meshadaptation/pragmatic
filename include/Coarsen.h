@@ -86,7 +86,7 @@ template<typename real_t, typename index_t> class Coarsen{
       nprocs = MPI::COMM_WORLD.Get_size();
       rank = MPI::COMM_WORLD.Get_rank();
     }
-
+    
     // Initialise a dynamic vertex list
     int NNodes = _mesh->get_number_nodes();
     
@@ -115,10 +115,10 @@ template<typename real_t, typename index_t> class Coarsen{
       gnn2lnn[lnn2gnn[i]] = i;
     
     // Loop until the maximum independent set is NULL.
-    for(int l=0;l<200;l++){
+    for(int l=0;l<2;l++){
       std::cout<<"round "<<l<<std::endl;
       
-      if(l==199)
+      if(l==99)
         std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
       
       // Determine the maximal independent set.
@@ -229,8 +229,9 @@ template<typename real_t, typename index_t> class Coarsen{
 
       // Communicate collapses.
       if(nprocs>1){
+        // Stuff in list of verticies that have to be communicated.
         std::vector< std::vector<int> > send_buffer(nprocs);
-        
+        std::vector< std::set<int> > send_elements(nprocs), send_nodes(nprocs);
         for(typename std::deque<index_t>::const_iterator it=maximal_independent_set.begin();it!=maximal_independent_set.end();++it){
           // Is this edges contained in the halo.
           if(_mesh->is_halo_node(*it)&&_mesh->is_halo_node(dynamic_vertex[*it])){ 
@@ -240,11 +241,62 @@ template<typename real_t, typename index_t> class Coarsen{
               if((known_nodes[p].count(*it)+known_nodes[p].count(dynamic_vertex[*it]))==2){
                 send_buffer[p].push_back(lnn2gnn[*it]);
                 send_buffer[p].push_back(lnn2gnn[dynamic_vertex[*it]]);
-                std::cout<<"sending "<<lnn2gnn[*it]<<", "<<lnn2gnn[dynamic_vertex[*it]]<<std::endl;
+
+                send_elements[p].insert(_mesh->NEList[*it].begin(), _mesh->NEList[*it].end());
               }
             }
           }
         }
+
+        // Finalise list of additional elements and nodes to be sent.
+        size_t node_package_int_size = (ndims+1)*ndims*sizeof(real_t)/sizeof(int);
+        for(int p=0;p<nprocs;p++){
+          for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();){
+            std::set<int>::iterator ele=it++;
+            const int *n=_mesh->get_element(*ele);
+            int cnt=0;
+            for(size_t i=0;i<nloc;i++){
+              if(known_nodes[p].count(n[i])==0){
+                send_nodes[p].insert(n[i]);
+                cnt++;
+              }
+            }
+            if(cnt==0){
+              send_elements[p].erase(ele);
+            }
+          }
+          std::cout<<"sending additional element and nodes: "<<send_elements[p].size()<<", "<<send_nodes[p].size()<<std::endl;
+        }
+
+        // Push remainder of data to be sent onto the send_buffer.
+        for(int p=0;p<nprocs;p++){
+          // Number of edges being sent into front of array 
+          send_buffer[p].insert(send_buffer[p].begin(), send_buffer[p].size());
+          
+          // Push on the nodes that need to be communicated.
+          send_buffer[p].push_back(send_nodes[p].size());
+          for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
+            send_buffer[p].push_back(lnn2gnn[*it]);
+            
+            // Stuff in coordinates and metric via int's.
+            std::vector<int> ivertex(node_package_int_size);
+            real_t *rcoords = (real_t *) &(ivertex[0]);
+            
+            _mesh->get_coords(*it, rcoords);
+            _mesh->get_metric(*it, rcoords+ndims);
+
+            send_buffer[p].insert(send_buffer[p].begin(), ivertex.begin(), ivertex.end());
+          }
+          
+          // Push on elements that need to be communicated.
+          send_buffer[p].push_back(send_elements[p].size());
+          for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();++it){
+            const int *n=_mesh->get_element(*it);
+            for(size_t j=0;j<nloc;j++)
+              send_buffer[p].push_back(lnn2gnn[n[j]]);
+          }           
+        }
+        
         
         std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
         for(int p=0;p<nprocs;p++)
@@ -278,15 +330,50 @@ template<typename real_t, typename index_t> class Coarsen{
         MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
         
         // Unpack received data into dynamic_vertex
-        for(int p=0;p<nprocs;p++)
-          for(size_t i=0;i<recv_buffer[p].size();i+=2){
-            int rm_vertex = gnn2lnn[recv_buffer[p][i]];
-            int target_vertex = gnn2lnn[recv_buffer[p][i+1]];
+        for(int p=0;p<nprocs;p++){
+          // Unpack edges
+          size_t edges_size=recv_buffer[p][0];
+          int loc = 1;
+          for(size_t i=0;i<edges_size;i+=2){
+            int rm_vertex = gnn2lnn[recv_buffer[p][loc++]];
+            int target_vertex = gnn2lnn[recv_buffer[p][loc++]];
             assert(dynamic_vertex[rm_vertex]<0);
             dynamic_vertex[rm_vertex] = target_vertex;
             maximal_independent_set.push_back(rm_vertex);
             std::cout<<"receiving: "<<rm_vertex<<", "<<target_vertex<<std::endl;
           }
+          
+          // Unpack additional nodes.
+          int num_extra_nodes = recv_buffer[p][loc++];
+          for(int i=0;i<num_extra_nodes;i++){
+            int gnn = recv_buffer[p][loc++]; // think this through - can I get duplicates
+            real_t *coords = (real_t *) &(recv_buffer[p][loc]);
+            real_t *metric = coords + ndims;
+            loc+=node_package_int_size;
+            
+            // Add vertex+metric if we have not already received this data.
+            if(gnn2lnn.find(gnn)==gnn2lnn.end()){
+              index_t lnn = _mesh->append_vertex(coords, metric);
+              
+              assert(lnn==(index_t)lnn2gnn.size());
+              lnn2gnn.push_back(gnn);
+            }
+          }
+
+          // Unpack elements.
+          int num_extra_elements = recv_buffer[p][loc++];
+          for(int i=0;i<num_extra_elements;i++){
+            int element[nloc];
+            for(size_t j=0;j<nloc;j++)
+              element[j] = recv_buffer[p][loc++];
+            
+            // add elements
+            // ...
+
+            // update adjancies
+            // ...
+          }
+        }
       }
 
       // Perform collapse operations.
