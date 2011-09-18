@@ -592,6 +592,14 @@ template<typename real_t, typename index_t> class Mesh{
     return &(metric[nid*ndims*ndims]);
   }
 
+  /// Return copy of metric.
+  void get_metric(size_t nid, real_t *m) const{
+    assert(metric.size()>0);
+    for(size_t i=0;i<ndims*ndims;i++)
+      m[i] = metric[nid*ndims*ndims+i];
+    return;
+  }
+
   /// Return new local node number given on original node number.
   int new2old(int nid){
     return nid_new2old[nid];
