@@ -383,6 +383,7 @@ template<typename real_t, typename index_t> class Coarsen{
               
               assert(lnn==(index_t)lnn2gnn.size());
               lnn2gnn.push_back(gnn);
+              gnn2lnn[gnn] = lnn;
             }
           }
 
