@@ -295,8 +295,10 @@ template<typename real_t, typename index_t> class Mesh{
         metric.push_back(m[i]);
       
       node_towner.push_back(0);
-      
+
       _NNodes++;
+      NEList.resize(_NNodes);
+      NNList.resize(_NNodes);
       
       return _NNodes-1;
     }else{
@@ -308,7 +310,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       for(size_t i=0;i<ndims*ndims;i++)
         metric[nid*ndims*ndims+i] = m[i];
-            
+
       return nid;
     }
   }

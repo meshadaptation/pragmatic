@@ -115,10 +115,10 @@ template<typename real_t, typename index_t> class Coarsen{
       gnn2lnn[lnn2gnn[i]] = i;
     
     // Loop until the maximum independent set is NULL.
-    for(int l=0;l<2;l++){
-      std::cout<<"round "<<l<<std::endl;
+    for(int loop=0;loop<1;loop++){
+      std::cout<<"round "<<loop<<std::endl;
       
-      if(l==99)
+      if(loop==99)
         std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
       
       // Determine the maximal independent set.
@@ -198,11 +198,6 @@ template<typename real_t, typename index_t> class Coarsen{
         if(MPI::Is_initialized())
           MPI_Allreduce(MPI_IN_PLACE, &(set_sizes[0]), max_colour, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 
-        std::cout<<"colours: ";        
-        for(int i=0;i<max_colour;i++)
-          std::cout<<i+1<<":"<<set_sizes[i]<<" ";
-        std::cout<<std::endl;
-
         int max_size=set_sizes[0];
         int max_id=0;
         for(int i=1;i<max_colour;i++)
@@ -270,6 +265,9 @@ template<typename real_t, typename index_t> class Coarsen{
 
         // Push remainder of data to be sent onto the send_buffer.
         for(int p=0;p<nprocs;p++){
+          if(send_buffer[p].size()==0)
+            continue;
+
           // Number of edges being sent into front of array 
           send_buffer[p].insert(send_buffer[p].begin(), send_buffer[p].size());
           
@@ -277,7 +275,18 @@ template<typename real_t, typename index_t> class Coarsen{
           send_buffer[p].push_back(send_nodes[p].size());
           for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
             send_buffer[p].push_back(lnn2gnn[*it]);
-            
+            if(_mesh->is_owned_node(*it)){
+              send_buffer[p].push_back(rank);
+            }else{
+              std::cerr<<"WARNING: dealing with more complex case where owner!=p .. have to write code to dead\n";
+
+              for(int o=0;o<nprocs;o++)
+                if(std::find(_mesh->recv[o].begin(), _mesh->recv[o].end(), *it)!=_mesh->recv[o].end()){
+                  send_buffer[p].push_back(o);
+                  break;
+                }
+            }
+
             // Stuff in coordinates and metric via int's.
             std::vector<int> ivertex(node_package_int_size);
             real_t *rcoords = (real_t *) &(ivertex[0]);
@@ -285,7 +294,7 @@ template<typename real_t, typename index_t> class Coarsen{
             _mesh->get_coords(*it, rcoords);
             _mesh->get_metric(*it, rcoords+ndims);
 
-            send_buffer[p].insert(send_buffer[p].begin(), ivertex.begin(), ivertex.end());
+            send_buffer[p].insert(send_buffer[p].end(), ivertex.begin(), ivertex.end());
           }
           
           // Push on elements that need to be communicated.
@@ -295,6 +304,14 @@ template<typename real_t, typename index_t> class Coarsen{
             for(size_t j=0;j<nloc;j++)
               send_buffer[p].push_back(lnn2gnn[n[j]]);
           }           
+        }
+
+        for(int p=0;p<nprocs;p++){
+          std::cout<<"sending to "<<p<<" :: ";
+          for(std::vector<int>::iterator kt=send_buffer[p].begin();kt!=send_buffer[p].end();++kt){
+            std::cout<<*kt<<" ";
+          }
+          std::cout<<std::endl;
         }
         
         
@@ -331,22 +348,31 @@ template<typename real_t, typename index_t> class Coarsen{
         
         // Unpack received data into dynamic_vertex
         for(int p=0;p<nprocs;p++){
+          if(recv_buffer[p].empty())
+            continue;
+
           // Unpack edges
           size_t edges_size=recv_buffer[p][0];
           int loc = 1;
+          std::cout<<"reading "<<edges_size<<"/2 edges :: ";
           for(size_t i=0;i<edges_size;i+=2){
             int rm_vertex = gnn2lnn[recv_buffer[p][loc++]];
             int target_vertex = gnn2lnn[recv_buffer[p][loc++]];
             assert(dynamic_vertex[rm_vertex]<0);
             dynamic_vertex[rm_vertex] = target_vertex;
             maximal_independent_set.push_back(rm_vertex);
-            std::cout<<"receiving: "<<rm_vertex<<", "<<target_vertex<<std::endl;
+            std::cout<<lnn2gnn[rm_vertex]<<" "<<lnn2gnn[target_vertex]<<"  ("<<rm_vertex<<", "<<target_vertex<<")\n";
           }
-          
+          std::cout<<std::endl;
+
           // Unpack additional nodes.
           int num_extra_nodes = recv_buffer[p][loc++];
           for(int i=0;i<num_extra_nodes;i++){
             int gnn = recv_buffer[p][loc++]; // think this through - can I get duplicates
+            int owner = recv_buffer[p][loc++];
+            if(owner!=p){
+              std::cerr<<"WARNING: dealing with more complex case where owner!=p .. have to write code to dead\n";
+            }
             real_t *coords = (real_t *) &(recv_buffer[p][loc]);
             real_t *metric = coords + ndims;
             loc+=node_package_int_size;
@@ -363,15 +389,43 @@ template<typename real_t, typename index_t> class Coarsen{
           // Unpack elements.
           int num_extra_elements = recv_buffer[p][loc++];
           for(int i=0;i<num_extra_elements;i++){
+            std::cout<<"unpacking element"<<i<<std::endl;
             int element[nloc];
-            for(size_t j=0;j<nloc;j++)
-              element[j] = recv_buffer[p][loc++];
-            
-            // add elements
-            // ...
+            for(size_t j=0;j<nloc;j++){
+              element[j] = gnn2lnn[recv_buffer[p][loc++]];
+              std::cout<<" "<<element[j];
+            }
+            std::cout<<std::endl;
 
-            // update adjancies
-            // ...
+            // Add element
+            int eid = _mesh->append_element(element);
+
+            // Update adjancies: edges, NEList, NNList
+            for(size_t l=0;l<nloc;l++){
+              _mesh->NEList[element[l]].insert(eid);
+              
+              for(size_t k=l+1;k<nloc;k++){
+                std::deque<int>::iterator result0 = std::find(_mesh->NNList[element[l]].begin(), _mesh->NNList[element[l]].end(), element[k]);
+                if(result0==_mesh->NNList[element[l]].end())
+                  _mesh->NNList[element[l]].push_back(element[k]);
+                
+                std::deque<int>::iterator result1 = std::find(_mesh->NNList[element[k]].begin(), _mesh->NNList[element[k]].end(), element[l]);
+                if(result1==_mesh->NNList[element[k]].end())
+                  _mesh->NNList[element[k]].push_back(element[l]);
+
+                std::cout<<"adding edge "<<l<<", "<<k<<" = "<<element[l]<<", "<<element[k]<<std::endl;
+
+                Edge<real_t, index_t> new_edge(element[l], element[k]);
+                typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(new_edge);
+                if(edge!=_mesh->Edges.end()){
+                  new_edge.adjacent_elements = edge->adjacent_elements;
+                  _mesh->Edges.erase(edge);
+                }
+
+                new_edge.adjacent_elements.insert(eid);
+                _mesh->Edges.insert(new_edge);
+              }
+            }
           }
         }
       }
@@ -579,6 +633,10 @@ template<typename real_t, typename index_t> class Coarsen{
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){      
       // We have to extract a copy of the edge being edited.
       typename std::set< Edge<real_t, index_t> >::iterator iedge_modify = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
+      std::cout<<"removing "<<std::min(rm_vertex, *nn)<<" "<<std::max(rm_vertex, *nn)<<std::endl;
+      if(iedge_modify==_mesh->Edges.end()){
+        std::cout<<"edge to be modified but missing "<<rm_vertex<<", "<<*nn<<std::endl;
+      }
       assert(iedge_modify!=_mesh->Edges.end());
       Edge<real_t, index_t> edge_modify = *iedge_modify;
       _mesh->Edges.erase(iedge_modify);
