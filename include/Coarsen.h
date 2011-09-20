@@ -115,7 +115,7 @@ template<typename real_t, typename index_t> class Coarsen{
       gnn2lnn[lnn2gnn[i]] = i;
     
     // Loop until the maximum independent set is NULL.
-    for(int loop=0;loop<2;loop++){
+    for(int loop=0;loop<1;loop++){
       NNodes = _mesh->get_number_nodes();
       std::cout<<"round "<<loop<<std::endl;
       
@@ -239,13 +239,14 @@ template<typename real_t, typename index_t> class Coarsen{
                 send_buffer[p].push_back(lnn2gnn[dynamic_vertex[*it]]);
 
                 send_elements[p].insert(_mesh->NEList[*it].begin(), _mesh->NEList[*it].end());
+                // Don't think this is required
+                // send_elements[p].insert(_mesh->NEList[dynamic_vertex[*it]].begin(), _mesh->NEList[dynamic_vertex[*it]].end());
               }
             }
           }
         }
 
         // Finalise list of additional elements and nodes to be sent.
-        size_t node_package_int_size = (ndims+1)*ndims*sizeof(real_t)/sizeof(int);
         for(int p=0;p<nprocs;p++){
           for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();){
             std::set<int>::iterator ele=it++;
@@ -265,6 +266,7 @@ template<typename real_t, typename index_t> class Coarsen{
         }
 
         // Push remainder of data to be sent onto the send_buffer.
+        size_t node_package_int_size = (ndims+1)*ndims*sizeof(real_t)/sizeof(int);
         for(int p=0;p<nprocs;p++){
           if(send_buffer[p].size()==0)
             continue;
@@ -279,7 +281,7 @@ template<typename real_t, typename index_t> class Coarsen{
             if(_mesh->is_owned_node(*it)){
               send_buffer[p].push_back(rank);
             }else{
-              std::cerr<<"WARNING: dealing with more complex case where owner!=p .. have to write code to dead\n";
+              std::cerr<<"WARNING: dealing with more complex case where owner!=p\n";
 
               for(int o=0;o<nprocs;o++)
                 if(std::find(_mesh->recv[o].begin(), _mesh->recv[o].end(), *it)!=_mesh->recv[o].end()){
@@ -375,9 +377,6 @@ template<typename real_t, typename index_t> class Coarsen{
 
             extra_halo_receives[owner].insert(gnn);
 
-            if(owner!=p){
-              std::cerr<<"WARNING: dealing with more complex case where owner!=p .. have to write code to dead\n";
-            }
             real_t *coords = (real_t *) &(recv_buffer[p][loc]);
             real_t *metric = coords + ndims;
             loc+=node_package_int_size;
@@ -386,10 +385,13 @@ template<typename real_t, typename index_t> class Coarsen{
             if(gnn2lnn.find(gnn)==gnn2lnn.end()){
               index_t lnn = _mesh->append_vertex(coords, metric);
               
-              if(lnn<(index_t)lnn2gnn.size())
+              if(lnn<(index_t)lnn2gnn.size()){
                 lnn2gnn[lnn] = gnn;
-              else
+              }else{
                 lnn2gnn.push_back(gnn);
+                dynamic_vertex.push_back(-1);
+                recalculate_collapse.push_back(false);
+              }
               gnn2lnn[gnn] = lnn;
             }
           }
@@ -473,14 +475,14 @@ template<typename real_t, typename index_t> class Coarsen{
         // Use this data to update the halo information.
         for(int i=0;i<nprocs;i++){
           for(std::vector<int>::const_iterator it=recv_buffer[i].begin();it!=recv_buffer[i].end();++it){
-            _mesh->send[i].push_back(*it);
-            _mesh->send_halo.insert(*it);
-            known_nodes[i].insert(*it);
+            int lnn = gnn2lnn[*it];
+            _mesh->send[i].push_back(lnn);
+            _mesh->send_halo.insert(lnn);
           }
           for(std::vector<int>::const_iterator it=send_buffer[i].begin();it!=send_buffer[i].end();++it){
-            _mesh->recv[i].push_back(*it);
-            _mesh->recv_halo.insert(*it);
-            known_nodes[i].insert(*it);
+            int lnn = gnn2lnn[*it];
+            _mesh->recv[i].push_back(lnn);
+            _mesh->recv_halo.insert(lnn);
           }
         }
       }
@@ -514,6 +516,12 @@ template<typename real_t, typename index_t> class Coarsen{
           dynamic_vertex[rm_vertex] = -1;
         }
       }
+    }
+    
+    std::cout<<"checking size of halo's\n";
+    for(int i=0;i<nprocs;i++){
+      cout<<rank<<" sending "<<_mesh->send[i].size()<<" to "<<i<<std::endl;
+      cout<<rank<<" recving "<<_mesh->recv[i].size()<<" from "<<i<<std::endl;
     }
 
     return;
