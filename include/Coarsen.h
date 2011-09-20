@@ -347,6 +347,7 @@ template<typename real_t, typename index_t> class Coarsen{
         MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
         
         // Unpack received data into dynamic_vertex
+        std::vector< std::set<index_t> > extra_halo_receives(nprocs);
         for(int p=0;p<nprocs;p++){
           if(recv_buffer[p].empty())
             continue;
@@ -370,6 +371,9 @@ template<typename real_t, typename index_t> class Coarsen{
           for(int i=0;i<num_extra_nodes;i++){
             int gnn = recv_buffer[p][loc++]; // think this through - can I get duplicates
             int owner = recv_buffer[p][loc++];
+
+            extra_halo_receives[owner].insert(gnn);
+
             if(owner!=p){
               std::cerr<<"WARNING: dealing with more complex case where owner!=p .. have to write code to dead\n";
             }
@@ -427,6 +431,53 @@ template<typename real_t, typename index_t> class Coarsen{
                 _mesh->Edges.insert(new_edge);
               }
             }
+          }
+        }
+
+        // Update halo.
+        for(int p=0;p<nprocs;p++){
+          send_buffer_size[p] = extra_halo_receives[p].size();
+          send_buffer[p].clear();
+          for(typename std::set<index_t>::const_iterator ht=extra_halo_receives[p].begin();ht!=extra_halo_receives[p].end();++ht)
+            send_buffer[p].push_back(*ht);
+          
+        }
+        MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+
+        // Setup non-blocking receives
+        for(int i=0;i<nprocs;i++){
+          if(recv_buffer_size[i]==0){
+            request[i] =  MPI_REQUEST_NULL;
+          }else{
+            recv_buffer[i].resize(recv_buffer_size[i]);
+            MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
+          }
+        }
+
+        // Non-blocking sends.
+        for(int i=0;i<nprocs;i++){
+          if(send_buffer_size[i]==0){
+            request[nprocs+i] =  MPI_REQUEST_NULL;
+          }else{
+            MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
+          }
+        }
+
+        // Wait for comms to finish.
+        MPI_Waitall(nprocs, &(request[0]), &(status[0]));
+        MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
+
+        // Use this data to update the halo information.
+        for(int i=0;i<nprocs;i++){
+          for(std::vector<int>::const_iterator it=recv_buffer[i].begin();it!=recv_buffer[i].end();++it){
+            _mesh->send[i].push_back(*it);
+            _mesh->send_halo.insert(*it);
+            known_nodes[i].insert(*it);
+          }
+          for(std::vector<int>::const_iterator it=send_buffer[i].begin();it!=send_buffer[i].end();++it){
+            _mesh->recv[i].push_back(*it);
+            _mesh->recv_halo.insert(*it);
+            known_nodes[i].insert(*it);
           }
         }
       }
