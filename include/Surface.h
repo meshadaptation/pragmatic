@@ -70,6 +70,22 @@ template<typename real_t, typename index_t>
   ~Surface(){
   }
 
+  /// Append a facet to the surface
+  void append_facet(const int *facet, int coplanar_id){
+    index_t eid = coplanar_ids.size();
+    coplanar_ids.push_back(coplanar_id);
+    for(size_t i=0;i<snloc;i++){
+      SNEList[facet[i]].insert(eid);
+      // This is required because additional vertices may have been added.
+      while(surface_nodes.size()<(size_t)facet[i])
+        surface_nodes.push_back(false);
+      surface_nodes[facet[i]] = true;
+      SENList.push_back(facet[i]);
+    }
+    for(size_t i=0;i<ndims;i++)
+      normals.push_back(0);
+  }
+
   /// True if surface contains vertex nid.
   bool contains_node(index_t nid){
     assert(nid>=0);
