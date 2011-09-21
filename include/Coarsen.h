@@ -51,7 +51,8 @@ template<typename real_t, typename index_t> class Coarsen{
 
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
-    
+    snloc = (ndims==2)?2:3;
+
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
     for(size_t i=0;i<NElements;i++){
@@ -292,13 +293,27 @@ template<typename real_t, typename index_t> class Coarsen{
           send_buffer[p].push_back(send_edges[p].size());
           send_buffer[p].insert(send_buffer[p].end(), send_edges[p].begin(), send_edges[p].end());
 
-          // Push on elements that need to be communicated.
+          // Push on elements that need to be communicated; record facets that need to be sent with these elements.
           send_buffer[p].push_back(send_elements[p].size());
+          std::set<int> send_facets;
           for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();++it){
             const int *n=_mesh->get_element(*it);
             for(size_t j=0;j<nloc;j++)
               send_buffer[p].push_back(lnn2gnn[n[j]]);
-          }           
+
+            std::vector<int> lfacets;
+            _surface->find_facets(n, lfacets);
+            send_facets.insert(lfacets.begin(), lfacets.end());
+          }
+
+          // Push on facets that need to be communicated.
+          send_buffer[p].push_back(send_facets.size());
+          for(std::set<int>::iterator it=send_facets.begin();it!=send_facets.end();++it){
+            const int *n=_surface->get_facet(*it);
+            for(size_t i=0;i<snloc;i++)
+              send_buffer[p].push_back(lnn2gnn[n[i]]);
+            send_buffer[p].push_back(_surface->get_coplanar_id(*it));
+          }
         }
         
         std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
@@ -764,7 +779,7 @@ template<typename real_t, typename index_t> class Coarsen{
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
-  size_t ndims, nloc;
+  size_t ndims, nloc, snloc;
 };
 
 #endif

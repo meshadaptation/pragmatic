@@ -92,7 +92,7 @@ template<typename real_t, typename index_t>
   }
 
   bool is_collapsible(index_t nid_free, index_t nid_target){
-    if((nid_free>=surface_nodes.size())||(nid_target>=surface_nodes.size())){
+    if((nid_free>=(index_t)surface_nodes.size())||(nid_target>=(index_t)surface_nodes.size())){
       std::cerr<<"WARNING: have yet to migrate surface\n";
       return true;
     }
@@ -230,6 +230,30 @@ template<typename real_t, typename index_t>
       
       for(size_t j=0;j<snloc;j++)
         SNEList[n[j]].insert(i);
+    }
+  }
+
+  void find_facets(const int *element, std::vector<int> &facet_ids){
+    if(ndims==2){
+      for(int i=0;i<3;i++){
+        std::set<index_t> Intersection;
+        set_intersection(SNEList[element[i]].begin(), SNEList[element[i]].end(),
+                         SNEList[element[(i+1)%3]].begin(), SNEList[element[(i+1)%3]].end(),
+                         inserter(Intersection,Intersection.begin()));
+        assert(Intersection.size()<2);
+        if(Intersection.size()){
+          facet_ids.push_back(*Intersection.begin());
+        }
+      }
+    }else{
+        /*
+        std::set<index_t>::iterator start;
+        std::set<index_t>::iterator end = set_intersection(SNEList[element[i]].begin(), SNEList[element[i]].end(),
+                                                           SNEList[element[(i+1)%3]].begin(), SNEList[element[(i+1)%3]].end(),
+                                                           start);
+        */
+        std::cerr<<"ERROR: not yet implemented\n";
+        exit(-1);
     }
   }
 
