@@ -117,7 +117,6 @@ template<typename real_t, typename index_t> class Coarsen{
     // Loop until the maximum independent set is NULL.
     for(int loop=0;loop<100;loop++){
       NNodes = _mesh->get_number_nodes();
-      std::cout<<"round "<<loop<<std::endl;
       
       if(loop==99)
         std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
@@ -180,7 +179,6 @@ template<typename real_t, typename index_t> class Coarsen{
           }
           
           if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
-            std::cout<<"colour[i]="<<colour[i]<<", dynamic_vertex[i]="<<dynamic_vertex[i]<<std::endl;
             colour_sets[colour[i]].push_back(i);
           }
         }
@@ -192,7 +190,6 @@ template<typename real_t, typename index_t> class Coarsen{
           MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
 
         // Check of all vertices have been processed.
-        std::cout<<"max colour "<<max_colour<<std::endl;
         if(max_colour<0){
           break;
         }
@@ -266,7 +263,6 @@ template<typename real_t, typename index_t> class Coarsen{
               send_elements[p].erase(ele);
             }
           }
-          std::cout<<"sending additional element and nodes: "<<send_elements[p].size()<<", "<<send_nodes[p].size()<<std::endl;
         }
 
         // Push data to be sent onto the send_buffer.
@@ -304,15 +300,6 @@ template<typename real_t, typename index_t> class Coarsen{
               send_buffer[p].push_back(lnn2gnn[n[j]]);
           }           
         }
-
-        for(int p=0;p<nprocs;p++){
-          std::cout<<"sending to "<<p<<" :: ";
-          for(std::vector<int>::iterator kt=send_buffer[p].begin();kt!=send_buffer[p].end();++kt){
-            std::cout<<*kt<<" ";
-          }
-          std::cout<<std::endl;
-        }
-        
         
         std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
         for(int p=0;p<nprocs;p++)
@@ -383,27 +370,21 @@ template<typename real_t, typename index_t> class Coarsen{
 
           // Unpack edges
           size_t edges_size=recv_buffer[p][loc++];
-          std::cout<<"reading "<<edges_size<<"/2 edges :: ";
           for(size_t i=0;i<edges_size;i+=2){
             int rm_vertex = gnn2lnn[recv_buffer[p][loc++]];
             int target_vertex = gnn2lnn[recv_buffer[p][loc++]];
             assert(dynamic_vertex[rm_vertex]<0);
             dynamic_vertex[rm_vertex] = target_vertex;
             maximal_independent_set.push_back(rm_vertex);
-            std::cout<<lnn2gnn[rm_vertex]<<" "<<lnn2gnn[target_vertex]<<"  ("<<rm_vertex<<", "<<target_vertex<<")\n";
           }
-          std::cout<<std::endl;
 
           // Unpack elements.
           int num_extra_elements = recv_buffer[p][loc++];
           for(int i=0;i<num_extra_elements;i++){
-            std::cout<<"unpacking element"<<i<<std::endl;
             int element[nloc];
             for(size_t j=0;j<nloc;j++){
               element[j] = gnn2lnn[recv_buffer[p][loc++]];
-              std::cout<<" "<<element[j];
             }
-            std::cout<<std::endl;
 
             // See if this is a new element.
             int cnt=0;
@@ -432,8 +413,6 @@ template<typename real_t, typename index_t> class Coarsen{
                   std::deque<int>::iterator result1 = std::find(_mesh->NNList[element[k]].begin(), _mesh->NNList[element[k]].end(), element[l]);
                   if(result1==_mesh->NNList[element[k]].end())
                     _mesh->NNList[element[k]].push_back(element[l]);
-                  
-                  std::cout<<"adding edge "<<l<<", "<<k<<" = "<<element[l]<<", "<<element[k]<<std::endl;
                   
                   Edge<real_t, index_t> new_edge(element[l], element[k]);
                   typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(new_edge);
@@ -509,14 +488,11 @@ template<typename real_t, typename index_t> class Coarsen{
       // Perform collapse operations.
       {
         int node_set_size = maximal_independent_set.size();
-        std::cout<<"node_set_size = "<<node_set_size<<std::endl;
         for(int i=0;i<node_set_size;i++){
           // Vertex to be removed: rm_vertex
           int rm_vertex=maximal_independent_set[i];
           int target_vertex=dynamic_vertex[rm_vertex];
           assert(target_vertex>=0);
-
-          std::cout<<rm_vertex<<" ---> "<<target_vertex<<std::endl;
 
           if(target_vertex<0)
             continue;
@@ -539,12 +515,6 @@ template<typename real_t, typename index_t> class Coarsen{
       assert(gnn2lnn.size()==lnn2gnn.size());
     }
     
-    std::cout<<"checking size of halo's\n";
-    for(int i=0;i<nprocs;i++){
-      cout<<rank<<" sending "<<_mesh->send[i].size()<<" to "<<i<<std::endl;
-      cout<<rank<<" recving "<<_mesh->recv[i].size()<<" from "<<i<<std::endl;
-    }
-
     return;
   }
   
@@ -657,11 +627,6 @@ template<typename real_t, typename index_t> class Coarsen{
    * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
    */
   int coarsen_kernel(index_t rm_vertex, index_t target_vertex){
-    std::cout<<"collapse edge : "<<rm_vertex<<", "<<target_vertex<<" rm_vertex = ("
-             <<_mesh->get_coords(rm_vertex)[0]<<", "<<_mesh->get_coords(rm_vertex)[1]<<"), "
-             <<" target_vertex = ("
-             <<_mesh->get_coords(target_vertex)[0]<<", "<<_mesh->get_coords(target_vertex)[1]<<")"<<std::endl;
-    
     typename std::set< Edge<real_t, index_t> >::const_iterator edge_iterator = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, target_vertex));
     assert(edge_iterator!=_mesh->Edges.end());
 
@@ -723,10 +688,7 @@ template<typename real_t, typename index_t> class Coarsen{
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){      
       // We have to extract a copy of the edge being edited.
       typename std::set< Edge<real_t, index_t> >::iterator iedge_modify = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
-      std::cout<<"removing "<<std::min(rm_vertex, *nn)<<" "<<std::max(rm_vertex, *nn)<<std::endl;
-      if(iedge_modify==_mesh->Edges.end()){
-        std::cout<<"edge to be modified but missing "<<rm_vertex<<", "<<*nn<<std::endl;
-      }
+
       assert(iedge_modify!=_mesh->Edges.end());
       Edge<real_t, index_t> edge_modify = *iedge_modify;
       _mesh->Edges.erase(iedge_modify);

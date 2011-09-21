@@ -104,7 +104,6 @@ template<typename real_t, typename index_t>
     // However, is nid_free is on the surface then nid_target must
     // also lie on a surface for it to be considered for collapse.
     if(!surface_nodes[nid_target]){
-      std::cout<<"one vertex is on the surface - the other is not\n";
       return false;
     }
 
@@ -114,12 +113,9 @@ template<typename real_t, typename index_t>
     
     // Non-collapsible if nid_free is a corner node.
     if(incident_plane_free.size()>=ndims){
-      std::cout<<nid_free<<" :: corner node incident_plane_free.size()="
-               <<incident_plane_free.size()
-               <<", ndims="<<ndims<<std::endl;
       return false;
     }
-
+    
     std::set<int> incident_plane_target;
     for(typename std::set<index_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
       incident_plane_target.insert(coplanar_ids[*it]);
@@ -137,8 +133,6 @@ template<typename real_t, typename index_t>
     // The final case is that the vertex is on a plane and can be
     // collapsed to any other vertex on that plane.
     assert(incident_plane_free.size()==1);
-    
-    std::cout<<"incident_plane_target.count(*incident_plane_free.begin())>0\n";
 
     return incident_plane_target.count(*incident_plane_free.begin())>0;
   }

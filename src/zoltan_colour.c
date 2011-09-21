@@ -141,10 +141,13 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance){
   global_ids = (ZOLTAN_ID_PTR) ZOLTAN_MALLOC(num_obj*sizeof(ZOLTAN_ID_TYPE));
   for(i=0;i<graph->nnodes;i++)
     global_ids[loc++] = graph->gid[i];
-  
-#ifndef NDEBUG 
-  ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
-#endif
+
+  /* In case of emergency, break glass
+     #ifndef NDEBUG 
+     ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
+     #endif
+  */
+
   ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "I");
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
