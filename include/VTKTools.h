@@ -243,12 +243,21 @@ template<typename real_t, typename index_t> class VTKTools{
   }
   
   static void export_vtu(const char *basename, const Mesh<real_t, index_t> *mesh, const real_t *psi=NULL){
-    size_t NElements = mesh->get_number_elements();
+    size_t NElements_total = mesh->get_number_elements();
+    // Correct number of elements.
+    int mask_count = 0;
+    for(size_t i=0;i<NElements_total;i++){
+      const index_t *n = mesh->get_element(i);
+      if(n[0]<0)
+        mask_count++;
+    }
+    size_t NElements = NElements_total - mask_count;
+
     size_t ndims = mesh->get_number_dimensions();
     
     // Set the orientation of elements.
     ElementProperty<real_t> *property = NULL;
-    for(size_t i=0;i<NElements;i++){
+    for(size_t i=0;i<NElements_total;i++){
       const int *n=mesh->get_element(i);
       if(n[0]<0)
         continue;
@@ -390,24 +399,30 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_quality->SetNumberOfTuples(NElements);
     vtk_quality->SetName("quality");
 
-    for(size_t i=0;i<NElements;i++){
-      vtk_cell_numbering->SetTuple1(i, i);
-      vtk_cell_tpartition->SetTuple1(i, mesh->get_element_towner(i));
+    for(size_t i=0, k=0;i<NElements_total;i++){
       const index_t *n = mesh->get_element(i);
-      assert(n[0]>=0);
+      if(n[0]<0){
+        continue;
+      }
+      
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
         ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
         
-        vtk_quality->SetTuple1(i, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), 
+        vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), 
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2])));
       }else{
         vtkIdType pts[] = {n[0], n[1], n[2], n[3]};
         ug->InsertNextCell(VTK_TETRA, 4, pts);
         
-        vtk_quality->SetTuple1(i, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), 
+        vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), 
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
       }
+
+      vtk_cell_numbering->SetTuple1(k, i);
+      vtk_cell_tpartition->SetTuple1(k, mesh->get_element_towner(i));      
+
+      k++;
     }
 
     ug->GetCellData()->AddArray(vtk_cell_numbering);

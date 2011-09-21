@@ -115,7 +115,7 @@ template<typename real_t, typename index_t> class Coarsen{
       gnn2lnn[lnn2gnn[i]] = i;
     
     // Loop until the maximum independent set is NULL.
-    for(int loop=0;loop<12;loop++){
+    for(int loop=0;loop<100;loop++){
       NNodes = _mesh->get_number_nodes();
       std::cout<<"round "<<loop<<std::endl;
       

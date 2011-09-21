@@ -83,6 +83,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
+  mesh->verify();
+
   VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d_surface", &surface);
 

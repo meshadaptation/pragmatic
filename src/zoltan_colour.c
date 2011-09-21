@@ -145,7 +145,7 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance){
 #ifndef NDEBUG 
   ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
 #endif
-  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "S");
+  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "I");
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
   }else if(distance==2){

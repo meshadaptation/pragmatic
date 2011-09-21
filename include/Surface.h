@@ -72,7 +72,13 @@ template<typename real_t, typename index_t>
 
   /// True if surface contains vertex nid.
   bool contains_node(index_t nid){
-    assert(nid>=0); assert(nid<(index_t)surface_nodes.size()); 
+    assert(nid>=0);
+    // assert(nid<(index_t)surface_nodes.size()); 
+    if(nid>=(index_t)surface_nodes.size()){
+      std::cerr<<"WARNING: querying non-registered node on surface\n";
+      return false;
+    }
+
     return surface_nodes[nid];
   }
 
@@ -86,6 +92,11 @@ template<typename real_t, typename index_t>
   }
 
   bool is_collapsible(index_t nid_free, index_t nid_target){
+    if((nid_free>=surface_nodes.size())||(nid_target>=surface_nodes.size())){
+      std::cerr<<"WARNING: have yet to migrate surface\n";
+      return true;
+    }
+
     // If nid_free is not on the surface then it's unconstrained.
     if(!surface_nodes[nid_free])
       return true;
