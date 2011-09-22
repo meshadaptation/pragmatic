@@ -63,7 +63,7 @@ int main(int argc, char **argv){
   
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface<double, int> surface(*mesh, true);
 
   MetricField<double, int> metric_field(*mesh, surface);
 
@@ -83,6 +83,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
+  mesh->verify();
+
   VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d_surface", &surface);
 

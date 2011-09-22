@@ -287,7 +287,8 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Add a new vertex
   index_t append_vertex(const real_t *x, const real_t *m){
-    if(recycle_nid.empty()){
+    // if(recycle_nid.empty()){
+    if(true){
       for(size_t i=0;i<ndims;i++)
         _coords.push_back(x[i]);
       
@@ -295,8 +296,10 @@ template<typename real_t, typename index_t> class Mesh{
         metric.push_back(m[i]);
       
       node_towner.push_back(0);
-      
+
       _NNodes++;
+      NEList.resize(_NNodes);
+      NNList.resize(_NNodes);
       
       return _NNodes-1;
     }else{
@@ -308,7 +311,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       for(size_t i=0;i<ndims*ndims;i++)
         metric[nid*ndims*ndims+i] = m[i];
-            
+
       return nid;
     }
   }
@@ -592,6 +595,14 @@ template<typename real_t, typename index_t> class Mesh{
     return &(metric[nid*ndims*ndims]);
   }
 
+  /// Return copy of metric.
+  void get_metric(size_t nid, real_t *m) const{
+    assert(metric.size()>0);
+    for(size_t i=0;i<ndims*ndims;i++)
+      m[i] = metric[nid*ndims*ndims+i];
+    return;
+  }
+
   /// Return new local node number given on original node number.
   int new2old(int nid){
     return nid_new2old[nid];
@@ -602,9 +613,9 @@ template<typename real_t, typename index_t> class Mesh{
     return (send_halo.count(nid)+recv_halo.count(nid))>0;
   }
 
-  /// Returns true if the node is not owned by the local partition.
-  bool is_not_owned_node(int nid){
-    return recv_halo.count(nid)>0;
+  /// Returns true if the node is assigned to the local partition.
+  bool is_owned_node(int nid){
+    return recv_halo.count(nid)==0;
   }
 
   /// Default destructor.
@@ -693,6 +704,23 @@ template<typename real_t, typename index_t> class Mesh{
     else
       std::cout<<"fail\n";
 
+    std::vector<int> mpi_node_owner(_NNodes, rank);
+    if(mpi_nparts>1)
+      for(int p=0;p<mpi_nparts;p++)
+        for(std::vector<int>::const_iterator it=recv[p].begin();it!=recv[p].end();++it){
+          mpi_node_owner[*it] = p;
+        }
+    std::vector<int> mpi_ele_owner(_NElements, rank);
+    if(mpi_nparts>1)
+      for(size_t i=0;i<_NElements;i++){
+        if(_ENList[i*nloc]<0)
+          continue;
+        int owner = mpi_node_owner[_ENList[i*nloc]];
+        for(size_t j=1;j<nloc;j++)
+          owner = std::min(owner, mpi_node_owner[_ENList[i*nloc+j]]);
+        mpi_ele_owner[i] = owner;
+      }
+    
     // Check for the correctness of NNList, NEList and Edges.
     std::vector< std::set<index_t> > local_NEList(_NNodes);
     std::vector< std::set<index_t> > local_NNList(_NNodes);
@@ -829,7 +857,7 @@ template<typename real_t, typename index_t> class Mesh{
       size_t i=0;
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
-        if(n[0]<0)
+        if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
         
         area = property->area(get_coords(n[0]),
@@ -837,11 +865,11 @@ template<typename real_t, typename index_t> class Mesh{
                               get_coords(n[2]));
         min_ele_area = area;
         max_ele_area = area;
-        break;
+        i++; break;
       }
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
-        if(n[0]<0)
+        if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
         
         real_t larea = property->area(get_coords(n[0]),
@@ -855,6 +883,13 @@ template<typename real_t, typename index_t> class Mesh{
         min_ele_area = std::min(min_ele_area, larea);
         max_ele_area = std::max(max_ele_area, larea);
       }
+
+      if(MPI::Is_initialized()){
+        MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+      }
+
       std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
       std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
       std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
@@ -863,7 +898,7 @@ template<typename real_t, typename index_t> class Mesh{
       size_t i=0;
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
-        if(n[0]<0)
+        if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
         
         volume = property->volume(get_coords(n[0]),
@@ -872,11 +907,11 @@ template<typename real_t, typename index_t> class Mesh{
                                   get_coords(n[3]));
         min_ele_vol = volume;
         max_ele_vol = volume;
-        break;
+        i++; break;
       }
       for(;i<_NElements;i++){
         const index_t *n=get_element(i);
-        if(n[0]<0)
+        if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
         
         real_t lvolume = property->volume(get_coords(n[0]),
@@ -887,6 +922,12 @@ template<typename real_t, typename index_t> class Mesh{
         min_ele_vol = std::min(min_ele_vol, lvolume);
         max_ele_vol = std::max(max_ele_vol, lvolume);
       }
+      if(MPI::Is_initialized()){
+        MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+      }
+
       std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
       std::cout<<"VERIFY: minimum element volume...."<<min_ele_vol<<std::endl;
       std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
@@ -906,7 +947,7 @@ template<typename real_t, typename index_t> class Mesh{
              const real_t *x, const real_t *y, const real_t *z,
              const index_t *lnn2gnn, const index_t *owner_range){
     mpi_nparts = 1;
-    int rank=0;
+    rank=0;
 #ifdef HAVE_MPI
     if(MPI::Is_initialized()){
       MPI_Comm_size(_mpi_comm, &mpi_nparts);
@@ -1190,9 +1231,6 @@ template<typename real_t, typename index_t> class Mesh{
 #ifdef HAVE_MPI
     if(mpi_nparts<2)
       return;
-    
-    int rank;
-    MPI_Comm_rank(_mpi_comm, &rank);
 
     // MPI_Requests for all non-blocking communications.
     std::vector<MPI_Request> request(mpi_nparts*2);
@@ -1240,9 +1278,6 @@ template<typename real_t, typename index_t> class Mesh{
 #ifdef HAVE_MPI
     if(mpi_nparts<2)
       return;
-    
-    int rank;
-    MPI_Comm_rank(_mpi_comm, &rank);
 
     // MPI_Requests for all non-blocking communications.
     std::vector<MPI_Request> request(mpi_nparts*2);
@@ -1337,8 +1372,6 @@ template<typename real_t, typename index_t> class Mesh{
       gnn_offset-=NPNodes;
 
       // Write global node numbering and ownership for nodes assigned to local process.
-      int rank;
-      MPI_Comm_rank(_mpi_comm, &rank);
       lnn2gnn.resize(NNodes);
       owner.resize(NNodes);
       for(int i=0;i<NNodes;i++){
@@ -1392,7 +1425,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<real_t> metric;
 
   // Parallel support.
-  int mpi_nparts, numa_nparts;
+  int rank, mpi_nparts, numa_nparts;
   std::vector< std::vector<int> > send, recv;
   std::set<int> send_halo, recv_halo;
 

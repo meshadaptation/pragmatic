@@ -5319,12 +5319,15 @@ fi
 if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 -Wall $CXXFLAGS"
+        CFLAGS="-g -O0 -Wall $CFLAGS"
         LDFLAGS="-g $LDFLAGS"
     elif test "$enable_gprof" = "yes" ; then
         CXXFLAGS="-p -g -O2 $CXXFLAGS"
+        CFLAGS="-p -g -O2 $CFLAGS"
         LDFLAGS="-p -g $LDFLAGS"
     else
         CXXFLAGS="-O2 $CXXFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
+        CFLAGS="-O2 $CFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$FCC" = "xyes" ; then

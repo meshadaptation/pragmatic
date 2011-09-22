@@ -14,7 +14,7 @@ LIB = lib/libpragmatic.a
 default: lib
 
 lib:
-	@echo "  BUILD Fortran interface"
+	@echo "  BUILD library"
 	@(cd src && $(MAKE))
 
 doxygen:
