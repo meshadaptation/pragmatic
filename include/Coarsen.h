@@ -448,17 +448,13 @@ template<typename real_t, typename index_t> class Coarsen{
           int num_extra_facets = recv_buffer[p][loc++];
           for(int i=0;i<num_extra_facets;i++){
             std::vector<int> facet(snloc);
-            std::cout<<"ADDING FACET ";
             for(size_t j=0;j<snloc;j++){
               index_t gnn = recv_buffer[p][loc++];
               assert(gnn2lnn.find(gnn)!=gnn2lnn.end());
               facet[j] = gnn2lnn[gnn];
-
-              std::cout<<facet[j]<<" ";
             }
 
             int coplanar_id = recv_buffer[p][loc++];
-            std::cout<<" :: "<<coplanar_id<<std::endl;
 
             _surface->append_facet(&(facet[0]), coplanar_id);
             

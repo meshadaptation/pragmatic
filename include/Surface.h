@@ -95,7 +95,6 @@ template<typename real_t, typename index_t>
     assert(nid>=0);
     // assert(nid<(index_t)surface_nodes.size()); 
     if(nid>=(index_t)surface_nodes.size()){
-      std::cerr<<"WARNING: querying non-registered node on surface\n";
       return false;
     }
 
