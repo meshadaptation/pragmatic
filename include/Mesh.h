@@ -705,20 +705,22 @@ template<typename real_t, typename index_t> class Mesh{
       std::cout<<"fail\n";
 
     std::vector<int> mpi_node_owner(_NNodes, rank);
-    for(int p=0;p<mpi_nparts;p++)
-      for(std::vector<int>::const_iterator it=recv[p].begin();it!=recv[p].end();++it){
-        mpi_node_owner[*it] = p;
-      }
+    if(mpi_nparts>1)
+      for(int p=0;p<mpi_nparts;p++)
+        for(std::vector<int>::const_iterator it=recv[p].begin();it!=recv[p].end();++it){
+          mpi_node_owner[*it] = p;
+        }
     std::vector<int> mpi_ele_owner(_NElements, rank);
-    for(size_t i=0;i<_NElements;i++){
-      if(_ENList[i*nloc]<0)
-        continue;
-      int owner = mpi_node_owner[_ENList[i*nloc]];
-      for(size_t j=1;j<nloc;j++)
-        owner = std::min(owner, mpi_node_owner[_ENList[i*nloc+j]]);
-      mpi_ele_owner[i] = owner;
-    }
-
+    if(mpi_nparts>1)
+      for(size_t i=0;i<_NElements;i++){
+        if(_ENList[i*nloc]<0)
+          continue;
+        int owner = mpi_node_owner[_ENList[i*nloc]];
+        for(size_t j=1;j<nloc;j++)
+          owner = std::min(owner, mpi_node_owner[_ENList[i*nloc+j]]);
+        mpi_ele_owner[i] = owner;
+      }
+    
     // Check for the correctness of NNList, NEList and Edges.
     std::vector< std::set<index_t> > local_NEList(_NNodes);
     std::vector< std::set<index_t> > local_NNList(_NNodes);
