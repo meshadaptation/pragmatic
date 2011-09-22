@@ -41,7 +41,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5x5.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -50,9 +50,9 @@ int main(int argc, char **argv){
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
     double m[] =
-      {0.1, 0.0, 0.0,
-       0.0, 0.1, 0.0,
-       0.0, 0.0, 0.1};
+      {0.5, 0.0, 0.0,
+       0.0, 0.5, 0.0,
+       0.0, 0.0, 0.5};
 
     metric_field.set_metric(m, i);
   }
