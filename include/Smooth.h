@@ -1218,7 +1218,7 @@ template<typename real_t, typename index_t>
 
     std::vector<int> colour(NNodes);
     graph.colour = &(colour[0]);
-    zoltan_colour(&graph, 1);
+    zoltan_colour(&graph, 1, MPI_COMM_WORLD);
     
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(!_mesh->is_owned_node(i)))

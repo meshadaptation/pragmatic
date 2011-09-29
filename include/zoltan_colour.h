@@ -31,6 +31,8 @@
 #define ZOLTAN_COLOUR_H
 
 #include <stddef.h>
+#include "mpi.h"
+
 #include "pragmatic_config.h"
 
 #ifndef HAVE_ZOLTAN
@@ -75,7 +77,7 @@ extern "C" {
     int *colour;
   } zoltan_colour_graph_t;
   
-  void zoltan_colour(zoltan_colour_graph_t *graph, int distance);
+  void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm);
   
 #ifdef __cplusplus
 }

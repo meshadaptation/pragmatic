@@ -90,7 +90,7 @@ int main(int argc, char **argv){
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
-  double L_low = L_up*0.5;
+  double L_low = L_up/2;
 
   Coarsen<double, int> coarsen(*mesh, surface);  
   Smooth<double, int> smooth(*mesh, surface);

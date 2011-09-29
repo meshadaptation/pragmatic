@@ -116,7 +116,7 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
   }
 }
 
-void zoltan_colour(zoltan_colour_graph_t *graph, int distance){
+void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm){
   int ierr, i, j, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
@@ -126,7 +126,7 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance){
   int *color_exp;
 
   ierr = Zoltan_Initialize(-1, NULL, &ver);
-  zz = Zoltan_Create(MPI_COMM_WORLD);
+  zz = Zoltan_Create(mpi_comm);
   
   /* The number of array entries used to describe a single global ID.
    */

@@ -39,6 +39,7 @@
 #include "Coarsen.h"
 #include "Refine.h"
 #include "Smooth.h"
+#include "Swapping.h"
 
 using namespace std;
 
@@ -70,22 +71,24 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen<double, int> coarsen(*mesh, surface);
-  coarsen.coarsen(L_low, L_up);
-  mesh->verify();
-
   Smooth<double, int> smooth(*mesh, surface);
+  Refine<double, int> refine(*mesh, surface);
+  Swapping<double, int> swapping(*mesh, surface);
+  
+  coarsen.coarsen(L_low, L_up);
   
   double L_max = mesh->maximal_edge_length();
-
-  double alpha = 0.95; //sqrt(2)/2;
-  Refine<double, int> refine(*mesh, surface);
-  for(size_t i=0;i<20;i++){
+  
+  double alpha = sqrt(2)/2;
+  for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
+    swapping.swap(0.01);
 
     L_max = mesh->maximal_edge_length();
+
     if((L_max-L_up)<0.01)
       break;
   }

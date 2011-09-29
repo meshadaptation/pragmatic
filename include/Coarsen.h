@@ -167,7 +167,7 @@ template<typename real_t, typename index_t> class Coarsen{
         
         graph.colour = &(colour[0]);
         
-        zoltan_colour(&graph, 2);
+        zoltan_colour(&graph, 2, MPI_COMM_WORLD);
 
         // Given a colouring, determine the maximum independent set.
 
