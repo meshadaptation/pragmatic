@@ -388,123 +388,426 @@ template<typename real_t, typename index_t> class Swapping{
       zoltan_colour(&flat_graph, 2, MPI_COMM_NULL);
 
       */
+
+      // Assume colour 0 will be the maximal independent set.
       
-      // Assume colour 0 will be the maximal independent set
-      for(size_t i=0;i<graph.size();i++){
-
-        int eid0 = renumber[i];
-        //if(colour[i]==0 && (partialEEList.count(eid0)>0)){
-        if(partialEEList.count(eid0)){
-          // Check this is not deleted.
-          const int *n=_mesh->get_element(eid0);
-          if(n[0]<0){
-            std::cerr<<"WARNING: element already swapped - skipping\n";
-            continue;
-          }
-
-          std::set<int> ele0_set;
-          for(int j=0;j<4;j++)
-            ele0_set.insert(n[0]);
+      int max_colour=colour[0];
+      for(size_t i=1;i<graph.size();i++)
+        max_colour = std::max(max_colour, colour[i]);
+      
+      // Process face-to-edge swap.
+      for(int c=0;c<max_colour;c++)
+        for(size_t i=0;i<graph.size();i++){
+          int eid0 = renumber[i];
           
-          // int best_neighbour=-1;
-          for(int j=0;j<4;j++){
+          if(colour[i]==c && (partialEEList.count(eid0)>0)){
+            
+            // Check this is not deleted.
+            const int *n=_mesh->get_element(eid0);
+            if(n[0]<0)
+              continue;
+            
             assert(partialEEList[eid0].size()==4);
             
-            int eid1 = partialEEList[eid0][j];
-            if(eid1==-1)
-              continue;
-            
-            std::vector<int> hull(5, -1);
-            if(j==0){
-              hull[0] = n[1];
-              hull[1] = n[3];
-              hull[2] = n[2];
-              hull[3] = n[0];
-            }else if(j==1){
-              hull[0] = n[2];
-              hull[1] = n[3];
-              hull[2] = n[0];
-              hull[3] = n[1];
-            }else if(j==2){
-              hull[0] = n[0];
-              hull[1] = n[3];
-              hull[2] = n[1];
-              hull[3] = n[2];
-            }else if(j==3){
-              hull[0] = n[0];
-              hull[1] = n[1];
-              hull[2] = n[2];
-              hull[3] = n[3];
-            }
-
-            const int *m=_mesh->get_element(eid1);
-            if(m[0]<0){
-              std::cerr<<"WARNING: element already swapped - skipping\n";
-              continue;
-            }
-
-            for(int k=0;k<4;k++)
-              if(ele0_set.count(m[k])==0){
-                hull[4] = m[k];
+            // Check adjancy is not toxic.
+            bool toxic = false;
+            for(int j=0;j<4;j++){
+              int eid1 = partialEEList[eid0][j];
+              if(eid1==-1)
+                continue;
+              
+              const int *m=_mesh->get_element(eid1);
+              if(m[0]<0){
+                toxic = true;
                 break;
               }
-            assert(hull[4]!=-1);
-
-            // New element: 0143
-            real_t q0 = property->lipnikov(_mesh->get_coords(hull[0]),
-                                           _mesh->get_coords(hull[1]),
-                                           _mesh->get_coords(hull[4]),
-                                           _mesh->get_coords(hull[3]),
-                                           _mesh->get_metric(hull[0]),
-                                           _mesh->get_metric(hull[1]),
-                                           _mesh->get_metric(hull[4]),
-                                           _mesh->get_metric(hull[3]));
-
-            // New element: 1243
-            real_t q1 = property->lipnikov(_mesh->get_coords(hull[1]),
-                                           _mesh->get_coords(hull[2]),
-                                           _mesh->get_coords(hull[4]),
-                                           _mesh->get_coords(hull[3]),
-                                           _mesh->get_metric(hull[1]),
-                                           _mesh->get_metric(hull[2]),
-                                           _mesh->get_metric(hull[4]),
-                                           _mesh->get_metric(hull[3]));
-
-            // New element:2043
-            real_t q2 = property->lipnikov(_mesh->get_coords(hull[2]),
-                                           _mesh->get_coords(hull[0]),
-                                           _mesh->get_coords(hull[4]),
-                                           _mesh->get_coords(hull[3]),
-                                           _mesh->get_metric(hull[2]),
-                                           _mesh->get_metric(hull[0]),
-                                           _mesh->get_metric(hull[4]),
-                                           _mesh->get_metric(hull[3]));
-
-            // std::cout<<"trying: "<<quality[eid0]<<", "<<quality[eid1]<<" --> "<<q0<<", "<<q1<<", "<<q2<<std::endl;
-            if(std::min(quality[eid0],quality[eid0]) < std::min(q0, std::min(q1, q2))){
-              std::cout<<"Found a good swap: was="<<std::min(quality[eid0],quality[eid0])<<", now="
-                       <<std::min(q0, std::min(q1, q2))<<std::endl; 
+            }
+            if(toxic)
+              continue;
+            
+            // Create set of nodes for quick lookup.
+            std::set<int> ele0_set;
+            for(int j=0;j<4;j++)
+              ele0_set.insert(n[0]);
+            
+            for(int j=0;j<4;j++){  
+              int eid1 = partialEEList[eid0][j];
+              if(eid1==-1)
+                continue;
               
-              _mesh->erase_element(eid0);
-              _mesh->erase_element(eid1);
+              std::vector<int> hull(5, -1);
+              if(j==0){
+                hull[0] = n[1];
+                hull[1] = n[3];
+                hull[2] = n[2];
+                hull[3] = n[0];
+              }else if(j==1){
+                hull[0] = n[2];
+                hull[1] = n[3];
+                hull[2] = n[0];
+                hull[3] = n[1];
+              }else if(j==2){
+                hull[0] = n[0];
+                hull[1] = n[3];
+                hull[2] = n[1];
+                hull[3] = n[2];
+              }else if(j==3){
+                hull[0] = n[0];
+                hull[1] = n[1];
+                hull[2] = n[2];
+                hull[3] = n[3];
+              }
               
-              int e0[] = {hull[0], hull[1], hull[4], hull[3]};
-              _mesh->append_element(e0);
-              quality.push_back(q0);
+              const int *m=_mesh->get_element(eid1);
+              assert(m[0]>=0);
               
-              int e1[] = {hull[1], hull[2], hull[4], hull[3]};
-              _mesh->append_element(e1);
-              quality.push_back(q1);
-
-              int e2[] = {hull[2], hull[0], hull[4], hull[3]};
-              _mesh->append_element(e2);
-              quality.push_back(q2);
+              for(int k=0;k<4;k++)
+                if(ele0_set.count(m[k])==0){
+                  hull[4] = m[k];
+                  break;
+                }
+              assert(hull[4]!=-1);
               
-              break;
+              // New element: 0143
+              real_t q0 = property->lipnikov(_mesh->get_coords(hull[0]),
+                                             _mesh->get_coords(hull[1]),
+                                             _mesh->get_coords(hull[4]),
+                                             _mesh->get_coords(hull[3]),
+                                             _mesh->get_metric(hull[0]),
+                                             _mesh->get_metric(hull[1]),
+                                             _mesh->get_metric(hull[4]),
+                                             _mesh->get_metric(hull[3]));
+              
+              // New element: 1243
+              real_t q1 = property->lipnikov(_mesh->get_coords(hull[1]),
+                                             _mesh->get_coords(hull[2]),
+                                             _mesh->get_coords(hull[4]),
+                                             _mesh->get_coords(hull[3]),
+                                             _mesh->get_metric(hull[1]),
+                                             _mesh->get_metric(hull[2]),
+                                             _mesh->get_metric(hull[4]),
+                                             _mesh->get_metric(hull[3]));
+              
+              // New element:2043
+              real_t q2 = property->lipnikov(_mesh->get_coords(hull[2]),
+                                             _mesh->get_coords(hull[0]),
+                                             _mesh->get_coords(hull[4]),
+                                             _mesh->get_coords(hull[3]),
+                                             _mesh->get_metric(hull[2]),
+                                             _mesh->get_metric(hull[0]),
+                                             _mesh->get_metric(hull[4]),
+                                             _mesh->get_metric(hull[3]));
+              
+              if(std::min(quality[eid0],quality[eid1]) < std::min(q0, std::min(q1, q2))){
+                //std::cout<<"2->3: was="<<std::min(quality[eid0],quality[eid1])<<", now="
+                //         <<std::min(q0, std::min(q1, q2))<<std::endl; 
+                
+                _mesh->erase_element(eid0);
+                _mesh->erase_element(eid1);
+                
+                int e0[] = {hull[0], hull[1], hull[4], hull[3]};
+                _mesh->append_element(e0);
+                quality.push_back(q0);
+                
+                int e1[] = {hull[1], hull[2], hull[4], hull[3]};
+                _mesh->append_element(e1);
+                quality.push_back(q1);
+                
+                int e2[] = {hull[2], hull[0], hull[4], hull[3]};
+                _mesh->append_element(e2);
+                quality.push_back(q2);
+                
+                break;
+              }
             }
           }
         }
-      }
+      
+      // Process edge-face swaps.
+      for(int c=0;c<max_colour;c++)
+        for(size_t i=0;i<graph.size();i++){
+          int eid0 = renumber[i];
+          
+          if(colour[i]==c && (partialEEList.count(eid0)>0)){
+            
+            // Check this is not deleted.
+            const int *n=_mesh->get_element(eid0);
+            if(n[0]<0)
+              continue;
+            
+            bool toxic=false, swapped=false;
+            for(int k=0;(k<3)&&(!toxic)&&(!swapped);k++){
+              for(int l=k+1;l<4;l++){                 
+                typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(n[k], n[l]));
+                assert(edge!=_mesh->Edges.end());
+                
+                double min_quality = quality[eid0];
+                std::vector<index_t> constrained_edges_unsorted;
+                for(typename std::set<index_t>::const_iterator it=edge->adjacent_elements.begin();it!=edge->adjacent_elements.end();++it){
+                  min_quality = std::min(min_quality, quality[*it]);
+                  
+                  const int *m=_mesh->get_element(*it);
+                  if(m[0]<0){
+                    toxic=true;
+                    break;
+                  }
+                  
+                  for(int j=0;j<4;j++){
+                    if((m[j]!=n[k])&&(m[j]!=n[l])){
+                      constrained_edges_unsorted.push_back(m[j]);
+                    }
+                  }
+                }
+                
+                if(toxic)
+                  break;
+                
+                size_t nelements = edge->adjacent_elements.size();
+                assert(nelements*2==constrained_edges_unsorted.size());
+                
+                // Sort edges.
+                std::vector<index_t> constrained_edges;
+                std::vector<bool> sorted(nelements, false);
+                constrained_edges.push_back(constrained_edges_unsorted[0]);
+                constrained_edges.push_back(constrained_edges_unsorted[1]);
+                for(size_t j=1;j<nelements;j++){
+                  for(size_t e=1;e<nelements;e++){
+                    if(sorted[e])
+                      continue;
+                    if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2]){
+                      constrained_edges.push_back(constrained_edges_unsorted[e*2]);
+                      constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
+                      sorted[e]=true;
+                      break;
+                    }else if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2+1]){
+                      constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
+                      constrained_edges.push_back(constrained_edges_unsorted[e*2]);
+                      sorted[e]=true;
+                      break;
+                    }
+                  }
+                }
+                
+                //std::cout<<"constrained edges: ";
+                //for(typename std::vector<index_t>::const_iterator it=constrained_edges.begin();it!=constrained_edges.end();++it)
+                //  std::cout<<*it<<" ";
+                //std::cout<<std::endl;
+                
+                if(*constrained_edges.begin() != *constrained_edges.rbegin()){
+                  assert(_surface->contains_node(n[k]));
+                  assert(_surface->contains_node(n[l]));
+                  // std::cout<<"surface edge\n";
+                  
+                  toxic = true;
+                  break;
+                }
+                
+                std::vector< std::vector<index_t> > new_elements;
+                if(nelements==3){
+                  // This is the 3-element to 2-element swap.
+                  new_elements.resize(1);
+                  
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(n[l]);
+                  
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(n[k]);
+                }else if(nelements==4){
+                  // This is the 4-element to 4-element swap.
+                  new_elements.resize(2);
+
+                  // Option 1.
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(n[l]);
+                  
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(n[l]);
+
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(n[k]);
+                                    
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(n[k]);
+
+                  // Option 2
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(n[l]);
+                  
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(n[l]);
+
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(n[k]);
+                                    
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(n[k]);
+                }else if(nelements==5){
+                  // This is the 5-element to 6-element swap.
+                  new_elements.resize(1);
+
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(n[l]);
+                  
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(n[l]);
+                  
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(n[l]);
+                  
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(n[k]);
+                  
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(n[k]);
+                  
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(n[k]);
+                }else if(nelements==6){
+                  // This is the 6-element to 8-element swap.
+                  new_elements.resize(1);
+
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(n[l]);
+
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(n[l]);
+
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(n[l]);
+
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(n[l]);
+
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[0]);
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(n[k]);
+
+                  new_elements[0].push_back(constrained_edges[6]);
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(n[k]);
+
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[2]);
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(n[k]);
+
+                  new_elements[0].push_back(constrained_edges[4]);
+                  new_elements[0].push_back(constrained_edges[10]);
+                  new_elements[0].push_back(constrained_edges[8]);
+                  new_elements[0].push_back(n[k]);
+                }else{
+                  continue;
+                }
+                
+                nelements = new_elements[0].size()/4;
+                
+                // Invert new elements if necessary.
+                if(property->volume(_mesh->get_coords(new_elements[0][0]),
+                                    _mesh->get_coords(new_elements[0][1]), 
+                                    _mesh->get_coords(new_elements[0][2]), 
+                                    _mesh->get_coords(new_elements[0][3]))<0.0){
+                  
+                  for(typename std::vector< std::vector<index_t> >::iterator it=new_elements.begin();it!=new_elements.end();++it){
+                    for(size_t j=0;j<nelements;j++){
+                      index_t stash_id = (*it)[j*4];
+                      (*it)[j*4] = (*it)[j*4+1];
+                      (*it)[j*4+1] = stash_id;           
+                    }
+                  }
+                }
+                
+                // Check new minimum quality.
+                std::vector<double> new_min_quality(new_elements.size());
+                std::vector< std::vector<double> > newq(new_elements.size());
+                for(size_t option=0;option<new_elements.size();option++){
+                  newq[option].resize(nelements);
+                  for(size_t j=0;j<nelements;j++){
+                    newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
+                                                         _mesh->get_coords(new_elements[option][j*4+1]),
+                                                         _mesh->get_coords(new_elements[option][j*4+2]),
+                                                         _mesh->get_coords(new_elements[option][j*4+3]),
+                                                         _mesh->get_metric(new_elements[option][j*4+0]),
+                                                         _mesh->get_metric(new_elements[option][j*4+1]),
+                                                         _mesh->get_metric(new_elements[option][j*4+2]),
+                                                         _mesh->get_metric(new_elements[option][j*4+3]));
+                  }
+                  
+                  new_min_quality[option] = newq[option][0];
+                  for(size_t j=0;j<nelements;j++)
+                    new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
+                }
+
+                int best_option=new_min_quality[0];
+                for(size_t option=1;option<new_elements.size();option++){
+                  if(new_min_quality[option]>new_min_quality[best_option]){
+                    best_option = option;
+                  }
+                }
+
+                if(new_min_quality[best_option] <= min_quality)
+                  continue;
+                
+                //std::cout<<"edge/face swap "<<nelements<<": "<<min_quality<<" --> "<<new_min_quality[best_option]
+                //         <<", option="<<best_option<<std::endl;
+                
+                // Remove old elements.
+                for(typename std::set<index_t>::const_iterator it=edge->adjacent_elements.begin();it!=edge->adjacent_elements.end();++it)
+                  _mesh->erase_element(*it);
+                
+                // Add new elements.
+                for(size_t j=0;j<nelements;j++){
+                  _mesh->append_element(&(new_elements[best_option][j*4]));
+                  quality.push_back(newq[best_option][j]);
+                }
+                
+                swapped = true;
+                break;
+              }
+            }
+          }
+        }
     }
     
     // recalculate adjancies

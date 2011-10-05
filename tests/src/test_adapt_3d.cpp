@@ -85,8 +85,9 @@ int main(int argc, char **argv){
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
-    swapping.swap(0.01);
-
+    for(int j=0;j<2;j++)
+      swapping.swap(0.1);
+    
     L_max = mesh->maximal_edge_length();
 
     if((L_max-L_up)<0.01)
@@ -100,24 +101,24 @@ int main(int argc, char **argv){
   smooth.smooth("smart Laplacian");
   mesh->verify();
     
-  double lrms = mesh->get_lrms();
+  double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
-    
-  int nelements = mesh->get_number_elements();
+  double qmin = mesh->get_qmin();
 
-  std::cout<<"Number elements:      "<<nelements<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
-           <<"Quality RMS:          "<<qrms<<std::endl;
+  std::cout<<"After adaptivity:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
   
-  if((lrms<0.2)&&(qrms<0.65))
+  delete mesh;
+  
+  if((qmean>0.8)&&(qmin>0.0003))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
-
-  delete mesh;
 
   return 0;
 }
