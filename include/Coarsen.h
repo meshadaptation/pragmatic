@@ -613,18 +613,28 @@ template<typename real_t, typename index_t> class Coarsen{
         }
         
         // Check the volume of this new element.
-        double volume;
-        if(ndims==2)
+        double orig_volume, volume;
+        if(ndims==2){
+          orig_volume = property->area(_mesh->get_coords(orig_n[0]),
+                                       _mesh->get_coords(orig_n[1]),
+                                       _mesh->get_coords(orig_n[2]));
+
           volume = property->area(_mesh->get_coords(n[0]),
                                   _mesh->get_coords(n[1]),
                                   _mesh->get_coords(n[2]));
-        else
+        }else{
+          orig_volume = property->volume(_mesh->get_coords(orig_n[0]),
+                                         _mesh->get_coords(orig_n[1]),
+                                         _mesh->get_coords(orig_n[2]),
+                                         _mesh->get_coords(orig_n[3]));
+
           volume = property->volume(_mesh->get_coords(n[0]),
                                     _mesh->get_coords(n[1]),
                                     _mesh->get_coords(n[2]),
                                     _mesh->get_coords(n[3]));
-        
-        if(volume<=0.0){
+        }
+
+        if(volume/orig_volume<=1.0e-3){
           reject_collapse=true;
           break;
         }
