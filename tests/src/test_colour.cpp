@@ -30,12 +30,14 @@
 #include <vector>
 #include <map>
 
+#include <mpi.h>
 #include "zoltan_colour.h"
 
 using namespace std;
 
 int main(int argc, char **argv){
-  
+  MPI::Init(argc,argv);
+
   /* 0: 3, 1
      1: 0, 2
      2: 1, 3
@@ -78,7 +80,7 @@ int main(int argc, char **argv){
   int colour[] = {0, 0, 0, 0};
   graph.colour = colour;
 
-  zoltan_colour(&graph, 1, MPI_COMM_NULL);
+  zoltan_colour(&graph, 1, MPI_COMM_WORLD);
   
   if((graph.colour[0]==1)&&(graph.colour[1]==2)&&
      (graph.colour[2]==1)&&(graph.colour[3]==2))
@@ -90,5 +92,8 @@ int main(int argc, char **argv){
     cout<<endl;
     cout<<"fail\n";
   }
+
+  MPI::Finalize();
+
   return 0;
 }
