@@ -42,9 +42,13 @@
 #include "Swapping.h"
 #include "ticker.h"
 
+#include <mpi.h>
+
 using namespace std;
 
 int main(int argc, char **argv){
+  MPI::Init(argc,argv);
+
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
@@ -171,6 +175,8 @@ int main(int argc, char **argv){
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
+
+  MPI::Finalize();
 
   return 0;
 }
