@@ -92,15 +92,15 @@ template<typename real_t, typename index_t> class Coarsen{
     int NNodes = _mesh->get_number_nodes();
     
     // Initialise list of vertices to be collapsed.
-    std::vector<index_t> dynamic_vertex(NNodes, -1);
-    std::vector<bool> recalculate_collapse(NNodes, false);
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<NNodes;i++){
-        if(_mesh->is_owned_node(i))
-          dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
-      }
+    std::vector<index_t> dynamic_vertex(NNodes);
+    std::vector<bool> recalculate_collapse(NNodes);
+#pragma omp parallel for schedule(static)
+    for(int i=0;i<NNodes;i++){
+      if(_mesh->is_owned_node(i))
+        dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+      else
+        dynamic_vertex[i] = -1;
+      recalculate_collapse[i] = false;
     }
 
     // Create the global node numbering.
@@ -553,7 +553,7 @@ template<typename real_t, typename index_t> class Coarsen{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should be collapsed onto, negative if no operation is to be performed.
    */
-  int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max){    
+  int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const{
     // If this is a corner-vertex then cannot collapse;
     if(_surface->is_corner_vertex(rm_vertex))
       return -2;
