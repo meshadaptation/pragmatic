@@ -153,6 +153,7 @@ int main(int argc, char **argv){
 
   mesh->verify();
 
+  NNodes = mesh->get_number_nodes();
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
     double x = 2*mesh->get_coords(i)[0]-1;
