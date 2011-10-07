@@ -604,17 +604,17 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return new local node number given on original node number.
-  int new2old(int nid){
+  int new2old(int nid) const{
     return nid_new2old[nid];
   }
 
   /// Returns true if the node is in any of the partitioned elements.
-  bool is_halo_node(int nid){
+  bool is_halo_node(int nid) const{
     return (send_halo.count(nid)+recv_halo.count(nid))>0;
   }
 
   /// Returns true if the node is assigned to the local partition.
-  bool is_owned_node(int nid){
+  bool is_owned_node(int nid) const{
     return recv_halo.count(nid)==0;
   }
 
