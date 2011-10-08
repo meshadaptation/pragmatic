@@ -102,9 +102,13 @@ template<typename real_t, typename index_t>
   }
 
   /// True if node nid is a corner vertex.
-  bool is_corner_vertex(index_t nid){
+  bool is_corner_vertex(index_t nid) const{
+    typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid);
+    if(iSNEList==SNEList.end())
+      return false;
+
     std::set<int> incident_plane;
-    for(typename std::set<index_t>::const_iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it)
+    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it)
       incident_plane.insert(coplanar_ids[*it]);
     
     return (incident_plane.size()>=ndims);
