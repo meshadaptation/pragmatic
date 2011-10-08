@@ -5538,49 +5538,6 @@ else
   as_fn_error $? "METIS required" "$LINENO" 5
 fi
 
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libCGAL" >&5
-$as_echo_n "checking for libCGAL... " >&6; }
-old_libs="$LIBS"
-LIBS="-lCGAL -lgmp $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <iostream>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/convex_hull_2.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_2 Point_2;
-
-int
-main ()
-{
-
-  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
-  Point_2 result[5];
-
-  CGAL::convex_hull_2( points, points+5, result );
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  $as_echo "#define HAVE_LIBCGAL 1" >>confdefs.h
-
-         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-
-## Zoltan
 # Check whether --enable-zoltan was given.
 if test "${enable_zoltan+set}" = set; then :
   enableval=$enable_zoltan;
@@ -5605,7 +5562,7 @@ zoltan_INCLUDES_PATH="$zoltan/include"
 tmpLIBS="$tmpLIBS -L$zoltan_LIBS_PATH"
 tmpCPPFLAGS="$tmpCPPFLAGS  -I/$zoltan_INCLUDES_PATH"
 fi
-tmpLIBS="$tmpLIBS -L/usr/lib -L/usr/local/lib/ -lzoltan -lparmetis $ZOLTAN_DEPS"
+tmpLIBS="$tmpLIBS -L/usr/lib -L/usr/local/lib/ -lzoltan -lparmetis -lmetis $ZOLTAN_DEPS"
 tmpCPPFLAGS="$tmpCPPFLAGS -I/usr/include/ -I/usr/local/include/"
 fi
 LIBS=$tmpLIBS
@@ -5685,6 +5642,47 @@ ZOLTAN="yes"
 
 echo $LIBS
 
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libCGAL" >&5
+$as_echo_n "checking for libCGAL... " >&6; }
+old_libs="$LIBS"
+LIBS="-lCGAL -lgmp $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <iostream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/convex_hull_2.h>
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_2 Point_2;
+
+int
+main ()
+{
+
+  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
+  Point_2 result[5];
+
+  CGAL::convex_hull_2( points, points+5, result );
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  $as_echo "#define HAVE_LIBCGAL 1" >>confdefs.h
+
+         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
 
 # Detect VTK
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
