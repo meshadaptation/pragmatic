@@ -66,23 +66,28 @@ int main(int argc, char **argv){
   double rms[] = {0., 0., 0.,
                   0., 0., 0.,
                   0., 0., 0.};
+  int ncnt=0;
   for(size_t i=0;i<NNodes;i++){
-    rms[0] += pow(2.0-metric[i*9  ], 2);
-    rms[1] += pow(metric[i*9+1], 2);
-    rms[2] += pow(metric[i*9+2], 2);
+    if(!surface.contains_node(i)){
+      rms[0] += pow(2.0-metric[i*9  ], 2);
+      rms[1] += pow(metric[i*9+1], 2);
+      rms[2] += pow(metric[i*9+2], 2);
     
-    rms[3] += pow(metric[i*9+3], 2);
-    rms[4] += pow(2.0-metric[i*9+4], 2);
-    rms[5] += pow(metric[i*9+5], 2);
+      rms[3] += pow(metric[i*9+3], 2);
+      rms[4] += pow(2.0-metric[i*9+4], 2);
+      rms[5] += pow(metric[i*9+5], 2);
     
-    rms[6] += pow(metric[i*9+6], 2);
-    rms[7] += pow(metric[i*9+7], 2);
-    rms[8] += pow(2.0-metric[i*9+8], 2);
+      rms[6] += pow(metric[i*9+6], 2);
+      rms[7] += pow(metric[i*9+7], 2);
+      rms[8] += pow(2.0-metric[i*9+8], 2);
+   
+      ncnt++;
+    }
   }
 
   double max_rms = 0;
   for(size_t i=0;i<9;i++){
-    rms[i] = sqrt(rms[i]/NNodes);
+    rms[i] = sqrt(rms[i]/ncnt);
     max_rms = std::max(max_rms, rms[i]);
   }
 
@@ -96,6 +101,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
+  std::cout<<"Asserting "<<max_rms<<">0.01\n";
   if(max_rms>0.01)
     std::cout<<"fail\n";
   else
