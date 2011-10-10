@@ -91,7 +91,7 @@ template<typename real_t, typename index_t>
   }
 
   /// True if surface contains vertex nid.
-  bool contains_node(index_t nid){
+  bool contains_node(index_t nid) const{
     assert(nid>=0);
     // assert(nid<(index_t)surface_nodes.size()); 
     if(nid>=(index_t)surface_nodes.size()){
@@ -114,7 +114,7 @@ template<typename real_t, typename index_t>
     return (incident_plane.size()>=ndims);
   }
 
-  bool is_collapsible(index_t nid_free, index_t nid_target){
+  bool is_collapsible(index_t nid_free, index_t nid_target) const{
     if((nid_free>=(index_t)surface_nodes.size())||(nid_target>=(index_t)surface_nodes.size())){
       std::cerr<<"WARNING: have yet to migrate surface\n";
       return true;
@@ -131,7 +131,9 @@ template<typename real_t, typename index_t>
     }
 
     std::set<int> incident_plane_free;
-    for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it)
+    typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid_free);
+    assert(iSNEList!=SNEList.end());
+    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it)
       incident_plane_free.insert(coplanar_ids[*it]);
     
     // Non-collapsible if nid_free is a corner node.
@@ -140,7 +142,9 @@ template<typename real_t, typename index_t>
     }
     
     std::set<int> incident_plane_target;
-    for(typename std::set<index_t>::const_iterator it=SNEList[nid_target].begin();it!=SNEList[nid_target].end();++it)
+    typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(nid_target);
+    assert(jSNEList!=SNEList.end());
+    for(typename std::set<index_t>::const_iterator it=jSNEList->second.begin();it!=jSNEList->second.end();++it)
       incident_plane_target.insert(coplanar_ids[*it]);
     
     if(ndims==3){
@@ -257,12 +261,18 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void find_facets(const int *element, std::vector<int> &facet_ids){
+  void find_facets(const int *element, std::vector<int> &facet_ids) const{
     if(ndims==2){
       for(int i=0;i<3;i++){
         std::set<index_t> Intersection;
-        set_intersection(SNEList[element[i]].begin(), SNEList[element[i]].end(),
-                         SNEList[element[(i+1)%3]].begin(), SNEList[element[(i+1)%3]].end(),
+        typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(i);
+        assert(iSNEList!=SNEList.end());
+        
+        typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find((i+1)%3);
+        assert(jSNEList!=SNEList.end());
+        
+        set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
+                         jSNEList->second.begin(), jSNEList->second.end(),
                          inserter(Intersection,Intersection.begin()));
 
         if(Intersection.size()){
@@ -465,8 +475,9 @@ template<typename real_t, typename index_t>
     return &(normals[eid*ndims]);
   }
 
-  std::set<index_t> get_surface_patch(int i){
-    return SNEList[i];
+  std::set<index_t> get_surface_patch(int nid) const{
+    assert(SNEList.find(nid)!=SNEList.end());
+    return SNEList.find(nid)->second;
   }
 
   /// Set dot product tolerence - used to decide if elements are co-planar
