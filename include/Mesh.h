@@ -932,6 +932,9 @@ template<typename real_t, typename index_t> class Mesh{
       std::cout<<"VERIFY: minimum element volume...."<<min_ele_vol<<std::endl;
       std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
     }
+    std::cout<<"VERIFY: mean quality...."<<get_qmean()<<std::endl;
+    std::cout<<"VERIFY: min quality...."<<get_qmin()<<std::endl;
+    std::cout<<"VERIFY: rms quality...."<<get_qrms()<<std::endl;
   }
 
  private:
