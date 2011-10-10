@@ -85,8 +85,15 @@ int main(int argc, char **argv){
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
-    for(int j=0;j<2;j++)
+
+    std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
+    mesh->verify();
+    
+    for(int j=0;j<10;j++)
       swapping.swap(0.1);
+
+    std::cout<<"INFO: Verify quality after swapping.\n";
+    mesh->verify();
     
     L_max = mesh->maximal_edge_length();
 
@@ -99,16 +106,12 @@ int main(int argc, char **argv){
   surface.defragment(&active_vertex_map);
 
   smooth.smooth("smart Laplacian");
-  mesh->verify();
-    
+  
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
-
-  std::cout<<"After adaptivity:\n"
-           <<"Quality mean:  "<<qmean<<std::endl
-           <<"Quality min:   "<<qmin<<std::endl
-           <<"Quality RMS:   "<<qrms<<std::endl;
+  
+  std::cout<<"After adaptivity:\n";
+  mesh->verify();
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);

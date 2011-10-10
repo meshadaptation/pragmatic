@@ -111,7 +111,14 @@ int main(int argc, char **argv){
     
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
+
+    std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
+    mesh->verify();
+    
     swapping.swap(0.95);
+
+    std::cout<<"INFO: Verify quality after swapping.\n";
+    mesh->verify();
     
     L_max = mesh->maximal_edge_length();
 
@@ -123,40 +130,21 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
-  qmin = mesh->get_qmin();
+  std::cout<<"Basic quality:\n";
+  mesh->verify();
   
-  std::cout<<"Basic quality:\n"
-           <<"Quality mean:  "<<qmean<<std::endl
-           <<"Quality min:   "<<qmin<<std::endl
-           <<"Quality RMS:   "<<qrms<<std::endl;
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
-
-  smooth.smooth("smart Laplacian");
-
-  qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
-  qmin = mesh->get_qmin();
   
-  std::cout<<"After smart smoothing:\n"
-           <<"Quality mean:  "<<qmean<<std::endl
-           <<"Quality min:   "<<qmin<<std::endl
-           <<"Quality RMS:   "<<qrms<<std::endl;
-
+  smooth.smooth("smart Laplacian");
+  
+  std::cout<<"After smart smoothing:\n";
+  mesh->verify();
+  
   smooth.smooth("optimisation Linf");
   
-  qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
-  qmin = mesh->get_qmin();
-  
-  std::cout<<"After optimisation smoothing:\n"
-           <<"Quality mean:  "<<qmean<<std::endl
-           <<"Quality min:   "<<qmin<<std::endl
-           <<"Quality RMS:   "<<qrms<<std::endl;
-
+  std::cout<<"After optimisation smoothing:\n";
   mesh->verify();
-
+  
   NNodes = mesh->get_number_nodes();
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -169,6 +157,10 @@ int main(int argc, char **argv){
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
+  qmean = mesh->get_qmean();
+  qrms = mesh->get_qrms();
+  qmin = mesh->get_qmin();
+  
   delete mesh;
 
   if((qmean>0.8)&&(qmin>0.3))
