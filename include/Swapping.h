@@ -779,7 +779,7 @@ template<typename real_t, typename index_t> class Swapping{
                     new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
                 }
 
-                int best_option=new_min_quality[0];
+                int best_option=0;
                 for(size_t option=1;option<new_elements.size();option++){
                   if(new_min_quality[option]>new_min_quality[best_option]){
                     best_option = option;
