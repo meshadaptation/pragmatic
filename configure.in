@@ -101,41 +101,40 @@ AC_ARG_ENABLE(debugging,
     [AC_HELP_STRING([--enable-debugging],
 	    [turns on debugging flags])])
 
-AC_ARG_ENABLE(gprof,
-    [AC_HELP_STRING([--enable-gprof],
-	    [enables profiling with gprof])])
-
 if test "x$ICPC" = "xyes" ; then
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 -Wall $CXXFLAGS"
         CFLAGS="-g -O0 -Wall $CFLAGS"
+        FCFLAGS="-g -O0 -Wall $FCFLAGS"
         LDFLAGS="-g $LDFLAGS"
-    elif test "$enable_gprof" = "yes" ; then
-        CXXFLAGS="-p -g -O2 $CXXFLAGS"
-        CFLAGS="-p -g -O2 $CFLAGS"
-        LDFLAGS="-p -g $LDFLAGS"
     else
         CXXFLAGS="-O2 $CXXFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
         CFLAGS="-O2 $CFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
+        FCFLAGS="-O2 $FCFLAGS -diag-disable all -w -vec-report0 -openmp-report0"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$FCC" = "xyes" ; then
     CXXFLAGS="$CXXFLAGS -w"
+    CFLAGS="$CFLAGS -w"
+    FCFLAGS="$FCFLAGS -w"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
+        CFLAGS="-g -O0 $CFLAGS"
+        FCFLAGS="-g -O0 $FCFLAGS"
         LDFLAGS="-g $LDFLAGS"
     else
         CXXFLAGS="-O3 $CXXFLAGS"
+        CFLAGS="-O3 $CFLAGS"
+        FCFLAGS="-O3 $FCFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
     CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated -frounding-math"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
+        CFLAGS="-g -O0 $CFLAGS"
+        FCFLAGS="-g -O0 $FCFLAGS"
         LDFLAGS="-g $LDFLAGS"
-    elif test "$enable_gprof" = "yes" ; then
-        CXXFLAGS="-pg -g -O2 $CXXFLAGS"
-        LDFLAGS="-pg -g $LDFLAGS"
     else
         CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
