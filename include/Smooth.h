@@ -208,8 +208,8 @@ template<typename real_t, typename index_t>
         _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
       }
       
-#ifdef _OPENMP
       active_vertices.clear();
+#ifdef _OPENMP
       for(int t=0;t<omp_get_max_threads();t++){
         active_vertices.insert(partial_active_vertices[t].begin(), partial_active_vertices[t].end());
         partial_active_vertices[t].clear();
@@ -1184,7 +1184,7 @@ template<typename real_t, typename index_t>
     }else{
       graph.rank = 0; 
     }
-
+    
     int NNodes = _mesh->get_number_nodes();
     assert(NNodes==(int)_mesh->NNList.size());
     graph.nnodes = NNodes;
@@ -1194,7 +1194,7 @@ template<typename real_t, typename index_t>
     std::vector<size_t> owner;
     _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
     graph.npnodes = NPNodes;
-
+    
     std::vector<size_t> nedges(NNodes);
     size_t sum = 0;
     for(int i=0;i<NNodes;i++){
