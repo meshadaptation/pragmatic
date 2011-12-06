@@ -54,13 +54,7 @@ using namespace std;
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);
-  
-  // Undo some MPI init shenanigans.
-  if(chdir(getenv("PWD"))){
-    perror("");
-    exit(-1);
-  }
-  
+
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface<double, int> surface(*mesh, true);
