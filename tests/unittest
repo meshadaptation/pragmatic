@@ -4,6 +4,7 @@ import os
 import os.path
 import glob
 import stat
+import subprocess
 
 class UnitTest:
     def __init__(self, exe):
@@ -18,13 +19,27 @@ class UnitTest:
 
     def run(self):
         os.chdir(self.dir)
-#        self.log("chdir " + self.dir)
+
+        args = [self.exe]
+
+        if os.path.isfile(self.exe+".mpi"):
+            file = open(self.exe+".mpi", "r")
+            nprocs = file.readline().strip()
+            file.close()
+            args = ["mpiexec", "-n", nprocs] + args
+       
         self.log("running")
-        f = os.popen(self.exe)
-        self.output = f.read()
+
+        p = subprocess.Popen(args, shell=False, cwd=os.getcwd(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.stdout, self.stderr = p.communicate()
+
+        if self.stderr:
+            print self.stderr
+        p.wait()
+        exitStatus = p.returncode
+
         os.chdir(self.cwd)
         
-        exitStatus = f.close()
         if exitStatus is None:
           return 0
         else:
@@ -35,11 +50,15 @@ class UnitTest:
         warncount = 0
         failcount = 0
 
-        for line in self.output.split('\n'):
+        for line in self.stdout.split('\n'):
             line = line.lstrip()
-            #self.log(line)
             if "pass" in line: passcount = passcount + 1
             if "fail" in line: failcount = failcount + 1
+
+        if not self.stdout:
+            warncount = warncount + 1
+        if self.stderr:
+            failcount = failcount + 1
 
         return (passcount, warncount, failcount)
 
