@@ -231,7 +231,7 @@ int main(int argc, char **argv){
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf", "combined"};
   const double target_quality_mean[] = {0.06, 0.2,   0.2, 0.07,   0.2};
-  const double target_quality_min[]  = {0.0,  0.007, 0.0, 0.0004, 0.007};
+  const double target_quality_min[]  = {0.0,  0.007, 0.0, 0.0002, 0.007};
   for(int m=0;m<5;m++){
     const char *method = methods[m];
 
@@ -276,7 +276,7 @@ int main(int argc, char **argv){
     Smooth<double, int> smooth(*mesh, surface);
     
     double tic = get_wtime();
-    int max_smooth_iter=10;
+    int max_smooth_iter=200;
     if(m<4){
       smooth.smooth(method, max_smooth_iter);
     }else{
