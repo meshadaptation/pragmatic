@@ -29,6 +29,7 @@ VPATH = ./:./src
 default: test
 
 test: binaries
+	@cp src/*.mpi bin/
 	python ./unittest bin
 
 ifeq (@ENABLE_CUDA@,yes)
