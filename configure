@@ -7782,4 +7782,4 @@ $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
 
-cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h
+cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" > include/pragmatic_config.h

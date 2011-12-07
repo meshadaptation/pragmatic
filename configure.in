@@ -351,4 +351,4 @@ AC_OUTPUT(Makefile
     src/Makefile
     tests/Makefile)
 
-cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h
+cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" > include/pragmatic_config.h
