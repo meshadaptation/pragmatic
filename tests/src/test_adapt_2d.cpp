@@ -48,6 +48,7 @@ using namespace std;
 
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
+  int rank = MPI::COMM_WORLD.Get_rank();
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
@@ -163,10 +164,12 @@ int main(int argc, char **argv){
   
   delete mesh;
 
-  if((qmean>0.8)&&(qmin>0.3))
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    if((qmean>0.8)&&(qmin>0.2))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
 
   MPI::Finalize();
 
