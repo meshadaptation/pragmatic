@@ -264,13 +264,15 @@ template<typename real_t, typename index_t>
   void find_facets(const int *element, std::vector<int> &facet_ids) const{
     if(ndims==2){
       for(int i=0;i<3;i++){
+        typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(element[i]);
+        if(iSNEList==SNEList.end())
+          continue;
+        
+        typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(element[(i+1)%3]);
+        if(jSNEList==SNEList.end())
+          continue;
+
         std::set<index_t> Intersection;
-        typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(i);
-        assert(iSNEList!=SNEList.end());
-        
-        typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find((i+1)%3);
-        assert(jSNEList!=SNEList.end());
-        
         set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
                          jSNEList->second.begin(), jSNEList->second.end(),
                          inserter(Intersection,Intersection.begin()));
