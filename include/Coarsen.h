@@ -120,7 +120,7 @@ template<typename real_t, typename index_t> class Coarsen{
       NNodes = _mesh->get_number_nodes();
       
       if(loop==99)
-        std::cerr<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
+        std::cout<<"WARNING: possibly excessive coarsening. Please check results and verify.\n";
       
       // Determine the maximal independent set.
       std::deque<index_t> maximal_independent_set;
