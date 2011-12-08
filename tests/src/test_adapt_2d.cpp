@@ -87,10 +87,10 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
-  std::cout<<"Initial quality:\n"
-           <<"Quality mean:  "<<qmean<<std::endl
-           <<"Quality min:   "<<qmin<<std::endl
-           <<"Quality RMS:   "<<qrms<<std::endl;
+  if(rank==0) std::cout<<"Initial quality:\n"
+           	<<"Quality mean:  "<<qmean<<std::endl
+           	<<"Quality min:   "<<qmin<<std::endl
+           	<<"Quality RMS:   "<<qrms<<std::endl;
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -113,12 +113,12 @@ int main(int argc, char **argv){
     refine.refine(L_ref);
     coarsen.coarsen(L_low, L_ref);
 
-    std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
+    if(rank==0) std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
     mesh->verify();
     
     swapping.swap(0.95);
 
-    std::cout<<"INFO: Verify quality after swapping.\n";
+    if(rank==0) std::cout<<"INFO: Verify quality after swapping.\n";
     mesh->verify();
     
     L_max = mesh->maximal_edge_length();
@@ -131,19 +131,19 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  std::cout<<"Basic quality:\n";
+  if(rank==0) std::cout<<"Basic quality:\n";
   mesh->verify();
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
   
   smooth.smooth("smart Laplacian");
   
-  std::cout<<"After smart smoothing:\n";
+  if(rank==0) std::cout<<"After smart smoothing:\n";
   mesh->verify();
   
   smooth.smooth("optimisation Linf");
   
-  std::cout<<"After optimisation smoothing:\n";
+  if(rank==0) std::cout<<"After optimisation smoothing:\n";
   mesh->verify();
   
   NNodes = mesh->get_number_nodes();
