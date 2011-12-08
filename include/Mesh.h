@@ -146,12 +146,23 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Discover which verticies and elements are active.
     bool local_active_vertex_map=(active_vertex_map==NULL);
-    if(local_active_vertex_map){
+    if(local_active_vertex_map)
       active_vertex_map = new std::map<index_t, index_t>;
+
+    // Create look-up tables for halos.
+    std::map<index_t, std::set<int> > send_set, recv_set;
+    if(mpi_nparts>1){
+      for(int k=0;k<mpi_nparts;k++){
+        for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt)
+          send_set[k].insert(*jt);
+        for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt)
+          recv_set[k].insert(*jt);
+      }
     }
 
+    // Identify active vertices and elements.
     std::deque<index_t> active_vertex, active_element;
-    std::set<index_t> verified_send_halo;
+    std::map<index_t, std::set<int> > new_send_set, new_recv_set;
     for(size_t e=0;e<_NElements;e++){
       index_t nid = _ENList[e*nloc];
       
@@ -175,12 +186,25 @@ template<typename real_t, typename index_t> class Mesh{
       // Need these mesh entities.
       active_element.push_back(e);
 
+      std::set<int> neigh;
       for(size_t j=0;j<nloc;j++){
         nid = _ENList[e*nloc+j];
         (*active_vertex_map)[nid]=0;
-
-        if(halo_element && (send_halo.count(nid)>0)){
-          verified_send_halo.insert(nid);
+      
+        if(halo_element){
+          for(int k=0;k<mpi_nparts;k++){
+            if(recv_set[k].count(nid)){
+              new_recv_set[k].insert(nid);
+              neigh.insert(k);
+            }
+          }
+        }
+      }
+      for(size_t j=0;j<nloc;j++){
+        nid = _ENList[e*nloc+j];
+        for(std::set<int>::iterator kt=neigh.begin();kt!=neigh.end();++kt){
+          if(send_set[*kt].count(nid))
+            new_send_set[*kt].insert(nid);
         }
       }
     }
@@ -241,40 +265,42 @@ template<typename real_t, typename index_t> class Mesh{
     metric.swap(defrag_metric);
     
     // Renumber halo
-    {
-      std::set<int> new_halo;
-      for(std::set<int>::iterator it=send_halo.begin();it!=send_halo.end();++it){
-        if(verified_send_halo.count(*it))
-          new_halo.insert((*active_vertex_map)[*it]);
+    if(mpi_nparts>1){
+      for(int k=0;k<mpi_nparts;k++){
+        std::vector<int> new_halo;
+        for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
+          if(new_send_set[k].count(*jt))
+            new_halo.push_back((*active_vertex_map)[*jt]);
+        }
+        send[k].swap(new_halo);
       }
-      send_halo.swap(new_halo);
-    }
-    {
-      std::set<int> new_halo;
-      for(std::set<int>::iterator it=recv_halo.begin();it!=recv_halo.end();++it){
-        if(active_vertex_map->count(*it))
-          new_halo.insert((*active_vertex_map)[*it]);
+      for(int k=0;k<mpi_nparts;k++){
+        std::vector<int> new_halo;
+        for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
+          if(new_recv_set[k].count(*jt))
+            new_halo.push_back((*active_vertex_map)[*jt]);
+        }
+        recv[k].swap(new_halo);
       }
-      recv_halo.swap(new_halo);
+      
+      {
+        send_halo.clear();
+        for(int k=0;k<mpi_nparts;k++){
+          for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
+            send_halo.insert(*jt);
+          }
+        }
+      }    
+      {
+        recv_halo.clear();
+        for(int k=0;k<mpi_nparts;k++){
+          for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
+            recv_halo.insert(*jt);
+          }
+        }
+      }
     }
 
-    for(std::vector< std::vector<int> >::iterator it=send.begin();it!=send.end();++it){
-      std::vector<int> new_halo;
-      for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
-        if(verified_send_halo.count(*jt))
-          new_halo.push_back((*active_vertex_map)[*jt]);
-      }
-      it->swap(new_halo);
-    }
-    for(std::vector< std::vector<int> >::iterator it=recv.begin();it!=recv.end();++it){
-      std::vector<int> new_halo;
-      for(std::vector<int>::iterator jt=it->begin();jt!=it->end();++jt){
-        if(active_vertex_map->count(*jt))
-          new_halo.push_back((*active_vertex_map)[*jt]);
-      }
-      it->swap(new_halo);
-    }
-    
     create_adjancy();
     calc_edge_lengths();
 
@@ -648,9 +674,11 @@ template<typename real_t, typename index_t> class Mesh{
       real_t ml00 = (metric[nid0*ndims*ndims]+metric[nid1*ndims*ndims])*0.5;
       real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
       real_t ml11 = (metric[nid0*ndims*ndims+3]+metric[nid1*ndims*ndims+3])*0.5;
-      real_t m[] = {ml00, ml01, ml01, ml11};
 
-      length = property->length(get_coords(nid0), get_coords(nid1), m);
+      const real_t m[] = {ml00, ml01,
+                          ml01, ml11};
+
+      length = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), m);
     }else{
       real_t ml00 = (metric[nid0*ndims*ndims  ]+metric[nid1*ndims*ndims  ])*0.5;
       real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
@@ -660,14 +688,12 @@ template<typename real_t, typename index_t> class Mesh{
       real_t ml12 = (metric[nid0*ndims*ndims+5]+metric[nid1*ndims*ndims+5])*0.5;
       
       real_t ml22 = (metric[nid0*ndims*ndims+8]+metric[nid1*ndims*ndims+8])*0.5;
+
+      const real_t m[] = {ml00, ml01, ml02,
+                          ml01, ml11, ml12,
+                          ml02, ml12, ml22};
       
-      real_t x=_coords[nid1*ndims]-_coords[nid0*ndims];
-      real_t y=_coords[nid1*ndims+1]-_coords[nid0*ndims+1];
-      real_t z=_coords[nid1*ndims+2]-_coords[nid0*ndims+2];
-      
-      length = sqrt((ml02*x + ml12*y + ml22*z)*z + 
-                    (ml01*x + ml11*y + ml12*z)*y + 
-                    (ml00*x + ml01*y + ml02*z)*x);
+      length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
     }
     return length;
   }
@@ -691,18 +717,22 @@ template<typename real_t, typename index_t> class Mesh{
   /// This is used to verify that the mesh and its metadata is correct.
   void verify() const{
     // Check for the correctness of number of elements.
-    std::cout<<"VERIFY: NElements...............";
-    if(_ENList.size()/nloc==_NElements)
-      std::cout<<"pass\n";
-    else
-      std::cout<<"fail\n";
-
+    if(rank==0){
+      std::cout<<"VERIFY: NElements...............";
+      if(_ENList.size()/nloc==_NElements)
+        std::cout<<"pass\n";
+      else
+        std::cout<<"fail\n";
+    }
+    
     // Check for the correctness of number of nodes.
-    std::cout<<"VERIFY: NNodes..................";
-    if(_coords.size()/ndims==_NNodes)
-      std::cout<<"pass\n";
-    else
-      std::cout<<"fail\n";
+    if(rank==0){
+      std::cout<<"VERIFY: NNodes..................";
+      if(_coords.size()/ndims==_NNodes)
+        std::cout<<"pass\n";
+      else
+        std::cout<<"fail\n";
+    }
 
     std::vector<int> mpi_node_owner(_NNodes, rank);
     if(mpi_nparts>1)
@@ -748,9 +778,9 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
     {
-      std::cout<<"VERIFY: NNList..................";
+      if(rank==0) std::cout<<"VERIFY: NNList..................";
       if(NNList.size()==0){
-        std::cout<<"empty\n";
+        if(rank==0) std::cout<<"empty\n";
       }else{
         bool valid_nnlist=true;
         for(size_t i=0;i<_NNodes;i++){
@@ -787,14 +817,16 @@ template<typename real_t, typename index_t> class Mesh{
             valid_nnlist=false;
           }
         }
-        if(valid_nnlist)
-          std::cout<<"pass\n";
-        else
-          std::cout<<"fail\n";
+        if(rank==0){
+          if(valid_nnlist)
+            std::cout<<"pass\n";
+          else
+            std::cout<<"fail\n";
+        }
       }
     }
     {
-      std::cout<<"VERIFY: NEList..................";
+      if(rank==0) std::cout<<"VERIFY: NEList..................";
       std::string result="pass\n";
       if(NEList.size()==0){
         result = "empty\n";
@@ -816,18 +848,15 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
       }
-      std::cout<<result;
+      if(rank==0) std::cout<<result;
     }
     {
-      std::cout<<"VERIFY: Edges...................";
+      if(rank==0) std::cout<<"VERIFY: Edges...................";
       std::string result="pass\n";
       if(Edges.size()==0){
         result="empty\n";
       }else{
-        bool valid_edges=true;
-        if(local_Edges.size()!=Edges.size()){
-          valid_edges = false;
-        }else{
+        if(local_Edges.size()==Edges.size()){
           for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin(), jt=local_Edges.begin();
               it!=Edges.end(); ++it, ++jt){
             if(it->edge != jt->edge){
@@ -850,7 +879,7 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
       }
-      std::cout<<result;
+      if(rank==0) std::cout<<result;
     }
     if(ndims==2){
       real_t area=0, min_ele_area=0, max_ele_area=0;
@@ -890,9 +919,11 @@ template<typename real_t, typename index_t> class Mesh{
         MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
       }
 
-      std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
-      std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
-      std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
+      if(rank==0){
+        std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
+        std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
+        std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
+      }
     }else{
       real_t volume=0, min_ele_vol=0, max_ele_vol=0;
       size_t i=0;
@@ -928,13 +959,20 @@ template<typename real_t, typename index_t> class Mesh{
         MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
       }
 
-      std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
-      std::cout<<"VERIFY: minimum element volume...."<<min_ele_vol<<std::endl;
-      std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
+      if(rank==0){
+        std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
+        std::cout<<"VERIFY: minimum element volume...."<<min_ele_vol<<std::endl;
+        std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
+      }
     }
-    std::cout<<"VERIFY: mean quality...."<<get_qmean()<<std::endl;
-    std::cout<<"VERIFY: min quality...."<<get_qmin()<<std::endl;
-    std::cout<<"VERIFY: rms quality...."<<get_qrms()<<std::endl;
+    double qmean = get_qmean();
+    double qmin = get_qmin();
+    double qrms = get_qrms();
+    if(rank==0){
+      std::cout<<"VERIFY: mean quality...."<<qmean<<std::endl;
+      std::cout<<"VERIFY: min quality...."<<qmin<<std::endl;
+      std::cout<<"VERIFY: rms quality...."<<qrms<<std::endl;
+    }
   }
 
  private:
