@@ -399,6 +399,14 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_quality->SetNumberOfTuples(NElements);
     vtk_quality->SetName("quality");
 
+    vtkDoubleArray *vtk_sliver = NULL;
+    if(ndims==3){
+      vtk_sliver = vtkDoubleArray::New();
+      vtk_sliver->SetNumberOfComponents(1);
+      vtk_sliver->SetNumberOfTuples(NElements);
+      vtk_sliver->SetName("sliver");
+    }
+
     for(size_t i=0, k=0;i<NElements_total;i++){
       const index_t *n = mesh->get_element(i);
       if(n[0]<0){
@@ -417,6 +425,8 @@ template<typename real_t, typename index_t> class VTKTools{
         
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), 
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
+        vtk_sliver->SetTuple1(k, property->sliver(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), 
+                                                  mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
       }
 
       vtk_cell_numbering->SetTuple1(k, i);
@@ -433,6 +443,11 @@ template<typename real_t, typename index_t> class VTKTools{
 
     ug->GetCellData()->AddArray(vtk_quality);
     vtk_quality->Delete();
+
+    if(vtk_sliver){
+      ug->GetCellData()->AddArray(vtk_sliver);
+      vtk_sliver->Delete();
+    }
     
     int nparts=1;
 #ifdef HAVE_MPI
