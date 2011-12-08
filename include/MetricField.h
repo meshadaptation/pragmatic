@@ -154,14 +154,18 @@ template<typename real_t, typename index_t>
     _mesh->calc_edge_lengths();
   }
 
-  /*! Add the contribution from the metric field from a new field with a target linear interpolation error.
-   * @param psi is field while curvature is to be considered.
-   * @param target_error is the target interpolation error.
-   * @param sigma_psi should be set if a relative interpolation error is specified. It is the minimum value for psi used when applying the relative error. If the argument is not specified or less than 0 then an absolute error is assumed.
-   */
-  void add_field(const real_t *psi, const real_t target_error, real_t sigma_psi=-1.0){
-    bool relative = sigma_psi>0.0;
+  /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
+
     
+
+   * @param psi is field while curvature is to be considered.
+   * @param target_error is the user target error for a given norm.
+   * @param p_norm Set this optional argument to a positive integer to
+    apply the p-norm scaling to the metric, as in Chen Sun and Zu,
+    Mathematics of Computation, Volume 76, Number 257, January 2007,
+    pp. 179-204.
+   */
+  void add_field(const real_t *psi, const real_t target_error, int p_norm=-1){
     int ndims2=_ndims*_ndims;
     real_t *Hessian = new real_t[_NNodes*ndims2];
     
@@ -178,17 +182,28 @@ template<typename real_t, typename index_t>
       for(int i=0; i<_NNodes; i++){
         (this->*hessian_kernel)(psi, i, Hessian);
         
-        if(relative){
-          real_t eta = 1.0/max(target_error*psi[i], sigma_psi);
-          for(int j=0;j<ndims2;j++){
-            Hessian[i*ndims2+j]*=eta;
+        if(p_norm>0){
+          double *h=Hessian+i*ndims2, m_det;
+          if(_ndims==2){
+            /*|h[0] h[1]| 
+              |h[2] h[3]|*/
+            m_det = fabs(h[0]*h[3]-h[1]*h[2]);
+          }else{
+            /*|h[0] h[1] h[2]| 
+              |h[3] h[4] h[5]| 
+              |h[6] h[7] h[8]|*/
+            m_det = h[0]*(h[4]*h[8]-h[5]*h[7]) - h[1]*(h[3]*h[8]-h[5]*h[6]) + h[2]*(h[3]*h[7]-h[4]*h[6]);
           }
-        }else{
-          real_t eta = 1.0/target_error;
+          
+          double scaling_factor = pow(m_det, -1.0 / (2.0 * p_norm + _ndims));  
           for(int j=0;j<ndims2;j++)
-            Hessian[i*ndims2+j]*=eta;
+            h[j] = scaling_factor*h[j];
         }
-
+        
+        real_t eta = 1.0/target_error;
+        for(int j=0;j<ndims2;j++)
+          Hessian[i*ndims2+j]*=eta;
+        
         // Merge this metric with the existing metric field.
         if(add_to)
           _metric[i].constrain(Hessian+i*ndims2);
