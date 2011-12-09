@@ -58,7 +58,7 @@ class UnitTest:
         if not self.stdout:
             warncount = warncount + 1
         if self.stderr:
-            failcount = failcount + 1
+            failcount = warncount + 1
 
         return (passcount, warncount, failcount)
 
