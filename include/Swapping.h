@@ -499,9 +499,6 @@ template<typename real_t, typename index_t> class Swapping{
                                              _mesh->get_metric(hull[3]));
               
               if(std::min(quality[eid0],quality[eid1]) < std::min(q0, std::min(q1, q2))){
-                //std::cout<<"2->3: was="<<std::min(quality[eid0],quality[eid1])<<", now="
-                //         <<std::min(q0, std::min(q1, q2))<<std::endl; 
-                
                 _mesh->erase_element(eid0);
                 _mesh->erase_element(eid1);
                 
@@ -588,15 +585,9 @@ template<typename real_t, typename index_t> class Swapping{
                   }
                 }
                 
-                //std::cout<<"constrained edges: ";
-                //for(typename std::vector<index_t>::const_iterator it=constrained_edges.begin();it!=constrained_edges.end();++it)
-                //  std::cout<<*it<<" ";
-                //std::cout<<std::endl;
-                
                 if(*constrained_edges.begin() != *constrained_edges.rbegin()){
                   assert(_surface->contains_node(n[k]));
                   assert(_surface->contains_node(n[l]));
-                  // std::cout<<"surface edge\n";
                   
                   toxic = true;
                   break;
@@ -652,19 +643,20 @@ template<typename real_t, typename index_t> class Swapping{
                   new_elements[1].push_back(constrained_edges[6]);
                   new_elements[1].push_back(n[l]);
 
-                  new_elements[1].push_back(constrained_edges[2]);
                   new_elements[1].push_back(constrained_edges[0]);
                   new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(constrained_edges[2]);
                   new_elements[1].push_back(n[k]);
                                     
-                  new_elements[1].push_back(constrained_edges[4]);
                   new_elements[1].push_back(constrained_edges[0]);
                   new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(constrained_edges[4]);
                   new_elements[1].push_back(n[k]);
                 }else if(nelements==5){
                   // This is the 5-element to 6-element swap.
-                  new_elements.resize(1);
+                  new_elements.resize(5);
 
+                  // Option 1
                   new_elements[0].push_back(constrained_edges[0]);
                   new_elements[0].push_back(constrained_edges[2]);
                   new_elements[0].push_back(constrained_edges[4]);
@@ -694,6 +686,130 @@ template<typename real_t, typename index_t> class Swapping{
                   new_elements[0].push_back(constrained_edges[6]);
                   new_elements[0].push_back(constrained_edges[0]);
                   new_elements[0].push_back(n[k]);
+
+                  // Option 2
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[8]);
+                  new_elements[1].push_back(n[l]);
+                  
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(constrained_edges[8]);
+                  new_elements[1].push_back(n[l]);
+                  
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(n[l]);
+                  
+                  new_elements[1].push_back(constrained_edges[0]);
+                  new_elements[1].push_back(constrained_edges[8]);
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(n[k]);
+                  
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[8]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(n[k]);
+                  
+                  new_elements[1].push_back(constrained_edges[2]);
+                  new_elements[1].push_back(constrained_edges[6]);
+                  new_elements[1].push_back(constrained_edges[4]);
+                  new_elements[1].push_back(n[k]);
+
+                  // Option 3
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[0]);
+                  new_elements[2].push_back(constrained_edges[2]);
+                  new_elements[2].push_back(n[l]);
+                  
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[8]);
+                  new_elements[2].push_back(constrained_edges[0]);
+                  new_elements[2].push_back(n[l]);
+                  
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[6]);
+                  new_elements[2].push_back(constrained_edges[8]);
+                  new_elements[2].push_back(n[l]);
+                  
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[2]);
+                  new_elements[2].push_back(constrained_edges[0]);
+                  new_elements[2].push_back(n[k]);
+                  
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[0]);
+                  new_elements[2].push_back(constrained_edges[8]);
+                  new_elements[2].push_back(n[k]);
+                  
+                  new_elements[2].push_back(constrained_edges[4]);
+                  new_elements[2].push_back(constrained_edges[8]);
+                  new_elements[2].push_back(constrained_edges[6]);
+                  new_elements[2].push_back(n[k]);
+
+                  // Option 4
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[2]);
+                  new_elements[3].push_back(constrained_edges[4]);
+                  new_elements[3].push_back(n[l]);
+                  
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[0]);
+                  new_elements[3].push_back(constrained_edges[2]);
+                  new_elements[3].push_back(n[l]);
+                  
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[8]);
+                  new_elements[3].push_back(constrained_edges[0]);
+                  new_elements[3].push_back(n[l]);
+                  
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[4]);
+                  new_elements[3].push_back(constrained_edges[2]);
+                  new_elements[3].push_back(n[k]);
+                  
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[2]);
+                  new_elements[3].push_back(constrained_edges[0]);
+                  new_elements[3].push_back(n[k]);
+                  
+                  new_elements[3].push_back(constrained_edges[6]);
+                  new_elements[3].push_back(constrained_edges[0]);
+                  new_elements[3].push_back(constrained_edges[8]);
+                  new_elements[3].push_back(n[k]);
+
+                  // Option 5
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[0]);
+                  new_elements[4].push_back(constrained_edges[2]);
+                  new_elements[4].push_back(n[l]);
+                  
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[2]);
+                  new_elements[4].push_back(constrained_edges[4]);
+                  new_elements[4].push_back(n[l]);
+                  
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[4]);
+                  new_elements[4].push_back(constrained_edges[6]);
+                  new_elements[4].push_back(n[l]);
+                  
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[2]);
+                  new_elements[4].push_back(constrained_edges[0]);
+                  new_elements[4].push_back(n[k]);
+                  
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[4]);
+                  new_elements[4].push_back(constrained_edges[2]);
+                  new_elements[4].push_back(n[k]);
+                  
+                  new_elements[4].push_back(constrained_edges[8]);
+                  new_elements[4].push_back(constrained_edges[6]);
+                  new_elements[4].push_back(constrained_edges[4]);
+                  new_elements[4].push_back(n[k]);
                 }else if(nelements==6){
                   // This is the 6-element to 8-element swap.
                   new_elements.resize(1);
@@ -743,55 +859,55 @@ template<typename real_t, typename index_t> class Swapping{
                 
                 nelements = new_elements[0].size()/4;
                 
-                // Invert new elements if necessary.
-                if(property->volume(_mesh->get_coords(new_elements[0][0]),
-                                    _mesh->get_coords(new_elements[0][1]), 
-                                    _mesh->get_coords(new_elements[0][2]), 
-                                    _mesh->get_coords(new_elements[0][3]))<0.0){
-                  
-                  for(typename std::vector< std::vector<index_t> >::iterator it=new_elements.begin();it!=new_elements.end();++it){
-                    for(size_t j=0;j<nelements;j++){
-                      index_t stash_id = (*it)[j*4];
-                      (*it)[j*4] = (*it)[j*4+1];
-                      (*it)[j*4+1] = stash_id;           
-                    }
-                  }
-                }
-                
                 // Check new minimum quality.
                 std::vector<double> new_min_quality(new_elements.size());
                 std::vector< std::vector<double> > newq(new_elements.size());
-                for(size_t option=0;option<new_elements.size();option++){
-                  newq[option].resize(nelements);
-                  for(size_t j=0;j<nelements;j++){
-                    newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
-                                                         _mesh->get_coords(new_elements[option][j*4+1]),
-                                                         _mesh->get_coords(new_elements[option][j*4+2]),
-                                                         _mesh->get_coords(new_elements[option][j*4+3]),
-                                                         _mesh->get_metric(new_elements[option][j*4+0]),
-                                                         _mesh->get_metric(new_elements[option][j*4+1]),
-                                                         _mesh->get_metric(new_elements[option][j*4+2]),
-                                                         _mesh->get_metric(new_elements[option][j*4+3]));
+                int best_option;
+                for(int invert=0;invert<2;invert++){
+                  best_option=0;
+                  for(size_t option=0;option<new_elements.size();option++){
+                    newq[option].resize(nelements);
+                    for(size_t j=0;j<nelements;j++){
+                      newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
+                                                           _mesh->get_coords(new_elements[option][j*4+1]),
+                                                           _mesh->get_coords(new_elements[option][j*4+2]),
+                                                           _mesh->get_coords(new_elements[option][j*4+3]),
+                                                           _mesh->get_metric(new_elements[option][j*4+0]),
+                                                           _mesh->get_metric(new_elements[option][j*4+1]),
+                                                           _mesh->get_metric(new_elements[option][j*4+2]),
+                                                           _mesh->get_metric(new_elements[option][j*4+3]));
+                    }
+                    
+                    new_min_quality[option] = newq[option][0];
+                    for(size_t j=0;j<nelements;j++)
+                      new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
                   }
                   
-                  new_min_quality[option] = newq[option][0];
-                  for(size_t j=0;j<nelements;j++)
-                    new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
-                }
-
-                int best_option=0;
-                for(size_t option=1;option<new_elements.size();option++){
-                  if(new_min_quality[option]>new_min_quality[best_option]){
-                    best_option = option;
+                  
+                  for(size_t option=1;option<new_elements.size();option++){
+                    if(new_min_quality[option]>new_min_quality[best_option]){
+                      best_option = option;
+                    }
                   }
-                }
+                  
+                  if(new_min_quality[best_option] < 0.0){
+                    // Invert elements.
+                    for(typename std::vector< std::vector<index_t> >::iterator it=new_elements.begin();it!=new_elements.end();++it){
+                      for(size_t j=0;j<nelements;j++){
+                        index_t stash_id = (*it)[j*4];
+                        (*it)[j*4] = (*it)[j*4+1];
+                        (*it)[j*4+1] = stash_id;           
+                      }
+                    }
 
+                    continue;
+                  }
+                  break;
+                }
+                                
                 if(new_min_quality[best_option] <= min_quality)
                   continue;
-                
-                //std::cout<<"edge/face swap "<<nelements<<": "<<min_quality<<" --> "<<new_min_quality[best_option]
-                //         <<", option="<<best_option<<std::endl;
-                
+
                 // Remove old elements.
                 for(typename std::set<index_t>::const_iterator it=edge->adjacent_elements.begin();it!=edge->adjacent_elements.end();++it)
                   _mesh->erase_element(*it);
