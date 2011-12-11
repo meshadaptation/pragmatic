@@ -278,46 +278,48 @@ template<typename real_t, typename index_t>
   }
 
   void find_facets(const int *element, std::vector<int> &facet_ids) const{
-    if(ndims==2){
-      for(int i=0;i<3;i++){
-        typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(element[i]);
-        if(iSNEList==SNEList.end())
-          continue;
-        
-        typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(element[(i+1)%3]);
-        if(jSNEList==SNEList.end())
+    for(size_t i=0;i<nloc;i++){
+      std::set<index_t> Intersection;
+      
+      typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(element[i]);
+      if(iSNEList==SNEList.end())
+        continue;
+      
+      typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(element[(i+1)%nloc]);
+      if(jSNEList==SNEList.end())
+        continue;
+      
+      set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
+                       jSNEList->second.begin(), jSNEList->second.end(),
+                       inserter(Intersection,Intersection.begin()));
+      
+      if(ndims==3){
+        typename std::map<int, std::set<index_t> >::const_iterator kSNEList = SNEList.find(element[(i+2)%nloc]);
+        if(kSNEList==SNEList.end())
           continue;
 
-        std::set<index_t> Intersection;
-        set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
-                         jSNEList->second.begin(), jSNEList->second.end(),
-                         inserter(Intersection,Intersection.begin()));
-
-        if(Intersection.size()){
-#ifndef NDEBUG
-          if(Intersection.size()>1){
-            std::cerr<<"WARNING: duplicate facets\nIntersection.size() = "<<Intersection.size()<<std::endl<<"Intersection = ";
-            for(typename std::set<index_t>::iterator ii=Intersection.begin();ii!=Intersection.end();++ii){
-              std::cerr<<*ii<<" (";
-              for(int jj=0;jj<2;jj++)
-                std::cerr<<SENList[(*ii)*2+jj]<<" ";
-              std::cerr<<") ";
-            }
-            std::cerr<<std::endl;  
-          }
-#endif
-          facet_ids.push_back(*Intersection.begin());
-        }
+        std::set<index_t> tmp_intersection;
+        set_intersection(Intersection.begin(), Intersection.end(),
+                         kSNEList->second.begin(), kSNEList->second.end(),
+                         inserter(tmp_intersection,tmp_intersection.begin()));
+        Intersection.swap(tmp_intersection);
       }
-    }else{
-        /*
-        std::set<index_t>::iterator start;
-        std::set<index_t>::iterator end = set_intersection(SNEList[element[i]].begin(), SNEList[element[i]].end(),
-                                                           SNEList[element[(i+1)%3]].begin(), SNEList[element[(i+1)%3]].end(),
-                                                           start);
-        */
-        std::cerr<<"ERROR: not yet implemented\n";
-        exit(-1);
+
+      if(Intersection.size()){
+#ifndef NDEBUG
+        if(Intersection.size()>1){
+          std::cerr<<"WARNING: duplicate facets\nIntersection.size() = "<<Intersection.size()<<std::endl<<"Intersection = ";
+          for(typename std::set<index_t>::iterator ii=Intersection.begin();ii!=Intersection.end();++ii){
+            std::cerr<<*ii<<" (";
+            for(size_t jj=0;jj<snloc;jj++)
+              std::cerr<<SENList[(*ii)*snloc+jj]<<" ";
+            std::cerr<<") ";
+          }
+          std::cerr<<std::endl;  
+        }
+#endif
+        facet_ids.push_back(*Intersection.begin());
+      }
     }
   }
 
