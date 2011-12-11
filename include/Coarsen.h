@@ -456,8 +456,7 @@ template<typename real_t, typename index_t> class Coarsen{
 
             int coplanar_id = recv_buffer[p][loc++];
 
-            _surface->append_facet(&(facet[0]), coplanar_id);
-            
+            _surface->append_facet(&(facet[0]), coplanar_id, true);
           }
         }
 

@@ -72,7 +72,23 @@ template<typename real_t, typename index_t>
   }
 
   /// Append a facet to the surface
-  void append_facet(const int *facet, int coplanar_id){
+  void append_facet(const int *facet, int coplanar_id, bool check_duplicates=false){
+    if(check_duplicates){
+      std::set<index_t> Intersection;
+      set_intersection(SNEList[facet[0]].begin(), SNEList[facet[0]].end(),
+                       SNEList[facet[1]].begin(), SNEList[facet[1]].end(),
+                       inserter(Intersection,Intersection.begin()));
+      for(size_t i=2;i<snloc;i++){
+        std::set<index_t> tmp_intersection;
+        set_intersection(Intersection.begin(), Intersection.end(),
+                         SNEList[facet[i]].begin(), SNEList[facet[i]].end(),
+                         inserter(tmp_intersection,tmp_intersection.begin()));
+        Intersection.swap(tmp_intersection);
+      }
+      if(Intersection.size())
+        return;
+    }
+
     index_t eid = coplanar_ids.size();
     coplanar_ids.push_back(coplanar_id);
     for(size_t i=0;i<snloc;i++){
@@ -278,7 +294,18 @@ template<typename real_t, typename index_t>
                          inserter(Intersection,Intersection.begin()));
 
         if(Intersection.size()){
-          assert(Intersection.size()==1);
+#ifndef NDEBUG
+          if(Intersection.size()>1){
+            std::cerr<<"WARNING: duplicate facets\nIntersection.size() = "<<Intersection.size()<<std::endl<<"Intersection = ";
+            for(typename std::set<index_t>::iterator ii=Intersection.begin();ii!=Intersection.end();++ii){
+              std::cerr<<*ii<<" (";
+              for(int jj=0;jj<2;jj++)
+                std::cerr<<SENList[(*ii)*2+jj]<<" ";
+              std::cerr<<") ";
+            }
+            std::cerr<<std::endl;  
+          }
+#endif
           facet_ids.push_back(*Intersection.begin());
         }
       }
