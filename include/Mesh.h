@@ -756,10 +756,12 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector< std::set<index_t> > local_NNList(_NNodes);
     std::set< Edge<real_t, index_t> > local_Edges;
     for(size_t i=0; i<_NElements; i++){
+      if(_ENList[i*nloc]<0)
+        continue;
+      
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
-        if(nid_j<0)
-          break;
+
         local_NEList[nid_j].insert(i);
         for(size_t k=j+1;k<nloc;k++){
           index_t nid_k = _ENList[i*nloc+k];
@@ -786,42 +788,33 @@ template<typename real_t, typename index_t> class Mesh{
         for(size_t i=0;i<_NNodes;i++){
           size_t active_cnt=0;
           for(size_t j=0;j<NNList[i].size();j++){
-            if(NNList[i][j]>=0){
+            if(NNList[i][j]>=0)
               active_cnt++;
-              if(local_NNList[i].count(NNList[i][j])==0){
-                valid_nnlist=false;
-                std::cerr<<"local_NNList[i].count(NNList[i][j])==0\n";
-                std::cerr<<"NNList[i] =       ";
-                for(size_t j=0;j<NNList[i].size();j++)
-                  std::cerr<<NNList[i][j]<<" ";
-                std::cerr<<std::endl;
-                std::cerr<<"local_NNList[i] = ";
-                for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
-                  std::cerr<<*kt<<" ";
-                std::cerr<<std::endl;
-              }
-            }
           }
           if(active_cnt!=local_NNList[i].size()){
+            valid_nnlist=false;
+
             std::cerr<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
             std::cerr<<"local_NNList[i].count(NNList[i][j])==0\n";
-            std::cerr<<"NNList["<<i<<"] =       ";
+            std::cerr<<"NNList["
+                     <<i
+                     <<"("<<send_halo.count(i)<<", "<<recv_halo.count(i)<<")] =       ";
             for(size_t j=0;j<NNList[i].size();j++)
-              std::cerr<<NNList[i][j]<<" ";
+              std::cerr<<NNList[i][j]<<"("<<NNList[NNList[i][j]].size()<<", "
+                       <<send_halo.count(NNList[i][j])<<", "
+                       <<recv_halo.count(NNList[i][j])<<") ";
             std::cerr<<std::endl;
             std::cerr<<"local_NNList["<<i<<"] = ";
             for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
               std::cerr<<*kt<<" ";
             std::cerr<<std::endl;
-            
-            valid_nnlist=false;
           }
         }
         if(rank==0){
           if(valid_nnlist)
             std::cout<<"pass\n";
           else
-            std::cout<<"fail\n";
+            std::cout<<"warn\n";
         }
       }
     }
