@@ -118,7 +118,7 @@ int main(int argc, char **argv){
   
   delete mesh;
   
-  if((qmean>0.4)&&(qmin>0.001))
+  if((qmean>0.4)&&(qmin>0.0003))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
