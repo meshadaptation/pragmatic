@@ -37,6 +37,7 @@
 #include "Swapping.h"
 #include "Smooth.h"
 
+#include "VTKTools.h"
 
 using namespace std;
 
@@ -70,6 +71,22 @@ extern "C" {
     _pragmatic_mesh = mesh;
     
     Surface<double, int> *surface = new Surface<double, int>(*mesh);
+    _pragmatic_surface = surface;
+    
+    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
+    metric_field->set_hessian_method("qls");
+    _pragmatic_metric_field = metric_field;
+  }
+
+  void pragmatic_vtk_begin(const char *filename){
+    assert(_pragmatic_mesh==NULL);
+    assert(_pragmatic_surface==NULL);
+    assert(_pragmatic_metric_field==NULL);
+    
+    Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu(filename);
+    _pragmatic_mesh = mesh;
+    
+    Surface<double, int> *surface = new Surface<double, int>(*mesh, true);
     _pragmatic_surface = surface;
     
     MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);

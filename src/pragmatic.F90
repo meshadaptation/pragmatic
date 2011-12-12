@@ -61,6 +61,11 @@ module pragmatic
        real(c_double) :: y(*)
        real(c_double) :: z(*)
      end subroutine pragmatic_3d_begin
+     subroutine pragmatic_vtk_begin(filename) bind(c,name="pragmatic_vtk_begin")
+       use iso_c_binding
+       implicit none
+       character(kind=c_char), intent(in) :: filename
+     end subroutine pragmatic_vtk_begin
   end interface pragmatic_begin
   
    !> Add field to be included in the metric.
