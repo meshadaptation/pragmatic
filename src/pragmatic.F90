@@ -32,7 +32,8 @@ module pragmatic
   
   private
   public :: pragmatic_begin, pragmatic_addfield, pragmatic_get_metric, &
-       pragmatic_set_metric, pragmatic_end
+       pragmatic_set_metric, pragmatic_end, pragmatic_get_mesh_info, &
+       pragmatic_get_mesh_coords
   
    !> Initialises metric calculation. This must be called first.
    !
@@ -110,10 +111,42 @@ module pragmatic
      end subroutine pragmatic_adapt
   end interface pragmatic_adapt
 
-   !> Free internal data structures.
+  !> Free internal data structures.
+  interface pragmatic_get_mesh_info
+     subroutine pragmatic_get_mesh_info(NNodes, NElements, NSElements) bind(c,name="pragmatic_get_mesh_info")
+       use iso_c_binding
+       integer(kind=c_int) :: NNodes
+       integer(kind=c_int) :: NElements
+       integer(kind=c_int) :: NSElements
+     end subroutine pragmatic_get_mesh_info
+  end interface pragmatic_get_mesh_info
+
+  !> Get the coordinates of the mesh vertices.
+  !
+  !> @param[in] x X-cooardinates.
+  !> @param[in] y Y-cooardinates.
+  !> @param[in] z Z-cooardinates.
+  interface pragmatic_get_mesh_coords
+     subroutine pragmatic_get_mesh_coords_2d(x, y) bind(c,name="pragmatic_get_mesh_coords_2d")
+       use iso_c_binding
+       implicit none
+       real(c_double) :: x(*)
+       real(c_double) :: y(*)
+     end subroutine pragmatic_get_mesh_coords_2d
+     subroutine pragmatic_get_mesh_coords_3d(x, y, z) bind(c,name="pragmatic_get_mesh_coords_3d")
+       use iso_c_binding
+       implicit none
+       real(c_double) :: x(*)
+       real(c_double) :: y(*)
+       real(c_double) :: z(*)
+     end subroutine pragmatic_get_mesh_coords_3d
+  end interface pragmatic_get_mesh_coords
+
+  !> Free internal data structures.
   interface pragmatic_end
      subroutine pragmatic_end() bind(c,name="pragmatic_end")
        use iso_c_binding
      end subroutine pragmatic_end
   end interface pragmatic_end
+
 end module pragmatic
