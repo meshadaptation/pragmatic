@@ -150,7 +150,7 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm
 #endif
 
 
-  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "I");
+  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "S");
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
   }else if(distance==2){
