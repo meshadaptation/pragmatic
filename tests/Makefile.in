@@ -1,8 +1,12 @@
 SHELL = /bin/bash
 
 CXX = @CXX@
-CPPFLAGS = @CPPFLAGS@ -I../include
 CXXFLAGS = @CXXFLAGS@ @OPENMP_CXXFLAGS@
+
+FC = @FC@
+FCFLAGS = @FCFLAGS@ @OPENMP_FCFLAGS@
+
+CPPFLAGS = @CPPFLAGS@ -I../include
 LDFLAGS = @LDFLAGS@
 
 NVCC = @NVCC@
@@ -13,18 +17,24 @@ LIBS = @LIBS@
 
 LIB = ../lib/libpragmatic.a
 
-TEST_SRC = $(wildcard src/*.cpp)
-TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC))
+TEST_SRC_F90 = $(wildcard src/*.F90)
+TEST_SRC_CXX = $(wildcard src/*.cpp)
+TEST_SRC = $(TEST_SRC_CXX) $(TEST_SRC_F90)
+
+TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX)) $(patsubst src/%.F90,bin/%,$(TEST_SRC_F90))
 
 TEST_SRC_CUDA = $(wildcard src/*.cu)
 TEST_BIN_CUDA = $(patsubst src/%.cu,bin/%,$(TEST_SRC_CUDA))
 
 VPATH = ./:./src
 
-.SUFFIXES: .cpp .o
+.SUFFIXES: .cpp .F90 .o
 
 .cpp.o:
 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $<
+
+.F90.o:
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
 
 default: test
 
@@ -42,7 +52,11 @@ bin/%: src/%.cpp ticker.o
 	@echo "    CXX $@"
 	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< ticker.o $(LIB) $(LIBS)
 
-bin/%: src/%.cu 
+bin/%: src/%.F90 ticker.o 
+	@echo "    FC $@"
+	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< ticker.o $(LIB) $(LIBS)
+
+bin/%: src/%.cu
 	@echo "    NVCC $@"
 	@$(NVCC) $(NVCCFLAGS) -o $@ $< ticker.o $(CUDA_LIBS)
 

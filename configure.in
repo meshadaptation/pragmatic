@@ -51,9 +51,10 @@ if test -z "$CC" && test -n "$MPICC"; then
 fi
 
 AC_PROG_CXX([icpc FCC g++])
-AX_MPI
+LX_FIND_MPI
+# AX_MPI
 CXX="$MPICXX"
-LIBS="$MPILIBS $LIBS"
+LIBS="$LIBS $MPI_CXXLDFLAGS"
 
 AC_LANG_PUSH([C])
 AC_PROG_FC([icc fc gcc])
