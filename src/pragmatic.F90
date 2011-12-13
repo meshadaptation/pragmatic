@@ -33,7 +33,7 @@ module pragmatic
   private
   public :: pragmatic_begin, pragmatic_addfield, pragmatic_get_metric, &
        pragmatic_set_metric, pragmatic_end, pragmatic_get_mesh_info, &
-       pragmatic_get_mesh_coords
+       pragmatic_get_mesh_coords, pragmatic_adapt, pragmatic_dump
   
    !> Initialises metric calculation. This must be called first.
    !
@@ -69,6 +69,14 @@ module pragmatic
      end subroutine pragmatic_vtk_begin
   end interface pragmatic_begin
   
+  interface pragmatic_dump
+     subroutine pragmatic_dump(filename) bind(c,name="pragmatic_dump")
+       use iso_c_binding
+       implicit none
+       character(kind=c_char), intent(in) :: filename
+     end subroutine pragmatic_dump
+  end interface pragmatic_dump
+
    !> Add field to be included in the metric.
    !
    !> @param[in] psi Solutional variables stored at the mesh verticies.
@@ -97,10 +105,10 @@ module pragmatic
    !
    !> @param[in] metric Metric tensor field.
   interface pragmatic_set_metric
-     subroutine pragmatic_set_metric(metric) bind(c,name="pragmatic_set_metric")
+     subroutine pragmatic_set_metric(metric, min_length, max_length) bind(c,name="pragmatic_set_metric")
        use iso_c_binding
        implicit none
-       real(c_double) :: metric(*)
+       real(c_double) :: metric(*), min_length, max_length
      end subroutine pragmatic_set_metric
   end interface pragmatic_set_metric
 

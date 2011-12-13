@@ -30,47 +30,50 @@ program test_adapt
   use iso_c_binding
   implicit none
 
-  integer :: NNodes, NElements, NSElements
-  real(c_double), allocatable, dimension(:) :: x, y
+  integer(kind=c_int) :: NNodes, NElements, NSElements
+  real(c_double), allocatable, dimension(:) :: xv, yv, metric
+  real(c_double), parameter :: eta=0.1, dh=0.02, maxh=1.0
+  
+  integer :: i
+  real :: x, y, d2fdx2, d2fdy2, d2fdxdy
 
-  call pragmatic_begin("../data/box200x200.vtu"//C_NULL_CHAR)
+  call pragmatic_begin("../data/box50x50.vtu"//C_NULL_CHAR)
   
   call pragmatic_get_mesh_info(NNodes, NElements, NSElements)
 
-  allocate(x(NNodes), y(NNodes))
-  call pragmatic_get_mesh_coords(x, y);
+  allocate(xv(NNodes), yv(NNodes))
+  call pragmatic_get_mesh_coords(xv, yv)
 
-  !size_t NNodes = mesh->get_number_nodes();
-  !double eta=0.1;
-  !double dh=0.01;
-  !for(size_t i=0;i<NNodes;i++){
-  !  double x = 2*mesh->get_coords(i)[0]-1;
-  !  double y = 2*mesh->get_coords(i)[1]-1;
-  !  
-  !  double d2fdx2 = -0.800000000000000/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 3)) + 0.00800000000000000/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 5)) - 250.000000000000*sin(50*x);
-  !  double d2fdy2 = 2.50000000000000*sin(5*y)/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 2)) - 5.00000000000000*cos(5*y)*(5*y)/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 3)) + 0.0500000000000000*cos(5*y)*(5*y)/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 5));
-  !  double d2fdxdy = 2.00000000000000*cos(5*y)/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 3)) - 0.0200000000000000*cos(5*y)/(double)((0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(0.0100000000000000/(double)(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*pow((2*x - sin(5*y)), 5));
+  allocate(metric(4*NNodes))
+  do i=1, NNodes
+     x = 2*xv(i)-1
+     y = 2*yv(i)-1
 
-   ! if(isnan(d2fdx2)){
-   !   double m[] =
-   !     {1/(dh*dh), 0.0,
-   !      0.0,       1/(dh*dh)};
-   !   metric_field.set_metric(m, i);
-   ! }else{
-   !   double m[] =
-   !     {d2fdx2/eta,  d2fdxdy/eta,
-   !      d2fdxdy/eta, d2fdy2/eta};
-   !   metric_field.set_metric(m, i);
-   ! } 
-  !}
-  !metric_field.apply_min_edge_length(dh);
-  !metric_field.apply_max_edge_length(1.0);
-  ! subroutine pragmatic_addfield(psi, error)
+     d2fdx2 = -0.8/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**3) + &
+          0.008/((0.01/(2*x - sin(5*y))* &
+          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
+          (2*x - sin(5*y))**5) - 250.0*sin(50*x)
+     
+     d2fdy2 = 2.5*sin(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
+          (2*x - sin(5*y))**2) - 5.0*cos(5*y)*(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
+          (2*x - sin(5*y))**3) + 0.05*cos(5*y)*(5*y)/((0.01/(2*x - sin(5*y))* &
+          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**5)
+     
+     d2fdxdy = 2.0*cos(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
+          (2*x - sin(5*y))**3) - 0.02*cos(5*y)/((0.01/(2*x - sin(5*y))* &
+          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**5)
+     
+     metric((i-1)*4+1) = d2fdx2/eta
+     metric((i-1)*4+2) = d2fdxdy/eta
+     metric((i-1)*4+3) = d2fdxdy/eta
+     metric((i-1)*4+4) = d2fdy2/eta
+  end do  
+  call pragmatic_set_metric(metric, dh, maxh)
 
- !pragmatic_set_metric(metric)
+  call pragmatic_adapt()
 
-  !subroutine pragmatic_adapt()
-  
+  call pragmatic_dump("../data/ftest_adapt_2d"//C_NULL_CHAR)
+
   call pragmatic_end()
 
   ! For now just be happy we get this far without dieing.

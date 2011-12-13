@@ -93,6 +93,10 @@ extern "C" {
     metric_field->set_hessian_method("qls");
     _pragmatic_metric_field = metric_field;
   }
+
+  void pragmatic_dump(const char *filename){
+    VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
+  }
   
   void pragmatic_addfield(const double *psi, const double *error){
     assert(_pragmatic_metric_field!=NULL);
@@ -104,9 +108,12 @@ extern "C" {
   void pragmatic_get_metric(double *metric){
     ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
   }
-
-  void pragmatic_set_metric(const double *metric){
+  
+  void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length){
     ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->apply_min_edge_length(*min_length);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->apply_max_edge_length(*max_length);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
   }
 
   void pragmatic_adapt(){
@@ -143,8 +150,6 @@ extern "C" {
     std::map<int, int> active_vertex_map;
     mesh->defragment(&active_vertex_map);
     surface->defragment(&active_vertex_map);
-    
-    smooth.smooth("smart Laplacian");
   }
 
   void pragmatic_get_mesh_info(int *NNodes, int *NElements, int *NSElements){
