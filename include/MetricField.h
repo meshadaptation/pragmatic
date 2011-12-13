@@ -116,9 +116,10 @@ template<typename real_t, typename index_t>
   void set_metric(const real_t *metric){
     if(_metric==NULL)
       _metric = new MetricTensor<real_t>[_NNodes];
-
+    
+    const size_t stride = _ndims*_ndims;
     for(int i=0;i<_NNodes;i++)
-      _metric[i].set_metric(_ndims, metric);
+      _metric[i].set_metric(_ndims, metric+stride*i);
   }
 
   /*! Set the metric tensor field.
