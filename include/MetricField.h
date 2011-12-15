@@ -416,7 +416,7 @@ template<typename real_t, typename index_t>
    * @param max_len specifies the maximum allowed edge length.
    */
   void apply_max_edge_length(real_t max_len){
-    real_t M[_ndims*_ndims];
+    std::vector<real_t> M(_ndims*_ndims);
     for(int i=0;i<_ndims;i++)
       for(int j=0;j<_ndims;j++)
         if(i==j)
@@ -425,14 +425,14 @@ template<typename real_t, typename index_t>
           M[i*_ndims+j] = 0.0;
 
     for(int i=0;i<_NNodes;i++)
-      _metric[i].constrain(M);
+      _metric[i].constrain(&(M[0]));
   }
 
   /*! Apply minimum edge length constraint.
    * @param min_len specifies the minimum allowed edge length globally.
    */
   void apply_min_edge_length(real_t min_len){
-    real_t M[_ndims*_ndims];
+    std::vector<real_t> M(_ndims*_ndims);
     for(int i=0;i<_ndims;i++)
       for(int j=0;j<_ndims;j++)
         if(i==j)
@@ -441,14 +441,14 @@ template<typename real_t, typename index_t>
           M[i*_ndims+j] = 0.0;
 
     for(int i=0;i<_NNodes;i++)
-      _metric[i].constrain(M, false);
+      _metric[i].constrain(&(M[0]), false);
   }
 
   /*! Apply minimum edge length constraint.
    * @param min_len specifies the minimum allowed edge length locally at each vertex.
    */
   void apply_min_edge_length(const real_t *min_len){
-    real_t M[_ndims*_ndims];
+    std::vector<real_t> M(_ndims*_ndims);
     for(int n=0;n<_NNodes;n++){
       for(int i=0;i<_ndims;i++){
         for(int j=0;j<_ndims;j++){
