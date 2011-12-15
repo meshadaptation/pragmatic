@@ -17,11 +17,16 @@ LIBS = @LIBS@
 
 LIB = ../lib/libpragmatic.a
 
+ifeq (@USING_FORTRAN@,yes)
 TEST_SRC_F90 = $(wildcard src/*.F90)
+TEST_BIN_F90 = $(patsubst src/%.F90,bin/%,$(TEST_SRC_F90))
+endif
 TEST_SRC_CXX = $(wildcard src/*.cpp)
+TEST_BIN_CXX = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX))
+
 TEST_SRC = $(TEST_SRC_CXX) $(TEST_SRC_F90)
 
-TEST_BIN = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX)) $(patsubst src/%.F90,bin/%,$(TEST_SRC_F90))
+TEST_BIN = $(TEST_BIN_CXX) $(TEST_BIN_F90)
 
 TEST_SRC_CUDA = $(wildcard src/*.cu)
 TEST_BIN_CUDA = $(patsubst src/%.cu,bin/%,$(TEST_SRC_CUDA))

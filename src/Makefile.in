@@ -17,7 +17,10 @@ LIB = ../lib/libpragmatic.a
 
 VPATH = ./:./src
 
-objects = zoltan_colour.o pragmatic.o  pragmatic_Fortran.o
+ifeq (@USING_FORTRAN@,yes)
+fortran_objs = pragmatic.o  pragmatic_Fortran.o
+endif
+objects = zoltan_colour.o $(fortran_objs)
 
 .SUFFIXES: .F90 .cpp .c .o
 
@@ -36,7 +39,9 @@ default: lib
 lib: $(objects)
 	mkdir -p ../lib
 	$(AR) $(ARFLAGS) $(LIB) $(objects)
+ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
+endif
 
 clean:
 	rm -rf *.o *.mod

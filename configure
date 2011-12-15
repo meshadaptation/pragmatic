@@ -611,6 +611,7 @@ EGREP
 GREP
 CXXCPP
 ZOLTAN
+USING_FORTRAN
 MAKE
 RANLIB
 AR
@@ -690,6 +691,7 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 enable_openmp
+enable_fortran
 enable_debugging
 enable_zoltan
 with_zoltan
@@ -1326,6 +1328,7 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --disable-openmp        do not use OpenMP
+  --enable-fortran        enable Fortran interface (default)
   --enable-debugging      turns on debugging flags
   --enable-zoltan         Enables Zoltan support
   --enable-cuda=ARCH      Enable cuda based modules for architecture ARCH (see
@@ -5358,6 +5361,17 @@ else
 $as_echo "no" >&6; }
 fi
 
+
+
+# Check whether --enable-fortran was given.
+if test "${enable_fortran+set}" = set; then :
+  enableval=$enable_fortran;
+fi
+
+USING_FORTRAN="yes"
+if test "x$enable_fortran" = "xno" ; then
+   USING_FORTRAN="no"
+fi
 
 
 # Check whether --enable-debugging was given.

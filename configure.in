@@ -98,6 +98,15 @@ test -n "$ARFLAGS" || ARFLAGS="cr"
 AC_PROG_RANLIB
 AC_CHECK_PROG(MAKE, gmake, gmake, make, $PATH)
 
+AC_ARG_ENABLE(fortran,
+    [AC_HELP_STRING([--enable-fortran],
+	    [enable Fortran interface (default)])])
+USING_FORTRAN="yes"
+if test "x$enable_fortran" = "xno" ; then
+   USING_FORTRAN="no"
+fi
+AC_SUBST(USING_FORTRAN)
+
 AC_ARG_ENABLE(debugging,
     [AC_HELP_STRING([--enable-debugging],
 	    [turns on debugging flags])])
