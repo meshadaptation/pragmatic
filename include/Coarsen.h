@@ -396,7 +396,7 @@ template<typename real_t, typename index_t> class Coarsen{
           // Unpack elements.
           int num_extra_elements = recv_buffer[p][loc++];
           for(int i=0;i<num_extra_elements;i++){
-            int element[nloc];
+            std::vector<int> element(nloc);
             for(size_t j=0;j<nloc;j++){
               element[j] = gnn2lnn[recv_buffer[p][loc++]];
             }
@@ -414,7 +414,7 @@ template<typename real_t, typename index_t> class Coarsen{
             
             if(cnt){
               // Add element
-              int eid = _mesh->append_element(element);
+              int eid = _mesh->append_element(&(element[0]));
               
               // Update adjancies: edges, NEList, NNList
               for(size_t l=0;l<nloc;l++){
@@ -433,7 +433,7 @@ template<typename real_t, typename index_t> class Coarsen{
                   typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(new_edge);
                   if(edge!=_mesh->Edges.end()){
                     new_edge.adjacent_elements = edge->adjacent_elements;
-                    _mesh->Edges.erase(edge);
+                    _mesh->Edges.erase(*edge);
                   }
                   
                   new_edge.adjacent_elements.insert(eid);
