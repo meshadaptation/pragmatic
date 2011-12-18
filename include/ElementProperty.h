@@ -28,6 +28,7 @@
 #ifndef ELEMENTPROPERTY_H
 #define ELEMENTPROPERTY_H
 
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
@@ -193,7 +194,7 @@ class ElementProperty{
     real_t a_m = a*sqrt(m00*m11 - m01*m01);
 
     // Function
-    real_t f = min(l/3.0, 3.0/l);
+    real_t f = std::min(l/3.0, 3.0/l);
     real_t F = pow(f * (2.0 - f), 3.0);
     real_t quality = 12.0*sqrt(3.0)*a_m*F/(l*l);
 
@@ -242,7 +243,7 @@ class ElementProperty{
     real_t v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
 
     // Function
-    real_t f = min(l/6, 6/l);
+    real_t f = std::min(l/6, 6/l);
     real_t F = pow(f * (2.0 - f), 3);
     real_t quality = pow(6.0, 4)*sqrt(2.0) * v_m * F / (l*l*l);
 
