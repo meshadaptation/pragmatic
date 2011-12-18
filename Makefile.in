@@ -28,6 +28,8 @@ basic_test:
 	@(cd tests && $(MAKE) test)
 
 clean:
+	@echo "  CLEAN lib"
+	@rm -rf lib/lib*
 	@echo "  CLEAN docs"
 	@rm -rf docs
 	@echo "  CLEAN src"
