@@ -133,15 +133,15 @@ template<> inline double machine_epsilon<double>() { return 2.220e-16; }
 inline double ei_real(double x)  { return x; }
 inline double ei_imag(double)    { return 0.; }
 inline double ei_conj(double x)  { return x; }
-inline double ei_abs(double x)   { return std::abs(x); }
+inline double ei_abs(double x)   { return fabs(x); }
 inline double ei_abs2(double x)  { return x*x; }
-inline double ei_sqrt(double x)  { return std::sqrt(x); }
-inline double ei_exp(double x)   { return std::exp(x); }
-inline double ei_log(double x)   { return std::log(x); }
-inline double ei_sin(double x)   { return std::sin(x); }
-inline double ei_cos(double x)   { return std::cos(x); }
-inline double ei_atan2(double y, double x) { return std::atan2(y,x); }
-inline double ei_pow(double x, double y) { return std::pow(x, y); }
+inline double ei_sqrt(double x)  { return sqrt(x); }
+inline double ei_exp(double x)   { return exp(x); }
+inline double ei_log(double x)   { return log(x); }
+inline double ei_sin(double x)   { return sin(x); }
+inline double ei_cos(double x)   { return cos(x); }
+inline double ei_atan2(double y, double x) { return atan2(y,x); }
+inline double ei_pow(double x, double y) { return pow(x, y); }
 
 template<> inline double ei_random(double a, double b)
 {
