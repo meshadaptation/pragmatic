@@ -26,6 +26,7 @@
  *    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  *    USA
  */
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -79,7 +80,7 @@ int main(int argc, char **argv){
   
   double L_max = mesh->maximal_edge_length();
   
-  double alpha = sqrt(2)/2;
+  double alpha = sqrt(2.0)/2;
   for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
