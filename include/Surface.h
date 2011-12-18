@@ -634,7 +634,7 @@ template<typename real_t, typename index_t>
       
 
     coplanar_ids.resize(NSElements);
-    fill(coplanar_ids.begin(), coplanar_ids.end(), 0);
+    std::fill(coplanar_ids.begin(), coplanar_ids.end(), 0);
 
     if(use_bbox){
       for(size_t i=0;i<NSElements;i++){
