@@ -30,6 +30,7 @@
 #ifndef SMOOTH_H
 #define SMOOTH_H
 
+#include <algorithm>
 #include <omp.h>
 #include <set>
 #include <map>
@@ -601,7 +602,7 @@ template<typename real_t, typename index_t>
         ll[2] = property->volume(x0, x1, p,  x3);
         ll[3] = property->volume(x0, x1, x2, p);
         
-        real_t min_l = min(min(ll[0], ll[1]), min(ll[2], ll[3]));
+        real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
         if(best_e<0){
           tol = min_l;
           best_e = *ie;
