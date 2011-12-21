@@ -141,12 +141,29 @@ template<typename real_t, typename index_t> class Coarsen{
         
         graph.npnodes = NPNodes;
         
+        std::vector< std::set<index_t> > NNList(NNodes);
+        size_t NElements = _mesh->get_number_elements();
+        for(size_t i=0; i<NElements; i++){
+          if(_mesh->_ENList[i*nloc]<0)
+            continue;
+          
+          for(size_t j=0;j<nloc;j++){
+            index_t nid_j = _mesh->_ENList[i*nloc+j];
+            
+            for(size_t k=j+1;k<nloc;k++){
+              index_t nid_k = _mesh->_ENList[i*nloc+k];
+              NNList[nid_j].insert(nid_k);
+              NNList[nid_k].insert(nid_j);
+            }
+          }
+        }
+
         std::vector<size_t> nedges(NNodes);
         size_t sum = 0;
         for(int i=0;i<NNodes;i++){
           size_t cnt = 0;
           if(owner[i]==(size_t)rank)
-            cnt = _mesh->NNList[i].size();
+            cnt = NNList[i].size();
           nedges[i] = cnt;
           sum+=cnt;
         }
@@ -156,7 +173,7 @@ template<typename real_t, typename index_t> class Coarsen{
         sum=0;
         for(int i=0;i<NNodes;i++){
           if(owner[i]==(size_t)rank)
-            for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+            for(typename std::set<index_t>::iterator it=NNList[i].begin();it!=NNList[i].end();++it){
               csr_edges[sum++] = *it;
             }
         }
@@ -167,7 +184,7 @@ template<typename real_t, typename index_t> class Coarsen{
         
         graph.colour = &(colour[0]);
         
-        zoltan_colour(&graph, 2, MPI_COMM_WORLD);
+        zoltan_colour(&graph, 1, MPI_COMM_WORLD);
 
         // Given a colouring, determine the maximum independent set.
 
