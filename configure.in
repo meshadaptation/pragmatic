@@ -158,9 +158,15 @@ AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 AC_ARG_ENABLE(zoltan,[AC_HELP_STRING([--enable-zoltan], [Enables Zoltan support])])
 ACX_zoltan([AC_MSG_NOTICE(["Zoltan found"])], [AC_MSG_WARN(["Zoltan not found"])])
 
+AC_CHECK_LIB(gmp, __gmpz_init, [GMP="yes"], [])
+
 AC_MSG_CHECKING([for libCGAL])
 old_libs="$LIBS"
-LIBS="-lCGAL -lgmp $LIBS"
+if test "x$GMP" = "xyes" ; then
+    LIBS="-lCGAL -lgmp $LIBS"
+else
+    LIBS="-lCGAL $LIBS"
+fi
 AC_LINK_IFELSE([
         AC_LANG_PROGRAM(
             [[
