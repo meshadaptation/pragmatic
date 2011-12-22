@@ -968,6 +968,42 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
 
+  void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
+    int NNodes = get_number_nodes();
+    
+    NPNodes.resize(mpi_nparts);    
+    if(mpi_nparts>1){
+      NPNodes[rank] = NNodes - recv_halo.size();
+      
+      // Allgather NPNodes
+      MPI_Allgather(&(NPNodes[rank]), 1, MPI_INT, &(NPNodes[0]), 1, MPI_INT, get_mpi_comm());
+      
+      // Calculate the global numbering offset for this partition.
+      int gnn_offset=0;
+      for(int i=0;i<rank;i++)
+        gnn_offset+=NPNodes[i];
+
+      // Write global node numbering.
+      lnn2gnn.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        if(recv_halo.count(i)){
+          lnn2gnn[i] = 0;
+        }else{
+          lnn2gnn[i] = gnn_offset++;
+        }
+      }
+      
+      // Update GNN's for the halo nodes.
+      halo_update(&(lnn2gnn[0]), 1);
+    }else{
+      NPNodes[0] = NNodes;
+      lnn2gnn.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        lnn2gnn[i] = i;
+      }
+    }
+  }
+
  private:
   template<typename _real_t, typename _index_t> friend class MetricField;
   template<typename _real_t, typename _index_t> friend class Smooth;
@@ -1437,7 +1473,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
   }
-
+  
   size_t _NNodes, _NElements, ndims, nloc;
   std::vector<index_t> _ENList;
   std::stack<int> recycle_eid;

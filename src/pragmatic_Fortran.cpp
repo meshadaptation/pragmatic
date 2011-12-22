@@ -93,20 +93,12 @@ extern "C" {
     metric_field->set_hessian_method("qls");
     _pragmatic_metric_field = metric_field;
   }
-
-  void pragmatic_dump(const char *filename){
-    VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
-  }
   
-  void pragmatic_addfield(const double *psi, const double *error){
+  void pragmatic_add_field(const double *psi, const double *error){
     assert(_pragmatic_metric_field!=NULL);
     
     ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error);
     ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
-  }
-  
-  void pragmatic_get_metric(double *metric){
-    ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
   }
   
   void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length){
@@ -115,7 +107,7 @@ extern "C" {
     ((MetricField<double, int> *)_pragmatic_metric_field)->apply_max_edge_length(*max_length);
     ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
   }
-
+  
   void pragmatic_adapt(){
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
     Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
@@ -152,13 +144,13 @@ extern "C" {
     surface->defragment(&active_vertex_map);
   }
 
-  void pragmatic_get_mesh_info(int *NNodes, int *NElements, int *NSElements){
+  void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements){
     *NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
     *NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
     *NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
   }
 
-  void pragmatic_get_mesh_coords_2d(double *x, double *y){
+  void pragmatic_get_coords_2d(double *x, double *y){
     size_t NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
     for(size_t i=0;i<NNodes;i++){
       x[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[0];
@@ -166,7 +158,7 @@ extern "C" {
     }
   }
 
-  void pragmatic_get_mesh_coords_3d(double *x, double *y, double *z){
+  void pragmatic_get_coords_3d(double *x, double *y, double *z){
     size_t NNodes = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_nodes();
     for(size_t i=0;i<NNodes;i++){
       x[i] = ((Mesh<double, int> *)_pragmatic_mesh)->get_coords(i)[0];
@@ -175,44 +167,50 @@ extern "C" {
     }
   }
 
-  void pragmatic_get_mesh_elements_2d(int *enlist){
-    size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
+  void pragmatic_get_elements(int *elements){
+    const size_t ndims = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions();
+    const size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
+    const size_t nloc = (ndims==2)?3:4;
+    
     for(size_t i=0;i<NElements;i++){
       const int *n=((Mesh<double, int> *)_pragmatic_mesh)->get_element(i);
       
-      for(size_t j=0;j<3;j++)
-        enlist[i*3+j] = n[j];
+      for(size_t j=0;j<nloc;j++)
+        elements[i*nloc+j] = n[j];
     }
   }
 
-  void pragmatic_get_mesh_elements_3d(int *enlist){
-    size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
-    for(size_t i=0;i<NElements;i++){
-      const int *n=((Mesh<double, int> *)_pragmatic_mesh)->get_element(i);
-      
-      for(size_t j=0;j<4;j++)
-        enlist[i*4+j] = n[j];
-    }
-  }
-
-  void pragmatic_get_mesh_surface_elements_2d(int *senlist){
+  void pragmatic_get_facets(int *facets){
+    const size_t ndims = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions();
     size_t NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
+    const size_t snloc = (ndims==2)?2:3;
+
     for(size_t i=0;i<NSElements;i++){
       const int *n=((Surface<double, int> *)_pragmatic_surface)->get_facet(i);
       
-      for(size_t j=0;j<2;j++)
-        senlist[i*2+j] = n[j];
+      for(size_t j=0;j<snloc;j++)
+        facets[i*snloc+j] = n[j];
     }
   }
 
-  void pragmatic_get_mesh_surface_elements_3d(int *senlist){
-    size_t NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
-    for(size_t i=0;i<NSElements;i++){
-      const int *n=((Surface<double, int> *)_pragmatic_surface)->get_facet(i);
-      
-      for(size_t j=0;j<3;j++)
-        senlist[i*3+j] = n[j];
-    }
+  void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn){
+    std::vector<int> _NPNodes, _lnn2gnn;
+    ((Mesh<double, int> *)_pragmatic_mesh)->get_global_node_numbering(_NPNodes, _lnn2gnn);
+    size_t len0 = _NPNodes.size();
+    for(size_t i=0;i<len0;i++)
+      nodes_per_partition[i] = _NPNodes[i];
+    
+    size_t len1 = _lnn2gnn.size();
+    for(size_t i=0;i<len1;i++)
+      lnn2gnn[i] = _lnn2gnn[i];
+  }
+
+  void pragmatic_get_metric(double *metric){
+    ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
+  }
+
+  void pragmatic_dump(const char *filename){
+    VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
   }
 
   void pragmatic_end(){

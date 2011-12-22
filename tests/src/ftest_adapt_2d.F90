@@ -39,10 +39,10 @@ program test_adapt
 
   call pragmatic_begin("../data/box50x50.vtu"//C_NULL_CHAR)
   
-  call pragmatic_get_mesh_info(NNodes, NElements, NSElements)
+  call pragmatic_get_info(NNodes, NElements, NSElements)
 
   allocate(xv(NNodes), yv(NNodes))
-  call pragmatic_get_mesh_coords(xv, yv)
+  call pragmatic_get_coords(xv, yv)
 
   allocate(metric(4*NNodes))
   do i=1, NNodes

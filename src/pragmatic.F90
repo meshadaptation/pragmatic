@@ -31,9 +31,19 @@ module pragmatic
   use iso_c_binding
   
   private
-  public :: pragmatic_begin, pragmatic_addfield, pragmatic_get_metric, &
-       pragmatic_set_metric, pragmatic_end, pragmatic_get_mesh_info, &
-       pragmatic_get_mesh_coords, pragmatic_adapt, pragmatic_dump
+  public :: &
+       pragmatic_begin, &
+       pragmatic_add_field, &
+       pragmatic_set_metric, &
+       pragmatic_adapt, &
+       pragmatic_get_info, &
+       pragmatic_get_coords, &
+       pragmatic_get_elements, &
+       pragmatic_get_facets, &
+       pragmatic_get_lnn2gnn, &
+       pragmatic_get_metric, &
+       pragmatic_dump, &
+       pragmatic_end
   
    !> Initialises metric calculation. This must be called first.
    !
@@ -69,41 +79,24 @@ module pragmatic
      end subroutine pragmatic_vtk_begin
   end interface pragmatic_begin
   
-  interface pragmatic_dump
-     subroutine pragmatic_dump(filename) bind(c,name="pragmatic_dump")
-       use iso_c_binding
-       implicit none
-       character(kind=c_char), intent(in) :: filename
-     end subroutine pragmatic_dump
-  end interface pragmatic_dump
-
    !> Add field to be included in the metric.
    !
    !> @param[in] psi Solutional variables stored at the mesh verticies.
    !> @param[in] error Target error.
-  interface pragmatic_addfield
-     subroutine pragmatic_addfield(psi, error) bind(c,name="pragmatic_addfield")
+  interface pragmatic_add_field
+     subroutine pragmatic_add_field(psi, error) bind(c,name="pragmatic_add_field")
        use iso_c_binding
        implicit none
        real(c_double) :: psi(*)
        real(c_double) :: error
-     end subroutine pragmatic_addfield
-  end interface pragmatic_addfield
-
-   !> Get final metric field.
-   !
-   !> @param[out] metric Metric tensor field.
-  interface pragmatic_get_metric
-     subroutine pragmatic_get_metric(metric) bind(c,name="pragmatic_get_metric")
-       use iso_c_binding
-       implicit none
-       real(c_double) :: metric(*)
-     end subroutine pragmatic_get_metric
-  end interface pragmatic_get_metric
-
-   !> Set the metric tensor field.
-   !
-   !> @param[in] metric Metric tensor field.
+     end subroutine pragmatic_add_field
+  end interface pragmatic_add_field
+  
+  !> Set the metric tensor field.
+  !
+  !> @param[in] metric Metric tensor field.
+  !> @param[in] min_length Minimum edge length in the mesh.
+  !> @param[in] max_length Maximum edge length in the mesh.
   interface pragmatic_set_metric
      subroutine pragmatic_set_metric(metric, min_length, max_length) bind(c,name="pragmatic_set_metric")
        use iso_c_binding
@@ -120,35 +113,96 @@ module pragmatic
   end interface pragmatic_adapt
 
   !> Free internal data structures.
-  interface pragmatic_get_mesh_info
-     subroutine pragmatic_get_mesh_info(NNodes, NElements, NSElements) bind(c,name="pragmatic_get_mesh_info")
+  !
+  !> @param[out] NNodes Number of nodes.
+  !> @param[out] NElements Number of elements.
+  !> @param[out] NSElements Number of surface elements.
+  interface pragmatic_get_info
+     subroutine pragmatic_get_info(NNodes, NElements, NSElements) bind(c,name="pragmatic_get_info")
        use iso_c_binding
        integer(kind=c_int) :: NNodes
        integer(kind=c_int) :: NElements
        integer(kind=c_int) :: NSElements
-     end subroutine pragmatic_get_mesh_info
-  end interface pragmatic_get_mesh_info
+     end subroutine pragmatic_get_info
+  end interface pragmatic_get_info
 
   !> Get the coordinates of the mesh vertices.
   !
-  !> @param[in] x X-cooardinates.
-  !> @param[in] y Y-cooardinates.
-  !> @param[in] z Z-cooardinates.
-  interface pragmatic_get_mesh_coords
-     subroutine pragmatic_get_mesh_coords_2d(x, y) bind(c,name="pragmatic_get_mesh_coords_2d")
+  !> @param[out] x X-cooardinates.
+  !> @param[out] y Y-cooardinates.
+  !> @param[out] z Z-cooardinates.
+  interface pragmatic_get_coords
+     subroutine pragmatic_get_coords_2d(x, y) bind(c,name="pragmatic_get_coords_2d")
        use iso_c_binding
        implicit none
        real(c_double) :: x(*)
        real(c_double) :: y(*)
-     end subroutine pragmatic_get_mesh_coords_2d
-     subroutine pragmatic_get_mesh_coords_3d(x, y, z) bind(c,name="pragmatic_get_mesh_coords_3d")
+     end subroutine pragmatic_get_coords_2d
+     subroutine pragmatic_get_coords_3d(x, y, z) bind(c,name="pragmatic_get_coords_3d")
        use iso_c_binding
        implicit none
        real(c_double) :: x(*)
        real(c_double) :: y(*)
        real(c_double) :: z(*)
-     end subroutine pragmatic_get_mesh_coords_3d
-  end interface pragmatic_get_mesh_coords
+     end subroutine pragmatic_get_coords_3d
+  end interface pragmatic_get_coords
+
+  !> Get the mesh elements.
+  !
+  !> @param[out] elements List of elements.
+  interface pragmatic_get_elements
+     subroutine pragmatic_get_elements(elements) bind(c,name="pragmatic_get_elements")
+       use iso_c_binding
+       implicit none
+       integer(c_int) :: elements(*)
+     end subroutine pragmatic_get_elements
+  end interface pragmatic_get_elements
+
+  !> Get the mesh elements.
+  !
+  !> @param[out] facets List of facets.
+  interface pragmatic_get_facets
+     subroutine pragmatic_get_facets(facets) bind(c,name="pragmatic_get_facets")
+       use iso_c_binding
+       implicit none
+       integer(c_int) :: facets(*)
+     end subroutine pragmatic_get_facets
+  end interface pragmatic_get_facets
+
+  !> Get the global node numbering.
+  !
+  !> @param[out] nodes_per_partition Array with number of owned nodes per partition.
+  !> @param[out] lnn2gnn Local node numbering to global node numbering mapping.
+  interface pragmatic_get_lnn2gnn
+     subroutine pragmatic_get_lnn2gnn(nodes_per_partition, lnn2gnn) bind(c,name="pragmatic_get_lnn2gnn")
+       use iso_c_binding
+       implicit none
+       integer(c_int) :: nodes_per_partition(*)
+       integer(c_int) :: lnn2gnn(*)
+     end subroutine pragmatic_get_lnn2gnn
+  end interface pragmatic_get_lnn2gnn
+
+  !> Get final metric field.
+  !
+  !> @param[out] metric Metric tensor field.
+  interface pragmatic_get_metric
+     subroutine pragmatic_get_metric(metric) bind(c,name="pragmatic_get_metric")
+       use iso_c_binding
+       implicit none
+       real(c_double) :: metric(*)
+     end subroutine pragmatic_get_metric
+  end interface pragmatic_get_metric
+
+  !> Dump a VTK file with the current mesh along with quality diagnostics.
+  !
+  !> @param[in] filename Name of VTK file.
+  interface pragmatic_dump
+     subroutine pragmatic_dump(filename) bind(c,name="pragmatic_dump")
+       use iso_c_binding
+       implicit none
+       character(kind=c_char), intent(in) :: filename
+     end subroutine pragmatic_dump
+  end interface pragmatic_dump
 
   !> Free internal data structures.
   interface pragmatic_end
