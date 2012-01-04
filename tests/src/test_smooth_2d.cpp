@@ -229,10 +229,10 @@ int main(int argc, char **argv){
     ENList.swap(lENList);
   }
 
-  const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation L2", "optimisation Linf", "combined"};
-  const double target_quality_mean[] = {0.06, 0.2,   0.2, 0.07,   0.2};
-  const double target_quality_min[]  = {0.0,  0.007, 0.0, 0.0002, 0.007};
-  for(int m=0;m<5;m++){
+  const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation L2", "optimisation Linf", "combined"};
+  const double target_quality_mean[] = {0.06, 0.2,    0.3,  0.4,    0.1,    0.3};
+  const double target_quality_min[]  = {0.0,  0.0002, 0.07, 0.0002, 0.0004, 0.1};
+  for(int m=0;m<6;m++){
     const char *method = methods[m];
 
     Mesh<double, int> *mesh;
@@ -277,10 +277,10 @@ int main(int argc, char **argv){
     
     double tic = get_wtime();
     int max_smooth_iter=200;
-    if(m<4){
+    if(m<5){
       smooth.smooth(method, max_smooth_iter);
     }else{
-      smooth.smooth("smart Laplacian", max_smooth_iter);
+      smooth.smooth("smart Laplacian search", max_smooth_iter);
       smooth.smooth("optimisation Linf", max_smooth_iter);
     }
     double toc = get_wtime();
