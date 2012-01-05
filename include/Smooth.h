@@ -748,10 +748,12 @@ template<typename real_t, typename index_t>
   }
 
   bool optimisation_linf_2d_kernel(index_t node){
+    bool smart_move = smart_laplacian_search_2d_kernel(node);
+    
     const real_t functional_orig = functional_Linf(node);
     
-    //if(functional_orig>0.5)
-    //  return false;
+    if(functional_orig>0.6)
+      return smart_move;
 
     if(_surface->contains_node(node))
       return false;
