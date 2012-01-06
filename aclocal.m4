@@ -2,9 +2,9 @@ AC_DEFUN([ACX_zoltan], [
 # Set variables...
 AC_ARG_WITH(
 	[zoltan],
-	[  --with-zoltan=prefix        Prefix where zoltan is installed],
-	[zoltan="$withval"],
-    [])
+        [AC_HELP_STRING([--with-zoltan],
+                	[Prefix where Zoltan is installed.])],
+	[zoltan="$withval"], [])
 
 tmpLIBS=$LIBS
 tmpCPPFLAGS=$CPPFLAGS
