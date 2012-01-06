@@ -136,15 +136,10 @@ int main(int argc, char **argv){
   mesh->verify();
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
-  
-  smooth.smooth("smart Laplacian");
-  
-  if(rank==0) std::cout<<"After smart smoothing:\n";
-  mesh->verify();
-  
+    
   smooth.smooth("optimisation Linf");
   
-  if(rank==0) std::cout<<"After optimisation smoothing:\n";
+  if(rank==0) std::cout<<"After optimisation based smoothing:\n";
   mesh->verify();
   
   NNodes = mesh->get_number_nodes();

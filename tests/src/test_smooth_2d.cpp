@@ -230,8 +230,8 @@ int main(int argc, char **argv){
   }
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation L2", "optimisation Linf", "combined"};
-  const double target_quality_mean[] = {0.06, 0.2,    0.3,  0.4,    0.1,    0.3};
-  const double target_quality_min[]  = {0.0,  0.0002, 0.07, 0.0002, 0.0004, 0.1};
+  const double target_quality_mean[] = {0.06, 0.08,  0.5,  0.3,   0.7, 0.7};
+  const double target_quality_min[]  = {0.0,  0.001, 0.02, 0.001, 0.4, 0.4};
   for(int m=0;m<6;m++){
     const char *method = methods[m];
 
