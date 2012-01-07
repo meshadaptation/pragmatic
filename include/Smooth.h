@@ -63,7 +63,8 @@ template<typename real_t, typename index_t>
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
     
-    rtol = 0.001;
+    sigma_q = 0.0001;
+    good_q = 0.7;
 
     // Set the orientation of elements.
     property = NULL;
@@ -92,7 +93,7 @@ template<typename real_t, typename index_t>
   }
   
   // Smooth the mesh using a given method. Valid methods are:
-  // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation L2", "optimisation Linf"
+  // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"
   void smooth(std::string method, int max_iterations=10){
     init_cache(method);
     
@@ -117,16 +118,6 @@ template<typename real_t, typename index_t>
         smooth_kernel = &Smooth<real_t, index_t>::optimisation_linf_2d_kernel;
       //else
       //  smooth_kernel = &Smooth<real_t, index_t>::optimisation_3d_kernel;
-    }else if(method=="optimisation L2"){
-      if(ndims==2)
-        smooth_kernel = &Smooth<real_t, index_t>::optimisation_l2_2d_kernel;
-      //else
-      //  smooth_kernel = &Smooth<real_t, index_t>::optimisation_3d_kernel;
-    }else if(method=="combined"){
-      if(ndims==2)
-        smooth_kernel = &Smooth<real_t, index_t>::combined_2d_kernel;
-      //else
-      //  smooth_kernel = &Smooth<real_t, index_t>::optimisation_3d_kernel;
     }else{
       std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"smart Laplacian\"\n";
       if(ndims==2)
@@ -136,17 +127,14 @@ template<typename real_t, typename index_t>
     }
 
     // Use this to keep track of vertices that are still to be visited.
-#ifdef _OPENMP
-    std::vector< std::set<index_t> > partial_active_vertices(omp_get_max_threads());
-#endif
-    std::set<index_t> active_vertices;
+    int NNodes = _mesh->get_number_nodes();
+    std::vector<int> active_vertices(NNodes, 0);
 
     // First sweep through all vertices. Add vertices adjancent to any
     // vertex moved into the active_vertex list.
     int max_colour = colour_sets.rbegin()->first;
-    if(MPI::Is_initialized()){
+    if(MPI::Is_initialized())
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-    }
 
     for(int ic=1;ic<=max_colour;ic++){
       if(colour_sets.count(ic)){
@@ -158,15 +146,9 @@ template<typename real_t, typename index_t>
             index_t node = colour_sets[ic][cn];
             
             if((this->*smooth_kernel)(node)){
+              active_vertices[node] = 1;
               for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                // Don't add node to the active set if it is not owned.
-                if(!_mesh->is_owned_node(*it))
-                  continue;
-#ifdef _OPENMP
-                partial_active_vertices[omp_get_thread_num()].insert(*it);
-#else
-                active_vertices.insert(*it);
-#endif
+                active_vertices[*it] = 1;
               }
             }
           }
@@ -175,14 +157,7 @@ template<typename real_t, typename index_t>
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
       _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
     }
-
-#ifdef _OPENMP
-    for(int t=0;t<omp_get_max_threads();t++){
-      active_vertices.insert(partial_active_vertices[t].begin(), partial_active_vertices[t].end());
-      partial_active_vertices[t].clear();
-    }
-#endif
-
+    
     for(int iter=1;iter<max_iterations;iter++){
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
@@ -193,16 +168,17 @@ template<typename real_t, typename index_t>
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
               
+              // Only process if it is active.
+              if(!active_vertices[node])
+                continue;
+
+              // Reset mask
+              active_vertices[node] = 0;
+
               if((this->*smooth_kernel)(node)){
+                active_vertices[node] = 1;
                 for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                  // Don't add node to the active set if it is not owned.
-                  if(!_mesh->is_owned_node(*it))
-                    continue;
-#ifdef _OPENMP
-                  partial_active_vertices[omp_get_thread_num()].insert(*it);
-#else
-                  active_vertices.insert(*it);
-#endif
+                  active_vertices[*it] = 1;
                 }
               }
             }
@@ -212,24 +188,25 @@ template<typename real_t, typename index_t>
         _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
       }
       
-      active_vertices.clear();
-#ifdef _OPENMP
-      for(int t=0;t<omp_get_max_threads();t++){
-        active_vertices.insert(partial_active_vertices[t].begin(), partial_active_vertices[t].end());
-        partial_active_vertices[t].clear();
+      // Count number of active vertices.
+      int nav = 0;      
+#pragma omp parallel reduction(+:nav)
+      {
+#pragma omp for schedule(static)
+        for(int i=0;i<NNodes;i++){
+          if(_mesh->is_owned_node(i))
+            nav += active_vertices[i];
+        }
       }
-#endif
-      int nav = active_vertices.size();
 #ifdef HAVE_MPI
       if(MPI::Is_initialized()){
         MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
       }
 #endif
+
       if(nav==0)
         break;
     }
-    _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-    _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
 
     return;
   }
@@ -267,7 +244,7 @@ template<typename real_t, typename index_t>
     real_t functional = functional_Linf(node, p, mp);
     real_t functional_orig = functional_Linf(node);
 
-    if(functional<functional_orig)
+    if(functional-functional_orig<sigma_q)
       return false;
 
     // Update qualities.
@@ -371,7 +348,7 @@ template<typename real_t, typename index_t>
     }
     assert(valid);
 
-    if(functional<functional_orig)
+    if(functional-functional_orig<sigma_q)
       return false;
 
     // Recalculate qualities.
@@ -475,18 +452,6 @@ template<typename real_t, typename index_t>
     p[1] += y0;
 
     return true;
-  }
-
-  bool combined_2d_kernel(index_t node){
-    // If this is on the surface then we just apply regular Laplacian smooth.
-    if(_surface->contains_node(node))
-      return laplacian_2d_kernel(node);
-    
-    bool move0 = smart_laplacian_2d_kernel(node);
-    bool move1 = true; // optimisation_l2_2d_kernel(node);
-    bool move2 = optimisation_linf_2d_kernel(node);
-
-    return move0||move1||move2;
   }
 
   bool laplacian_3d_kernel(index_t node){
@@ -730,8 +695,8 @@ template<typename real_t, typename index_t>
         new_min_q = std::min(new_min_q, ie->second);
     }
     
-    // So - is this an improvement?
-    if((new_min_q-min_q)/min_q<rtol)
+    // Check if this is an improvement.
+    if(new_min_q-min_q<sigma_q)
       return false;
     
     // Looks good so lets copy it back;
@@ -752,7 +717,7 @@ template<typename real_t, typename index_t>
     
     const real_t functional_orig = functional_Linf(node);
     
-    if(functional_orig>0.6)
+    if(functional_orig>good_q)
       return smart_move;
 
     if(_surface->contains_node(node))
@@ -889,8 +854,8 @@ template<typename real_t, typename index_t>
         real_t functional = property->lipnikov(gp, x1, x2, 
                                                mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
         assert(isnormal(functional));
-        if(functional<functional_orig){
-          alpha*=0.9;
+        if(functional-functional_orig<sigma_q){
+          alpha/=2;
           valid_move = false;
           break;
         }
@@ -916,153 +881,6 @@ template<typename real_t, typename index_t>
     return true;
   }
 
-  bool optimisation_l2_2d_kernel(index_t node){
-    real_t x0=get_x(node), y0=get_y(node);
-    real_t p[2], hat[2], bbox[4], alpha;
-    bbox[0] = x0; bbox[1] = x0;
-    bbox[2] = y0; bbox[3] = y0;
-    
-    if(_surface->contains_node(node)){
-      if(!laplacian_2d_kernel(node, p))
-        return false;
-      
-      p[0] -= x0;
-      p[1] -= y0;
-    
-      alpha = sqrt(p[0]*p[0]+p[1]*p[1]);
-
-      hat[0] = p[0]/alpha;
-      hat[1] = p[1]/alpha;
-    }else{
-      // Differentiate quality functional for elements with respect to x,y
-      real_t gradient[]={0,0};
-      for(typename std::set<index_t>::const_iterator it=_mesh->NEList[node].begin();it!=_mesh->NEList[node].end();++it){
-        const index_t *ele=_mesh->get_element(*it);
-        size_t loc=0;
-        for(;loc<3;loc++)
-          if(ele[loc]==node)
-            break;
-        
-        const real_t *r1=_mesh->get_coords(ele[(loc+1)%3]);
-        bbox[0] = std::min(bbox[0], r1[0]); bbox[1] = std::max(bbox[1], r1[0]);
-        bbox[2] = std::min(bbox[2], r1[1]); bbox[3] = std::max(bbox[3], r1[1]);
-        
-        const real_t *r2=_mesh->get_coords(ele[(loc+2)%3]);
-        bbox[0] = std::min(bbox[0], r2[0]); bbox[1] = std::max(bbox[1], r2[0]);
-        bbox[2] = std::min(bbox[2], r2[1]); bbox[3] = std::max(bbox[3], r2[1]);
-
-        const real_t *m1=_mesh->get_metric(ele[(loc+1)%3]);
-        const real_t *m2=_mesh->get_metric(ele[(loc+2)%3]);
-        
-        std::vector<real_t> grad_functional(2);
-        grad_r(node,
-             r1, m1,
-             r2, m2,
-             grad_functional);
-
-        gradient[0] += grad_functional[0];
-        gradient[1] += grad_functional[1];
-      }
-      real_t mag = sqrt(gradient[0]*gradient[0]+gradient[1]*gradient[1]);
-      hat[0] = gradient[0]/mag;
-      hat[1] = gradient[1]/mag;
-
-      alpha = std::max(bbox[1]-bbox[0], bbox[3]-bbox[2]);
-    }
-
-    // This can happen if there is zero mag.
-    if(!isnormal(hat[0]+hat[1]))
-      return false;
-
-    real_t mp[4];
-
-    // Initialise alpha.
-    bool valid=false;
-    real_t functional;
-    for(int rb=0;rb<10;rb++){
-      p[0] = x0 + alpha*hat[0];
-      p[1] = y0 + alpha*hat[1];
-      
-      valid = generate_location_2d(node, p, mp);
-
-      if(valid){
-        functional = functional_Linf(node, p, mp);
-        break;
-      }else{
-        alpha*=0.5;
-        continue;
-      }
-    }
-    if(!valid)
-      return false;
-
-    // Recursive bisection search along line.
-    const real_t functional_orig = functional_Linf(node);
-    std::pair<real_t, real_t> alpha_lower(0, functional_orig), alpha_upper(alpha, functional);
-    
-    for(int rb=0;rb<10;rb++){
-      alpha = (alpha_lower.first+alpha_upper.first)*0.5;
-      p[0] = x0 + alpha*hat[0];
-      p[1] = y0 + alpha*hat[1];
-
-      // Check if this positions improves the L2 norm.
-      valid = generate_location_2d(node, p, mp);
-      if(valid){
-        functional = functional_Linf(node, p, mp);
-      }else{
-        functional = -1;
-        alpha_upper.first*=0.5;
-      }
-
-      if(alpha_lower.second<functional){
-        alpha_lower.first = alpha;
-        alpha_lower.second = functional;
-      }else{
-        if(alpha_upper.second<functional){
-          alpha_upper.first = alpha;
-          alpha_upper.second = functional;
-        }else{
-          alpha = alpha_upper.first;
-          functional = alpha_upper.second;
-          p[0] = x0 + alpha*hat[0];
-          p[1] = y0 + alpha*hat[1];
-          break;
-        }
-      }
-    }
-    if(!valid)
-      return false;
-
-    if(functional<functional_orig)
-      return false;
-
-    // Recalculate qualities.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      if(n[0]<0)
-        continue;
-      
-      int iloc = 0;
-      while(n[iloc]!=(int)node){
-        iloc++;
-      }
-      int loc1 = (iloc+1)%3;
-      int loc2 = (iloc+2)%3;
-      
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-      quality[*ie] = property->lipnikov(p, x1, x2, 
-                                        mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-    }
-    
-    _mesh->_coords[node*2  ] = p[0];
-    _mesh->_coords[node*2+1] = p[1];
-
-    for(size_t j=0;j<4;j++)
-      _mesh->metric[node*4+j] = mp[j];
-    
-    return true;
-  }
  private:
   void init_cache(std::string method){
     colour_sets.clear();
@@ -1323,41 +1141,6 @@ template<typename real_t, typename index_t>
     return functional;
   }
 
-  real_t functional_L2(index_t node) const{
-    typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();
-    double patch_quality = quality[*ie]*quality[*ie];
-
-    ++ie;
-
-    for(;ie!=_mesh->NEList[node].end();++ie)
-      patch_quality += quality[*ie]*quality[*ie];
-    
-    return sqrt(patch_quality);
-  }
-
-  real_t functional_L2(index_t node, const real_t *p, const real_t *mp) const{
-    real_t functional = 0;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      assert(n[0]>=0);
-      int iloc = 0;
-      
-      while(n[iloc]!=(int)node){
-        iloc++;
-      }
-      int loc1 = (iloc+1)%3;
-      int loc2 = (iloc+2)%3;
-      
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-      
-      real_t fnl = property->lipnikov(p, x1, x2, 
-                                      mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-      functional += fnl*fnl;
-    }
-    return sqrt(functional);
-  }
-
   bool generate_location_2d(index_t node, const real_t *p, real_t *mp){
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1};
@@ -1424,7 +1207,7 @@ template<typename real_t, typename index_t>
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   size_t ndims, nloc;
-  real_t rtol;
+  real_t good_q, sigma_q;
   std::vector<real_t> quality;
   std::map<int, std::deque<index_t> > colour_sets;
 };

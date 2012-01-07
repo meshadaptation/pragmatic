@@ -137,7 +137,7 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
     
-  smooth.smooth("optimisation Linf");
+  smooth.smooth("optimisation Linf", 200);
   
   if(rank==0) std::cout<<"After optimisation based smoothing:\n";
   mesh->verify();
@@ -161,7 +161,7 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(rank==0){
-    if((qmean>0.8)&&(qmin>0.2))
+    if((qmean>0.8)&&(qmin>0.4))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
