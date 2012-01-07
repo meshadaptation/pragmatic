@@ -713,15 +713,15 @@ template<typename real_t, typename index_t>
   }
 
   bool optimisation_linf_2d_kernel(index_t node){
-    bool smart_move = smart_laplacian_search_2d_kernel(node);
+    bool update = smart_laplacian_search_2d_kernel(node);
     
     const real_t functional_orig = functional_Linf(node);
     
     if(functional_orig>good_q)
-      return smart_move;
+      return update;
 
     if(_surface->contains_node(node))
-      return false;
+      return update;
 
     const real_t *r0=_mesh->get_coords(node);
 
@@ -748,10 +748,7 @@ template<typename real_t, typename index_t>
              grad_functional);
       local_gradients[*it] = grad_functional;
       
-      // To follow highest gradient
-      // real_t key = grad_functional[0]*grad_functional[0]+grad_functional[1]*grad_functional[1];
-
-      // To improve worst element
+      // Focusing on improving the worst element
       real_t key = quality[*it];
       priority_elements.insert(std::pair<real_t, index_t>(key, *it));
     }
@@ -808,7 +805,7 @@ template<typename real_t, typename index_t>
 
     // If there is no viable direction to step in then return.
     if((!isnormal(alpha))||(alpha<=0))
-      return false;
+      return update;
 
     // -
     real_t p[2], gp[2], mp[4];
@@ -822,7 +819,7 @@ template<typename real_t, typename index_t>
       
       if(!isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
         std::cerr<<"ERROR!!\n";
-        return false;
+        return update;
       }
       
       gp[0] = r0[0]+p[0]; gp[1] = r0[1]+p[1];      
@@ -866,7 +863,7 @@ template<typename real_t, typename index_t>
         break;
     }
     if(!valid_move)
-      return false;
+      return update;
         
     // Looks good so lets copy it back;
     for(typename std::map<int, real_t>::const_iterator it=new_quality.begin();it!=new_quality.end();++it)
