@@ -146,7 +146,6 @@ template<typename real_t, typename index_t>
             index_t node = colour_sets[ic][cn];
             
             if((this->*smooth_kernel)(node)){
-              active_vertices[node] = 1;
               for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                 active_vertices[*it] = 1;
               }
@@ -176,7 +175,6 @@ template<typename real_t, typename index_t>
               active_vertices[node] = 0;
 
               if((this->*smooth_kernel)(node)){
-                active_vertices[node] = 1;
                 for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                   active_vertices[*it] = 1;
                 }
@@ -714,168 +712,176 @@ template<typename real_t, typename index_t>
 
   bool optimisation_linf_2d_kernel(index_t node){
     bool update = smart_laplacian_search_2d_kernel(node);
-    
-    const real_t functional_orig = functional_Linf(node);
-    
-    if(functional_orig>good_q)
-      return update;
 
     if(_surface->contains_node(node))
       return update;
+        
+    for(int hill_climb_iteration=0;hill_climb_iteration<5;hill_climb_iteration++){
+      // As soon as the tolerence quality is reached, break.
+      const real_t functional_0 = functional_Linf(node);  
+      if(functional_0>good_q)
+        break;
 
-    const real_t *r0=_mesh->get_coords(node);
-
-    // Differentiate quality functional for elements with respect to x,y
-    std::map<index_t, std::vector<real_t> > local_gradients;
-    std::multimap<real_t, index_t> priority_elements;
-    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[node].begin();it!=_mesh->NEList[node].end();++it){
-      const index_t *ele=_mesh->get_element(*it);
-      size_t loc=0;
-      for(;loc<3;loc++)
-        if(ele[loc]==node)
-          break;
-
-      const real_t *r1=_mesh->get_coords(ele[(loc+1)%3]);
-      const real_t *r2=_mesh->get_coords(ele[(loc+2)%3]);
-
-      const real_t *m1=_mesh->get_metric(ele[(loc+1)%3]);
-      const real_t *m2=_mesh->get_metric(ele[(loc+2)%3]);
-
-      std::vector<real_t> grad_functional(2);
-      grad_r(node,
-             r1, m1,
-             r2, m2,
-             grad_functional);
-      local_gradients[*it] = grad_functional;
-      
-      // Focusing on improving the worst element
-      real_t key = quality[*it];
-      priority_elements.insert(std::pair<real_t, index_t>(key, *it));
-    }
-
-    // Find the distance we have to step to reach the local quality maximum.
-    real_t alpha=-1.0;
-    index_t target_element = priority_elements.begin()->second;
-    
-    std::vector<real_t> hat0 = local_gradients[target_element];
-    real_t mag0 = sqrt(hat0[0]*hat0[0]+hat0[1]*hat0[1]);
-    hat0[0]/=mag0;
-    hat0[1]/=mag0;
-    
-    typename std::map<index_t, std::vector<real_t> >::iterator lg=local_gradients.begin();
-    for(;lg!=local_gradients.end();++lg){
-      if(lg->first == target_element)
-        continue;
-      
-      std::vector<real_t> hat1 = lg->second;
-      real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
-      hat1[0]/=mag1;
-      hat1[1]/=mag1;
-      
-      alpha = (quality[lg->first] - quality[target_element])/
-        (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
-      
-      if(!isnormal(alpha) || alpha<=0){
-        alpha = -1;
-        continue;
-      }
-     
-      break;
-    }
-
-    // Adjust alpha to the nearest point where the patch functional intersects with another.
-    for(;lg!=local_gradients.end();++lg){
-      if(lg->first == target_element)
-        continue;
-      
-      std::vector<real_t> hat1 = lg->second;
-      real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
-      hat1[0]/=mag1;
-      hat1[1]/=mag1;
-      
-      real_t new_alpha = (quality[lg->first] - quality[target_element])/
-        (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
-
-      if(!isnormal(new_alpha) || new_alpha<=0)
-        continue;
-      
-      if(new_alpha<alpha)
-        alpha = new_alpha;
-    }
-
-    // If there is no viable direction to step in then return.
-    if((!isnormal(alpha))||(alpha<=0))
-      return update;
-
-    // -
-    real_t p[2], gp[2], mp[4];
-    std::map<int, real_t> new_quality;
-    bool valid_move = false;
-    for(int i=0;i<10;i++){
-      new_quality.clear();
-
-      p[0] = alpha*hat0[0];
-      p[1] = alpha*hat0[1];
-      
-      if(!isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
-        std::cerr<<"ERROR!!\n";
-        return update;
+      // Differentiate quality functional for elements with respect to x,y
+      std::map<index_t, std::vector<real_t> > local_gradients;
+      std::multimap<real_t, index_t> priority_elements;
+      for(typename std::set<index_t>::const_iterator it=_mesh->NEList[node].begin();it!=_mesh->NEList[node].end();++it){
+        const index_t *ele=_mesh->get_element(*it);
+        size_t loc=0;
+        for(;loc<3;loc++)
+          if(ele[loc]==node)
+            break;
+        
+        const real_t *r1=_mesh->get_coords(ele[(loc+1)%3]);
+        const real_t *r2=_mesh->get_coords(ele[(loc+2)%3]);
+        
+        const real_t *m1=_mesh->get_metric(ele[(loc+1)%3]);
+        const real_t *m2=_mesh->get_metric(ele[(loc+2)%3]);
+        
+        std::vector<real_t> grad_functional(2);
+        grad_r(node,
+               r1, m1,
+               r2, m2,
+               grad_functional);
+        local_gradients[*it] = grad_functional;
+        
+        // Focusing on improving the worst element
+        real_t key = quality[*it];
+        priority_elements.insert(std::pair<real_t, index_t>(key, *it));
       }
       
-      gp[0] = r0[0]+p[0]; gp[1] = r0[1]+p[1];      
-      valid_move = generate_location_2d(node, gp, mp);
-      if(!valid_move){
-        alpha/=2;
-        continue;
-      }
+      // Find the distance we have to step to reach the local quality maximum.
+      real_t alpha=-1.0;
+      index_t target_element = priority_elements.begin()->second;
       
-      assert(isnormal(p[0]+p[0]));
-      assert(isnormal(mp[0]+mp[1]+mp[3]));
+      std::vector<real_t> hat0 = local_gradients[target_element];
+      real_t mag0 = sqrt(hat0[0]*hat0[0]+hat0[1]*hat0[1]);
+      hat0[0]/=mag0;
+      hat0[1]/=mag0;
       
-      // Check if this positions improves the local mesh quality.
-      for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-        const index_t *n=_mesh->get_element(*ie);
-        if(n[0]<0)
+      typename std::map<index_t, std::vector<real_t> >::iterator lg=local_gradients.begin();
+      for(;lg!=local_gradients.end();++lg){
+        if(lg->first == target_element)
           continue;
         
-        int iloc = 0;
-        while(n[iloc]!=(int)node){
-          iloc++;
+        std::vector<real_t> hat1 = lg->second;
+        real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
+        hat1[0]/=mag1;
+        hat1[1]/=mag1;
+        
+        alpha = (quality[lg->first] - quality[target_element])/
+          (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
+        
+        if((!isnormal(alpha)) || (alpha<0)){
+          alpha = -1;
+          continue;
         }
-        int loc1 = (iloc+1)%3;
-        int loc2 = (iloc+2)%3;
         
-        const real_t *x1 = _mesh->get_coords(n[loc1]);
-        const real_t *x2 = _mesh->get_coords(n[loc2]);
+        break;
+      }
+
+      // Adjust alpha to the nearest point where the patch functional intersects with another.
+      for(;lg!=local_gradients.end();++lg){
+        if(lg->first == target_element)
+          continue;
         
-        real_t functional = property->lipnikov(gp, x1, x2, 
-                                               mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-        assert(isnormal(functional));
-        if(functional-functional_orig<sigma_q){
-          alpha/=2;
-          valid_move = false;
+        std::vector<real_t> hat1 = lg->second;
+        real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
+        hat1[0]/=mag1;
+        hat1[1]/=mag1;
+        
+        real_t new_alpha = (quality[lg->first] - quality[target_element])/
+          (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
+        
+        if((!isnormal(new_alpha)) || (new_alpha<0))
+          continue;
+        
+        if(new_alpha<alpha)
+          alpha = new_alpha;
+      }
+      
+      // If there is no viable direction, break.
+      if((!isnormal(alpha))||(alpha<=0))
+        break;
+    
+      // -
+      real_t p[2], gp[2], mp[4];
+      std::map<int, real_t> new_quality;
+      bool valid_move = false;
+      for(int i=0;i<10;i++){
+        // If the predicted improvement is less than sigma, break;
+        if(mag0*alpha<sigma_q)
+          break;
+
+        new_quality.clear();
+        
+        p[0] = alpha*hat0[0];
+        p[1] = alpha*hat0[1];
+        
+        if(!isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
+          std::cerr<<"WARNING: apparently no gradients for mesh smoothing!!\n";
           break;
         }
         
-        new_quality[*ie] = functional;
-      }
-      if(valid_move)
-        break;
-    }
-    if(!valid_move)
-      return update;
+        const real_t *r0=_mesh->get_coords(node);
+        gp[0] = r0[0]+p[0]; gp[1] = r0[1]+p[1];      
+        valid_move = generate_location_2d(node, gp, mp);
+        if(!valid_move){
+          alpha/=2;
+          continue;
+        }
         
-    // Looks good so lets copy it back;
-    for(typename std::map<int, real_t>::const_iterator it=new_quality.begin();it!=new_quality.end();++it)
-      quality[it->first] = it->second;
-    
-    _mesh->_coords[node*2  ] = gp[0];
-    _mesh->_coords[node*2+1] = gp[1];
+        assert(isnormal(p[0]+p[0]));
+        assert(isnormal(mp[0]+mp[1]+mp[3]));
+        
+        // Check if this positions improves the local mesh quality.
+        for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+          const index_t *n=_mesh->get_element(*ie);
+          if(n[0]<0)
+            continue;
+          
+          int iloc = 0;
+          while(n[iloc]!=(int)node){
+            iloc++;
+          }
+          int loc1 = (iloc+1)%3;
+          int loc2 = (iloc+2)%3;
+          
+          const real_t *x1 = _mesh->get_coords(n[loc1]);
+          const real_t *x2 = _mesh->get_coords(n[loc2]);
+          
+          real_t functional = property->lipnikov(gp, x1, x2, 
+                                                 mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
+          assert(isnormal(functional));
+          if(functional-functional_0<sigma_q){
+            alpha/=2;
+            valid_move = false;
+            break;
+          }
+          
+          new_quality[*ie] = functional;
+        }
+        if(valid_move)
+          break;
+      }
+      
+      if(valid_move)
+        update = true;
+      else
+        break;
+      
+      // Looks good so lets copy it back;
+      for(typename std::map<int, real_t>::const_iterator it=new_quality.begin();it!=new_quality.end();++it)
+        quality[it->first] = it->second;
+      
+      _mesh->_coords[node*2  ] = gp[0];
+      _mesh->_coords[node*2+1] = gp[1];
+      
+      for(size_t j=0;j<4;j++)
+        _mesh->metric[node*4+j] = mp[j];
+    }
 
-    for(size_t j=0;j<4;j++)
-      _mesh->metric[node*4+j] = mp[j];
-    
-    return true;
+    return update;
   }
 
  private:
@@ -1028,7 +1034,7 @@ template<typename real_t, typename index_t>
     const real_t *r0=_mesh->get_coords(node);
 
     real_t linf_x = std::max(fabs(r1[0]-r0[0]), fabs(r2[0]-r0[0]));
-    real_t delta_x=linf_x*1.0e-1;
+    real_t delta_x=linf_x*1.0e-2;
 
     real_t linf_y = std::max(fabs(r1[1]-r0[1]), fabs(r2[1]-r0[1]));
     real_t delta_y=linf_y*1.0e-1;
