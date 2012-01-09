@@ -80,7 +80,7 @@ int main(int argc, char **argv){
 
   vector<double> x, y;
   vector<int> ENList;
-  int NNodes=0, NElements=0;
+  int NNodes=0, TotalNElements=0, NElements=0;
   if(rank==0){
     CDT cdt;
     double xmin=-1.0, xmax=1.0, ymin=-1.0, ymax=1.0;
@@ -119,6 +119,7 @@ int main(int argc, char **argv){
       ENList.push_back(coordToId[it->vertex(2)->point()]);
     }
     NElements = ENList.size()/3; 
+    TotalNElements = NElements;
   }
 
   std::vector<int> owner_range;
@@ -127,6 +128,7 @@ int main(int argc, char **argv){
     // Distribute the mesh to everyone.
     MPI::COMM_WORLD.Bcast(&NNodes, 1, MPI_INT, 0);
     MPI::COMM_WORLD.Bcast(&NElements, 1, MPI_INT, 0);
+    MPI::COMM_WORLD.Bcast(&TotalNElements, 1, MPI_INT, 0);
     
     if(rank!=0){
       x.resize(NNodes);
@@ -230,8 +232,8 @@ int main(int argc, char **argv){
   }
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
-  const double target_quality_mean[] = {0.06, 0.08,  0.5,  0.7};
-  const double target_quality_min[]  = {0.0,  0.001, 0.02, 0.4};
+  const double target_quality_mean[] = {0.06, 0.1,    0.4, 0.4};
+  const double target_quality_min[]  = {0.0,  0.0002, 0.1, 0.3};
   for(int m=0;m<4;m++){
     const char *method = methods[m];
 
@@ -257,7 +259,7 @@ int main(int argc, char **argv){
       metric_field.set_metric(m, i);
     }
     
-    metric_field.apply_nelements(NElements);
+    metric_field.apply_nelements(TotalNElements);
     metric_field.update_mesh();
     
     if(m==0){
