@@ -513,6 +513,9 @@ template<typename real_t, typename index_t>
         real_t total_area_metric = 0.0;
         for(int i=0;i<_NElements;i++){
           const index_t *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
+
           const real_t *x0 = _mesh->get_coords(n[0]);
           const real_t *x1 = _mesh->get_coords(n[1]);
           const real_t *x2 = _mesh->get_coords(n[2]);
@@ -544,6 +547,9 @@ template<typename real_t, typename index_t>
         real_t total_volume_metric = 0.0;
         for(int i=0;i<_NElements;i++){
           const index_t *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
+
           const real_t *x0 = _mesh->get_coords(n[0]);
           const real_t *x1 = _mesh->get_coords(n[1]);
           const real_t *x2 = _mesh->get_coords(n[2]);
