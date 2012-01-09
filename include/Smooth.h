@@ -36,6 +36,7 @@
 #include <map>
 #include <vector>
 #include <deque>
+#include <limits>
 
 #include "errno.h"
 
@@ -63,6 +64,15 @@ template<typename real_t, typename index_t>
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
     
+    mpi_nparts = 1;
+    rank=0;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      MPI_Comm_size(_mesh->get_mpi_comm(), &mpi_nparts);
+      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
+    }
+#endif
+
     sigma_q = 0.0001;
     good_q = 0.7;
 
@@ -96,7 +106,22 @@ template<typename real_t, typename index_t>
   // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"
   void smooth(std::string method, int max_iterations=10){
     init_cache(method);
-    
+
+    std::deque<int> halo_elements;
+    int NElements = _mesh->get_number_elements();
+    for(int i=0;i<NElements;i++){
+      const int *n=_mesh->get_element(i);
+      if(n[0]<0)
+        continue;
+      
+      for(size_t j=0;j<nloc;j++){
+        if(!_mesh->is_owned_node(n[j])){
+          halo_elements.push_back(i);
+          break;
+        }
+      }
+    } 
+
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
     if(method=="Laplacian"){
       if(ndims==2)
@@ -133,8 +158,10 @@ template<typename real_t, typename index_t>
     // First sweep through all vertices. Add vertices adjancent to any
     // vertex moved into the active_vertex list.
     int max_colour = colour_sets.rbegin()->first;
-    if(MPI::Is_initialized())
+#ifdef HAVE_MPI
+    if(mpi_nparts>1)
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+#endif
 
     for(int ic=1;ic<=max_colour;ic++){
       if(colour_sets.count(ic)){
@@ -155,8 +182,10 @@ template<typename real_t, typename index_t>
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
       _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+      for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+        quality[*ie] = -1;
     }
-    
+
     for(int iter=1;iter<max_iterations;iter++){
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
@@ -184,6 +213,8 @@ template<typename real_t, typename index_t>
         }
         _mesh->halo_update(&(_mesh->_coords[0]), ndims);
         _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+        for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+          quality[*ie] = -1;
       }
       
       // Count number of active vertices.
@@ -197,11 +228,10 @@ template<typename real_t, typename index_t>
         }
       }
 #ifdef HAVE_MPI
-      if(MPI::Is_initialized()){
+      if(mpi_nparts>1)
         MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-      }
 #endif
-
+      
       if(nav==0)
         break;
     }
@@ -245,24 +275,9 @@ template<typename real_t, typename index_t>
     if(functional-functional_orig<sigma_q)
       return false;
 
-    // Update qualities.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      if(n[0]<0)
-        continue;
-      
-      int iloc = 0;
-      while(n[iloc]!=(int)node){
-        iloc++;
-      }
-      int loc1 = (iloc+1)%3;
-      int loc2 = (iloc+2)%3;
-      
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-      quality[*ie] = property->lipnikov(p, x1, x2, 
-                                        mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-    }
+    // Reset quality cache.
+    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
+      quality[*ie] = -1;
     
     _mesh->_coords[node*2  ] = p[0];
     _mesh->_coords[node*2+1] = p[1];
@@ -296,7 +311,7 @@ template<typename real_t, typename index_t>
     // Initialise alpha.
     bool valid=false;
     real_t alpha = mag, functional;
-    for(int rb=0;rb<10;rb++){
+    for(int rb=0;rb<5;rb++){
       p[0] = x0 + alpha*hat[0];
       p[1] = y0 + alpha*hat[1];
       
@@ -349,24 +364,9 @@ template<typename real_t, typename index_t>
     if(functional-functional_orig<sigma_q)
       return false;
 
-    // Recalculate qualities.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      if(n[0]<0)
-        continue;
-      
-      int iloc = 0;
-      while(n[iloc]!=(int)node){
-        iloc++;
-      }
-      int loc1 = (iloc+1)%3;
-      int loc2 = (iloc+2)%3;
-      
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-      quality[*ie] = property->lipnikov(p, x1, x2, 
-                                        mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-    }
+    // Reset quality cache.
+    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
+      quality[*ie] = -1;
     
     _mesh->_coords[node*2  ] = p[0];
     _mesh->_coords[node*2+1] = p[1];
@@ -889,11 +889,7 @@ template<typename real_t, typename index_t>
     colour_sets.clear();
 
     zoltan_colour_graph_t graph;
-    if(MPI::Is_initialized()){
-      MPI_Comm_rank(_mesh->get_mpi_comm(), &graph.rank);
-    }else{
-      graph.rank = 0; 
-    }
+    graph.rank = rank; 
     
     int NNodes = _mesh->get_number_nodes();
     assert(NNodes==(int)_mesh->NNList.size());
@@ -928,7 +924,7 @@ template<typename real_t, typename index_t>
 
     std::vector<int> colour(NNodes);
     graph.colour = &(colour[0]);
-    zoltan_colour(&graph, 1, MPI_COMM_WORLD);
+    zoltan_colour(&graph, 1, _mesh->get_mpi_comm());
     
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(!_mesh->is_owned_node(i)))
@@ -1109,15 +1105,30 @@ template<typename real_t, typename index_t>
     return _mesh->_coords[nid*ndims+2];
   }
 
-  real_t functional_Linf(index_t node) const{
-    typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();
-    double patch_quality = quality[*ie];
-
-    ++ie;
-
-    for(;ie!=_mesh->NEList[node].end();++ie)
+  real_t functional_Linf(index_t node){
+    double patch_quality = std::numeric_limits<double>::max();
+    
+    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+      // Check cache - if it's stale then recalculate. 
+      if(quality[*ie]<0){
+        const int *n=_mesh->get_element(*ie);
+        assert(n[0]>=0);
+        std::vector<const real_t *> x(nloc), m(nloc);
+        for(size_t i=0;i<nloc;i++){
+          x[i] = _mesh->get_coords(n[i]);
+          m[i] = _mesh->get_metric(n[i]);
+        }
+        if(ndims==2)
+          quality[*ie] = property->lipnikov(x[0], x[1], x[2], 
+                                            m[0], m[1], m[2]);
+        else
+          quality[*ie] = property->lipnikov(x[0], x[1], x[2], x[3],
+                                            m[0], m[1], m[2], m[3]);
+      }
+      
       patch_quality = std::min(patch_quality, quality[*ie]);
-  
+    }
+
     return patch_quality;
   }
   
@@ -1150,7 +1161,7 @@ template<typename real_t, typename index_t>
     int best_e=-1;
     real_t tol=-1;
     
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
       const index_t *n=_mesh->get_element(*ie);
       assert(n[0]>=0);
       
@@ -1210,6 +1221,7 @@ template<typename real_t, typename index_t>
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   size_t ndims, nloc;
+  int mpi_nparts, rank;
   real_t good_q, sigma_q;
   std::vector<real_t> quality;
   std::map<int, std::deque<index_t> > colour_sets;
