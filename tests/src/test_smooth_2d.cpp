@@ -54,7 +54,7 @@ int main(int argc, char **argv){
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
   const double target_quality_mean[] = {0.4, 0.8, 0.8, 0.8};
-  const double target_quality_min[]  = {0.0, 0.2, 0.4, 0.6};
+  const double target_quality_min[]  = {0.0, 0.2, 0.3, 0.6};
   for(int m=0;m<4;m++){
     const char *method = methods[m];
 
