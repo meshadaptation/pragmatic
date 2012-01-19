@@ -192,7 +192,7 @@ template<typename real_t, typename index_t>
 #pragma omp parallel
           {
             int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic)
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
               
