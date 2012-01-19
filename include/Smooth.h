@@ -711,7 +711,7 @@ template<typename real_t, typename index_t>
   }
 
   bool optimisation_linf_2d_kernel(index_t node){
-    bool update = smart_laplacian_search_2d_kernel(node);
+    bool update = smart_laplacian_2d_kernel(node);
 
     if(_surface->contains_node(node))
       return update;
