@@ -1,0 +1,23 @@
+FIND_PATH(NUMA_INCLUDE_DIR numa.h
+  /usr/local/include
+  /usr/include
+  /usr/include/numa
+  $ENV{NUMA_DIR}/include
+  )
+message( STATUS ${NUMA_INCLUDE_DIR} )
+
+FIND_LIBRARY(NUMA_LIBRARY numa
+  /usr/local/lib
+  /usr/lib
+  $ENV{NUMA_DIR}/lib
+  )
+
+IF(NUMA_INCLUDE_DIR)
+  ADD_DEFINITIONS(-DHAVE_NUMA)
+  IF(NUMA_LIBRARY)
+    SET( NUMA_LIBRARIES ${NUMA_LIBRARY})
+    SET( NUMA_FOUND "YES" )
+  ENDIF(NUMA_LIBRARY)
+ENDIF(NUMA_INCLUDE_DIR)
+
+MARK_AS_ADVANCED( NUMA_INCLUDE_DIR NUMA_LIBRARY )
