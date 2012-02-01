@@ -1026,6 +1026,10 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
 
     numa_nparts = 1;
+#ifdef _OPENMP
+    // Set a upper limit on the number of NUMA regions.
+    numa_nparts = omp_get_max_threads();
+#endif
 #ifdef HAVE_LIBNUMA
     numa_nparts =numa_max_node()+1;
 #endif
