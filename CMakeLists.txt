@@ -7,6 +7,10 @@ set (PRAgMaTIc_VERSION_MINOR 9)
 
 set (CMAKE_MODULE_PATH CMake/Modules ${CMAKE_MODULE_PATH})
 
+enable_language(CXX)
+enable_language(C)
+enable_language(Fortran)
+
 set (PRAGMATIC_LIBRARIES)
 FIND_PACKAGE(VTK)
 if(VTK_FOUND)
