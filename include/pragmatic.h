@@ -27,6 +27,21 @@
  *    USA
  */
 
+/*! \mainpage Parallel anisotRopic Adaptive Mesh ToolkIt
+ *
+ * PRAgMaTIc provides 2D/3D anisotropic mesh adaptivity for meshes of
+ * simplexes. The target applications are finite element and finite
+ * volume methods although the it can also be used as a lossy
+ * compression algorithm for 2 and 3D data (e.g. image
+ * compression). It takes as its input the mesh and a metric tensor
+ * field which encodes desired mesh element size anisotropically. The
+ * toolkit is written in C++ and has OpenMP and MPI parallel support.
+ * 
+ * \section links Useful links:
+ * \li Production releases are available from <a href="http://www.openpetascale.org/">Open Petascale Libraries</a>.
+ * \li Bleeding edge developer site on <a href="https://launchpad.net/pragmatic">Launchpad</a>.
+ */
+
 extern "C" {
   void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y);
   void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z);
