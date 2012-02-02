@@ -56,11 +56,14 @@ typedef float vtkFloatingPointType;
 #include "Metis.h"
 #include "ElementProperty.h"
 
-
 #ifdef HAVE_MPI
 #include <mpi.h>
 #endif
 
+/*! \brief Toolkit for importing and exporting VTK files. This is
+ * mostly used as part of the internal unit testing framework and
+ * should not intended to be part of the public API.
+ */
 template<typename real_t, typename index_t> class VTKTools{
  public:
   static Mesh<real_t, index_t>* import_vtu(const char *filename){

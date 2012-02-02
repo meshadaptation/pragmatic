@@ -42,7 +42,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-  
+
+  /*! \Brief This is used internally to package the data required by
+   * the Zoltan C interface.
+   */
   typedef struct {
     /* Rank of local process.
      */

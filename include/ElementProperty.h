@@ -37,12 +37,17 @@
 #include <set>
 #include <cmath>
 
-/*! \brief Calculates element properties.
+/*! \brief Calculates a number of element properties.
  *
  * The constructers for this class requires a reference element so
  * that the orientation convention can be established. After the
  * orientation has been established a negative area or volume
- * indicated an inverted element.
+ * indicated an inverted element. Properties caluclated are:
+ * \li Euclidean area (if 2D element).
+ * \li Euclidean Volume (if 3D element).
+ * \li Non-Euclidean edge length.
+ * \li 2D/3D Lipnikov quality functional.
+ * \li 3D sliver functional.
  */
 template<typename real_t>
 class ElementProperty{

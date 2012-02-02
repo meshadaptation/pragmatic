@@ -37,7 +37,7 @@
 
 #include "pragmatic_config.h"
 
-/*! \brief Class contains various methods for colouring undirected graphs.
+/*! \brief Performs a simple first breath greedy graph colouring of a local undirected graph.
  */
 template<typename index_t>
 class Colour{

@@ -38,7 +38,7 @@
 #include "zoltan_colour.h"
 #include "Mesh.h"
 
-/*! \brief Performs mesh coarsening.
+/*! \brief Performs 2D and 3D mesh coarsening.
  *
  */
 

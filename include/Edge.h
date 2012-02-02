@@ -32,7 +32,7 @@
 
 #include "pragmatic_config.h"
 
-/*! \brief Edge object
+/*! \brief Mesh edge object.
  */
 template<typename real_t, typename index_t> class Edge{
  public:
