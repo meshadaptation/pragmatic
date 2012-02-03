@@ -1,11 +1,11 @@
 SHELL = /bin/bash
 
-CPPFLAGS = 
 MAKE = make -s
 
 PREFIX = @prefix@
-include_dir = $(PREFIX)/include/pragmatic
-lib_dir = $(PREFIX)/lib
+includedir = $(PREFIX)/include/pragmatic
+libdir = $(PREFIX)/lib
+docdir = $(PREFIX)/share/doc/pragmatic
 
 LIB = lib/libpragmatic.a
 
@@ -18,8 +18,10 @@ lib:
 	@(cd src && $(MAKE))
 
 docs:
-	@echo "  DOXYGEN Doxyfile"
+	@echo "  DOXYGEN (source code documentation)"
 	@doxygen Doxyfile > doxygen.log
+	@echo "  MAKE manual"
+	@(cd docs && $(MAKE))
 
 test: basic_test
 
@@ -31,7 +33,7 @@ clean:
 	@echo "  CLEAN lib"
 	@rm -rf lib/lib*
 	@echo "  CLEAN docs"
-	@rm -rf docs
+	@(cd docs && $(MAKE) clean)
 	@echo "  CLEAN src"
 	@(cd src && $(MAKE) clean)
 	@echo "  CLEAN include"
@@ -41,10 +43,13 @@ clean:
 
 distclean: clean
 	@echo "   DISTCLEAN"
-	@rm -rf config.status config.log Makefile src/Makefile tests/Makefile
+	@rm -rf config.status config.log Makefile src/Makefile tests/Makefile docs/Makefile
 
 install:
-	mkdir -p $(DESTDIR)$(include_dir)
-	cp -r include/* $(DESTDIR)$(include_dir)/
-	mkdir -p $(DESTDIR)$(lib_dir)
-	cp -r $(LIB) $(DESTDIR)$(lib_dir)/
+	mkdir -p $(DESTDIR)$(includedir)
+	cp -r include/* $(DESTDIR)$(includedir)/
+	mkdir -p $(DESTDIR)$(libdir)
+	cp -r $(LIB) $(DESTDIR)$(libdir)/
+	mkdir -p $(DESTDIR)$(docdir)
+	cp -r docs/html $(DESTDIR)$(docdir)/
+	cp docs/pragmatic.pdf $(DESTDIR)$(docdir)/

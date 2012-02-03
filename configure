@@ -6719,7 +6719,7 @@ _ACEOF
 esac
 
 
-ac_config_files="$ac_config_files Makefile src/Makefile tests/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile tests/Makefile docs/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -7442,6 +7442,7 @@ do
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
+    "docs/Makefile") CONFIG_FILES="$CONFIG_FILES docs/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
@@ -7895,6 +7896,7 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
+
 
 cat > include/pragmatic_config.h << EOF
 #ifndef PRAGMATIC_CONFIG_H
