@@ -1012,6 +1012,7 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class Refine;
   template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend class VTKTools;
+  template<typename _real_t, typename _index_t> friend class CUDATools;
 
   void _init(int NNodes, int NElements, const index_t *globalENList,
              const real_t *x, const real_t *y, const real_t *z,

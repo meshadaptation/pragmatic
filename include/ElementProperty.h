@@ -298,6 +298,10 @@ class ElementProperty{
     return sliver;
   }
 
+  int getOrientation() {
+	return orientation;
+  }
+
  private:
   int orientation;
   const int dimension;

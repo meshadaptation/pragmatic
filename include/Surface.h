@@ -518,6 +518,7 @@ template<typename real_t, typename index_t>
   
  private:
   template<typename _real_t, typename _index_t> friend class VTKTools;
+  template<typename _real_t, typename _index_t> friend class CUDATools;
 
   /// Detects the surface nodes of the domain.
   void find_surface(){
