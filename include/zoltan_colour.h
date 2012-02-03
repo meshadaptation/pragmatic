@@ -43,7 +43,7 @@
 extern "C" {
 #endif
 
-  /*! \Brief This is used internally to package the data required by
+  /*! \brief This is used internally to package the data required by
    * the Zoltan C interface.
    */
   typedef struct {
