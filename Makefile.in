@@ -9,7 +9,7 @@ lib_dir = $(PREFIX)/lib
 
 LIB = lib/libpragmatic.a
 
-.PHONY: lib test bin
+.PHONY: lib test bin docs
 
 default: lib
 
@@ -17,7 +17,7 @@ lib:
 	@echo "  BUILD library"
 	@(cd src && $(MAKE))
 
-doxygen:
+docs:
 	@echo "  DOXYGEN Doxyfile"
 	@doxygen Doxyfile > doxygen.log
 
