@@ -11,7 +11,7 @@ LIB = lib/libpragmatic.a
 
 .PHONY: lib test bin docs
 
-default: lib
+default: lib docs
 
 lib:
 	@echo "  BUILD library"
@@ -51,5 +51,5 @@ install:
 	mkdir -p $(DESTDIR)$(libdir)
 	cp -r $(LIB) $(DESTDIR)$(libdir)/
 	mkdir -p $(DESTDIR)$(docdir)
-	cp -r docs/html $(DESTDIR)$(docdir)/
 	cp docs/pragmatic.pdf $(DESTDIR)$(docdir)/
+	cp -r docs/html $(DESTDIR)$(docdir)/

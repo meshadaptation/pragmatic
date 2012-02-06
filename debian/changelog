@@ -1,8 +1,8 @@
-pragmatic (0.2.0ubuntu2) natty; urgency=low
+pragmatic (0.9.0ubuntu1) natty; urgency=low
 
-  * Updated package dependencies to include Zoltan
+  * Numerious updates (see commit logs for details).
 
- -- Gerard Gorman <g.gorman@imperial.ac.uk>  Thu, 22 Sep 2011 13:32:08 +0100
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Mon, 06 Feb 2012 15:22:19 +0000
 
 pragmatic (0.2.0ubuntu1) natty; urgency=low
 

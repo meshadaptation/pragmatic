@@ -2,12 +2,12 @@ Source: pragmatic
 Section: science
 Priority: extra
 Maintainer: Gerard Gorman <g.gorman@imperial.ac.uk>
-Build-Depends: debhelper (>= 5), autotools-dev, libvtk5-dev, libparmetis-dev, libnuma-dev, libcgal-dev, libzoltan, libzoltan-dev
+Build-Depends: debhelper (>= 5), autotools-dev, libvtk5-dev, libparmetis-dev, libnuma-dev, libtrilinos-dev
 Standards-Version: 3.7.2
 
 Package: pragmatic
 Architecture: any
-Depends: libvtk5-dev, libparmetis-dev, libnuma-dev, libcgal-dev
+Depends: libvtk5-dev, libparmetis-dev, libnuma-dev, libtrilinos-dev
 Description: PRAgMaTIc (Parallel anisotRopic Adaptive Mesh ToolkIt) provides 2D/3D
  anisotropic mesh adaptivity for meshes of simplexes. The target
  applications are finite element and finite volume methods although the
