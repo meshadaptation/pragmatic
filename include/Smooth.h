@@ -194,20 +194,22 @@ template<typename real_t, typename index_t>
           cudaTools.copyMetricFromDevice(_mesh);
           cudaTools.retrieveSmoothStatus(smoothStatus);
         }
+//        else{
 #pragma omp parallel
-        {
-          int node_set_size = colour_sets[ic].size();
+          {
+            int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(static)
-          for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[ic][cn];
-            
-            if((this->*smooth_kernel)(node)){
-              for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                active_vertices[*it] = 1;
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[ic][cn];
+
+              if((this->*smooth_kernel)(node)){
+                for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                  active_vertices[*it] = 1;
+                }
               }
             }
           }
-        }
+//        }
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
       _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
@@ -226,27 +228,29 @@ template<typename real_t, typename index_t>
             cudaTools.copyMetricFromDevice(_mesh);
             cudaTools.retrieveSmoothStatus(smoothStatus);
           }
+//          else{
 #pragma omp parallel
-          {
-            int node_set_size = colour_sets[ic].size();
+            {
+              int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(dynamic)
-            for(int cn=0;cn<node_set_size;cn++){
-              index_t node = colour_sets[ic][cn];
-              
-              // Only process if it is active.
-              if(!active_vertices[node])
-                continue;
+              for(int cn=0;cn<node_set_size;cn++){
+                index_t node = colour_sets[ic][cn];
 
-              // Reset mask
-              active_vertices[node] = 0;
+                // Only process if it is active.
+                if(!active_vertices[node])
+                  continue;
 
-              if((this->*smooth_kernel)(node)){
-                for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                  active_vertices[*it] = 1;
+                // Reset mask
+                active_vertices[node] = 0;
+
+                if((this->*smooth_kernel)(node)){
+                  for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                    active_vertices[*it] = 1;
+                  }
                 }
               }
             }
-          }
+//          }
         }
         _mesh->halo_update(&(_mesh->_coords[0]), ndims);
         _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
@@ -757,7 +761,7 @@ template<typename real_t, typename index_t>
       return update;
         
     for(int hill_climb_iteration=0;hill_climb_iteration<5;hill_climb_iteration++){
-      // As soon as the tolerence quality is reached, break.
+      // As soon as the tolerance quality is reached, break.
       const real_t functional_0 = functional_Linf(node);  
       if(functional_0>good_q)
         break;
@@ -874,7 +878,7 @@ template<typename real_t, typename index_t>
         assert(isnormal(p[0]+p[0]));
         assert(isnormal(mp[0]+mp[1]+mp[3]));
         
-        // Check if this positions improves the local mesh quality.
+        // Check if this position improves the local mesh quality.
         for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
           const index_t *n=_mesh->get_element(*ie);
           if(n[0]<0)

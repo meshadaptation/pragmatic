@@ -198,6 +198,21 @@ public:
 		cuMemcpyHtoD(address, &CUDA_smoothStatus, symbol_size);
 	}
 
+	void reserveActiveVerticesMemory()
+	{
+		if(cuMemAlloc(&CUDA_activeVertices, NNodes * sizeof(unsigned char)) != CUDA_SUCCESS)
+		{
+			std::cout << "Error allocating CUDA memory" << std::endl;
+			exit(1);
+		}
+
+		// set the constant symbol in CUDA smoothing kernel
+    	CUdeviceptr address;
+    	size_t symbol_size;
+		cuModuleGetGlobal(&address, &symbol_size, smoothModule, "activeVertices");
+		cuMemcpyHtoD(address, &CUDA_activeVertices, symbol_size);
+	}
+
 	void retrieveSmoothStatus(std::vector<unsigned char> & status)
 	{
 		copyArrayFromDevice<unsigned char>( (unsigned char *) &status[0], CUDA_smoothStatus, NNodes);
@@ -427,6 +442,7 @@ private:
     CUdeviceptr CUDA_SENList;
     CUdeviceptr CUDA_quality;
     CUdeviceptr CUDA_smoothStatus;
+    CUdeviceptr CUDA_activeVertices;
 
     index_t * NNListArray;
     index_t * NNListIndex;
