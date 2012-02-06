@@ -23,4 +23,4 @@ manual: pragmatic.pdf
 
 clean:
 	rm -rf html
-	rm -f *.log *.aux *.bbl *.blg *.idx *.lof *.out *.toc tmp.inputs
+	rm -f pragmatic.pdf *.log *.aux *.bbl *.blg *.idx *.lof *.out *.toc tmp.inputs
