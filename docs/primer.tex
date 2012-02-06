@@ -1,0 +1,39 @@
+\chapter*{\pragmatic\ Primer}
+% \pagenumbering{roman} \setcounter{page}{}
+
+Please check the \pragmatic\ webpage at
+\href{https://launchpad.net/pragmatic}{https://launchpad.net/pragmatic}
+to ensure you are reading the most recent version of this
+manual. Methods for installing \pragmatic\ may sometimes change, and
+instructions may be updated!
+
+This is a one-page primer for obtaining \pragmatic\ and getting up and
+running with development. It assumes that:
+
+\begin{itemize}
+\item You are running Ubuntu Linux, release 11.10 or newer
+\item You have administrative rights on your computer
+\item You know how to run a terminal with a command prompt
+\item You have a directory in which you can create files
+\end{itemize}
+
+Set up your computer to access the \pragmatic\ repository by typing:
+
+\begin{lstlisting}[language=Bash]
+sudo apt-add-repository -y ppa:pragmatic-core/ppa
+\end{lstlisting}
+
+Type your password when prompted.
+
+Once this completes, update your system and install \pragmatic along with its
+supporting software by typing:
+
+\begin{lstlisting}[language=Bash]
+sudo apt-get update
+sudo apt-get -y install pragmatic
+\end{lstlisting}
+
+To get dOxygen documentation of the API point your browser at:
+\begin{lstlisting}[language=Html]
+fiel:///usr/share/pragmatic/html/index.html
+\end{lstlisting}
