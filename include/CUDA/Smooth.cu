@@ -32,7 +32,6 @@
 #include "SVD.cuh"
 
 #include <stdint.h>
-#include <stdio.h>
 
 extern "C" {
 

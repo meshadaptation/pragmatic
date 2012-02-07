@@ -49,7 +49,9 @@
 #include "Mesh.h"
 #include "MetricTensor.h"
 
+#if HAVE_CUDA
 #include "CUDATools.h"
+#endif
 
 #include "zoltan_colour.h"
 
@@ -135,6 +137,7 @@ template<typename real_t, typename index_t>
 
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
 
+#if HAVE_CUDA
     CUDATools<real_t, index_t> cudaTools;
 
     // Check whether a CUDA-enabled device is to be used for smoothening
@@ -158,6 +161,8 @@ template<typename real_t, typename index_t>
 
     // Otherwise, run the smoothening kernel on conventional hardware
     if(!cudaTools.isEnabled()){
+#endif
+
       MethodDims methodDims(method, ndims);
       if(kernels.count(methodDims)){
        	smooth_kernel = kernels[methodDims];
@@ -165,7 +170,10 @@ template<typename real_t, typename index_t>
         std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"smart Laplacian\"\n";
         smooth_kernel = kernels[MethodDims("smart Laplacian", ndims)];
       }
+
+#if HAVE_CUDA
     }
+#endif
 
     // Use this to keep track of vertices that are still to be visited.
     int NNodes = _mesh->get_number_nodes();
@@ -179,13 +187,17 @@ template<typename real_t, typename index_t>
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
 #endif
 
+#if HAVE_CUDA
     if(cudaTools.isEnabled()) {
     	cudaTools.copyMeshDataToDevice(_mesh, _surface, colour_sets, quality, property->getOrientation(), 2);
     	cudaTools.reserveSmoothStatusMemory();
     }
+#endif
 
     for(int ic=1;ic<=max_colour;ic++){
       if(colour_sets.count(ic)){
+
+#if HAVE_CUDA
         if(cudaTools.isEnabled()){
           cudaTools.copyCoordinatesToDevice(_mesh);
           cudaTools.copyMetricToDevice(_mesh);
@@ -194,7 +206,10 @@ template<typename real_t, typename index_t>
           cudaTools.copyMetricFromDevice(_mesh);
           cudaTools.retrieveSmoothStatus(smoothStatus);
         }
-//        else{
+
+        else{
+#endif
+
 #pragma omp parallel
           {
             int node_set_size = colour_sets[ic].size();
@@ -209,7 +224,11 @@ template<typename real_t, typename index_t>
               }
             }
           }
-//        }
+
+#if HAVE_CUDA
+        }
+#endif
+
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
       _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
@@ -220,6 +239,8 @@ template<typename real_t, typename index_t>
     for(int iter=1;iter<max_iterations;iter++){
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
+
+#if HAVE_CUDA
           if(cudaTools.isEnabled()){
             cudaTools.copyCoordinatesToDevice(_mesh);
             cudaTools.copyMetricToDevice(_mesh);
@@ -228,7 +249,9 @@ template<typename real_t, typename index_t>
             cudaTools.copyMetricFromDevice(_mesh);
             cudaTools.retrieveSmoothStatus(smoothStatus);
           }
-//          else{
+          else{
+#endif
+
 #pragma omp parallel
             {
               int node_set_size = colour_sets[ic].size();
@@ -250,7 +273,11 @@ template<typename real_t, typename index_t>
                 }
               }
             }
-//          }
+
+#if HAVE_CUDA
+          }
+#endif
+
         }
         _mesh->halo_update(&(_mesh->_coords[0]), ndims);
         _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
@@ -277,8 +304,10 @@ template<typename real_t, typename index_t>
         break;
     }
 
+#if HAVE_CUDA
     if(cudaTools.isEnabled())
       cudaTools.freeResources();
+#endif
 
     return;
   }
@@ -1260,10 +1289,12 @@ template<typename real_t, typename index_t>
     
     return true;
   }
-  
+
+#if HAVE_CUDA
   bool cudaHasBeenSmoothed(index_t node) {
 	return (bool) smoothStatus[node];
   }
+#endif
 
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
@@ -1273,7 +1304,10 @@ template<typename real_t, typename index_t>
   real_t good_q, sigma_q;
   std::vector<real_t> quality;
   std::map<int, std::deque<index_t> > colour_sets;
+
+#if HAVE_CUDA
   std::vector<unsigned char> smoothStatus;
+#endif
 
   typedef std::pair<std::string, int> MethodDims;
   std::map<MethodDims, bool (Smooth<real_t, index_t>::*)(index_t)> kernels;
