@@ -155,8 +155,8 @@ AC_CHECK_LIB(stdc++,fclose,,)
 AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 
-ACX_zoltan([AC_MSG_NOTICE(["Zoltan found"])], [AC_MSG_WARN(["Zoltan not found"])])
-
+ACX_ZOLTAN()
+    
 AC_CHECK_LIB(gmp, __gmpz_init, [GMP="yes"], [])
 
 AC_ARG_WITH([cgal],

@@ -607,10 +607,11 @@ ENABLE_CUDA
 CUDA_LIBS
 CUDA_CFLAGS
 NVCC
+LIBS_ZOLTAN
+CPPFLAGS_ZOLTAN
 EGREP
 GREP
 CXXCPP
-ZOLTAN
 USING_FORTRAN
 MAKE
 RANLIB
@@ -693,7 +694,7 @@ enable_option_checking
 enable_openmp
 enable_fortran
 enable_debugging
-with_zoltan
+with_external_zoltan
 with_cgal
 enable_cuda
 '
@@ -1336,7 +1337,8 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-zoltan           Prefix where Zoltan is installed.
+  --with-external_zoltan=LIB
+                          external installation of Zoltan mesh-partitioner
   --with-cgal             Prefix where CGAL is installed.
 
 Some influential environment variables:
@@ -1988,6 +1990,73 @@ $as_echo "$ac_res" >&6; }
   eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
 
 } # ac_fn_cxx_check_header_compile
+
+# ac_fn_cxx_check_func LINENO FUNC VAR
+# ------------------------------------
+# Tests whether FUNC exists, setting the cache variable VAR accordingly
+ac_fn_cxx_check_func ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $2" >&5
+$as_echo_n "checking for $2... " >&6; }
+if eval \${$3+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+/* Define $2 to an innocuous variant, in case <limits.h> declares $2.
+   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
+#define $2 innocuous_$2
+
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char $2 (); below.
+    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
+    <limits.h> exists even on freestanding compilers.  */
+
+#ifdef __STDC__
+# include <limits.h>
+#else
+# include <assert.h>
+#endif
+
+#undef $2
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char $2 ();
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined __stub_$2 || defined __stub___$2
+choke me
+#endif
+
+int
+main ()
+{
+return $2 ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  eval "$3=yes"
+else
+  eval "$3=no"
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+fi
+eval ac_res=\$$3
+	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+$as_echo "$ac_res" >&6; }
+  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
+
+} # ac_fn_cxx_check_func
 cat >config.log <<_ACEOF
 This file contains any messages produced by compilers while
 running configure, to aid debugging if configure makes a mistake.
@@ -3106,7 +3175,7 @@ $as_echo "#define HAVE_MPI 1" >>confdefs.h
 
                       have_CXX_mpi='yes'
 else
-  # zero out mpi flags so we don't link against the faulty library.
+  # zero out mpi flags so we do not link against the faulty library.
                       MPI_CXXFLAGS=""
                       MPI_CXXLDFLAGS=""
                       have_CXX_mpi='no'
@@ -3254,7 +3323,7 @@ $as_echo "#define HAVE_MPI 1" >>confdefs.h
 
                       have_CXX_mpi='yes'
 else
-  # zero out mpi flags so we don't link against the faulty library.
+  # zero out mpi flags so we do not link against the faulty library.
                       MPI_CXXFLAGS=""
                       MPI_CXXLDFLAGS=""
                       have_CXX_mpi='no'
@@ -5559,259 +5628,6 @@ $as_echo "$as_me: WARNING: No NUMA support available." >&2;}
 fi
 
 
-
-# Set variables...
-
-# Check whether --with-zoltan was given.
-if test "${with_zoltan+set}" = set; then :
-  withval=$with_zoltan; zoltan="$withval"
-fi
-
-
-tmpLIBS=$LIBS
-tmpCPPFLAGS=$CPPFLAGS
-if test "x$zoltan" != "xno"; then
-if test "x$zoltan" != "xyes"; then
-zoltan_LIBS_PATH="$zoltan/lib"
-zoltan_INCLUDES_PATH="$zoltan/include"
-# Ensure the comiler finds the library...
-tmpLIBS="$tmpLIBS -L$zoltan_LIBS_PATH"
-tmpCPPFLAGS="$tmpCPPFLAGS  -I/$zoltan_INCLUDES_PATH"
-fi
-tmpLIBS="$tmpLIBS -L/usr/lib -L/usr/local/lib/ -lzoltan -lparmetis -lmetis $ZOLTAN_DEPS"
-tmpCPPFLAGS="$tmpCPPFLAGS -I/usr/include/ -I/usr/local/include/"
-fi
-LIBS=$tmpLIBS
-CPPFLAGS=$tmpCPPFLAGS
-# Check that the compiler uses the library we specified...
-if test -e $zoltan_LIBS_PATH/libzoltan.a; then
-	echo "note: using $zoltan_LIBS_PATH/libzoltan.a"
-fi
-
-# Check that the compiler uses the include path we specified...
-if test -e $zoltan_INCLUDES_PATH/zoltan.mod; then
-	echo "note: using $zoltan_INCLUDES_PATH/zoltan.mod"
-fi
-
-
-
-ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for Zoltan_Initialize in -lzoltan" >&5
-$as_echo_n "checking for Zoltan_Initialize in -lzoltan... " >&6; }
-if ${ac_cv_lib_zoltan_Zoltan_Initialize+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lzoltan  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char Zoltan_Initialize ();
-int
-main ()
-{
-return Zoltan_Initialize ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_zoltan_Zoltan_Initialize=yes
-else
-  ac_cv_lib_zoltan_Zoltan_Initialize=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_zoltan_Zoltan_Initialize" >&5
-$as_echo "$ac_cv_lib_zoltan_Zoltan_Initialize" >&6; }
-if test "x$ac_cv_lib_zoltan_Zoltan_Initialize" = xyes; then :
-
-$as_echo "#define HAVE_ZOLTAN 1" >>confdefs.h
-
-else
-  as_fn_error $? "Could not link in the zoltan library... exiting " "$LINENO" 5
-fi
-
-# Save variables...
-ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
-
-ZOLTAN="yes"
-
-
-echo $LIBS
-
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __gmpz_init in -lgmp" >&5
-$as_echo_n "checking for __gmpz_init in -lgmp... " >&6; }
-if ${ac_cv_lib_gmp___gmpz_init+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgmp  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char __gmpz_init ();
-int
-main ()
-{
-return __gmpz_init ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_gmp___gmpz_init=yes
-else
-  ac_cv_lib_gmp___gmpz_init=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gmp___gmpz_init" >&5
-$as_echo "$ac_cv_lib_gmp___gmpz_init" >&6; }
-if test "x$ac_cv_lib_gmp___gmpz_init" = xyes; then :
-  GMP="yes"
-fi
-
-
-
-# Check whether --with-cgal was given.
-if test "${with_cgal+set}" = set; then :
-  withval=$with_cgal; cgal="$withval"
-fi
-
-if test -n "$cgal" ; then
-  CPPFLAGS="$CPPFLAGS -I$cgal/include"
-  LIBS="$LIBS -L$cgal/lib"
-fi
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libCGAL" >&5
-$as_echo_n "checking for libCGAL... " >&6; }
-old_libs="$LIBS"
-if test "x$GMP" = "xyes" ; then
-    LIBS="-lCGAL -lgmp $LIBS"
-else
-    LIBS="-lCGAL $LIBS"
-fi
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <iostream>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/convex_hull_2.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_2 Point_2;
-
-int
-main ()
-{
-
-  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
-  Point_2 result[5];
-
-  CGAL::convex_hull_2( points, points+5, result );
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  $as_echo "#define HAVE_LIBCGAL 1" >>confdefs.h
-
-         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-
-# Detect VTK
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
-$as_echo_n "checking for dlopen in -ldl... " >&6; }
-if ${ac_cv_lib_dl_dlopen+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-ldl  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char dlopen ();
-int
-main ()
-{
-return dlopen ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_dl_dlopen=yes
-else
-  ac_cv_lib_dl_dlopen=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_dl_dlopen" >&5
-$as_echo "$ac_cv_lib_dl_dlopen" >&6; }
-if test "x$ac_cv_lib_dl_dlopen" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBDL 1
-_ACEOF
-
-  LIBS="-ldl $LIBS"
-
-fi
-
-
-if test -n "$VTK_LIBS" ; then
-    LIBS="$LIBS -L$VTK_LIBS"
-fi
-for i in $VTK_INCLUDE $(ls -d /usr/include/vtk*); do
-    if test -r $i/vtkCellData.h; then
-        CPPFLAGS="-I$i $CPPFLAGS"
-    fi
-done
-
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -6204,6 +6020,278 @@ fi
 
 done
 
+
+
+compile_zoltan=no
+
+
+# Check whether --with-external_zoltan was given.
+if test "${with_external_zoltan+set}" = set; then :
+  withval=$with_external_zoltan;
+fi
+
+case $with_external_zoltan in
+  yes | "") ;;
+  no ) compile_zoltan=yes ;;
+  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_external_zoltan";;
+  *) LIBS_ZOLTAN="-l$with_external_zoltan" ;;
+esac
+
+if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
+  acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
+  acx_zoltan_save_LIBS="$LIBS"
+
+  if test x"$CPPFLAGS_ZOLTAN" != x; then
+    CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
+  fi
+  for ac_header in zoltan.h
+do :
+  ac_fn_cxx_check_header_mongrel "$LINENO" "zoltan.h" "ac_cv_header_zoltan_h" "$ac_includes_default"
+if test "x$ac_cv_header_zoltan_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ZOLTAN_H 1
+_ACEOF
+ compile_zoltan=no
+else
+  compile_zoltan=yes
+fi
+
+done
+
+
+  # if failed, try with a common location for trilinos installation
+  if test x"$compile_zoltan" == x"yes"; then
+    CPPFLAGS_ZOLTAN="-I/usr/include/trilinos"
+    CPPFLAGS="$acx_zoltan_save_CPPFLAGS $CPPFLAGS_ZOLTAN"
+    # remove cache so it actually checks again
+    $as_unset ac_cv_header_zoltan_h
+    for ac_header in zoltan.h
+do :
+  ac_fn_cxx_check_header_mongrel "$LINENO" "zoltan.h" "ac_cv_header_zoltan_h" "$ac_includes_default"
+if test "x$ac_cv_header_zoltan_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ZOLTAN_H 1
+_ACEOF
+ compile_zoltan=no
+else
+  compile_zoltan=yes
+fi
+
+done
+
+  fi
+
+  # if couldn't find header, don't bother checking for function
+  if test x"$compile_zoltan" == x"no"; then
+    LIBS="$LIBS $LIBS_ZOLTAN"
+    for ac_func in Zoltan_Initialize
+do :
+  ac_fn_cxx_check_func "$LINENO" "Zoltan_Initialize" "ac_cv_func_Zoltan_Initialize"
+if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ZOLTAN_INITIALIZE 1
+_ACEOF
+ compile_zoltan=no
+else
+  compile_zoltan=yes
+fi
+done
+
+
+    # if failed, try with a common location for trilinos installation
+    if test x"$compile_zoltan" == x"yes"; then
+      LIBS_ZOLTAN=-ltrilinos_zoltan
+      LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN"
+      # remove cache so it actually checks again
+      $as_unset ac_cv_func_Zoltan_Initialize
+      for ac_func in Zoltan_Initialize
+do :
+  ac_fn_cxx_check_func "$LINENO" "Zoltan_Initialize" "ac_cv_func_Zoltan_Initialize"
+if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ZOLTAN_INITIALIZE 1
+_ACEOF
+ compile_zoltan=no
+else
+  compile_zoltan=yes
+fi
+done
+
+    fi
+  fi
+
+  if test x"$compile_zoltan" == x"no"; then
+
+$as_echo "#define HAVE_ZOLTAN 1" >>confdefs.h
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: Found a usable installation of Zoltan." >&5
+$as_echo "$as_me: Found a usable installation of Zoltan." >&6;}
+
+
+  else
+    { $as_echo "$as_me:${as_lineno-$LINENO}: Could not find an installed version of Zoltan. It will be compiled." >&5
+$as_echo "$as_me: Could not find an installed version of Zoltan. It will be compiled." >&6;}
+    CPPFLAGS_ZOLTAN=""
+    LIBS_ZOLTAN=""
+  fi
+  CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
+  LIBS="$acx_zoltan_save_LIBS"
+fi
+
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __gmpz_init in -lgmp" >&5
+$as_echo_n "checking for __gmpz_init in -lgmp... " >&6; }
+if ${ac_cv_lib_gmp___gmpz_init+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lgmp  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char __gmpz_init ();
+int
+main ()
+{
+return __gmpz_init ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_gmp___gmpz_init=yes
+else
+  ac_cv_lib_gmp___gmpz_init=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gmp___gmpz_init" >&5
+$as_echo "$ac_cv_lib_gmp___gmpz_init" >&6; }
+if test "x$ac_cv_lib_gmp___gmpz_init" = xyes; then :
+  GMP="yes"
+fi
+
+
+
+# Check whether --with-cgal was given.
+if test "${with_cgal+set}" = set; then :
+  withval=$with_cgal; cgal="$withval"
+fi
+
+if test -n "$cgal" ; then
+  CPPFLAGS="$CPPFLAGS -I$cgal/include"
+  LIBS="$LIBS -L$cgal/lib"
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libCGAL" >&5
+$as_echo_n "checking for libCGAL... " >&6; }
+old_libs="$LIBS"
+if test "x$GMP" = "xyes" ; then
+    LIBS="-lCGAL -lgmp $LIBS"
+else
+    LIBS="-lCGAL $LIBS"
+fi
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <iostream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/convex_hull_2.h>
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_2 Point_2;
+
+int
+main ()
+{
+
+  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
+  Point_2 result[5];
+
+  CGAL::convex_hull_2( points, points+5, result );
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  $as_echo "#define HAVE_LIBCGAL 1" >>confdefs.h
+
+         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+# Detect VTK
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
+$as_echo_n "checking for dlopen in -ldl... " >&6; }
+if ${ac_cv_lib_dl_dlopen+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-ldl  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char dlopen ();
+int
+main ()
+{
+return dlopen ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_dl_dlopen=yes
+else
+  ac_cv_lib_dl_dlopen=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_dl_dlopen" >&5
+$as_echo "$ac_cv_lib_dl_dlopen" >&6; }
+if test "x$ac_cv_lib_dl_dlopen" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBDL 1
+_ACEOF
+
+  LIBS="-ldl $LIBS"
+
+fi
+
+
+if test -n "$VTK_LIBS" ; then
+    LIBS="$LIBS -L$VTK_LIBS"
+fi
+for i in $VTK_INCLUDE $(ls -d /usr/include/vtk*); do
+    if test -r $i/vtkCellData.h; then
+        CPPFLAGS="-I$i $CPPFLAGS"
+    fi
+done
 
 ac_fn_cxx_check_header_mongrel "$LINENO" "vtkVersion.h" "ac_cv_header_vtkVersion_h" "$ac_includes_default"
 if test "x$ac_cv_header_vtkVersion_h" = xyes; then :
