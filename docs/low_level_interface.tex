@@ -1,0 +1,178 @@
+\chapter{User interface}
+
+Detailed worked examples can be found in the source directory under
+\lstinline[language=bash]+tests/src/test_adapt_2d.cpp+ and
+\lstinline[language=bash]+tests/src/test_adapt_3d.cpp+. Here we
+review the key steps required when applying mesh adaptivity to your
+model.
+
+\section{Header files}
+To be able to perform all the adaptive operations the following
+includes are required:
+\begin{lstlisting}[language=C++]
+#include "Mesh.h"
+#include "Surface.h"
+
+#include "MetricField.h"
+
+#include "Coarsen.h"
+#include "Refine.h"
+#include "Smooth.h"
+#include "Swapping.h"
+\end{lstlisting}
+
+If you want to make use the VTK I/O interface, typically for the
+purpose of unit testing and generating pretty pictures, then also
+include:
+\begin{lstlisting}[language=C++]
+#include "VTKTools.h"
+\end{lstlisting}
+
+\section{Initialise mesh}
+The first step is to import the mesh into \pragmatic. In the test case
+this is done simply be importing a mesh from a VTK XML unstructured
+grid file:
+\begin{lstlisting}[language=C++]
+  Mesh<double, int> *mesh=
+    VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
+\end{lstlisting}
+A range of different constructors are available for
+\lstinline[language=c++]+Mesh<double, int>+ to handle different kinds of input, such as 2D/3D and distributed meshes. 
+
+For more details see the API documentation at
+\lstinline[language=html]+file:///usr/share/doc/pragmatic/html/classMesh.html+
+
+\section{Initialise surface}
+The surface mesh must be specified as to preserve geometric
+properties. \pragmatic\ does allow on to derive this from the mesh
+directly by passing in a reference to the mesh to the class
+constructor:
+\begin{lstlisting}[language=C++]
+  Surface<double, int> *surface = Surface<double, int>(*mesh);
+\end{lstlisting}
+However, this is not robust in general because floating point
+comparisons must be performed to determine if adjacent facets are
+co-planar and this can lead to mis-characterisation of gently varying
+surfaces. A better approach is to use the method
+\lstinline[language=c++]+append_facet+ to explicitly add surface
+facets along with their boundary id's.
+
+For more details see the API documentation at
+\lstinline[language=html]+file:///usr/share/doc/pragmatic/html/classSurface.html+
+ 
+\section{Initialise metric tensor field}
+The metric tensor field, which specifies anisotropically the local
+size of elements takes the mesh and the surface as inputs to the
+constructor:
+\begin{lstlisting}[language=C++]
+  MetricField<double, int> metric_field(*mesh, *surface);
+\end{lstlisting}
+By far the ideal scenario is that the application code supplies the
+metric tensor field. This is because in general one must use knowledge
+of the problem being solved, and how it has been discretised, to
+properly define the necessary errors norms. In order to specify the
+metric tensor field use the member function
+\lstinline[language=c++]+set_metric+.
+
+A black box implementation of a metric field calculation is also
+available. For this you just have to provide a scalar array, a target
+error tolerance, and the error norm, $p$:
+\begin{lstlisting}[language=C++]
+  metric_field.add_field(&(psi[0]), eta, 1);
+\end{lstlisting}
+If this is called multiple times then the metric fields are
+superimposed. Options are available for specifying various constraints
+such as the minimum edge length in the mesh, or the maximum number of
+elements permitted in the new mesh.
+
+Once you have finished editing the metric field it should be copied to
+the mesh, \eg:
+\begin{lstlisting}[language=C++]
+  metric_field.update_mesh();
+\end{lstlisting}
+
+For more details see the API documentation at
+\lstinline[language=html]+file:///usr/share/doc/pragmatic/html/classMetricField.html+
+
+\section{Adaptive block}
+The main adaptive loop given here is based on an algorithm published
+by Li et al. \citep{li20053d}.
+
+\begin{lstlisting}[language=C++]
+  // Set upper and lower tolerances on edge length as measured in metric space.
+  double L_up = sqrt(2.0);
+  double L_low = L_up/2;
+
+  // Initialise adaptive modules
+  Coarsen<double, int> coarsen(*mesh, *surface);  
+  Smooth<double, int> smooth(*mesh, *surface);
+  Refine<double, int> refine(*mesh, *surface);
+  Swapping<double, int> swapping(*mesh, *surface);
+ 
+  // Apply initial coarsening
+  coarsen.coarsen(L_low, L_up);
+
+  // Initialise the maximum edge length.
+  double L_max = mesh->maximal_edge_length();
+
+  double alpha = sqrt(2.0)/2;  
+  for(size_t i=0;i<10;i++){
+    // Used to throttle the coarsening and refinement.
+    double L_ref = std::max(alpha*L_max, L_up);
+    
+    // Refine mesh.
+    refine.refine(L_ref);
+
+    // Coarsen mesh.
+    coarsen.coarsen(L_low, L_ref);
+
+    // Improve quality through swapping
+    swapping.swap(0.95);
+
+    // Update the maximum edge length and check convergence of algorithm,
+    L_max = mesh->maximal_edge_length();
+    if((L_max-L_up)<0.01)
+      break;
+  }
+
+  // Defragment the memory usage.  
+  std::map<int, int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+
+  // Apply vertex smoothing.
+  smooth.smooth("optimisation Linf", 200);
+\end{lstlisting}
+
+\section{Diagnostics}
+A number of diagnostics are available to evaluate the quality of the
+mesh before, during and after adapting the mesh. To get a general
+summery printed to \lstinline[language=bash]+stdout+ use:
+\begin{lstlisting}[language=C++]
+  mesh->verify();
+\end{lstlisting}
+
+Alternatively, the values can be retrieved within the code, \eg:
+\begin{lstlisting}[language=C++]
+  qmean = mesh->get_qmean();
+  qrms = mesh->get_qrms();
+  qmin = mesh->get_qmin();
+\end{lstlisting}
+
+If you have enabled \lstinline[language=bash]+VTK+ then you can also
+dump results to \lstinline[language=bash]+VTK+ files for visualisation
+purposes, \eg:
+\begin{lstlisting}[language=C++]
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
+\end{lstlisting}
+
+\section{Exporting the mesh}
+The classes \lstinline[language=c++]+Mesh+ and
+\lstinline[language=c++]+Surface+ provide member functions to copy
+retrieve the adapted mesh from \pragmatic. These methods are clearly
+identified by the prefix \lstinline[language=c++]+get_+, see
+\lstinline[language=html]+file:///usr/share/doc/pragmatic/html/classMesh.html+
+and
+\lstinline[language=html]+file:///usr/share/doc/pragmatic/html/classSurface.html+
+for details.

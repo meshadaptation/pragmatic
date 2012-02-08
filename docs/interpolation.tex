@@ -1,0 +1,35 @@
+\chapter{Mesh-to-mesh interpolation}
+By changing the mesh, an adaptive algorithm also changes
+the function space associated with the mesh. Therefore, adaptivity
+necessitates an interpolation step between the previous and adapted
+meshes so that the simulation may be timestepped forward.
+
+The natural algorithm for interpolating from a donor mesh to a target
+mesh, called consistent interpolation, is the interpolation derived
+from the solution values of the donor mesh. For each node $n_{\cal{T}}
+\in \cal{N}_{\cal{T}}$ in the target mesh $\cal{T}$, a containing
+element $K_{\cal{D}}$ is identified in the donor mesh $\cal{D}$, and
+the solution $q(\pmb{x})$ is evaluated at the physical location of the
+target node $n_{\cal{T}}$. Such an element $K_{\cal{D}}$ may be
+identified by an advancing front algorithm \citep{lohner1995} or by an
+R-tree spatial indexing algorithm \citep{guttman1984}.
+
+This algorithm is cheap to implement and is bounded for piecewise
+linear basis functions. It is not conservative: the integral of the
+interpolant on the target mesh will not in general be the same as the
+integral of the field on the donor mesh. The method can be diffusive:
+unless nodes in the new mesh exist at the maxima and minima of the
+function on the old mesh, the maxima and minima may be lost. The
+algorithm is also not defined for discontinuous meshes.
+
+An alternative is to project from the donor mesh to the target mesh;
+that is, to find the element of the target function space which is
+closest in the $L_2$ norm to the function being interpolated. This is
+referred to as Galerkin projection \citep{george1998}. Doing this
+between arbitrarily unrelated unstructured meshes requires the
+construction of a supermesh of the target and donor meshes; this may
+be thought of as the mesh of intersections of the elements of the
+target and donor meshes
+\citep{farrell2009a,farrell2011conservative}. Galerkin projection is
+conservative, minimally diffusive, and can be made bounded, but is
+more expensive than consistent interpolation.
