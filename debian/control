@@ -2,7 +2,7 @@ Source: pragmatic
 Section: science
 Priority: extra
 Maintainer: Gerard Gorman <g.gorman@imperial.ac.uk>
-Build-Depends: debhelper (>= 7.0.50~), autotools-dev, libvtk5-dev, libparmetis-dev, libnuma-dev, libtrilinos-dev, doxygen, texlive-fonts-recommended, texlive-latex-base, gfortran, libopenmpi-dev
+Build-Depends: debhelper (>= 7.0.50~), autotools-dev, libvtk5-dev, libparmetis-dev, libnuma-dev, libtrilinos-dev, doxygen, texlive-fonts-recommended, texlive-latex-base, texlive-latex-extra, texlive-pstricks, gfortran, libopenmpi-dev
 Standards-Version: 3.9.1
 XS-Python-Version: >= 2.5
 
