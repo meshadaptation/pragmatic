@@ -694,7 +694,7 @@ enable_option_checking
 enable_openmp
 enable_fortran
 enable_debugging
-with_external_zoltan
+with_zoltan
 with_cgal
 enable_cuda
 '
@@ -1337,8 +1337,7 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-external_zoltan=LIB
-                          external installation of Zoltan mesh-partitioner
+  --with-zoltan=LIB       installation of Zoltan
   --with-cgal             Prefix where CGAL is installed.
 
 Some influential environment variables:
@@ -6025,16 +6024,16 @@ done
 compile_zoltan=no
 
 
-# Check whether --with-external_zoltan was given.
-if test "${with_external_zoltan+set}" = set; then :
-  withval=$with_external_zoltan;
+# Check whether --with-zoltan was given.
+if test "${with_zoltan+set}" = set; then :
+  withval=$with_zoltan;
 fi
 
-case $with_external_zoltan in
+case $with_zoltan in
   yes | "") ;;
   no ) compile_zoltan=yes ;;
-  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_external_zoltan";;
-  *) LIBS_ZOLTAN="-l$with_external_zoltan" ;;
+  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_zoltan";;
+  *) LIBS_ZOLTAN="-l$with_zoltan" ;;
 esac
 
 if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then

@@ -5,12 +5,12 @@
 AC_DEFUN([ACX_ZOLTAN], [
 compile_zoltan=no
 
-AC_ARG_WITH(external_zoltan, [AS_HELP_STRING([--with-external_zoltan=LIB], [external installation of Zoltan mesh-partitioner])])
-case $with_external_zoltan in
+AC_ARG_WITH(zoltan, [AS_HELP_STRING([--with-zoltan=LIB], [installation of Zoltan])])
+case $with_zoltan in
   yes | "") ;;
   no ) compile_zoltan=yes ;;
-  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_external_zoltan";;
-  *) LIBS_ZOLTAN="-l$with_external_zoltan" ;;
+  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_zoltan";;
+  *) LIBS_ZOLTAN="-l$with_zoltan" ;;
 esac
 
 dnl If in parallel, enable Zoltan compilation
@@ -48,7 +48,7 @@ if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
   fi
 
   if test x"$compile_zoltan" == x"no"; then
-    AC_DEFINE(HAVE_ZOLTAN, 1, [Zoltan is a external library])
+    AC_DEFINE(HAVE_ZOLTAN, 1, [Zoltan package])
     AC_MSG_NOTICE([Found a usable installation of Zoltan.])
     AC_SUBST(CPPFLAGS_ZOLTAN)
     AC_SUBST(LIBS_ZOLTAN)
