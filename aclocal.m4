@@ -29,14 +29,14 @@ CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
 AC_CHECK_HEADERS(zoltan.h,AC_MSG_NOTICE([found zoltan.h]),AC_MSG_ERROR([cannot find zoltan.h]))
 
 LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
-AC_CHECK_FUNCS(Zoltan_Initialize,AC_MSG_NOTICE([found zoltan]),[check_trilinos=yes])
+AC_CHECK_FUNCS(Zoltan_Initialize,AC_DEFINE(HAVE_ZOLTAN,1),[check_trilinos=yes])
 
 if test x"$check_trilinos" == x"yes"; then
   LIBZOLTAN="trilinos_zoltan"
   LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
 
   $as_unset AS_TR_SH([ac_cv_func_Zoltan_Initialize])
-  AC_CHECK_FUNCS(Zoltan_Initialize,AC_MSG_NOTICE([found trilinos_zoltan]),AC_MSG_ERROR([cannot find zoltan]))
+  AC_CHECK_FUNCS(Zoltan_Initialize,AC_DEFINE(HAVE_ZOLTAN,1),AC_MSG_ERROR([cannot find zoltan]))
 fi
 
 CPPFLAGS="$acx_zoltan_save_CPPFLAGS"

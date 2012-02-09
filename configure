@@ -6130,8 +6130,8 @@ if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZOLTAN_INITIALIZE 1
 _ACEOF
- { $as_echo "$as_me:${as_lineno-$LINENO}: found zoltan" >&5
-$as_echo "$as_me: found zoltan" >&6;}
+ $as_echo "#define HAVE_ZOLTAN 1" >>confdefs.h
+
 else
   check_trilinos=yes
 fi
@@ -6150,8 +6150,8 @@ if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZOLTAN_INITIALIZE 1
 _ACEOF
- { $as_echo "$as_me:${as_lineno-$LINENO}: found trilinos_zoltan" >&5
-$as_echo "$as_me: found trilinos_zoltan" >&6;}
+ $as_echo "#define HAVE_ZOLTAN 1" >>confdefs.h
+
 else
   as_fn_error $? "cannot find zoltan" "$LINENO" 5
 fi
