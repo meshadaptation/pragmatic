@@ -607,11 +607,11 @@ ENABLE_CUDA
 CUDA_LIBS
 CUDA_CFLAGS
 NVCC
-LIBS_ZOLTAN
-CPPFLAGS_ZOLTAN
 EGREP
 GREP
 CXXCPP
+CPPFLAGS_ZOLTAN
+LIBS_ZOLTAN
 USING_FORTRAN
 MAKE
 RANLIB
@@ -695,7 +695,7 @@ enable_openmp
 enable_fortran
 enable_debugging
 with_zoltan
-with_zoltan_lib
+with_trilinos
 with_cgal
 enable_cuda
 '
@@ -1338,9 +1338,10 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-zoltan=LIB       root installation of Zoltan
-  --with-zoltan-lib=LIB   name of Zoltan library, e.g., zoltan or
-                          trilinos_zoltan
+  --with-zoltan=ZOLTAN_ROOT
+                          root installation of Zoltan
+  --with-trilinos=TRILINOS_ROOT
+                          root installation of trilinos
   --with-cgal             Prefix where CGAL is installed.
 
 Some influential environment variables:
@@ -6072,7 +6073,11 @@ done
 
 
 
-compile_zoltan=no
+
+
+
+
+LIBZOLTAN="zoltan"
 
 
 # Check whether --with-zoltan was given.
@@ -6086,115 +6091,76 @@ if test -n "$with_zoltan" ; then
 fi
 
 
-# Check whether --with-zoltan-lib was given.
-if test "${with_zoltan_lib+set}" = set; then :
-  withval=$with_zoltan_lib;
+# Check whether --with-trilinos was given.
+if test "${with_trilinos+set}" = set; then :
+  withval=$with_trilinos;
 fi
 
-if test -n "$with_zoltan_lib" ; then
-  LIBS_ZOLTAN="-l$with_zoltan_lib"
+if test -n "$with_trilinos" ; then
+  LIBZOLTAN="trilinos_zoltan"
+  LIBS_ZOLTAN="-L$with_trilinos/lib"
+  CPPFLAGS_ZOLTAN="-I$with_trilinos/include/trilinos"
 fi
 
-if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
-  acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
-  acx_zoltan_save_LIBS="$LIBS"
+acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
+acx_zoltan_save_LIBS="$LIBS"
 
-  if test x"$CPPFLAGS_ZOLTAN" != x; then
-    CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
-  fi
-  for ac_header in zoltan.h
+CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
+for ac_header in zoltan.h
 do :
   ac_fn_cxx_check_header_mongrel "$LINENO" "zoltan.h" "ac_cv_header_zoltan_h" "$ac_includes_default"
 if test "x$ac_cv_header_zoltan_h" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZOLTAN_H 1
 _ACEOF
- compile_zoltan=no
+ { $as_echo "$as_me:${as_lineno-$LINENO}: found zoltan.h" >&5
+$as_echo "$as_me: found zoltan.h" >&6;}
 else
-  compile_zoltan=yes
+  as_fn_error $? "cannot find zoltan.h" "$LINENO" 5
 fi
 
 done
 
 
-  # if failed, try with a common location for trilinos installation
-  if test x"$compile_zoltan" == x"yes"; then
-    CPPFLAGS_ZOLTAN="-I/usr/include/trilinos"
-    CPPFLAGS="$acx_zoltan_save_CPPFLAGS $CPPFLAGS_ZOLTAN"
-    # remove cache so it actually checks again
-    $as_unset ac_cv_header_zoltan_h
-    for ac_header in zoltan.h
-do :
-  ac_fn_cxx_check_header_mongrel "$LINENO" "zoltan.h" "ac_cv_header_zoltan_h" "$ac_includes_default"
-if test "x$ac_cv_header_zoltan_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_ZOLTAN_H 1
-_ACEOF
- compile_zoltan=no
-else
-  compile_zoltan=yes
-fi
-
-done
-
-  fi
-
-  # if couldn't find header, don't bother checking for function
-  if test x"$compile_zoltan" == x"no"; then
-    LIBS="$LIBS $LIBS_ZOLTAN"
-    for ac_func in Zoltan_Initialize
+LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
+for ac_func in Zoltan_Initialize
 do :
   ac_fn_cxx_check_func "$LINENO" "Zoltan_Initialize" "ac_cv_func_Zoltan_Initialize"
 if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZOLTAN_INITIALIZE 1
 _ACEOF
- compile_zoltan=no
+ { $as_echo "$as_me:${as_lineno-$LINENO}: found zoltan" >&5
+$as_echo "$as_me: found zoltan" >&6;}
 else
-  compile_zoltan=yes
+  check_trilinos=yes
 fi
 done
 
 
-    # if failed, try with a common location for trilinos installation
-    if test x"$compile_zoltan" == x"yes"; then
-      LIBS_ZOLTAN=-ltrilinos_zoltan
-      LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN"
-      # remove cache so it actually checks again
-      $as_unset ac_cv_func_Zoltan_Initialize
-      for ac_func in Zoltan_Initialize
+if test x"$check_trilinos" == x"yes"; then
+  LIBZOLTAN="trilinos_zoltan"
+  LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
+
+  $as_unset ac_cv_func_Zoltan_Initialize
+  for ac_func in Zoltan_Initialize
 do :
   ac_fn_cxx_check_func "$LINENO" "Zoltan_Initialize" "ac_cv_func_Zoltan_Initialize"
 if test "x$ac_cv_func_Zoltan_Initialize" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZOLTAN_INITIALIZE 1
 _ACEOF
- compile_zoltan=no
+ { $as_echo "$as_me:${as_lineno-$LINENO}: found trilinos_zoltan" >&5
+$as_echo "$as_me: found trilinos_zoltan" >&6;}
 else
-  compile_zoltan=yes
+  as_fn_error $? "cannot find zoltan" "$LINENO" 5
 fi
 done
 
-    fi
-  fi
-
-  if test x"$compile_zoltan" == x"no"; then
-
-$as_echo "#define HAVE_ZOLTAN 1" >>confdefs.h
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: Found a usable installation of Zoltan." >&5
-$as_echo "$as_me: Found a usable installation of Zoltan." >&6;}
-
-
-  else
-    { $as_echo "$as_me:${as_lineno-$LINENO}: Could not find an installed version of Zoltan. It will be compiled." >&5
-$as_echo "$as_me: Could not find an installed version of Zoltan. It will be compiled." >&6;}
-    CPPFLAGS_ZOLTAN=""
-    LIBS_ZOLTAN=""
-  fi
-  CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
-  LIBS="$acx_zoltan_save_LIBS"
 fi
+
+CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
+LIBS="$acx_zoltan_save_LIBS"
 
 
 

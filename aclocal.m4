@@ -3,69 +3,46 @@
 
 
 AC_DEFUN([ACX_ZOLTAN], [
-compile_zoltan=no
 
-AC_ARG_WITH(zoltan, [AS_HELP_STRING([--with-zoltan=LIB], [root installation of Zoltan])])
+AC_SUBST(LIBS_ZOLTAN)
+AC_SUBST(CPPFLAGS_ZOLTAN)
+
+LIBZOLTAN="zoltan"
+
+AC_ARG_WITH(zoltan, [AS_HELP_STRING([--with-zoltan=ZOLTAN_ROOT], [root installation of Zoltan])])
 if test -n "$with_zoltan" ; then
   LIBS_ZOLTAN="-L$with_zoltan/lib"
   CPPFLAGS_ZOLTAN="-I$with_zoltan/include"
 fi
 
-AC_ARG_WITH(zoltan-lib, [AS_HELP_STRING([--with-zoltan-lib=LIB], [name of Zoltan library, e.g., zoltan or trilinos_zoltan])])
-if test -n "$with_zoltan_lib" ; then
-  LIBS_ZOLTAN="-l$with_zoltan_lib"
+AC_ARG_WITH(trilinos, [AS_HELP_STRING([--with-trilinos=TRILINOS_ROOT], [root installation of trilinos])])
+if test -n "$with_trilinos" ; then
+  LIBZOLTAN="trilinos_zoltan"
+  LIBS_ZOLTAN="-L$with_trilinos/lib"
+  CPPFLAGS_ZOLTAN="-I$with_trilinos/include/trilinos"
 fi
 
-dnl If in parallel, enable Zoltan compilation
-if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
-  acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
-  acx_zoltan_save_LIBS="$LIBS"
+acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
+acx_zoltan_save_LIBS="$LIBS"
 
-  if test x"$CPPFLAGS_ZOLTAN" != x; then
-    CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
-  fi
-  AC_CHECK_HEADERS(zoltan.h,[compile_zoltan=no],[compile_zoltan=yes])
+CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
+AC_CHECK_HEADERS(zoltan.h,AC_MSG_NOTICE([found zoltan.h]),AC_MSG_ERROR([cannot find zoltan.h]))
 
-  # if failed, try with a common location for trilinos installation
-  if test x"$compile_zoltan" == x"yes"; then
-    CPPFLAGS_ZOLTAN="-I/usr/include/trilinos"
-    CPPFLAGS="$acx_zoltan_save_CPPFLAGS $CPPFLAGS_ZOLTAN"
-    # remove cache so it actually checks again
-    $as_unset AS_TR_SH([ac_cv_header_zoltan_h])
-    AC_CHECK_HEADERS(zoltan.h,[compile_zoltan=no],[compile_zoltan=yes])
-  fi
+LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
+AC_CHECK_FUNCS(Zoltan_Initialize,AC_MSG_NOTICE([found zoltan]),[check_trilinos=yes])
 
-  # if couldn't find header, don't bother checking for function
-  if test x"$compile_zoltan" == x"no"; then
-    LIBS="$LIBS $LIBS_ZOLTAN"
-    AC_CHECK_FUNCS(Zoltan_Initialize,[compile_zoltan=no],[compile_zoltan=yes])
+if test x"$check_trilinos" == x"yes"; then
+  LIBZOLTAN="trilinos_zoltan"
+  LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
 
-    # if failed, try with a common location for trilinos installation
-    if test x"$compile_zoltan" == x"yes"; then
-      LIBS_ZOLTAN=-ltrilinos_zoltan
-      LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN"
-      # remove cache so it actually checks again
-      $as_unset AS_TR_SH([ac_cv_func_Zoltan_Initialize])
-      AC_CHECK_FUNCS(Zoltan_Initialize,[compile_zoltan=no],[compile_zoltan=yes])
-    fi
-  fi
-
-  if test x"$compile_zoltan" == x"no"; then
-    AC_DEFINE(HAVE_ZOLTAN, 1, [Zoltan package])
-    AC_MSG_NOTICE([Found a usable installation of Zoltan.])
-    AC_SUBST(CPPFLAGS_ZOLTAN)
-    AC_SUBST(LIBS_ZOLTAN)
-  else
-    AC_MSG_NOTICE([Could not find an installed version of Zoltan. It will be compiled.])
-    CPPFLAGS_ZOLTAN=""	
-    LIBS_ZOLTAN=""
-  fi
-  CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
-  LIBS="$acx_zoltan_save_LIBS"
+  $as_unset AS_TR_SH([ac_cv_func_Zoltan_Initialize])
+  AC_CHECK_FUNCS(Zoltan_Initialize,AC_MSG_NOTICE([found trilinos_zoltan]),AC_MSG_ERROR([cannot find zoltan]))
 fi
+
+CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
+LIBS="$acx_zoltan_save_LIBS"
 
 ]) dnl ACX_ZOLTAN
-
 
 # ===========================================================================
 #            http://autoconf-archive.cryp.to/ax_check_define.html
