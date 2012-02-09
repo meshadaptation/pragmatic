@@ -26,7 +26,12 @@ acx_zoltan_save_CPPFLAGS="$CPPFLAGS"
 acx_zoltan_save_LIBS="$LIBS"
 
 CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
-AC_CHECK_HEADERS(zoltan.h,AC_MSG_NOTICE([found zoltan.h]),AC_MSG_ERROR([cannot find zoltan.h]))
+AC_CHECK_HEADERS(zoltan.h,AC_MSG_NOTICE([found zoltan.h]),[
+  CPPFLAGS_ZOLTAN="-I/usr/include/trilinos"
+  CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
+  $as_unset AS_TR_SH([ac_cv_header_zoltan_h])
+  AC_CHECK_HEADERS(zoltan.h,AC_MSG_NOTICE([found zoltan.h]),AC_MSG_ERROR([cannot find zoltan.h]))
+])
 
 LIBS="$acx_zoltan_save_LIBS $LIBS_ZOLTAN -l$LIBZOLTAN"
 AC_CHECK_FUNCS(Zoltan_Initialize,AC_DEFINE(HAVE_ZOLTAN,1),[check_trilinos=yes])

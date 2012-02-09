@@ -6116,7 +6116,26 @@ _ACEOF
  { $as_echo "$as_me:${as_lineno-$LINENO}: found zoltan.h" >&5
 $as_echo "$as_me: found zoltan.h" >&6;}
 else
+
+  CPPFLAGS_ZOLTAN="-I/usr/include/trilinos"
+  CPPFLAGS="$CPPFLAGS $CPPFLAGS_ZOLTAN"
+  $as_unset ac_cv_header_zoltan_h
+  for ac_header in zoltan.h
+do :
+  ac_fn_cxx_check_header_mongrel "$LINENO" "zoltan.h" "ac_cv_header_zoltan_h" "$ac_includes_default"
+if test "x$ac_cv_header_zoltan_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_ZOLTAN_H 1
+_ACEOF
+ { $as_echo "$as_me:${as_lineno-$LINENO}: found zoltan.h" >&5
+$as_echo "$as_me: found zoltan.h" >&6;}
+else
   as_fn_error $? "cannot find zoltan.h" "$LINENO" 5
+fi
+
+done
+
+
 fi
 
 done
