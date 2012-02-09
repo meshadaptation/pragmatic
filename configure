@@ -695,6 +695,7 @@ enable_openmp
 enable_fortran
 enable_debugging
 with_zoltan
+with_zoltan_lib
 with_cgal
 enable_cuda
 '
@@ -1337,7 +1338,9 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-zoltan=LIB       installation of Zoltan
+  --with-zoltan=LIB       root installation of Zoltan
+  --with-zoltan-lib=LIB   name of Zoltan library, e.g., zoltan or
+                          trilinos_zoltan
   --with-cgal             Prefix where CGAL is installed.
 
 Some influential environment variables:
@@ -6077,12 +6080,20 @@ if test "${with_zoltan+set}" = set; then :
   withval=$with_zoltan;
 fi
 
-case $with_zoltan in
-  yes | "") ;;
-  no ) compile_zoltan=yes ;;
-  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_zoltan";;
-  *) LIBS_ZOLTAN="-l$with_zoltan" ;;
-esac
+if test -n "$with_zoltan" ; then
+  LIBS_ZOLTAN="-L$with_zoltan/lib"
+  CPPFLAGS_ZOLTAN="-I$with_zoltan/include"
+fi
+
+
+# Check whether --with-zoltan-lib was given.
+if test "${with_zoltan_lib+set}" = set; then :
+  withval=$with_zoltan_lib;
+fi
+
+if test -n "$with_zoltan_lib" ; then
+  LIBS_ZOLTAN="-l$with_zoltan_lib"
+fi
 
 if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
   acx_zoltan_save_CPPFLAGS="$CPPFLAGS"

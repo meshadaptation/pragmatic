@@ -5,13 +5,16 @@
 AC_DEFUN([ACX_ZOLTAN], [
 compile_zoltan=no
 
-AC_ARG_WITH(zoltan, [AS_HELP_STRING([--with-zoltan=LIB], [installation of Zoltan])])
-case $with_zoltan in
-  yes | "") ;;
-  no ) compile_zoltan=yes ;;
-  -* | */* | *.a | *.so | *.so.* | *.o) LIBS_ZOLTAN="$with_zoltan";;
-  *) LIBS_ZOLTAN="-l$with_zoltan" ;;
-esac
+AC_ARG_WITH(zoltan, [AS_HELP_STRING([--with-zoltan=LIB], [root installation of Zoltan])])
+if test -n "$with_zoltan" ; then
+  LIBS_ZOLTAN="-L$with_zoltan/lib"
+  CPPFLAGS_ZOLTAN="-I$with_zoltan/include"
+fi
+
+AC_ARG_WITH(zoltan-lib, [AS_HELP_STRING([--with-zoltan-lib=LIB], [name of Zoltan library, e.g., zoltan or trilinos_zoltan])])
+if test -n "$with_zoltan_lib" ; then
+  LIBS_ZOLTAN="-l$with_zoltan_lib"
+fi
 
 dnl If in parallel, enable Zoltan compilation
 if test x"$enable_mpi" != x"no" && test x"$compile_zoltan" == x"no"; then
