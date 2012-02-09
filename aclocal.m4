@@ -38,6 +38,7 @@ if test x"$check_trilinos" == x"yes"; then
   $as_unset AS_TR_SH([ac_cv_func_Zoltan_Initialize])
   AC_CHECK_FUNCS(Zoltan_Initialize,AC_DEFINE(HAVE_ZOLTAN,1),AC_MSG_ERROR([cannot find zoltan]))
 fi
+LIBS_ZOLTAN="$LIBS_ZOLTAN -l$LIBZOLTAN"
 
 CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
 LIBS="$acx_zoltan_save_LIBS"

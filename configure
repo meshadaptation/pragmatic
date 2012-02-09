@@ -6158,6 +6158,7 @@ fi
 done
 
 fi
+LIBS_ZOLTAN="$LIBS_ZOLTAN -l$LIBZOLTAN"
 
 CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
 LIBS="$acx_zoltan_save_LIBS"
