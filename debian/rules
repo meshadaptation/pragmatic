@@ -50,6 +50,7 @@ build-arch-stamp:  config.status
 
 	# Add here commands to compile the arch part of the package.
 	$(MAKE) 
+	$(MAKE) doc
 	touch $@
 
 build-indep: build-indep-stamp

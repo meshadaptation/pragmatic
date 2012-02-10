@@ -11,13 +11,13 @@ LIB = lib/libpragmatic.a
 
 .PHONY: lib test bin docs
 
-default: lib docs
+default: lib
 
 lib:
 	@echo "  BUILD library"
 	@(cd src && $(MAKE))
 
-docs:
+doc:
 	@echo "  DOXYGEN (source code documentation)"
 	@doxygen Doxyfile > doxygen.log
 	@echo "  MAKE manual"

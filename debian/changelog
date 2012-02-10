@@ -1,3 +1,9 @@
+pragmatic (1.1.0ubuntu2) oneiric; urgency=low
+
+  * Update rules such that docs are not built by default.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Fri, 10 Feb 2012 09:28:28 +0000
+
 pragmatic (1.1.0ubuntu1) oneiric; urgency=low
 
   * Start of new development cycle.
