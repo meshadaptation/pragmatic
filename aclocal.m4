@@ -18,7 +18,9 @@ fi
 AC_ARG_WITH(trilinos, [AS_HELP_STRING([--with-trilinos=TRILINOS_ROOT], [root installation of trilinos])])
 if test -n "$with_trilinos" ; then
   LIBZOLTAN="trilinos_zoltan"
-  LIBS_ZOLTAN="-L$with_trilinos/lib"
+  if test -d "$with_trilinos" ; then
+    LIBS_ZOLTAN="-L$with_trilinos/lib"
+  fi
   CPPFLAGS_ZOLTAN="-I$with_trilinos/include/trilinos"
 fi
 
