@@ -21,15 +21,17 @@ ifeq (@USING_FORTRAN@,yes)
 TEST_SRC_F90 = $(wildcard src/*.F90)
 TEST_BIN_F90 = $(patsubst src/%.F90,bin/%,$(TEST_SRC_F90))
 endif
-TEST_SRC_CXX = $(wildcard src/*.cpp)
-TEST_BIN_CXX = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX))
 
-TEST_SRC = $(TEST_SRC_CXX) $(TEST_SRC_F90)
-
-TEST_BIN = $(TEST_BIN_CXX) $(TEST_BIN_F90)
-
+ifeq (@ENABLE_CUDA@,yes)
 TEST_SRC_CUDA = $(wildcard src/*.cu)
 TEST_BIN_CUDA = $(patsubst src/%.cu,bin/%,$(TEST_SRC_CUDA))
+endif
+
+TEST_SRC_CXX = $(filter-out $(wildcard src/*cuda.cpp), $(wildcard src/*.cpp))
+TEST_BIN_CXX = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX))
+
+TEST_SRC = $(TEST_SRC_CXX) $(TEST_SRC_F90) $(TEST_SRC_CUDA)
+TEST_BIN = $(TEST_BIN_CXX) $(TEST_BIN_F90) $(TEST_BIN_CUDA)
 
 VPATH = ./:./src
 
@@ -37,9 +39,10 @@ VPATH = ./:./src
 
 .cpp.o:
 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $<
-
 .F90.o:
 	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+.cu.o:
+	@$(NVCC) $(NVCCFLAGS) -c $<
 
 default: test
 
@@ -47,11 +50,7 @@ test: binaries
 	@cp src/*.mpi bin/
 	python ./unittest bin
 
-ifeq (@ENABLE_CUDA@,yes)
-binaries: $(TEST_BIN) $(TEST_BIN_CUDA)
-else
 binaries: $(TEST_BIN)
-endif
 
 bin/%: src/%.cpp ticker.o 
 	@echo "    CXX $@"
