@@ -37,6 +37,7 @@ AC_LANG_PUSH([C++])
 FCFLAGS="${FCFLAGS:''}"
 CXXFLAGS="${CXXFLAGS:''}"
 CFLAGS="${CFLAGS:''}"
+CPPFLAGS="${CPPFLAGS:''}"
 
 if test -z "$FC" && test -n "$MPIFC"; then
     FC="$MPIFC"
@@ -77,7 +78,6 @@ AC_CHECK_DEFINED(__INTEL_COMPILER, [ICPC="yes"], [])
 # Check for Fujitsu compiler
 AC_CHECK_DEFINED(__FCC_VERSION, [FCC="yes"], [])
 
-CPPFLAGS="${CPPFLAGS:''}"
 AC_PROG_CPP
 
 AC_OPENMP()

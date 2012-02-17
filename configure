@@ -2526,6 +2526,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 FCFLAGS="${FCFLAGS:''}"
 CXXFLAGS="${CXXFLAGS:''}"
 CFLAGS="${CFLAGS:''}"
+CPPFLAGS="${CPPFLAGS:''}"
 
 if test -z "$FC" && test -n "$MPIFC"; then
     FC="$MPIFC"
@@ -4821,7 +4822,6 @@ if test $ac_cv_defined___FCC_VERSION != "no"; then :
   FCC="yes"
 fi
 
-CPPFLAGS="${CPPFLAGS:''}"
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
