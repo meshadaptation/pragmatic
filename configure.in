@@ -155,6 +155,7 @@ AC_CHECK_LIB(stdc++,fclose,,)
 AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 AC_CHECK_LIB(metis,METIS_NodeND,,AC_MSG_WARN([No METIS support available.]))
+AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_WARN([No ParMETIS support available.]))
 
 ACX_ZOLTAN()
     
