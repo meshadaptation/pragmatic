@@ -49,6 +49,10 @@ using namespace std;
 
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
+
+  // Benchmark times.
+  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
+
   int rank = MPI::COMM_WORLD.Get_rank();
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
@@ -90,7 +94,11 @@ int main(int argc, char **argv){
   Refine<double, int> refine(*mesh, surface);
   Swapping<double, int> swapping(*mesh, surface);
 
+  time_adapt = get_wtime();
+
+  double tic = get_wtime();
   coarsen.coarsen(L_low, L_up);
+  time_coarsen += get_wtime()-tic;
 
   double L_max = mesh->maximal_edge_length();
 
@@ -98,13 +106,20 @@ int main(int argc, char **argv){
   for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
+    tic = get_wtime();
     refine.refine(L_ref);
+    time_refine += get_wtime() - tic;
+
+    tic = get_wtime();
     coarsen.coarsen(L_low, L_ref);
+    time_coarsen += get_wtime() - tic;
 
     if(rank==0) std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
     mesh->verify();
     
+    tic = get_wtime();
     swapping.swap(0.95);
+    time_swap += get_wtime() - tic;
 
     if(rank==0) std::cout<<"INFO: Verify quality after swapping.\n";
     mesh->verify();
@@ -124,8 +139,12 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
     
+  tic = get_wtime();
   smooth.smooth("optimisation Linf", 200);
+  time_smooth += get_wtime()-tic;
   
+  time_adapt = get_wtime()-time_adapt;
+
   if(rank==0) std::cout<<"After optimisation based smoothing:\n";
   mesh->verify();
   
@@ -146,6 +165,9 @@ int main(int argc, char **argv){
   qmin = mesh->get_qmin();
   
   delete mesh;
+
+  std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
+  std::cout<<"BENCHMARK: "<<time_coarsen<<" "<<time_refine<<" "<<time_swap<<" "<<time_smooth<<"\n";
 
   if(rank==0){
     if((qmean>0.8)&&(qmin>0.4))
