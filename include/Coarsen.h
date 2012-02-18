@@ -141,20 +141,15 @@ template<typename real_t, typename index_t> class Coarsen{
         
         graph.npnodes = NPNodes;
         
-        std::vector< std::set<index_t> > NNList(NNodes);
         std::vector<size_t> nedges(NNodes);
         size_t sum=0;
 #pragma omp parallel reduction(+:sum)
         {
 #pragma omp for schedule(static)
           for(int i=0;i<NNodes;i++){
-            for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
-              NNList[i].insert(*it);
-            }
-            
             size_t cnt = 0;
             if(owner[i]==(size_t)rank)
-              cnt = NNList[i].size();
+              cnt = _mesh->NNList[i].size();
             nedges[i] = cnt;
             sum+=cnt;
           }
@@ -165,7 +160,7 @@ template<typename real_t, typename index_t> class Coarsen{
         sum=0;
         for(int i=0;i<NNodes;i++){
           if(owner[i]==(size_t)rank)
-            for(typename std::set<index_t>::iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+            for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
               csr_edges[sum++] = *it;
             }
         }
@@ -180,14 +175,18 @@ template<typename real_t, typename index_t> class Coarsen{
 
         // Given a colouring, determine the maximum independent set.
 
-        // Create sets of nodes based on colour.
-        std::map<int, std::deque<index_t> > colour_sets;
+        // Update edges that are to be collapsed.
+#pragma omp parallel for schedule(dynamic)
         for(int i=0;i<NNodes;i++){
           if(recalculate_collapse[i]){
             recalculate_collapse[i] = false;
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
           }
-          
+        }
+
+        // Create sets of nodes based on colour.
+        std::map<int, std::deque<index_t> > colour_sets;
+        for(int i=0;i<NNodes;i++){
           if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
             colour_sets[colour[i]].push_back(i);
           }
@@ -250,7 +249,6 @@ template<typename real_t, typename index_t> class Coarsen{
                 send_edges[p].push_back(lnn2gnn[dynamic_vertex[*it]]);
 
                 send_elements[p].insert(_mesh->NEList[*it].begin(), _mesh->NEList[*it].end());
-                //send_elements[p].insert(_mesh->NEList[dynamic_vertex[*it]].begin(), _mesh->NEList[dynamic_vertex[*it]].end());
               }
             }
           }
@@ -519,6 +517,7 @@ template<typename real_t, typename index_t> class Coarsen{
       // Perform collapse operations.
       {
         int node_set_size = maximal_independent_set.size();
+#pragma omp for schedule(dynamic)
         for(int i=0;i<node_set_size;i++){
           // Vertex to be removed: rm_vertex
           int rm_vertex=maximal_independent_set[i];
