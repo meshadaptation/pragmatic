@@ -27,6 +27,7 @@
  *    USA
  */
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include <omp.h>
@@ -42,7 +43,12 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5.vtu");
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+  
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -65,9 +71,6 @@ int main(int argc, char **argv){
   double tic = get_wtime();
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
-
-  double lrms = mesh->get_lrms();
-  double qrms = mesh->get_qrms();
   
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
@@ -75,11 +78,16 @@ int main(int argc, char **argv){
 
   int nelements = mesh->get_number_elements();
 
-  std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-           <<"Number elements:      "<<nelements<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
-           <<"Quality RMS:          "<<qrms<<std::endl;
-      
+  if(verbose){
+    double lrms = mesh->get_lrms();
+    double qrms = mesh->get_qrms();
+    
+    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+             <<"Number elements:      "<<nelements<<std::endl
+             <<"Edge length RMS:      "<<lrms<<std::endl
+             <<"Quality RMS:          "<<qrms<<std::endl;
+  }
+
   VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 

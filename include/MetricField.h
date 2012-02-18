@@ -151,14 +151,9 @@ template<typename real_t, typename index_t>
 
     // Halo update if parallel
     _mesh->halo_update(&(_mesh->metric[0]), _ndims*_ndims);
-
-    _mesh->calc_edge_lengths();
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
-
-    
-
    * @param psi is field while curvature is to be considered.
    * @param target_error is the user target error for a given norm.
    * @param p_norm Set this optional argument to a positive integer to

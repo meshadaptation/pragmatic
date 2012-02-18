@@ -142,30 +142,22 @@ template<typename real_t, typename index_t> class Coarsen{
         graph.npnodes = NPNodes;
         
         std::vector< std::set<index_t> > NNList(NNodes);
-        size_t NElements = _mesh->get_number_elements();
-        for(size_t i=0; i<NElements; i++){
-          if(_mesh->_ENList[i*nloc]<0)
-            continue;
-          
-          for(size_t j=0;j<nloc;j++){
-            index_t nid_j = _mesh->_ENList[i*nloc+j];
-            
-            for(size_t k=j+1;k<nloc;k++){
-              index_t nid_k = _mesh->_ENList[i*nloc+k];
-              NNList[nid_j].insert(nid_k);
-              NNList[nid_k].insert(nid_j);
-            }
-          }
-        }
-
         std::vector<size_t> nedges(NNodes);
-        size_t sum = 0;
-        for(int i=0;i<NNodes;i++){
-          size_t cnt = 0;
-          if(owner[i]==(size_t)rank)
-            cnt = NNList[i].size();
-          nedges[i] = cnt;
-          sum+=cnt;
+        size_t sum=0;
+#pragma omp parallel reduction(+:sum)
+        {
+#pragma omp for schedule(static)
+          for(int i=0;i<NNodes;i++){
+            for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+              NNList[i].insert(*it);
+            }
+            
+            size_t cnt = 0;
+            if(owner[i]==(size_t)rank)
+              cnt = NNList[i].size();
+            nedges[i] = cnt;
+            sum+=cnt;
+          }
         }
         graph.nedges = &(nedges[0]);
         
@@ -420,11 +412,14 @@ template<typename real_t, typename index_t> class Coarsen{
 
             // See if this is a new element.
             int cnt=0;
-            for(size_t l=0;l<nloc;l++){
-              for(size_t k=l+1;k<nloc;k++){
-                Edge<real_t, index_t> new_edge(element[l], element[k]);
-                typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(new_edge);
-                if(edge==_mesh->Edges.end())
+            for(size_t l=0;(l<nloc)&&(cnt==0);l++){
+              for(size_t k=l+1;(k<nloc)&&(cnt==0);k++){
+                std::set<index_t> neigh_elements;
+                set_intersection(_mesh->NEList[element[l]].begin(), _mesh->NEList[element[l]].end(),
+                                 _mesh->NEList[element[k]].begin(), _mesh->NEList[element[l]].end(),
+                                 inserter(neigh_elements, neigh_elements.begin()));
+                
+                if(neigh_elements.size())
                   cnt++;
               }
             }
@@ -445,19 +440,8 @@ template<typename real_t, typename index_t> class Coarsen{
                   std::deque<int>::iterator result1 = std::find(_mesh->NNList[element[k]].begin(), _mesh->NNList[element[k]].end(), element[l]);
                   if(result1==_mesh->NNList[element[k]].end())
                     _mesh->NNList[element[k]].push_back(element[l]);
-                  
-                  Edge<real_t, index_t> new_edge(element[l], element[k]);
-                  typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(new_edge);
-                  if(edge!=_mesh->Edges.end()){
-                    new_edge.adjacent_elements = edge->adjacent_elements;
-                    _mesh->Edges.erase(*edge);
-                  }
-                  
-                  new_edge.adjacent_elements.insert(eid);
-                  _mesh->Edges.insert(new_edge);
                 }
               }
-              
             }
           }
           
@@ -579,42 +563,45 @@ template<typename real_t, typename index_t> class Coarsen{
       return -3;
 
     /* Sort the edges according to length. We want to collapse the
-       shortest. If it's not possible to collapse the edge then move
+       shortest. If it is not possible to collapse the edge then move
        onto the next shortest.*/
-    std::multimap<real_t, const Edge<real_t, index_t>* > short_edges;
+    std::multimap<real_t, index_t> short_edges;
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
       // For now impose the restriction that we will not coarsen across partition boundarys.
       if(_mesh->recv_halo.count(*nn))
         continue;
-
+      
       // First check if this edge can be collapsed
       if(!_surface->is_collapsible(rm_vertex, *nn))
         continue;
       
-      typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
-      assert(edge!=_mesh->Edges.end());
-      if(edge->length<L_low)
-        short_edges.insert(std::pair< real_t, const Edge<real_t, index_t>*  >(edge->length, &(*edge)));
+      double length = _mesh->calc_edge_length(rm_vertex, *nn);
+      if(length<L_low)
+        short_edges.insert(std::pair<real_t, index_t>(length, *nn));
     }
     
     bool reject_collapse = false;
-    const Edge<real_t, index_t> *target_edge = NULL;
     index_t target_vertex=-1;
     while(short_edges.size()){
       // Get the next shortest edge.
-      target_edge = short_edges.begin()->second;
+      target_vertex = short_edges.begin()->second;
       short_edges.erase(short_edges.begin());
 
       // Assume the best.
       reject_collapse=false;
-
-      // Identify vertex that will be collapsed onto.
-      target_vertex = (rm_vertex==target_edge->edge.first)?target_edge->edge.second:target_edge->edge.first;
       
-      // Check the properties of new elements. If the new properties
-      // are not acceptable when continue.
+      /* Check the properties of new elements. If the new properties
+         are not acceptable when continue. */
+
+      // Find the elements what will be collapsed.
+      std::set<index_t> collapsed_elements;
+      set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+                       _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
+                       inserter(collapsed_elements,collapsed_elements.begin()));
+      
+      // Check volume/area of new elements.
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-        if(target_edge->adjacent_elements.count(*ee))
+        if(collapsed_elements.count(*ee))
           continue;
         
         // Create a copy of the proposed element
@@ -650,6 +637,7 @@ template<typename real_t, typename index_t> class Coarsen{
                                     _mesh->get_coords(n[3]));
         }
 
+        // Not very satisfactory - requires more thought.
         if(volume/orig_volume<=1.0e-3){
           reject_collapse=true;
           break;
@@ -684,39 +672,18 @@ template<typename real_t, typename index_t> class Coarsen{
    * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
    */
   int coarsen_kernel(index_t rm_vertex, index_t target_vertex){
-    typename std::set< Edge<real_t, index_t> >::const_iterator edge_iterator = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, target_vertex));
-    assert(edge_iterator!=_mesh->Edges.end());
-
-    const Edge<real_t, index_t> *target_edge = &(*edge_iterator);
-    
-    std::set<index_t> deleted_elements = target_edge->adjacent_elements;
+    std::set<index_t> deleted_elements;
+    set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+                     _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
+                     inserter(deleted_elements, deleted_elements.begin()));
     
     // Perform coarsening on surface if necessary.
     if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex))
       _surface->collapse(rm_vertex, target_vertex);
-
-    // Remove deleted elements from node-elemement adjancy list.
-    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
-      const int *n=_mesh->get_element(*de);
-      assert(n[0]>=0);
-      for(size_t i=0;i<nloc;i++){
-        for(size_t j=i+1;j<nloc;j++){
-          typename std::set< Edge<real_t, index_t> >::iterator iother_edge = _mesh->Edges.find(Edge<real_t, index_t>(n[i], n[j]));
-          if(*iother_edge==*target_edge)
-            continue;
-          assert(iother_edge!=_mesh->Edges.end());
-          Edge<real_t, index_t> new_edge = *iother_edge;
-          _mesh->Edges.erase(iother_edge);
-          
-          new_edge.adjacent_elements.erase(*de);
-          _mesh->Edges.insert(new_edge);
-        }
-      }
-    }
     
-    // Renumber nodes in elements adjacent to rm_vertex, deleted
-    // elements being collapsed, and make these elements adjacent to
-    // target_vertex.
+    /* Renumber nodes in elements adjacent to rm_vertex, deleted
+       elements being collapsed, and make these elements adjacent to
+       target_vertex. */
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       // Delete if element is to be collapsed.
       if(deleted_elements.count(*ee)){
@@ -739,48 +706,9 @@ template<typename real_t, typename index_t> class Coarsen{
     for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
       _mesh->NEList[target_vertex].erase(*de);
     }
-
-    // Update Edges.
-    std::set<index_t> adj_nodes_target = _mesh->get_node_patch(target_vertex);
-    for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){      
-      // We have to extract a copy of the edge being edited.
-      typename std::set< Edge<real_t, index_t> >::iterator iedge_modify = _mesh->Edges.find(Edge<real_t, index_t>(rm_vertex, *nn));
-
-      assert(iedge_modify!=_mesh->Edges.end());
-      Edge<real_t, index_t> edge_modify = *iedge_modify;
-      _mesh->Edges.erase(iedge_modify);
-      
-      // Continue is this is the target edge.
-      if(target_vertex==*nn)
-        continue;
-  
-      // Update vertex id's for this edge.
-      edge_modify.edge.first = std::min(target_vertex, *nn);
-      edge_modify.edge.second = std::max(target_vertex, *nn);
-      
-      // Check if this edge is being collapsed onto an existing edge connected to target vertex.
-      if(adj_nodes_target.count(*nn)){
-        typename std::set< Edge<real_t, index_t> >::iterator iedge_duplicate = _mesh->Edges.find(Edge<real_t, index_t>(target_vertex, *nn));
-        assert(iedge_duplicate!=_mesh->Edges.end());
-        Edge<real_t, index_t> edge_duplicate = *iedge_duplicate;
-        _mesh->Edges.erase(iedge_duplicate);
-
-        // Add in additional elements from edge being merged onto.
-        edge_modify.adjacent_elements.insert(edge_duplicate.adjacent_elements.begin(),
-                                             edge_duplicate.adjacent_elements.end());
-        
-        // Copy the length
-        edge_modify.length = edge_duplicate.length;
-      }else{
-        // Update the length of the edge in metric space.
-        edge_modify.length = _mesh->calc_edge_length(target_vertex, *nn);
-      }
-      
-      // Add in modified edge back in.
-      _mesh->Edges.insert(edge_modify);
-    }
     
     // Update surrounding NNList and add elements to ENList.
+    std::set<index_t> adj_nodes_target = _mesh->get_node_patch(target_vertex);
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
       if(*nn == target_vertex){
         std::set<index_t> new_patch = adj_nodes_target;

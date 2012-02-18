@@ -348,8 +348,8 @@ template<typename real_t, typename index_t> class VTKTools{
       real_t max_desired_edge_length=0;
       real_t min_desired_edge_length=DBL_MAX;
       for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
-        Edge<real_t, index_t> edge(i, *it);
-        mean_edge_length+=mesh->Edges.find(edge)->get_length();
+        double length = mesh->calc_edge_length(i, *it);
+        mean_edge_length += length;
         
         MetricTensor<real_t> M(ndims, m);
         max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());

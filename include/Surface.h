@@ -323,6 +323,7 @@ template<typename real_t, typename index_t>
     }
   }
 
+  /*
   void refine(std::map< Edge<real_t, index_t>, index_t> &refined_edges){
     if(refined_edges.size()==0){
       return;
@@ -358,13 +359,12 @@ template<typename real_t, typename index_t>
       }
     }else{      
       for(int i=0;i<lNSElements;i++){
-        /* Check if this element has been erased - if so continue to
-           next element.*/
+        // Check if this element has been erased - if so continue to next element.
         int *n=&(SENList[i*snloc]);
         if(n[0]<0)
           continue;
     
-        /* Delete this facet if it's parent element has been deleted.*/
+        // Delete this facet if it's parent element has been deleted.
         bool erase_facet=true;
         for(size_t j=0;j<3;j++)
           if(!_mesh->is_halo_node(n[j])){
@@ -477,6 +477,7 @@ template<typename real_t, typename index_t>
       }
     }
   }
+*/
 
   int get_number_facets() const{
     return SENList.size()/snloc;
