@@ -37,6 +37,7 @@
 #include <errno.h>
 
 #include "Mesh.h"
+#include "Edge.h"
 
 /*! \brief Manages surface information and classification.
  *
@@ -323,8 +324,7 @@ template<typename real_t, typename index_t>
     }
   }
 
-  /*
-  void refine(std::map< Edge<real_t, index_t>, index_t> &refined_edges){
+  void refine(std::map< Edge<index_t>, index_t> &refined_edges){
     if(refined_edges.size()==0){
       return;
     }
@@ -339,8 +339,8 @@ template<typename real_t, typename index_t>
           continue;
         
         // Check if this edge has been refined.
-        typename std::map< Edge<real_t, index_t>, index_t>::const_iterator edge = 
-          refined_edges.find(Edge<real_t, index_t>(n[0], n[1]));
+        typename std::map< Edge<index_t>, index_t>::const_iterator edge = 
+          refined_edges.find(Edge<index_t>(n[0], n[1]));
         
         // If it's refined then just jump onto the next one.
         if(edge==refined_edges.end())
@@ -377,11 +377,11 @@ template<typename real_t, typename index_t>
           continue;
         }
 
-        std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
+        std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
         for(size_t j=0;j<3;j++)
           for(size_t k=j+1;k<3;k++){
-            typename std::map< Edge<real_t, index_t>, index_t>::const_iterator it =
-              refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+            typename std::map< Edge<index_t>, index_t>::const_iterator it =
+              refined_edges.find(Edge<index_t>(n[j], n[k]));
             if(it!=refined_edges.end())
               split.push_back(it);
           }
@@ -418,11 +418,11 @@ template<typename real_t, typename index_t>
 
           index_t m[6];
           m[0] = n[0];
-          m[1] = refined_edges.find(Edge<real_t, index_t>(n[0], n[1]))->second;
+          m[1] = refined_edges.find(Edge<index_t>(n[0], n[1]))->second;
           m[2] = n[1];
-          m[3] = refined_edges.find(Edge<real_t, index_t>(n[1], n[2]))->second;
+          m[3] = refined_edges.find(Edge<index_t>(n[1], n[2]))->second;
           m[4] = n[2];
-          m[5] = refined_edges.find(Edge<real_t, index_t>(n[2], n[0]))->second;
+          m[5] = refined_edges.find(Edge<index_t>(n[2], n[0]))->second;
           
           // Renumber existing facet and add the new one.
           n[0] = m[0];
@@ -477,7 +477,6 @@ template<typename real_t, typename index_t>
       }
     }
   }
-*/
 
   int get_number_facets() const{
     return SENList.size()/snloc;

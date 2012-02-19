@@ -34,7 +34,7 @@
 
 /*! \brief Mesh edge object.
  */
-template<typename real_t, typename index_t> class Edge{
+template<typename index_t> class Edge{
  public:
   /*! Constructor
    * @param nid0 Node-Id 0
@@ -58,8 +58,6 @@ template<typename real_t, typename index_t> class Edge{
   /// Assignment operator
   Edge& operator=(const Edge &in){
     edge = in.edge;
-    length = in.length;
-    adjacent_elements = in.adjacent_elements;
 
     return *this;
   }
@@ -77,11 +75,6 @@ template<typename real_t, typename index_t> class Edge{
   /// Greater-than operator
   bool operator<(const Edge& in) const{
     return this->edge < in.edge;
-  }
-
-  /// Return the length of the edge in metric space.
-  real_t get_length() const{
-    return length;
   }
 
   index_t connected(const Edge& in) const{
@@ -105,8 +98,6 @@ template<typename real_t, typename index_t> class Edge{
  private:
 
   std::pair<index_t, index_t> edge;
-  real_t length;
-  std::set<index_t> adjacent_elements;
 };
 
 #endif
