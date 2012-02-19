@@ -40,9 +40,13 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
+#include <mpi.h>
+
 using namespace std;
 
 int main(int argc, char **argv){
+  MPI::Init(argc,argv);
+
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
@@ -97,6 +101,8 @@ int main(int argc, char **argv){
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
+
+  MPI::Finalize();
 
   return 0;
 }

@@ -38,10 +38,19 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
+#include <mpi.h>
+
 using namespace std;
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box5x5x5.vtu");
+  MPI::Init(argc,argv);
+
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+  
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50x50.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -67,10 +76,8 @@ int main(int argc, char **argv){
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
 
-  double lrms = mesh->get_lrms();
-  double qrms = mesh->get_qrms();
-
-  mesh->verify();
+  if(verbose)
+    mesh->verify();
 
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
@@ -78,11 +85,15 @@ int main(int argc, char **argv){
   
   int nelements = mesh->get_number_elements();  
 
-  std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
-           <<"Number elements:      "<<nelements<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
-           <<"Quality RMS:          "<<qrms<<std::endl;
-
+  if(verbose){
+    double lrms = mesh->get_lrms();
+    double qrms = mesh->get_qrms();
+    
+    std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
+             <<"Number elements:      "<<nelements<<std::endl
+             <<"Edge length RMS:      "<<lrms<<std::endl
+             <<"Quality RMS:          "<<qrms<<std::endl;
+  }
 
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
@@ -93,6 +104,8 @@ int main(int argc, char **argv){
     std::cout<<"fail"<<std::endl;
   
   delete mesh;
+
+  MPI::Finalize();
 
   return 0;
 }
