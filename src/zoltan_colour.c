@@ -144,7 +144,7 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm
   int num_obj;
   ZOLTAN_ID_PTR global_ids;
 
-  ierr = Zoltan_Initialize(-1, NULL, &ver)
+  ierr = Zoltan_Initialize(-1, NULL, &ver); 
   pragmatic_zoltan_verify(ierr, "Zoltan_Initialize\0");
 
   zz = Zoltan_Create(mpi_comm);
