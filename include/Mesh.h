@@ -693,7 +693,7 @@ template<typename real_t, typename index_t> class Mesh{
   real_t maximal_edge_length(){
     double L_max = 0;
     
-    for(int i=0;i<_NNodes;i++){
+    for(int i=0;i<(int)_NNodes;i++){
       if(is_owned_node(i) && (NNList[i].size()>0))
         for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           if(i<*it){ // Ensure that every edge length is only calculated once. 

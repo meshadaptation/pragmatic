@@ -1,6 +1,6 @@
-/* 
+/*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -66,24 +66,22 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[0], 3) + 
       pow(mesh->get_coords(i)[1], 3) + 
       pow(mesh->get_coords(i)[2], 3);
-  
+
   metric_field.add_field(&(psi[0]), 0.6);
 
   size_t NElements = mesh->get_number_elements();
 
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
-  
+
   Smooth<double, int> smooth(*mesh, surface);
   double tic = get_wtime();
   smooth.smooth("Laplacian");
   smooth.smooth("smart Laplacian");
   double toc = get_wtime();
-  
+
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
-  
-  mesh->calc_edge_lengths();
 
   VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_3d_surface", &surface);
@@ -94,13 +92,13 @@ int main(int argc, char **argv){
     std::cout<<"Smooth loop time:     "<<toc-tic<<std::endl
              <<"Edge length RMS:      "<<lrms<<std::endl
              <<"Quality RMS:          "<<qrms<<std::endl;
-    
+
     if((lrms<0.45)&&(qrms<2.0))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
   }
-  
+
   MPI::Finalize();
 #else
   std::cout<<"warning - no MPI compiled"<<std::endl;
