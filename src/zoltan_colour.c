@@ -192,16 +192,16 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm
 
   /* Register the callbacks.
    */
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (void *)&num_obj_fn, (void *)graph);
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (ZOLTAN_VOID_FN *)&num_obj_fn, (void *)graph);
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
 
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void *)&obj_list_fn, (void *)graph);
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (ZOLTAN_VOID_FN *)&obj_list_fn, (void *)graph);
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
 
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_MULTI_FN_TYPE, (void *)&num_edges_multi_fn, (void *)graph);
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&num_edges_multi_fn, (void *)graph);
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
 
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_MULTI_FN_TYPE, (void *)&edge_list_multi_fn, (void *)graph);
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&edge_list_multi_fn, (void *)graph);
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
   
   ierr = Zoltan_Color(zz, num_gid_entries, num_obj, global_ids, graph->colour);
