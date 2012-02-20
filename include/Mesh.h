@@ -1370,15 +1370,12 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
     }
-    
+
     // Compress NNList
     NNList.clear();
     NNList.resize(_NNodes);
-    for(size_t i=0;i<_NNodes;i++){
-      for(typename std::set<index_t>::const_iterator it=NNList_set[i].begin();it!=NNList_set[i].end();++it){
-        NNList[i].push_back(*it);
-      }
-    }
+    for(size_t i=0;i<_NNodes;i++)
+      NNList[i].insert(NNList[i].end(), NNList_set[i].begin(), NNList_set[i].end());
   }
 
   void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){

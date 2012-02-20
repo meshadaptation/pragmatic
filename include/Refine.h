@@ -31,6 +31,7 @@
 #define REFINE_H
 
 #include <algorithm>
+#include <deque>
 #include <set>
 #include <vector>
 
@@ -158,17 +159,22 @@ template<typename real_t, typename index_t> class Refine{
     for(int i=0;i<(int)_mesh->NNList.size();++i){
       for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
         if(i<*it){
-          Edge<index_t> edge(i, *it);
           double length = _mesh->calc_edge_length(i, *it);
-          if(length>L_max)
+          if(length>L_max){
+            Edge<index_t> edge(i, *it);
+            
+            // Refining the edge invalidates NNList[i].end() in this
+            // loop. It is a good idea to break at this point anyhow.
             refined_edges[edge] = refine_edge(edge);
+            break;
+          }
         }
       }
     }
-
+    
     /* If there are no edges to be refined globally then we can return
        at this point.
-     */
+    */
     int refined_edges_size = refined_edges.size();
 #ifdef HAVE_MPI
     if(nprocs>1)

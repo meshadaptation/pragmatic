@@ -1,6 +1,6 @@
-/* 
+/*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -49,8 +49,8 @@ int main(int argc, char **argv){
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
-  
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50x50.vtu");
+
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 
   Surface<double, int> surface(*mesh);
 
@@ -82,13 +82,13 @@ int main(int argc, char **argv){
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-  
+
   int nelements = mesh->get_number_elements();  
 
   if(verbose){
     double lrms = mesh->get_lrms();
     double qrms = mesh->get_qrms();
-    
+
     std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
              <<"Number elements:      "<<nelements<<std::endl
              <<"Edge length RMS:      "<<lrms<<std::endl
@@ -97,12 +97,12 @@ int main(int argc, char **argv){
 
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
-  
-  if(nelements<12)
+
+  if(nelements<50)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
-  
+
   delete mesh;
 
   MPI::Finalize();
