@@ -1,6 +1,6 @@
 /*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -155,7 +155,7 @@ template<typename real_t, typename index_t> class Coarsen{
           }
         }
         graph.nedges = &(nedges[0]);
-        
+
         std::vector<size_t> csr_edges(sum);
         sum=0;
         for(int i=0;i<NNodes;i++){
@@ -165,12 +165,12 @@ template<typename real_t, typename index_t> class Coarsen{
             }
         }
         graph.csr_edges = &(csr_edges[0]);
-        
+
         graph.gid = &(lnn2gnn[0]);
         graph.owner = &(owner[0]);
-        
+
         graph.colour = &(colour[0]);
-        
+
         zoltan_colour(&graph, 2, MPI_COMM_WORLD);
 
         // Given a colouring, determine the maximum independent set.
@@ -414,7 +414,7 @@ template<typename real_t, typename index_t> class Coarsen{
               for(size_t k=l+1;(k<nloc)&&(cnt==0);k++){
                 std::set<index_t> neigh_elements;
                 set_intersection(_mesh->NEList[element[l]].begin(), _mesh->NEList[element[l]].end(),
-                                 _mesh->NEList[element[k]].begin(), _mesh->NEList[element[l]].end(),
+                                 _mesh->NEList[element[k]].begin(), _mesh->NEList[element[k]].end(),
                                  inserter(neigh_elements, neigh_elements.begin()));
                 
                 if(neigh_elements.size())
