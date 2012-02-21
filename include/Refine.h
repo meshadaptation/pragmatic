@@ -31,6 +31,7 @@
 #define REFINE_H
 
 #include <algorithm>
+#include <deque>
 #include <set>
 #include <vector>
 
@@ -150,18 +151,30 @@ template<typename real_t, typename index_t> class Refine{
 #endif
     
     // Initialise a dynamic vertex list
-    std::map< Edge<real_t, index_t>, index_t> refined_edges;
-    std::map<int, std::set< Edge<real_t, index_t> > > new_recv_halo;
+    std::map< Edge<index_t>, index_t> refined_edges;
+    std::map<int, std::set< Edge<index_t> > > new_recv_halo;
     
     /* Loop through all edges and select them for refinement is
        it's length is greater than L_max in transformed space. */
-    for(typename std::set< Edge<real_t, index_t> >::const_iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it)
-      if(it->length>L_max)
-        refined_edges[*it] = refine_edge(*it);
+    for(int i=0;i<(int)_mesh->NNList.size();++i){
+      for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+        if(i<*it){
+          double length = _mesh->calc_edge_length(i, *it);
+          if(length>L_max){
+            Edge<index_t> edge(i, *it);
+            
+            // Refining the edge invalidates NNList[i].end() in this
+            // loop. It is a good idea to break at this point anyhow.
+            refined_edges[edge] = refine_edge(edge);
+            break;
+          }
+        }
+      }
+    }
     
     /* If there are no edges to be refined globally then we can return
        at this point.
-     */
+    */
     int refined_edges_size = refined_edges.size();
 #ifdef HAVE_MPI
     if(nprocs>1)
@@ -174,7 +187,7 @@ template<typename real_t, typename index_t> class Refine{
        to get a regular and conforming element refinement throughout
        the domain.*/
     for(;;){
-      typename std::set< Edge<real_t, index_t> > new_edges;
+      typename std::set< Edge<index_t> > new_edges;
       for(int i=0;i<NElements;i++){
         // Check if this element has been erased - if so continue to next element.
         const int *n=_mesh->get_element(i);
@@ -182,12 +195,12 @@ template<typename real_t, typename index_t> class Refine{
           continue;
                 
         // Find what edges have been split in this element.
-        std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
-        typename std::set< Edge<real_t, index_t> > split_set;
+        std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
+        typename std::set< Edge<index_t> > split_set;
         for(size_t j=0;j<nloc;j++){
           for(size_t k=j+1;k<nloc;k++){
-            typename std::map< Edge<real_t, index_t>, index_t>::const_iterator it =
-              refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+            typename std::map< Edge<index_t>, index_t>::const_iterator it =
+              refined_edges.find(Edge<index_t>(n[j], n[k]));
             if(it!=refined_edges.end()){
               split.push_back(it);
               split_set.insert(it->first);
@@ -212,7 +225,7 @@ template<typename real_t, typename index_t> class Refine{
             
             int n1 = (n0==split[0]->first.edge.first)?split[0]->first.edge.second:split[0]->first.edge.first;
             int n2 = (n0==split[1]->first.edge.first)?split[1]->first.edge.second:split[1]->first.edge.first;
-            new_edges.insert(Edge<real_t, index_t>(n1, n2));
+            new_edges.insert(Edge<index_t>(n1, n2));
             break;}
             // case 3: // 1:4 refinement is ok.
           default:
@@ -235,7 +248,7 @@ template<typename real_t, typename index_t> class Refine{
               // Case 1.
               int n1 = (n0==split[0]->first.edge.first)?split[0]->first.edge.second:split[0]->first.edge.first;
               int n2 = (n0==split[1]->first.edge.first)?split[1]->first.edge.second:split[1]->first.edge.first;
-              new_edges.insert(Edge<real_t, index_t>(n1, n2));
+              new_edges.insert(Edge<index_t>(n1, n2));
             }
             break;
           }
@@ -260,7 +273,7 @@ template<typename real_t, typename index_t> class Refine{
               // Refine unsplit edges.
               for(int j=0;j<4;j++)
                 for(int k=j+1;k<4;k++){
-                  Edge<real_t, index_t> test_edge(n[j], n[k]);
+                  Edge<index_t> test_edge(n[j], n[k]);
                   if(split_set.count(test_edge)==0)
                     new_edges.insert(test_edge);
                 }
@@ -271,7 +284,7 @@ template<typename real_t, typename index_t> class Refine{
             // Refine unsplit edges.
             for(int j=0;j<4;j++)
               for(int k=j+1;k<4;k++){
-                Edge<real_t, index_t> test_edge(n[j], n[k]);
+                Edge<index_t> test_edge(n[j], n[k]);
                 if(split_set.count(test_edge)==0)
                   new_edges.insert(test_edge);
               }
@@ -281,7 +294,7 @@ template<typename real_t, typename index_t> class Refine{
             // Refine unsplit edges.
             for(int j=0;j<4;j++)
               for(int k=j+1;k<4;k++){
-                Edge<real_t, index_t> test_edge(n[j], n[k]);
+                Edge<index_t> test_edge(n[j], n[k]);
                 if(split_set.count(test_edge)==0)
                   new_edges.insert(test_edge);
               }
@@ -305,7 +318,7 @@ template<typename real_t, typename index_t> class Refine{
         break;
     
       // Add new edges to refined_edges.
-      for(typename std::set< Edge<real_t, index_t> >::const_iterator it=new_edges.begin();it!=new_edges.end();++it)
+      for(typename std::set< Edge<index_t> >::const_iterator it=new_edges.begin();it!=new_edges.end();++it)
         refined_edges[*it] = refine_edge(*it);
       
 #ifdef HAVE_MPI
@@ -320,7 +333,7 @@ template<typename real_t, typename index_t> class Refine{
             
             for(size_t j=0;j<nloc;j++){
               for(size_t k=j+1;k<nloc;k++){
-                Edge<real_t, index_t> edge(n[j], n[k]);
+                Edge<index_t> edge(n[j], n[k]);
                 if(refined_edges.count(edge))
                   send_edges.insert(std::pair<index_t, index_t>(edge.edge.first, edge.edge.second));
               }
@@ -343,7 +356,7 @@ template<typename real_t, typename index_t> class Refine{
             
             // Add edge into the new halo.
             if(owner!=rank)
-              new_recv_halo[owner].insert(Edge<real_t, index_t>(gnn0, gnn1));
+              new_recv_halo[owner].insert(Edge<index_t>(gnn0, gnn1));
           }
         }
         
@@ -389,14 +402,14 @@ template<typename real_t, typename index_t> class Refine{
             // Edge in terms of its global node numbering.
             int gnn0 = recv_buffer[i][j];
             int gnn1 = recv_buffer[i][j+1];
-            Edge<real_t, index_t> global_edge(gnn0, gnn1);
+            Edge<index_t> global_edge(gnn0, gnn1);
             
             // Edge in terms of its local node numbering.
             assert(gnn2lnn.count(gnn0));
             assert(gnn2lnn.count(gnn1));
             int nid0 = gnn2lnn[gnn0];
             int nid1 = gnn2lnn[gnn1];
-            Edge<real_t, index_t> local_edge(nid0, nid1);
+            Edge<index_t> local_edge(nid0, nid1);
             
             // Edge owner is defined as its minimum node owner.
             int owner = std::min(get_node_owner(nid0), get_node_owner(nid1));
@@ -419,9 +432,9 @@ template<typename real_t, typename index_t> class Refine{
     // All edges have been refined. Time to reconstruct the halo.
     if(nprocs>1){
       typename std::vector< std::vector<int> > send_buffer(nprocs), recv_buffer(nprocs);      
-      for(typename std::map<int, std::set< Edge<real_t, index_t> > >::const_iterator rh=new_recv_halo.begin();rh!=new_recv_halo.end();++rh){
+      for(typename std::map<int, std::set< Edge<index_t> > >::const_iterator rh=new_recv_halo.begin();rh!=new_recv_halo.end();++rh){
         int proc = rh->first;
-        for(typename std::set< Edge<real_t, index_t> >::const_iterator ed=rh->second.begin();ed!=rh->second.end();++ed){
+        for(typename std::set< Edge<index_t> >::const_iterator ed=rh->second.begin();ed!=rh->second.end();++ed){
           index_t gnn0 = ed->edge.first;
           index_t gnn1 = ed->edge.second;
           
@@ -431,7 +444,7 @@ template<typename real_t, typename index_t> class Refine{
           index_t lnn0 = gnn2lnn[gnn0];
           index_t lnn1 = gnn2lnn[gnn1];
           
-          index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
+          index_t lnn = refined_edges[Edge<index_t>(lnn0, lnn1)];
           
           _mesh->recv[proc].push_back(lnn);
           _mesh->recv_halo.insert(lnn);
@@ -479,7 +492,7 @@ template<typename real_t, typename index_t> class Refine{
           assert(gnn2lnn.count(recv_buffer[i][j+1]));
           index_t lnn1 = gnn2lnn[recv_buffer[i][j+1]];
 
-          index_t lnn = refined_edges[Edge<real_t, index_t>(lnn0, lnn1)];
+          index_t lnn = refined_edges[Edge<index_t>(lnn0, lnn1)];
           _mesh->send[i].push_back(lnn);
           _mesh->send_halo.insert(lnn);
         }
@@ -498,10 +511,10 @@ template<typename real_t, typename index_t> class Refine{
       
       if(ndims==2){
         // Note the order of the edges - the i'th edge is opposit the i'th node in the element. 
-        typename std::map< Edge<real_t, index_t>, index_t>::const_iterator edge[3];
-        edge[0] = refined_edges.find(Edge<real_t, index_t>(n[1], n[2]));
-        edge[1] = refined_edges.find(Edge<real_t, index_t>(n[2], n[0]));
-        edge[2] = refined_edges.find(Edge<real_t, index_t>(n[0], n[1]));
+        typename std::map< Edge<index_t>, index_t>::const_iterator edge[3];
+        edge[0] = refined_edges.find(Edge<index_t>(n[1], n[2]));
+        edge[1] = refined_edges.find(Edge<index_t>(n[2], n[0]));
+        edge[2] = refined_edges.find(Edge<index_t>(n[0], n[1]));
         
         int refine_cnt=0;
         for(int j=0;j<3;j++)
@@ -513,7 +526,7 @@ template<typename real_t, typename index_t> class Refine{
           continue;
         }else if(refine_cnt==1){
           // Single edge split.
-          typename std::map< Edge<real_t, index_t>, index_t>::const_iterator split;
+          typename std::map< Edge<index_t>, index_t>::const_iterator split;
           int rotated_ele[] = {-1, -1, -1};
           for(int j=0;j<3;j++)
             if(edge[j]!=refined_edges.end()){
@@ -540,11 +553,11 @@ template<typename real_t, typename index_t> class Refine{
           _mesh->append_element(ele3);
         }
       }else{ // 3D
-        std::vector<typename std::map< Edge<real_t, index_t>, index_t>::const_iterator> split;
+        std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
         for(size_t j=0;j<4;j++)
           for(size_t k=j+1;k<4;k++){
-            typename std::map< Edge<real_t, index_t>, index_t>::const_iterator it =
-              refined_edges.find(Edge<real_t, index_t>(n[j], n[k]));
+            typename std::map< Edge<index_t>, index_t>::const_iterator it =
+              refined_edges.find(Edge<index_t>(n[j], n[k]));
             if(it!=refined_edges.end())
               split.push_back(it);
           }
@@ -714,7 +727,6 @@ template<typename real_t, typename index_t> class Refine{
 
     // Tidy up. Need to look at efficiencies here.
     _mesh->create_adjancy();
-    _mesh->calc_edge_lengths();
     cache_clear();
   
     return refined_edges_size;
@@ -743,7 +755,7 @@ template<typename real_t, typename index_t> class Refine{
     return owner;
   }
 
-  int refine_edge(const Edge<real_t, index_t> &edge){
+  int refine_edge(const Edge<index_t> &edge){
     // Calculate the position of the new point. From equation 16 in
     // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
     real_t x[3], m[9];

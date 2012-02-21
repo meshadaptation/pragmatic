@@ -52,7 +52,6 @@
 #endif
 
 #include "Metis.h"
-#include "Edge.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
 
@@ -302,7 +301,6 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     create_adjancy();
-    calc_edge_lengths();
 
     if(local_active_vertex_map)
       delete active_vertex_map;
@@ -398,40 +396,31 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Get the mean edge length metric space.
   real_t get_lmean(){
-    calc_edge_lengths();
-    
-    double sum=0;
-    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it){
-      if(isnan(it->length)){
-        std::cerr<<"ERROR: Edge length is NaN\n"
-                 <<"Node id's = "<<it->edge.first<<", "<<it->edge.second<<std::endl
-                 <<get_metric(it->edge.first)[0]<<", "
-                 <<get_metric(it->edge.first)[1]<<", "
-                 <<get_metric(it->edge.first)[3]<<std::endl
-                 <<get_metric(it->edge.second)[0]<<", "
-                 <<get_metric(it->edge.second)[1]<<", "
-                 <<get_metric(it->edge.second)[3]<<std::endl
-                 <<get_coords(it->edge.first)[0]<<", "
-                 <<get_coords(it->edge.first)[1]<<std::endl
-                 <<get_coords(it->edge.second)[0]<<", "
-                 <<get_coords(it->edge.second)[1]<<std::endl;
-          
+    double total_length=0;
+    int nedges=0;
+#pragma omp parallel reduction(+:total_length,nedges)
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<(int)_NNodes;i++){
+        if(is_owned_node(i) && (NNList[i].size()>0))
+          for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+            if(i<*it){ // Ensure that every edge length is only calculated once. 
+              total_length += calc_edge_length(i, *it);
+              nedges++;
+            }
           }
-      sum+=it->length;
+      }
     }
-
-    int nedges = Edges.size();
+    
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
-      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
     
-    if(nedges==0)
-      std::cerr<<"ERROR: apparently zero edges present.\n";
-    double mean = sum/nedges;
-
+    double mean = total_length/nedges;
+    
     return mean;
   }
 
@@ -440,10 +429,21 @@ template<typename real_t, typename index_t> class Mesh{
     double mean = get_lmean();
     
     double rms=0;
-    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();++it){
-      rms+=pow(it->length - mean, 2);
+    int nedges=0;
+#pragma omp parallel reduction(+:rms,nedges)
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<(int)_NNodes;i++){
+        if(is_owned_node(i) && (NNList[i].size()>0))
+          for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+            if(i<*it){ // Ensure that every edge length is only calculated once. 
+              rms+=pow(calc_edge_length(i, *it) - mean, 2);
+              nedges++;
+            }
+          }
+      }
     }
-    int nedges = Edges.size();
+
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
       MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
@@ -452,7 +452,7 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
     
     rms = sqrt(rms/nedges);
-
+    
     return rms;
   }
 
@@ -460,26 +460,33 @@ template<typename real_t, typename index_t> class Mesh{
   real_t get_qmean() const{
     real_t sum=0;
     int nele=0;
-    for(size_t i=0;i<_NElements;i++){
-      const index_t *n=get_element(i);
-      if(n[0]<0)
-        continue;
-
-      if(ndims==2){
-        sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
-                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-      }else{
-        sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
-                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+    
+#pragma omp parallel reduction(+:sum, nele)
+    {
+#pragma omp for schedule(static)
+      for(size_t i=0;i<_NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        if(ndims==2){
+          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+        }else{
+          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+        }
+        nele++;
       }
-      nele++;
     }
+
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
       MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
+
     double mean = sum/nele;
 
     return mean;
@@ -488,6 +495,9 @@ template<typename real_t, typename index_t> class Mesh{
   /// Get the element minimum quality in metric space.
   real_t get_qmin() const{
     double qmin=1; // Where 1 is ideal.
+
+    // This is not urgent - but when OpenMP 3.1 is more common we
+    // should stick a proper min reduction in here.
     for(size_t i=0;i<_NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
@@ -650,25 +660,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Calculates the edge lengths in metric space.
-  void calc_edge_lengths(){
-    assert(Edges.size());
-    
-    for(typename std::set< Edge<real_t, index_t> >::iterator it=Edges.begin();it!=Edges.end();){
-      typename std::set< Edge<real_t, index_t> >::iterator current_edge = it++;
-      
-      Edge<real_t, index_t> edge = *current_edge;
-      Edges.erase(current_edge);
-      
-      index_t nid0 = edge.edge.first;
-      index_t nid1 = edge.edge.second;
-      
-      edge.length = calc_edge_length(nid0, nid1);
-      Edges.insert(edge);
-    }
-  }
-
-  /// Calculates the edge lengths in metric space.
-  real_t calc_edge_length(index_t nid0, index_t nid1){
+  real_t calc_edge_length(index_t nid0, index_t nid1) const{
     real_t length=-1.0;
     if(ndims==2){
       real_t ml00 = (metric[nid0*ndims*ndims]+metric[nid1*ndims*ndims])*0.5;
@@ -699,11 +691,15 @@ template<typename real_t, typename index_t> class Mesh{
   }
   
   real_t maximal_edge_length(){
-    calc_edge_lengths();
+    double L_max = 0;
     
-    double L_max=0;
-    for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin();it!=Edges.end();++it){
-      L_max = std::max(L_max, (double)it->length);
+    for(int i=0;i<(int)_NNodes;i++){
+      if(is_owned_node(i) && (NNList[i].size()>0))
+        for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          if(i<*it){ // Ensure that every edge length is only calculated once. 
+            L_max = std::min(L_max, calc_edge_length(i, *it));
+          }
+        }
     }
     
 #ifdef HAVE_MPI
@@ -751,10 +747,9 @@ template<typename real_t, typename index_t> class Mesh{
         mpi_ele_owner[i] = owner;
       }
     
-    // Check for the correctness of NNList, NEList and Edges.
+    // Check for the correctness of NNList and NEList.
     std::vector< std::set<index_t> > local_NEList(_NNodes);
     std::vector< std::set<index_t> > local_NNList(_NNodes);
-    std::set< Edge<real_t, index_t> > local_Edges;
     for(size_t i=0; i<_NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
@@ -767,15 +762,6 @@ template<typename real_t, typename index_t> class Mesh{
           index_t nid_k = _ENList[i*nloc+k];
           local_NNList[nid_j].insert(nid_k);
           local_NNList[nid_k].insert(nid_j);
-          
-          Edge<real_t, index_t> edge(nid_j, nid_k);
-          typename std::set< Edge<real_t, index_t> >::iterator edge_ptr = local_Edges.find(edge);
-          if(edge_ptr!=local_Edges.end()){
-            edge.adjacent_elements = edge_ptr->adjacent_elements;
-            local_Edges.erase(edge_ptr);
-          }
-          edge.adjacent_elements.insert(i);
-          local_Edges.insert(edge);
         }
       }
     }
@@ -836,37 +822,6 @@ template<typename real_t, typename index_t> class Mesh{
               continue;
             if(local_NEList[i]!=NEList[i]){
               result = "fail (local_NEList[i]!=NEList[i])\n";
-              break;
-            }
-          }
-        }
-      }
-      if(rank==0) std::cout<<result;
-    }
-    {
-      if(rank==0) std::cout<<"VERIFY: Edges...................";
-      std::string result="pass\n";
-      if(Edges.size()==0){
-        result="empty\n";
-      }else{
-        if(local_Edges.size()==Edges.size()){
-          for(typename std::set< Edge<real_t, index_t> >::const_iterator it=Edges.begin(), jt=local_Edges.begin();
-              it!=Edges.end(); ++it, ++jt){
-            if(it->edge != jt->edge){
-              result = "fail (it->edge != jt->edge)\n";
-              break;
-            }
-            if(it->adjacent_elements != jt->adjacent_elements){
-              result = "fail (it->adjacent_elements != jt->adjacent_elements)\n";
-              std::cerr<<"it->adjacent_elements = {";
-              for(typename std::set<index_t>::const_iterator kt=it->adjacent_elements.begin();kt!=it->adjacent_elements.end();++kt)
-                std::cerr<<*kt<<" ";
-              std::cerr<<"}\n";
-              
-              std::cerr<<"jt->adjacent_elements = {";
-              for(typename std::set<index_t>::const_iterator kt=jt->adjacent_elements.begin();kt!=jt->adjacent_elements.end();++kt)
-                std::cerr<<*kt<<" ";
-              std::cerr<<"}\n";
               break;
             }
           }
@@ -1397,11 +1352,11 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Create required adjancy lists.
   void create_adjancy(){
-    // Create new NNList, NEList and edges
+    // Create new NNList and NEList.
     std::vector< std::set<index_t> > NNList_set(_NNodes);
     NEList.clear();
     NEList.resize(_NNodes);
-    Edges.clear();
+
     for(size_t i=0; i<_NElements; i++){
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
@@ -1412,27 +1367,15 @@ template<typename real_t, typename index_t> class Mesh{
           index_t nid_k = _ENList[i*nloc+k];
           NNList_set[nid_j].insert(nid_k);
           NNList_set[nid_k].insert(nid_j);
-          
-          Edge<real_t, index_t> edge(nid_j, nid_k);
-          typename std::set< Edge<real_t, index_t> >::iterator edge_ptr = Edges.find(edge);
-          if(edge_ptr!=Edges.end()){
-            edge.adjacent_elements = edge_ptr->adjacent_elements;
-            Edges.erase(edge_ptr);
-          }
-          edge.adjacent_elements.insert(i);
-          Edges.insert(edge);
         }
       }
     }
-    
+
     // Compress NNList
     NNList.clear();
     NNList.resize(_NNodes);
-    for(size_t i=0;i<_NNodes;i++){
-      for(typename std::set<index_t>::const_iterator it=NNList_set[i].begin();it!=NNList_set[i].end();++it){
-        NNList[i].push_back(*it);
-      }
-    }
+    for(size_t i=0;i<_NNodes;i++)
+      NNList[i].insert(NNList[i].end(), NNList_set[i].begin(), NNList_set[i].end());
   }
 
   void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){
@@ -1492,7 +1435,6 @@ template<typename real_t, typename index_t> class Mesh{
   // Adjancy lists
   std::vector< std::set<index_t> > NEList;
   std::vector< std::deque<index_t> > NNList;
-  std::set< Edge<real_t, index_t> > Edges;
 
   ElementProperty<real_t> *property;
 

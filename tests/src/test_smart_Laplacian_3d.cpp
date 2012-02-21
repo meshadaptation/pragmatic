@@ -1,6 +1,6 @@
-/* 
+/*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -49,7 +49,7 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  
+
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
@@ -63,19 +63,18 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
 
   Smooth<double, int> smooth(*mesh, surface);
-  
+
   double tic = get_wtime();
   smooth.smooth("smart Laplacian");
   double toc = get_wtime();
-  
+
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
-  
+
   std::cout<<"Smooth loop time:     "<<toc-tic<<std::endl
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
-  
-  mesh->calc_edge_lengths();
+
   VTKTools<double, int>::export_vtu("../data/test_smart_Laplacian_3d", mesh);
   delete mesh;
 

@@ -116,32 +116,46 @@ template<typename real_t, typename index_t> class Swapping{
 
     if(ndims==2){
       // Initialise list of dynamic edges.
-      typename std::set<Edge<real_t, index_t> > dynamic_edges;
-      for(typename std::set< Edge<real_t, index_t> >::iterator it=_mesh->Edges.begin();it!=_mesh->Edges.end();++it){
-        if(it->adjacent_elements.size()!=2)
-          continue;
-        
-        for(std::set<int>::const_iterator jt=it->adjacent_elements.begin();jt!=it->adjacent_elements.end();++jt){
-          if(quality[*jt]<Q_min){
-            dynamic_edges.insert(*it);
-            break;
+      typename std::set<Edge<index_t> > dynamic_edges;
+      for(int i=0;i<(int)_mesh->NNList.size();i++){
+        for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+          if(i<*it){
+            std::set<index_t> neigh_elements;
+            set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+                             _mesh->NEList[*it].begin(), _mesh->NEList[*it].end(),
+                             inserter(neigh_elements, neigh_elements.begin()));
+            
+            if(neigh_elements.size()!=2)
+              continue;
+            
+            for(typename std::set<index_t>::const_iterator jt=neigh_elements.begin();jt!=neigh_elements.end();++jt){
+              if(quality[*jt]<Q_min){
+                dynamic_edges.insert(Edge<index_t>(i, *it));
+                break;
+              }
+            }
           }
         }
       }
       
       // -
       while(!dynamic_edges.empty()){
-        Edge<real_t, index_t> target_edge = *_mesh->Edges.find(*dynamic_edges.begin());
+        Edge<index_t> target_edge = *dynamic_edges.begin();
         dynamic_edges.erase(dynamic_edges.begin());
         
-        if(target_edge.adjacent_elements.size()!=2)
+        std::set<index_t> neigh_elements;
+        set_intersection(_mesh->NEList[target_edge.edge.first].begin(), _mesh->NEList[target_edge.edge.first].end(),
+                         _mesh->NEList[target_edge.edge.second].begin(), _mesh->NEList[target_edge.edge.second].end(),
+                         inserter(neigh_elements, neigh_elements.begin()));
+            
+        if(neigh_elements.size()!=2)
           continue;
         
         if(_mesh->is_halo_node(target_edge.edge.first) || _mesh->is_halo_node(target_edge.edge.second))
           continue;
         
-        int eid0 = *target_edge.adjacent_elements.begin();
-        int eid1 = *target_edge.adjacent_elements.rbegin();
+        int eid0 = *neigh_elements.begin();
+        int eid1 = *neigh_elements.rbegin();
         
         if(std::min(quality[eid0], quality[eid1])>Q_min)
           continue;
@@ -192,60 +206,7 @@ template<typename real_t, typename index_t> class Swapping{
           // Cache new quality measures.
           quality[eid0] = q0;
           quality[eid1] = q1;
-          
-          //
-          // Update Edges.
-          //
-          
-          // Delete old element from edge-element adjancy.
-          for(size_t i=0;i<nloc;i++){
-            typename std::set< Edge<real_t, index_t> >::iterator edge =  _mesh->Edges.find(Edge<real_t, index_t>(n[i], n[(i+1)%3]));
-            assert(edge!=_mesh->Edges.end());
-            
-            Edge<real_t, index_t> modify_edge = *edge;
-            _mesh->Edges.erase(edge);
-            
-            assert(modify_edge.adjacent_elements.count(eid0));
-            modify_edge.adjacent_elements.erase(eid0);
-            _mesh->Edges.insert(modify_edge);
-          }
-          for(size_t i=0;i<nloc;i++){
-            typename std::set< Edge<real_t, index_t> >::iterator edge =  _mesh->Edges.find(Edge<real_t, index_t>(m[i], m[(i+1)%3]));
-            assert(edge!=_mesh->Edges.end());
-            
-            Edge<real_t, index_t> modify_edge = *edge;
-            _mesh->Edges.erase(edge);
-            
-            assert(modify_edge.adjacent_elements.count(eid1));
-            modify_edge.adjacent_elements.erase(eid1);
-            _mesh->Edges.insert(modify_edge);
-          }
-          
-          // Add new edge
-          _mesh->Edges.insert(Edge<real_t, index_t>(n[n_off], m[m_off]));
-          
-          // Add new element to the edge-element adjancy.
-          for(size_t i=0;i<nloc;i++){
-            // eid0
-            typename std::set< Edge<real_t, index_t> >::iterator edge0 =  _mesh->Edges.find(Edge<real_t, index_t>(n_swap[i], n_swap[(i+1)%3]));
-            Edge<real_t, index_t> modify_edge0 = *edge0;
-            _mesh->Edges.erase(edge0);
-            
-            modify_edge0.adjacent_elements.insert(eid0);
-            _mesh->Edges.insert(modify_edge0);
-            
-            // eid1
-            typename std::set< Edge<real_t, index_t> >::iterator edge1 =  _mesh->Edges.find(Edge<real_t, index_t>(m_swap[i], m_swap[(i+1)%3]));
-            Edge<real_t, index_t> modify_edge1 = *edge1;
-            _mesh->Edges.erase(edge1);
-            
-            modify_edge1.adjacent_elements.insert(eid1);
-            _mesh->Edges.insert(modify_edge1);
-          }
-          
-          // Delete edge being swapped out
-          _mesh->Edges.erase(Edge<real_t, index_t>(n[(n_off+1)%3], n[(n_off+2)%3]));
-          
+                    
           //
           // Update node-node list.
           //
@@ -295,8 +256,8 @@ template<typename real_t, typename index_t> class Swapping{
             _mesh->_ENList[eid1*nloc+i] = m_swap[i];
             
             // Also update the edges that have to be rechecked.
-            dynamic_edges.insert(Edge<real_t, index_t>(n_swap[i], n_swap[(i+1)%3]));
-            dynamic_edges.insert(Edge<real_t, index_t>(m_swap[i], m_swap[(i+1)%3]));
+            dynamic_edges.insert(Edge<index_t>(n_swap[i], n_swap[(i+1)%3]));
+            dynamic_edges.insert(Edge<index_t>(m_swap[i], m_swap[(i+1)%3]));
           }
         }
       }
@@ -535,12 +496,16 @@ template<typename real_t, typename index_t> class Swapping{
             bool toxic=false, swapped=false;
             for(int k=0;(k<3)&&(!toxic)&&(!swapped);k++){
               for(int l=k+1;l<4;l++){                 
-                typename std::set< Edge<real_t, index_t> >::const_iterator edge = _mesh->Edges.find(Edge<real_t, index_t>(n[k], n[l]));
-                assert(edge!=_mesh->Edges.end());
+                Edge<index_t> edge = Edge<index_t>(n[k], n[l]);
+                
+                std::set<index_t> neigh_elements;
+                set_intersection(_mesh->NEList[n[k]].begin(), _mesh->NEList[n[k]].end(),
+                                 _mesh->NEList[n[l]].begin(), _mesh->NEList[n[l]].end(),
+                                 inserter(neigh_elements, neigh_elements.begin()));
                 
                 double min_quality = quality[eid0];
                 std::vector<index_t> constrained_edges_unsorted;
-                for(typename std::set<index_t>::const_iterator it=edge->adjacent_elements.begin();it!=edge->adjacent_elements.end();++it){
+                for(typename std::set<index_t>::const_iterator it=neigh_elements.begin();it!=neigh_elements.end();++it){
                   min_quality = std::min(min_quality, quality[*it]);
                   
                   const int *m=_mesh->get_element(*it);
@@ -559,7 +524,7 @@ template<typename real_t, typename index_t> class Swapping{
                 if(toxic)
                   break;
                 
-                size_t nelements = edge->adjacent_elements.size();
+                size_t nelements = neigh_elements.size();
                 assert(nelements*2==constrained_edges_unsorted.size());
                 
                 // Sort edges.
@@ -909,7 +874,7 @@ template<typename real_t, typename index_t> class Swapping{
                   continue;
 
                 // Remove old elements.
-                for(typename std::set<index_t>::const_iterator it=edge->adjacent_elements.begin();it!=edge->adjacent_elements.end();++it)
+                for(typename std::set<index_t>::const_iterator it=neigh_elements.begin();it!=neigh_elements.end();++it)
                   _mesh->erase_element(*it);
                 
                 // Add new elements.
@@ -928,7 +893,6 @@ template<typename real_t, typename index_t> class Swapping{
     
     // recalculate adjancies
     _mesh->create_adjancy();
-    _mesh->calc_edge_lengths();
 
     return;
   }

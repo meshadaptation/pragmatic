@@ -39,9 +39,18 @@
 #include "Refine.h"
 #include "ticker.h"
 
+#include <mpi.h>
+
 using namespace std;
 
 int main(int argc, char **argv){
+  MPI::Init(argc,argv);
+
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 
   Surface<double, int> surface(*mesh);
@@ -66,31 +75,34 @@ int main(int argc, char **argv){
   adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  double lrms = mesh->get_lrms();
-  double qrms = mesh->get_qrms();
-
-  mesh->verify();
+  if(verbose)
+    mesh->verify();
 
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-
-  int nelements = mesh->get_number_elements();  
   
   VTKTools<double, int>::export_vtu("../data/test_refine_3d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_refine_3d_surface", &surface);
+   
+  double lrms = mesh->get_lrms();
+  double qrms = mesh->get_qrms(); 
+  if(verbose){
+    int nelements = mesh->get_number_elements();
+    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+             <<"Number elements:      "<<nelements<<std::endl
+             <<"Edge length RMS:      "<<lrms<<std::endl
+             <<"Quality RMS:          "<<qrms<<std::endl;
+  }
 
-  std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-           <<"Number elements:      "<<nelements<<std::endl
-           <<"Edge length RMS:      "<<lrms<<std::endl
-           <<"Quality RMS:          "<<qrms<<std::endl;
-
-  if((lrms<0.5)&&(qrms<1.0))
+  if((lrms<0.6)&&(qrms<0.2))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
 
   delete mesh;
+
+  MPI::Finalize();
 
   return 0;
 }

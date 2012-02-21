@@ -29,12 +29,32 @@
 
 #include <assert.h>
 #include <mpi.h>
+#include <stdlib.h>
 
 #include "zoltan_colour.h"
 
 #include "zoltan.h"
 
 #include <stdio.h>
+
+void pragmatic_zoltan_verify(int ierr, const char *str){
+  if(ierr==ZOLTAN_WARN){
+    fprintf(stderr, "ZOLTAN_WARN: %s\n", str);
+    return;
+  }
+
+  if(ierr==ZOLTAN_FATAL){
+    fprintf(stderr, "ZOLTAN_FATAL: %s\n", str);
+    exit(-1);
+  }
+
+  if(ierr==ZOLTAN_MEMERR){
+    fprintf(stderr, "ZOLTAN_MEMERR: %s\n", str);
+    exit(-1);
+  }
+
+  return;
+}
 
 /* A ZOLTAN_NUM_OBJ_FN query function returns the number of objects
    that are currently assigned to the processor. */
@@ -117,15 +137,16 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
 }
 
 void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm){
-  int ierr, i, j, loc=0;
+  int ierr, i, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
   int num_gid_entries;
   int num_obj;
   ZOLTAN_ID_PTR global_ids;
-  int *color_exp;
 
-  ierr = Zoltan_Initialize(-1, NULL, &ver);
+  ierr = Zoltan_Initialize(-1, NULL, &ver); 
+  pragmatic_zoltan_verify(ierr, "Zoltan_Initialize\0");
+
   zz = Zoltan_Create(mpi_comm);
   
   /* The number of array entries used to describe a single global ID.
@@ -144,30 +165,47 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm
 
 #ifndef NDEBUG 
   ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
   ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 #else
   ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 #endif
 
-
   ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "L");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
   ierr = Zoltan_Set_Param(zz, "RECOLORING_NUM_OF_ITERATIONS", "2");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
+    pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
   }else if(distance==2){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-2");
+    pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
   }else{
     fprintf(stderr, "WARNING unexpected distance for coloring graph.\n");
   }
 
   /* Register the callbacks.
    */
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (void *)&num_obj_fn, (void *)graph);
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void *)&obj_list_fn, (void *)graph);
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_MULTI_FN_TYPE, (void *)&num_edges_multi_fn, (void *)graph);
-  ierr = Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_MULTI_FN_TYPE, (void *)&edge_list_multi_fn, (void *)graph);
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (ZOLTAN_VOID_FN *)&num_obj_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (ZOLTAN_VOID_FN *)&obj_list_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&num_edges_multi_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&edge_list_multi_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
   
   ierr = Zoltan_Color(zz, num_gid_entries, num_obj, global_ids, graph->colour);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Color\0");
 
   ZOLTAN_FREE(&global_ids);
   Zoltan_Destroy(&zz);
