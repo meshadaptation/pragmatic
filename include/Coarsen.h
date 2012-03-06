@@ -467,7 +467,7 @@ template<typename real_t, typename index_t> class Coarsen{
           send_buffer[p].clear();
           for(typename std::set<index_t>::const_iterator ht=extra_halo_receives[p].begin();ht!=extra_halo_receives[p].end();++ht)
             send_buffer[p].push_back(*ht);
-          
+
         }
         MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
 
@@ -524,12 +524,9 @@ template<typename real_t, typename index_t> class Coarsen{
           int target_vertex=dynamic_vertex[rm_vertex];
           assert(target_vertex>=0);
 
-          if(target_vertex<0)
-            continue;
-          
           // Call the coarsening kernel.
           coarsen_kernel(rm_vertex, target_vertex);
-          
+
           if(_mesh->is_owned_node(target_vertex)){
             dynamic_vertex[target_vertex] = coarsen_identify_kernel(target_vertex, L_low, L_max);
             assert(dynamic_vertex[target_vertex]!=rm_vertex);
@@ -537,17 +534,17 @@ template<typename real_t, typename index_t> class Coarsen{
 
           for(typename std::deque<index_t>::iterator it=_mesh->NNList[target_vertex].begin();it!=_mesh->NNList[target_vertex].end();++it)
             recalculate_collapse[*it] = true;
-          
+
           dynamic_vertex[rm_vertex] = -1;
         }
       }
 
       assert(gnn2lnn.size()==lnn2gnn.size());
     }
-    
+
     return;
   }
-  
+
   /*! Kernel for identifying what if any vertex rm_vertex should be collapsed onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should be collapsed onto, negative if no operation is to be performed.
