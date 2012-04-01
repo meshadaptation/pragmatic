@@ -158,45 +158,6 @@ AC_CHECK_LIB(metis,METIS_NodeND,,AC_MSG_WARN([No METIS support available.]))
 AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_WARN([No ParMETIS support available.]))
 
 ACX_ZOLTAN()
-    
-AC_CHECK_LIB(gmp, __gmpz_init, [GMP="yes"], [])
-
-AC_ARG_WITH([cgal],
-    [AC_HELP_STRING([--with-cgal],
-	    [Prefix where CGAL is installed.])],
-            [cgal="$withval"], [])
-if test -n "$cgal" ; then
-  CPPFLAGS="$CPPFLAGS -I$cgal/include"
-  LIBS="$LIBS -L$cgal/lib"
-fi
-
-AC_MSG_CHECKING([for libCGAL])
-old_libs="$LIBS"
-if test "x$GMP" = "xyes" ; then
-    LIBS="-lCGAL -lgmp $LIBS"
-else
-    LIBS="-lCGAL $LIBS"
-fi
-AC_LINK_IFELSE([
-        AC_LANG_PROGRAM(
-            [[
-#include <iostream>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/convex_hull_2.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_2 Point_2;
-                    ]],
-            [[
-  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
-  Point_2 result[5];
-
-  CGAL::convex_hull_2( points, points+5, result );
-                    ]])
-        ],
-        [AC_DEFINE([HAVE_LIBCGAL])
-         AC_MSG_RESULT([yes])],
-    [LIBS="$old_libs" ; AC_MSG_RESULT([no])])
 
 # Detect VTK
 AC_CHECK_LIB(dl, dlopen)

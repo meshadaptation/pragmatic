@@ -19,13 +19,6 @@ if(VTK_FOUND)
   set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
 endif()
 
-FIND_PACKAGE(CGAL)
-if(CGAL_FOUND)
-  add_definitions(-DHAVE_CGAL)
-  include(${CGAL_USE_FILE})
-  set (PRAGMATIC_LIBRARIES ${CGAL_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-endif()
-
 FIND_PACKAGE(MPI)
 if(MPI_FOUND)
   add_definitions(-DHAVE_MPI)

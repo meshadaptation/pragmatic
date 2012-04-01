@@ -696,7 +696,6 @@ enable_fortran
 enable_debugging
 with_zoltan
 with_trilinos
-with_cgal
 enable_cuda
 '
       ac_precious_vars='build_alias
@@ -1342,7 +1341,6 @@ Optional Packages:
                           root installation of Zoltan
   --with-trilinos=TRILINOS_ROOT
                           root installation of trilinos
-  --with-cgal             Prefix where CGAL is installed.
 
 Some influential environment variables:
   CXX         C++ compiler command
@@ -6233,103 +6231,6 @@ CPPFLAGS="$acx_zoltan_save_CPPFLAGS"
 LIBS="$acx_zoltan_save_LIBS"
 
 
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for __gmpz_init in -lgmp" >&5
-$as_echo_n "checking for __gmpz_init in -lgmp... " >&6; }
-if ${ac_cv_lib_gmp___gmpz_init+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgmp  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char __gmpz_init ();
-int
-main ()
-{
-return __gmpz_init ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_gmp___gmpz_init=yes
-else
-  ac_cv_lib_gmp___gmpz_init=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gmp___gmpz_init" >&5
-$as_echo "$ac_cv_lib_gmp___gmpz_init" >&6; }
-if test "x$ac_cv_lib_gmp___gmpz_init" = xyes; then :
-  GMP="yes"
-fi
-
-
-
-# Check whether --with-cgal was given.
-if test "${with_cgal+set}" = set; then :
-  withval=$with_cgal; cgal="$withval"
-fi
-
-if test -n "$cgal" ; then
-  CPPFLAGS="$CPPFLAGS -I$cgal/include"
-  LIBS="$LIBS -L$cgal/lib"
-fi
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libCGAL" >&5
-$as_echo_n "checking for libCGAL... " >&6; }
-old_libs="$LIBS"
-if test "x$GMP" = "xyes" ; then
-    LIBS="-lCGAL -lgmp $LIBS"
-else
-    LIBS="-lCGAL $LIBS"
-fi
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <iostream>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/convex_hull_2.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_2 Point_2;
-
-int
-main ()
-{
-
-  Point_2 points[5] = { Point_2(0,0), Point_2(10,0), Point_2(10,10), Point_2(6,5), Point_2(4,1) };
-  Point_2 result[5];
-
-  CGAL::convex_hull_2( points, points+5, result );
-
-  ;
-  return 0;
-}
-
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  $as_echo "#define HAVE_LIBCGAL 1" >>confdefs.h
-
-         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  LIBS="$old_libs" ; { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
 
 # Detect VTK
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
