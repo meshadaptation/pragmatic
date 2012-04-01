@@ -67,6 +67,16 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
+  double qmean = mesh->get_qmean();
+  double qrms = mesh->get_qrms();
+  double qmin = mesh->get_qmin();
+  
+  std::cout<<"Initial quality:\n"
+           <<"Quality mean:  "<<qmean<<std::endl
+           <<"Quality min:   "<<qmin<<std::endl
+           <<"Quality RMS:   "<<qrms<<std::endl;
+  VTKTools<double, int>::export_vtu("../data/test_adapt_3d-initial", mesh);
+
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
@@ -108,8 +118,8 @@ int main(int argc, char **argv){
 
   smooth.smooth("smart Laplacian");
   
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
+  qmean = mesh->get_qmean();
+  qmin = mesh->get_qmin();
   
   std::cout<<"After adaptivity:\n";
   mesh->verify();
