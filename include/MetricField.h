@@ -157,7 +157,7 @@ template<typename real_t, typename index_t>
    * @param psi is field while curvature is to be considered.
    * @param target_error is the user target error for a given norm.
    * @param p_norm Set this optional argument to a positive integer to
-    apply the p-norm scaling to the metric, as in Chen Sun and Zu,
+    apply the p-norm scaling to the metric, as in Chen, Sun and Xu,
     Mathematics of Computation, Volume 76, Number 257, January 2007,
     pp. 179-204.
    */
