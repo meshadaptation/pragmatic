@@ -1,6 +1,6 @@
 /*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -31,6 +31,7 @@
 #define SMOOTH_H
 
 #include <algorithm>
+#include <cmath>
 #include <omp.h>
 #include <set>
 #include <map>
@@ -376,7 +377,7 @@ template<typename real_t, typename index_t>
     real_t hat[] = {p[0]/mag, p[1]/mag};
 
     // This can happen if there is zero mag.
-    if(!isnormal(hat[0]+hat[1]))
+    if(!std::isnormal(hat[0]+hat[1]))
       return false;
 
     real_t mp[4];
@@ -616,7 +617,7 @@ template<typename real_t, typename index_t>
     for(int i=0;i<3;i++)
       p[i] = b[i];
 
-    if(!isnormal(p[0]+p[1]+p[2])){
+    if(!std::isnormal(p[0]+p[1]+p[2])){
       errno = 0;
       return false;
     }
@@ -836,20 +837,20 @@ template<typename real_t, typename index_t>
       for(;lg!=local_gradients.end();++lg){
         if(lg->first == target_element)
           continue;
-        
+
         std::vector<real_t> hat1 = lg->second;
         real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
         hat1[0]/=mag1;
         hat1[1]/=mag1;
-        
+
         alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
-        
-        if((!isnormal(alpha)) || (alpha<0)){
+
+        if((!std::isnormal(alpha)) || (alpha<0)){
           alpha = -1;
           continue;
         }
-        
+
         break;
       }
 
@@ -857,26 +858,26 @@ template<typename real_t, typename index_t>
       for(;lg!=local_gradients.end();++lg){
         if(lg->first == target_element)
           continue;
-        
+
         std::vector<real_t> hat1 = lg->second;
         real_t mag1 = sqrt(hat1[0]*hat1[0]+hat1[1]*hat1[1]);
         hat1[0]/=mag1;
         hat1[1]/=mag1;
-        
+
         real_t new_alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
-        
-        if((!isnormal(new_alpha)) || (new_alpha<0))
+
+        if((!std::isnormal(new_alpha)) || (new_alpha<0))
           continue;
-        
+
         if(new_alpha<alpha)
           alpha = new_alpha;
       }
-      
+
       // If there is no viable direction, break.
-      if((!isnormal(alpha))||(alpha<=0))
+      if((!std::isnormal(alpha))||(alpha<=0))
         break;
-    
+
       // -
       real_t p[2], gp[2], mp[4];
       std::map<int, real_t> new_quality;
@@ -887,15 +888,15 @@ template<typename real_t, typename index_t>
           break;
 
         new_quality.clear();
-        
+
         p[0] = alpha*hat0[0];
         p[1] = alpha*hat0[1];
-        
-        if(!isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
+
+        if(!std::isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
           std::cerr<<"WARNING: apparently no gradients for mesh smoothing!!\n";
           break;
         }
-        
+
         const real_t *r0=_mesh->get_coords(node);
         gp[0] = r0[0]+p[0]; gp[1] = r0[1]+p[1];      
         valid_move = generate_location_2d(node, gp, mp);
@@ -903,16 +904,16 @@ template<typename real_t, typename index_t>
           alpha/=2;
           continue;
         }
-        
-        assert(isnormal(p[0]+p[0]));
-        assert(isnormal(mp[0]+mp[1]+mp[3]));
-        
+
+        assert(std::isnormal(p[0]+p[0]));
+        assert(std::isnormal(mp[0]+mp[1]+mp[3]));
+
         // Check if this position improves the local mesh quality.
         for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
           const index_t *n=_mesh->get_element(*ie);
           if(n[0]<0)
             continue;
-          
+
           int iloc = 0;
           while(n[iloc]!=(int)node){
             iloc++;
@@ -925,7 +926,7 @@ template<typename real_t, typename index_t>
           
           real_t functional = property->lipnikov(gp, x1, x2, 
                                                  mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-          assert(isnormal(functional));
+          assert(std::isnormal(functional));
           if(functional-functional_0<sigma_q){
             alpha/=2;
             valid_move = false;

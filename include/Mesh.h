@@ -649,6 +649,13 @@ template<typename real_t, typename index_t> class Mesh{
     return (send_halo.count(nid)+recv_halo.count(nid))>0;
   }
 
+  /// Flip orientation of element.
+  void invert_element(size_t eid){
+    int tmp = _ENList[eid*nloc];
+    _ENList[eid*nloc] = _ENList[eid*nloc+1];
+    _ENList[eid*nloc+1] = tmp;
+  }
+
   /// Returns true if the node is assigned to the local partition.
   bool is_owned_node(int nid) const{
     return recv_halo.count(nid)==0;
@@ -1244,16 +1251,31 @@ template<typename real_t, typename index_t> class Mesh{
       if(n[0]<0)
         continue;
       
-      if(ndims==2)
-        property = new ElementProperty<real_t>(get_coords(n[0]),
-                                               get_coords(n[1]),
-                                               get_coords(n[2]));
-      else
-        property = new ElementProperty<real_t>(get_coords(n[0]),
-                                               get_coords(n[1]),
-                                               get_coords(n[2]),
-                                               get_coords(n[3]));
-      break;
+      if(property==NULL){
+        if(ndims==2)
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]));
+        else
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]),
+                                                 get_coords(n[3]));
+      }else{
+        double volarea;
+        if(ndims==2)
+          volarea = property->area(get_coords(n[0]),
+                                   get_coords(n[1]),
+                                   get_coords(n[2]));
+        else
+          volarea = property->volume(get_coords(n[0]),
+                                     get_coords(n[1]),
+                                     get_coords(n[2]),
+                                     get_coords(n[2]));
+
+        if(volarea<0)
+          invert_element(i);
+      }
     }
   }
 
