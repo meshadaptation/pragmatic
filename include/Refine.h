@@ -183,61 +183,39 @@ template<typename real_t, typename index_t> class Refine{
     if(refined_edges_size==0)
       return 0;
     
-    /* Given the set of refined edge, apply additional edge-refinement
+    /* Given the set of refined edges, apply additional edge-refinement
        to get a regular and conforming element refinement throughout
        the domain.*/
-    for(;;){
-      typename std::set< Edge<index_t> > new_edges;
-      for(int i=0;i<NElements;i++){
-        // Check if this element has been erased - if so continue to next element.
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
+    if(ndims==3){
+      for(;;){
+        typename std::set< Edge<index_t> > new_edges;
+        for(int i=0;i<NElements;i++){
+          // Check if this element has been erased - if so continue to next element.
+          const int *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
                 
-        // Find what edges have been split in this element.
-        std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
-        typename std::set< Edge<index_t> > split_set;
-        for(size_t j=0;j<nloc;j++){
-          for(size_t k=j+1;k<nloc;k++){
-            typename std::map< Edge<index_t>, index_t>::const_iterator it =
-              refined_edges.find(Edge<index_t>(n[j], n[k]));
-            if(it!=refined_edges.end()){
-              split.push_back(it);
-              split_set.insert(it->first);
+          // Find what edges have been split in this element.
+          std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
+          typename std::set< Edge<index_t> > split_set;
+          for(size_t j=0;j<nloc;j++){
+            for(size_t k=j+1;k<nloc;k++){
+              typename std::map< Edge<index_t>, index_t>::const_iterator it =
+                refined_edges.find(Edge<index_t>(n[j], n[k]));
+              if(it!=refined_edges.end()){
+                split.push_back(it);
+                split_set.insert(it->first);
+              }
             }
           }
-        }
-        int refine_cnt=split.size();
+          int refine_cnt=split.size();
         
-        if(ndims==2){
-          switch(refine_cnt){
-            // case 0: // No refinement - continue to next element.
-            // case 1: // 1:2 refinement is ok.
-          case 2:{
-            /* Here there are two possibilities when splitting the
-               remaining quad. While this would be ok for generating
-               conformal refinements in serial it is an additional
-               complication for MPI parallel. Therefore we change this
-               to a 1:4 subdivision. We can later improve this by only
-               having this restriction on the halo elements.*/
-            int n0=split[0]->first.connected(split[1]->first);
-            assert(n0>=0);
-            
-            int n1 = (n0==split[0]->first.edge.first)?split[0]->first.edge.second:split[0]->first.edge.first;
-            int n2 = (n0==split[1]->first.edge.first)?split[1]->first.edge.second:split[1]->first.edge.first;
-            new_edges.insert(Edge<index_t>(n1, n2));
-            break;}
-            // case 3: // 1:4 refinement is ok.
-          default:
-            break;
-          }
-        }else{ // 3d case
           switch(refine_cnt){
             // case 0: // No refinement
             // case 1: // 1:2 refinement is ok.
           case 2:{
             /* Here there are two possibilities. Either the two split
-               edges share a vertex (case 1) or there are opposit
+               edges share a vertex (case 1) or there are opposite
                (case 2). Case 1 results in a 1:3 subdivision and a
                possible mismatch on the surface. So we have to spit an
                additional edge. Case 2 results in a 1:4 with no issues
@@ -305,127 +283,127 @@ template<typename real_t, typename index_t> class Refine{
             break;
           }
         }
-      }
       
-      // If there are no new edges then we can jump out of here.
-      int new_edges_size = new_edges.size();
+        // If there are no new edges then we can jump out of here.
+        int new_edges_size = new_edges.size();
 #ifdef HAVE_MPI
-      if(nprocs>1){
-        MPI_Allreduce(MPI_IN_PLACE, &new_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-      }
+        if(nprocs>1){
+          MPI_Allreduce(MPI_IN_PLACE, &new_edges_size, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+        }
 #endif
-      if(new_edges_size==0)
-        break;
+        if(new_edges_size==0)
+          break;
     
-      // Add new edges to refined_edges.
-      for(typename std::set< Edge<index_t> >::const_iterator it=new_edges.begin();it!=new_edges.end();++it)
-        refined_edges[*it] = refine_edge(*it);
+        // Add new edges to refined_edges.
+        for(typename std::set< Edge<index_t> >::const_iterator it=new_edges.begin();it!=new_edges.end();++it)
+          refined_edges[*it] = refine_edge(*it);
       
 #ifdef HAVE_MPI
-      if(nprocs>1){
-        // Communicate edges within halo elements which are to be refined. First create the send buffers.
-        std::map<int, std::vector<int> > send_buffer;
-        for(int p=0;p<nprocs;p++){
-          // Identify all the edges to be sent
-          typename std::set< std::pair<index_t, index_t> > send_edges;
-          for(std::deque<int>::const_iterator he=halo_elements[p].begin();he!=halo_elements[p].end();++he){
-            const int *n=_mesh->get_element(*he);
+        if(nprocs>1){
+          // Communicate edges within halo elements which are to be refined. First create the send buffers.
+          std::map<int, std::vector<int> > send_buffer;
+          for(int p=0;p<nprocs;p++){
+            // Identify all the edges to be sent
+            typename std::set< std::pair<index_t, index_t> > send_edges;
+            for(std::deque<int>::const_iterator he=halo_elements[p].begin();he!=halo_elements[p].end();++he){
+              const int *n=_mesh->get_element(*he);
             
-            for(size_t j=0;j<nloc;j++){
-              for(size_t k=j+1;k<nloc;k++){
-                Edge<index_t> edge(n[j], n[k]);
-                if(refined_edges.count(edge))
-                  send_edges.insert(std::pair<index_t, index_t>(edge.edge.first, edge.edge.second));
+              for(size_t j=0;j<nloc;j++){
+                for(size_t k=j+1;k<nloc;k++){
+                  Edge<index_t> edge(n[j], n[k]);
+                  if(refined_edges.count(edge))
+                    send_edges.insert(std::pair<index_t, index_t>(edge.edge.first, edge.edge.second));
+                }
+              }
+            }
+          
+            // Stuff these edges into the send buffer for p and add them to the new halo.
+            for(typename std::set<std::pair<index_t,index_t> >::const_iterator se=send_edges.begin();se!=send_edges.end();++se){
+              index_t lnn0 = se->first;
+              index_t lnn1 = se->second;
+            
+              index_t gnn0 = lnn2gnn[lnn0];
+              index_t gnn1 = lnn2gnn[lnn1];
+            
+              send_buffer[p].push_back(gnn0);
+              send_buffer[p].push_back(gnn1);
+            
+              // Edge owner is defined as its minimum node owner.
+              int owner = std::min(get_node_owner(lnn0), get_node_owner(lnn1));
+            
+              // Add edge into the new halo.
+              if(owner!=rank)
+                new_recv_halo[owner].insert(Edge<index_t>(gnn0, gnn1));
+            }
+          }
+        
+          // Set up the receive buffer.
+          std::map<int, std::vector<int> > recv_buffer;
+          std::vector<int> send_buffer_size(nprocs, 0), recv_buffer_size(nprocs);
+          for(std::map<int, std::vector<int> >::const_iterator sb=send_buffer.begin();sb!=send_buffer.end();++sb){
+            send_buffer_size[sb->first] = sb->second.size();
+          }
+          MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT,
+                       &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+        
+          // Exchange data using non-blocking communication.
+        
+          // Setup non-blocking receives
+          std::vector<MPI_Request> request(nprocs*2);
+          for(int i=0;i<nprocs;i++){
+            if(recv_buffer_size[i]==0){
+              request[i] =  MPI_REQUEST_NULL;
+            }else{
+              recv_buffer[i].resize(recv_buffer_size[i]);
+              MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
+            }
+          }
+        
+          // Non-blocking sends.
+          for(int i=0;i<nprocs;i++){
+            if(send_buffer_size[i]==0){
+              request[nprocs+i] =  MPI_REQUEST_NULL;
+            }else{
+              MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
+            }
+          }
+        
+          // Wait for all communication to finish.
+          std::vector<MPI_Status> status(nprocs*2);
+          MPI_Waitall(nprocs, &(request[0]), &(status[0]));
+          MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
+        
+          // Need to unpack and decode data.
+          for(int i=0;i<nprocs;i++){
+            for(int j=0;j<recv_buffer_size[i];j+=2){
+              // Edge in terms of its global node numbering.
+              int gnn0 = recv_buffer[i][j];
+              int gnn1 = recv_buffer[i][j+1];
+              Edge<index_t> global_edge(gnn0, gnn1);
+            
+              // Edge in terms of its local node numbering.
+              assert(gnn2lnn.count(gnn0));
+              assert(gnn2lnn.count(gnn1));
+              int nid0 = gnn2lnn[gnn0];
+              int nid1 = gnn2lnn[gnn1];
+              Edge<index_t> local_edge(nid0, nid1);
+            
+              // Edge owner is defined as its minimum node owner.
+              int owner = std::min(get_node_owner(nid0), get_node_owner(nid1));
+            
+              // Add edge into the new halo.
+              if(owner!=rank)
+                new_recv_halo[owner].insert(global_edge);
+            
+              // Add this to refined_edges if it's not already known.
+              if(refined_edges.count(local_edge)==0){
+                refined_edges[local_edge] = refine_edge(local_edge);
               }
             }
           }
-          
-          // Stuff these edges into the send buffer for p and add them to the new halo.
-          for(typename std::set<std::pair<index_t,index_t> >::const_iterator se=send_edges.begin();se!=send_edges.end();++se){
-            index_t lnn0 = se->first;
-            index_t lnn1 = se->second;
-            
-            index_t gnn0 = lnn2gnn[lnn0];
-            index_t gnn1 = lnn2gnn[lnn1];
-            
-            send_buffer[p].push_back(gnn0);
-            send_buffer[p].push_back(gnn1);
-            
-            // Edge owner is defined as its minimum node owner.
-            int owner = std::min(get_node_owner(lnn0), get_node_owner(lnn1));
-            
-            // Add edge into the new halo.
-            if(owner!=rank)
-              new_recv_halo[owner].insert(Edge<index_t>(gnn0, gnn1));
-          }
         }
-        
-        // Set up the receive buffer.
-        std::map<int, std::vector<int> > recv_buffer;
-        std::vector<int> send_buffer_size(nprocs, 0), recv_buffer_size(nprocs);
-        for(std::map<int, std::vector<int> >::const_iterator sb=send_buffer.begin();sb!=send_buffer.end();++sb){
-          send_buffer_size[sb->first] = sb->second.size();
-        }
-        MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT,
-                     &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
-        
-        // Exchange data using non-blocking communication.
-        
-        // Setup non-blocking receives
-        std::vector<MPI_Request> request(nprocs*2);
-        for(int i=0;i<nprocs;i++){
-          if(recv_buffer_size[i]==0){
-            request[i] =  MPI_REQUEST_NULL;
-          }else{
-            recv_buffer[i].resize(recv_buffer_size[i]);
-            MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
-          }
-        }
-        
-        // Non-blocking sends.
-        for(int i=0;i<nprocs;i++){
-          if(send_buffer_size[i]==0){
-            request[nprocs+i] =  MPI_REQUEST_NULL;
-          }else{
-            MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
-          }
-        }
-        
-        // Wait for all communication to finish.
-        std::vector<MPI_Status> status(nprocs*2);
-        MPI_Waitall(nprocs, &(request[0]), &(status[0]));
-        MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
-        
-        // Need to unpack and decode data.
-        for(int i=0;i<nprocs;i++){
-          for(int j=0;j<recv_buffer_size[i];j+=2){
-            // Edge in terms of its global node numbering.
-            int gnn0 = recv_buffer[i][j];
-            int gnn1 = recv_buffer[i][j+1];
-            Edge<index_t> global_edge(gnn0, gnn1);
-            
-            // Edge in terms of its local node numbering.
-            assert(gnn2lnn.count(gnn0));
-            assert(gnn2lnn.count(gnn1));
-            int nid0 = gnn2lnn[gnn0];
-            int nid1 = gnn2lnn[gnn1];
-            Edge<index_t> local_edge(nid0, nid1);
-            
-            // Edge owner is defined as its minimum node owner.
-            int owner = std::min(get_node_owner(nid0), get_node_owner(nid1));
-            
-            // Add edge into the new halo.
-            if(owner!=rank)
-              new_recv_halo[owner].insert(global_edge);
-            
-            // Add this to refined_edges if it's not already known.
-            if(refined_edges.count(local_edge)==0){
-              refined_edges[local_edge] = refine_edge(local_edge);
-            }
-          }
-        }
-      }
 #endif
+      }
     }
     
 #ifdef HAVE_MPI
@@ -510,7 +488,7 @@ template<typename real_t, typename index_t> class Refine{
         continue;
       
       if(ndims==2){
-        // Note the order of the edges - the i'th edge is opposit the i'th node in the element. 
+        // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
         typename std::map< Edge<index_t>, index_t>::const_iterator edge[3];
         edge[0] = refined_edges.find(Edge<index_t>(n[1], n[2]));
         edge[1] = refined_edges.find(Edge<index_t>(n[2], n[0]));
@@ -541,6 +519,30 @@ template<typename real_t, typename index_t> class Refine{
           
           _mesh->append_element(ele0);
           _mesh->append_element(ele1);
+        }else if(refine_cnt==2){
+          typename std::map< Edge<index_t>, index_t>::const_iterator split[2];
+          int rotated_ele[3];
+          for(int j=0;j<3;j++){
+            if(edge[j]==refined_edges.end()){
+              split[0] = edge[(j+1)%3];
+              split[1] = edge[(j+2)%3];
+              for(int k=0;k<3;k++)
+            	rotated_ele[k] = n[(j+k)%3];
+              break;
+            }
+          }
+
+          real_t ldiag0 = _mesh->calc_edge_length(split[0]->second, rotated_ele[1]);
+          real_t ldiag1 = _mesh->calc_edge_length(split[1]->second, rotated_ele[2]);
+          const int offset = ldiag0 < ldiag1 ? 0 : 1;
+
+          const int ele0[] = {rotated_ele[0], split[1]->second, split[0]->second};
+          const int ele1[] = {split[offset]->second, rotated_ele[1], rotated_ele[2]};
+          const int ele2[] = {split[0]->second, split[1]->second, rotated_ele[offset+1]};
+
+          _mesh->append_element(ele0);
+          _mesh->append_element(ele1);
+          _mesh->append_element(ele2);
         }else if(refine_cnt==3){
           const int ele0[] = {n[0], edge[2]->second, edge[1]->second};
           const int ele1[] = {n[1], edge[0]->second, edge[2]->second};
