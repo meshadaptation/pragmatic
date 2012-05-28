@@ -39,10 +39,10 @@
 
 /*! \brief Calculates a number of element properties.
  *
- * The constructers for this class requires a reference element so
+ * The constructor for this class requires a reference element so
  * that the orientation convention can be established. After the
  * orientation has been established a negative area or volume
- * indicated an inverted element. Properties caluclated are:
+ * indicated an inverted element. Properties calculated are:
  * \li Euclidean area (if 2D element).
  * \li Euclidean Volume (if 3D element).
  * \li Non-Euclidean edge length.

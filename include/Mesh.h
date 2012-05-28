@@ -377,6 +377,10 @@ template<typename real_t, typename index_t> class Mesh{
     recycle_eid.push(eid);
   }
 
+  void erase_element_no_recycle(const index_t eid){
+    _ENList[eid*nloc] = -1;
+  }
+
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
     assert(_NNodes == (_coords.size()/ndims));
@@ -1372,7 +1376,7 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
   }
 
-  /// Create required adjancy lists.
+  /// Create required adjacency lists.
   void create_adjancy(){
     // Create new NNList and NEList.
     std::vector< std::set<index_t> > NNList_set(_NNodes);
@@ -1444,6 +1448,15 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
   
+  inline index_t get_new_vertex_omp(index_t n0, index_t n1, std::vector< std::vector<index_t> > &refined_edges){
+		index_t minID = std::min(n0, n1);
+		index_t maxID = std::max(n0, n1);
+		index_t pos = 0;
+		while(NNList[minID][pos] != maxID) ++pos;
+
+		return refined_edges[minID][2*pos];
+  }
+
   size_t _NNodes, _NElements, ndims, nloc;
   std::vector<index_t> _ENList;
   std::stack<int> recycle_eid;

@@ -342,7 +342,7 @@ template<typename real_t, typename index_t>
         typename std::map< Edge<index_t>, index_t>::const_iterator edge = 
           refined_edges.find(Edge<index_t>(n[0], n[1]));
         
-        // If it's refined then just jump onto the next one.
+        // If it's not refined then just jump onto the next one.
         if(edge==refined_edges.end())
           continue;
 
@@ -472,6 +472,244 @@ template<typename real_t, typename index_t>
       for(size_t j=0;j<snloc;j++){
         const int *n=get_facet(i);
         
+        SNEList[n[j]].insert(i);
+        surface_nodes[n[j]] = true;
+      }
+    }
+  }
+
+  void refine(std::vector< std::vector<index_t> > &refined_edges){
+    // Given the refined edges, refine facets.
+    std::vector< std::vector<index_t> > private_SENList;
+    std::vector< std::vector<index_t> > private_coplanar_ids;
+    std::vector< std::vector<real_t> > private_normals;
+    std::vector<unsigned int> threadIdx, splitCnt;
+    unsigned int nthreads_omp;
+
+    #pragma omp parallel
+  	{
+      nthreads_omp = omp_get_num_threads();
+
+      #pragma omp master
+      {
+      	private_SENList.resize(nthreads_omp);
+      	private_coplanar_ids.resize(nthreads_omp);
+      	private_normals.resize(nthreads_omp);
+      	threadIdx.resize(nthreads_omp);
+      	splitCnt.resize(nthreads_omp);
+      }
+      #pragma omp barrier
+  	}
+
+  	int lNSElements = get_number_facets();
+
+    if(ndims==2){
+    	#pragma omp parallel
+    	{
+        const unsigned int tid = omp_get_thread_num();
+        splitCnt[tid] = 0;
+
+        #pragma omp for schedule(dynamic)
+        for(int i=0;i<lNSElements;i++){
+          // Check if this element has been erased - if so continue to next element.
+          int *n=&(SENList[i*snloc]);
+          if(n[0]<0)
+            continue;
+
+          // Check if this edge has been refined.
+          index_t newVertex = _mesh->get_new_vertex_omp(n[0], n[1], refined_edges);
+
+          // If it's not refined then just jump onto the next one.
+          if(newVertex < 0)
+            continue;
+
+          // Renumber existing facet and add the new one.
+          index_t cache_n1 = n[1];
+          n[1] = newVertex;
+
+          private_SENList[tid].push_back(newVertex);
+          private_SENList[tid].push_back(cache_n1);
+
+          private_coplanar_ids[tid].push_back(coplanar_ids[i]);
+          for(size_t j=0;j<ndims;j++)
+          	private_normals[tid].push_back(normals[ndims*i+j]);
+
+          splitCnt[tid]++;
+        }
+    	}
+    }else{
+    	#pragma omp parallel
+    	{
+        const unsigned int tid = omp_get_thread_num();
+        splitCnt[tid] = 0;
+
+        #pragma omp for schedule(dynamic)
+        for(int i=0;i<lNSElements;i++){
+          // Check if this element has been erased - if so continue to next element.
+          int *n=&(SENList[i*snloc]);
+          if(n[0]<0)
+            continue;
+
+          // Delete this facet if it's parent element has been deleted.
+          bool erase_facet=true;
+          for(size_t j=0;j<3;j++)
+            if(!_mesh->is_halo_node(n[j])){
+              erase_facet = false;
+              break;
+            }
+          if(erase_facet){
+            for(size_t j=0;j<3;j++)
+              n[j] = -1;
+            continue;
+          }
+
+          std::vector< Edge<index_t> > splitEdges;
+          std::vector<index_t> newVertex;
+          index_t vertexID;
+          for(size_t j=0;j<3;j++)
+            for(size_t k=j+1;k<3;k++){
+            	vertexID = _mesh->get_new_vertex_omp(n[j], n[k], refined_edges);
+              if(vertexID >= 0){
+              	splitEdges.push_back(Edge<index_t>(n[j], n[k]));
+              	newVertex.push_back(vertexID);
+              }
+            }
+          int refine_cnt=splitEdges.size();
+
+          if(refine_cnt==0)
+            continue;
+
+          // Apply refinement templates.
+          if(refine_cnt==1){
+            // Find the opposite vertex
+            int n0;
+            for(size_t j=0;j<snloc;j++){
+              if((splitEdges[0].edge.first!=n[j])&&(splitEdges[0].edge.second!=n[j])){
+                n0 = n[j];
+                break;
+              }
+            }
+
+            // Renumber existing facet and add the new one.
+            n[0] = splitEdges[0].edge.first;
+            n[1] = newVertex[0];
+            n[2] = n0;
+
+            private_SENList[tid].push_back(newVertex[0]);
+            private_SENList[tid].push_back(splitEdges[0].edge.second);
+            private_SENList[tid].push_back(n0);
+
+            private_coplanar_ids[tid].push_back(coplanar_ids[i]);
+            for(size_t j=0;j<ndims;j++)
+              private_normals[tid].push_back(normals[ndims*i+j]);
+
+            splitCnt[tid]++;
+          }else{
+            assert(refine_cnt==3);
+
+            index_t m[6];
+            m[0] = n[0];
+            m[1] = newVertex[0];
+            m[2] = n[1];
+            m[3] = newVertex[2];
+            m[4] = n[2];
+            m[5] = newVertex[1];
+
+            // Renumber existing facet and add the new one.
+            n[0] = m[0];
+            n[1] = m[1];
+            n[2] = m[5];
+
+            private_SENList[tid].push_back(m[1]);
+            private_SENList[tid].push_back(m[3]);
+            private_SENList[tid].push_back(m[5]);
+
+            private_coplanar_ids[tid].push_back(coplanar_ids[i]);
+            for(size_t j=0;j<ndims;j++)
+              private_normals[tid].push_back(normals[ndims*i+j]);
+
+            private_SENList[tid].push_back(m[1]);
+            private_SENList[tid].push_back(m[2]);
+            private_SENList[tid].push_back(m[3]);
+
+            private_coplanar_ids[tid].push_back(coplanar_ids[i]);
+            for(size_t j=0;j<ndims;j++)
+            	private_normals[tid].push_back(normals[ndims*i+j]);
+
+            private_SENList[tid].push_back(m[3]);
+            private_SENList[tid].push_back(m[4]);
+            private_SENList[tid].push_back(m[5]);
+
+            private_coplanar_ids[tid].push_back(coplanar_ids[i]);
+            for(size_t j=0;j<ndims;j++)
+            	private_normals[tid].push_back(normals[ndims*i+j]);
+
+            splitCnt[tid] += 3;
+          }
+        }
+    	}
+    }
+
+    #pragma omp parallel
+    {
+      // Perform parallel prefix sum to find (for each OMP thread) the starting position
+      // in SENList at which new elements should be appended.
+    	const unsigned int tid = omp_get_thread_num();
+      threadIdx[tid] = splitCnt[tid];
+
+      #pragma omp barrier
+
+      unsigned int blockSize = 1, tmp;
+      while(blockSize < threadIdx.size())
+      {
+      	if((tid & blockSize) != 0)
+      		tmp = threadIdx[tid - ((tid & (blockSize - 1)) + 1)];
+      	else
+      		tmp = 0;
+
+      	#pragma omp barrier
+
+      	threadIdx[tid] += tmp;
+
+      	#pragma omp barrier
+
+      	blockSize *= 2;
+      }
+
+      threadIdx[tid] += get_number_facets() - splitCnt[tid];
+
+      #pragma omp barrier
+
+      // Resize mesh containers
+      #pragma omp master
+      {
+      	const int newSize = threadIdx[nthreads_omp - 1] + splitCnt[nthreads_omp - 1];
+
+      	SENList.resize(snloc*newSize);
+        coplanar_ids.resize(newSize);
+        normals.resize(ndims*newSize);
+      }
+      #pragma omp barrier
+
+      // Append new elements to the surface
+      memcpy(&SENList[snloc*threadIdx[tid]], &private_SENList[tid][0], snloc*splitCnt[tid]*sizeof(index_t));
+      memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(index_t));
+      memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
+    }
+
+    size_t NNodes = _mesh->get_number_nodes();
+    size_t NSElements = get_number_facets();
+
+    SNEList.clear();
+    surface_nodes.clear();
+    surface_nodes.resize(NNodes, false);
+
+    for(size_t i=0;i<NSElements;i++){
+      const int *n=get_facet(i);
+      if(n[0]<0)
+        continue;
+
+      for(size_t j=0;j<snloc;j++){
         SNEList[n[j]].insert(i);
         surface_nodes[n[j]] = true;
       }

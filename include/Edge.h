@@ -72,7 +72,7 @@ template<typename index_t> class Edge{
     return this->edge != in.edge;
   }
 
-  /// Greater-than operator
+  /// Less-than operator
   bool operator<(const Edge& in) const{
     return this->edge < in.edge;
   }
