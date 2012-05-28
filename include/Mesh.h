@@ -141,8 +141,6 @@ template<typename real_t, typename index_t> class Mesh{
     structures. This is useful if the mesh has been significently
     coarsened. */
   void defragment(std::map<index_t, index_t> *active_vertex_map=NULL){
-    while (!recycle_nid.empty()){recycle_nid.pop();}
-
     // Discover which verticies and elements are active.
     bool local_active_vertex_map=(active_vertex_map==NULL);
     if(local_active_vertex_map)
@@ -311,70 +309,43 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Add a new vertex
   index_t append_vertex(const real_t *x, const real_t *m){
-    // if(recycle_nid.empty()){
-    if(true){
-      for(size_t i=0;i<ndims;i++)
-        _coords.push_back(x[i]);
+    for(size_t i=0;i<ndims;i++)
+      _coords.push_back(x[i]);
+    
+    for(size_t i=0;i<ndims*ndims;i++)
+      metric.push_back(m[i]);
+    
+    node_towner.push_back(0);
+    
+    _NNodes++;
+    NEList.resize(_NNodes);
+    NNList.resize(_NNodes);
       
-      for(size_t i=0;i<ndims*ndims;i++)
-        metric.push_back(m[i]);
-      
-      node_towner.push_back(0);
-
-      _NNodes++;
-      NEList.resize(_NNodes);
-      NNList.resize(_NNodes);
-      
-      return _NNodes-1;
-    }else{
-      size_t nid = recycle_nid.top();
-      recycle_nid.pop();
-
-      for(size_t i=0;i<ndims;i++)
-        _coords[nid*ndims+i] = x[i];
-      
-      for(size_t i=0;i<ndims*ndims;i++)
-        metric[nid*ndims*ndims+i] = m[i];
-
-      return nid;
-    }
+    return _NNodes-1;
   }
 
   /// Erase a vertex
   void erase_vertex(const index_t nid){
     NNList[nid].clear();
     NEList[nid].clear();
-
-    recycle_nid.push(nid);
   }
 
   /// Add a new element
   index_t append_element(const int *n){
-    //if(recycle_eid.empty()){ // not yet a good idea - probably a bug in the NEList
-    if(true){
-      for(size_t i=0;i<nloc;i++)
-        _ENList.push_back(n[i]);
-      
-      element_towner.push_back(0);
-      
-      _NElements++;
-      
-      return _NElements-1;
-    }else{
-      size_t eid = recycle_eid.top();
-      recycle_eid.pop();
-      
-      for(size_t i=0;i<nloc;i++)
-        _ENList[eid*nloc+i] = n[i];
-      
-      return eid;
-    }
+    for(size_t i=0;i<nloc;i++)
+      _ENList.push_back(n[i]);
+    
+    element_towner.push_back(0);
+    
+    _NElements++;
+    
+    return _NElements-1;
   }
 
   /// Erase an element
   void erase_element(const index_t eid){
     _ENList[eid*nloc] = -1;
-    recycle_eid.push(eid);
+    // Something for NEList?
   }
 
   void erase_element_no_recycle(const index_t eid){
@@ -708,7 +679,7 @@ template<typename real_t, typename index_t> class Mesh{
       if(is_owned_node(i) && (NNList[i].size()>0))
         for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           if(i<*it){ // Ensure that every edge length is only calculated once. 
-            L_max = std::min(L_max, calc_edge_length(i, *it));
+            L_max = std::max(L_max, calc_edge_length(i, *it));
           }
         }
     }
@@ -805,6 +776,7 @@ template<typename real_t, typename index_t> class Mesh{
             for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
               std::cerr<<*kt<<" ";
             std::cerr<<std::endl;
+            exit(-1);
           }
         }
         if(rank==0){
@@ -1459,10 +1431,8 @@ template<typename real_t, typename index_t> class Mesh{
 
   size_t _NNodes, _NElements, ndims, nloc;
   std::vector<index_t> _ENList;
-  std::stack<int> recycle_eid;
 
   std::vector<real_t> _coords;
-  std::stack<int> recycle_nid;
 
   std::vector<index_t> nid_new2old;
   std::vector<int> element_towner, node_towner;
