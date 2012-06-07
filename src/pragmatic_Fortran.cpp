@@ -125,7 +125,7 @@ extern "C" {
     
     double L_max = mesh->maximal_edge_length();
     
-    double alpha = sqrt(2)/2;  
+    double alpha = sqrt(2.0)/2.0;  
     for(size_t i=0;i<10;i++){
       double L_ref = std::max(alpha*L_max, L_up);
       
