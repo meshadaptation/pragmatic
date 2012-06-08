@@ -227,13 +227,6 @@ template<typename real_t, typename index_t> class Coarsen{
         }
       }
 
-      for(int i=0;i<NNodes;i++)
-        if(_mesh->NNList[i].size()>0)
-          for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[i].begin();nn!=_mesh->NNList[i].end();++nn){
-            typename std::deque<index_t>::const_iterator back_reference = find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), i);
-            assert(back_reference!=_mesh->NNList[*nn].end());
-          }
-      
       if(nprocs>1){
         // Cache who knows what.
         std::vector< std::set<int> > known_nodes(nprocs);
@@ -531,13 +524,6 @@ template<typename real_t, typename index_t> class Coarsen{
 
       assert(gnn2lnn.size()==lnn2gnn.size());
 
-      for(int i=0;i<NNodes;i++)
-        if(_mesh->NNList[i].size()>0)
-          for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[i].begin();nn!=_mesh->NNList[i].end();++nn){
-            typename std::deque<index_t>::const_iterator back_reference = find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), i);
-            assert(back_reference!=_mesh->NNList[*nn].end());
-          }
-          
       // Perform collapse operations.
       //#pragma omp parallel
       {
@@ -546,7 +532,7 @@ template<typename real_t, typename index_t> class Coarsen{
           // Vertex to be removed: rm_vertex
           if(!maximal_independent_set[rm_vertex])
             continue;
-          
+
           int target_vertex=dynamic_vertex[rm_vertex];
           assert(target_vertex>=0);
 
@@ -565,13 +551,6 @@ template<typename real_t, typename index_t> class Coarsen{
         }
       }
 
-      for(int i=0;i<NNodes;i++)
-        if(_mesh->NNList[i].size()>0)
-          for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[i].begin();nn!=_mesh->NNList[i].end();++nn){
-            typename std::deque<index_t>::const_iterator back_reference = find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), i);
-            assert(back_reference!=_mesh->NNList[*nn].end());
-          }
-      
       assert(gnn2lnn.size()==lnn2gnn.size());
     }
 
