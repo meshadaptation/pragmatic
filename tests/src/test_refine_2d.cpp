@@ -89,7 +89,7 @@ int main(int argc, char **argv){
              <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  if((lrms<0.7)&&(qrms<0.3))
+  if((lrms<0.8)&&(qrms<0.3))
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
