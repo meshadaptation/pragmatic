@@ -136,7 +136,7 @@ class MetricTensor{
       Eigen::Matrix<real_t, 2, 1> evalues = solver.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
 
-      Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      Eigen::Matrix<real_t, 2, 2> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
 
       for(size_t i=0;i<4;i++)
         metric[i] = Mp[i];
@@ -155,7 +155,7 @@ class MetricTensor{
       Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
 
-      Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      Eigen::Matrix<real_t, 3, 3> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
       for(size_t i=0;i<9;i++)
         metric[i] = Mp[i];
     }
@@ -181,7 +181,7 @@ class MetricTensor{
       
       Eigen::Matrix<real_t, 2, 2> evectors = solver.eigenvectors().real();
 
-      Eigen::Matrix<real_t, 2, 2> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      Eigen::Matrix<real_t, 2, 2> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
 
       for(size_t i=0;i<4;i++)
         metric[i] = Mp[i];
@@ -200,7 +200,7 @@ class MetricTensor{
       Eigen::Matrix<real_t, 3, 1> evalues = solver.eigenvalues().real().cwise().abs();
       Eigen::Matrix<real_t, 3, 3> evectors = solver.eigenvectors().real();
 
-      Eigen::Matrix<real_t, 3, 3> Mp = evectors.transpose()*evalues.asDiagonal()*evectors;
+      Eigen::Matrix<real_t, 3, 3> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
       for(size_t i=0;i<9;i++)
         metric[i] = Mp[i];
     }
@@ -318,7 +318,7 @@ class MetricTensor{
         for(size_t i=0;i<2;i++)
           evalues[i] = std::min((real_t)1.0, evalues[i]);
 
-      Eigen::Matrix<real_t, 2, 2> Mc = F.transpose()*evectors.transpose()*evalues.asDiagonal()*evectors*F;
+      Eigen::Matrix<real_t, 2, 2> Mc = F.transpose()*evectors*evalues.asDiagonal()*evectors.transpose()*F;
 
       for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
@@ -353,7 +353,7 @@ class MetricTensor{
         for(size_t i=0;i<3;i++)
           evalues[i] = std::min((real_t)1.0, evalues[i]);
 
-      Eigen::Matrix<real_t, 3, 3> Mc = F.transpose()*evectors.transpose()*evalues.asDiagonal()*evectors*F;
+      Eigen::Matrix<real_t, 3, 3> Mc = F.transpose()*evectors*evalues.asDiagonal()*evectors.transpose()*F;
 
       for(size_t i=0;i<_dimension*_dimension;i++)
         _metric[i] = Mc[i];
