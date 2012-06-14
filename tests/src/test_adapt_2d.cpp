@@ -100,8 +100,17 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   time_coarsen += get_wtime()-tic;
 
-  double L_max = mesh->maximal_edge_length();
+  if(!mesh->verify()){
+    std::map<int, int> active_vertex_map;
+    mesh->defragment(&active_vertex_map);
+    surface.defragment(&active_vertex_map);
+    
+    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
+    exit(-1);
+  }
 
+  double L_max = mesh->maximal_edge_length();
+  
   double alpha = sqrt(2.0)/2;  
   for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
@@ -109,31 +118,55 @@ int main(int argc, char **argv){
     tic = get_wtime();
     refine.refine(L_ref);
     time_refine += get_wtime() - tic;
+    
+    if(rank==0) std::cout<<"INFO: Verify quality after refine.\n";
+    if(!mesh->verify()){    
+      std::map<int, int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
+      
+      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
+      exit(-1);
+    }
 
     tic = get_wtime();
     coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
 
-    if(rank==0) std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
-    mesh->verify();
-    
+    if(rank==0) std::cout<<"INFO: Verify quality after coarsen.\n";
+    if(!mesh->verify()){
+      std::map<int, int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
+      
+      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
+      exit(-1);
+    }
+
     tic = get_wtime();
     swapping.swap(0.95);
     time_swap += get_wtime() - tic;
-
+    
     if(rank==0) std::cout<<"INFO: Verify quality after swapping.\n";
-    mesh->verify();
+    if(!mesh->verify()){
+      std::map<int, int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
+      
+      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+      exit(-1);
+    }
     
     L_max = mesh->maximal_edge_length();
-
+    
     if((L_max-L_up)<0.01)
       break;
   }
-
+  
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-
+  
   if(rank==0) std::cout<<"Basic quality:\n";
   mesh->verify();
   

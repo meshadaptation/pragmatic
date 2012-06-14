@@ -53,8 +53,8 @@ int main(int argc, char **argv){
   int rank = MPI::COMM_WORLD.Get_rank();
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
-  const double target_quality_mean[] = {0.4, 0.8, 0.8, 0.8};
-  const double target_quality_min[]  = {0.0, 0.2, 0.2, 0.3};
+  const double target_quality_mean[] = {0.4, 0.7, 0.7, 0.7};
+  const double target_quality_min[]  = {0.0, 0.1, 0.2, 0.3};
   for(int m=0;m<4;m++){
     const char *method = methods[m];
 

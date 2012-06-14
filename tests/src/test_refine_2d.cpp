@@ -44,7 +44,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  MPI::Init(argc, argv);
 
   bool verbose = false;
   if(argc>1){
@@ -63,18 +63,17 @@ int main(int argc, char **argv){
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
   
-  metric_field.add_field(&(psi[0]), 0.01);
+  metric_field.add_field(&(psi[0]), 0.001);
   metric_field.update_mesh();
   
+  VTKTools<double, int>::export_vtu("../data/test_refine_2d-initial", mesh);
+
   Refine<double, int> adapt(*mesh, surface);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  for(int i=0;i<5;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
-
-  std::map<int, int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
 
   VTKTools<double, int>::export_vtu("../data/test_refine_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_refine_2d_surface", &surface);

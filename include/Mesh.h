@@ -160,7 +160,8 @@ template<typename real_t, typename index_t> class Mesh{
     // Identify active vertices and elements.
     std::deque<index_t> active_vertex, active_element;
     std::map<index_t, std::set<int> > new_send_set, new_recv_set;
-    for(size_t e=0;e<_NElements;e++){
+    size_t NElements = get_number_elements();
+    for(size_t e=0;e<NElements;e++){
       index_t nid = _ENList[e*nloc];
       
       // Check if deleted.
@@ -214,46 +215,32 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     // Compress data structures.
-    _NNodes = active_vertex.size();
-    node_towner.resize(_NNodes);
+    index_t NNodes = active_vertex.size();
+    NElements = active_element.size();
 
-    _NElements = active_element.size();
-    element_towner.resize(_NElements);
-
-    std::vector<index_t> defrag_ENList(_NElements*nloc);
-    std::vector<real_t> defrag_coords(_NNodes*ndims);
-    std::vector<real_t> defrag_metric(_NNodes*ndims*ndims);
+    std::vector<index_t> defrag_ENList(NElements*nloc);
+    std::vector<real_t> defrag_coords(NNodes*ndims);
+    std::vector<real_t> defrag_metric(NNodes*ndims*ndims);
 
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<(int)_NElements;i++){
+      for(int i=0;i<(int)NElements;i++){
         index_t eid = active_element[i];
         for(size_t j=0;j<nloc;j++){
           index_t nid = (*active_vertex_map)[_ENList[eid*nloc+j]];
-          assert(nid<(index_t)_NNodes);
+          assert(nid<NNodes);
           defrag_ENList[i*nloc+j] = nid;
         }
-#ifdef _OPENMP
-        element_towner[i] = omp_get_thread_num();
-#else
-        element_towner[i] = 0;
-#endif
       }
 
-      node_towner.resize(_NNodes);
 #pragma omp for schedule(static)
-      for(int i=0;i<(int)_NNodes;i++){
+      for(int i=0;i<(int)NNodes;i++){
         index_t nid=active_vertex[i];
         for(size_t j=0;j<ndims;j++)
           defrag_coords[i*ndims+j] = _coords[nid*ndims+j];
         for(size_t j=0;j<ndims*ndims;j++)
           defrag_metric[i*ndims*ndims+j] = metric[nid*ndims*ndims+j];
-#ifdef _OPENMP
-        node_towner[i] = omp_get_thread_num();
-#else
-        node_towner[i] = 0;
-#endif 
       }
     }
 
@@ -302,9 +289,6 @@ template<typename real_t, typename index_t> class Mesh{
 
     if(local_active_vertex_map)
       delete active_vertex_map;
-
-    element_towner.clear();
-    node_towner.clear();
   }
 
   /// Add a new vertex
@@ -315,13 +299,10 @@ template<typename real_t, typename index_t> class Mesh{
     for(size_t i=0;i<ndims*ndims;i++)
       metric.push_back(m[i]);
     
-    node_towner.push_back(0);
-    
-    _NNodes++;
-    NEList.resize(_NNodes);
-    NNList.resize(_NNodes);
+    NEList.push_back(std::set<index_t>());
+    NNList.push_back(std::deque<index_t>());
       
-    return _NNodes-1;
+    return get_number_nodes()-1;
   }
 
   /// Erase a vertex
@@ -335,11 +316,7 @@ template<typename real_t, typename index_t> class Mesh{
     for(size_t i=0;i<nloc;i++)
       _ENList.push_back(n[i]);
     
-    element_towner.push_back(0);
-    
-    _NElements++;
-    
-    return _NElements-1;
+    return get_number_elements()-1;
   }
 
   /// Erase an element
@@ -348,20 +325,14 @@ template<typename real_t, typename index_t> class Mesh{
     // Something for NEList?
   }
 
-  void erase_element_no_recycle(const index_t eid){
-    _ENList[eid*nloc] = -1;
-  }
-
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
-    assert(_NNodes == (_coords.size()/ndims));
-    return _NNodes;
+    return _coords.size()/ndims;
   }
 
   /// Return the number of elements in the mesh.
   int get_number_elements() const{
-    assert(_NElements == (_ENList.size()/nloc));
-    return _NElements;
+    return _ENList.size()/nloc;
   }
 
   /// Return the number of spatial dimensions.
@@ -371,12 +342,13 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Get the mean edge length metric space.
   real_t get_lmean(){
+    int NNodes = get_number_nodes();
     double total_length=0;
     int nedges=0;
 #pragma omp parallel reduction(+:total_length,nedges)
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<(int)_NNodes;i++){
+      for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once. 
@@ -402,13 +374,14 @@ template<typename real_t, typename index_t> class Mesh{
   /// Get the edge length RMS value in metric space.
   real_t get_lrms(){
     double mean = get_lmean();
-    
+    int NNodes = get_number_nodes();
+
     double rms=0;
     int nedges=0;
 #pragma omp parallel reduction(+:rms,nedges)
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<(int)_NNodes;i++){
+      for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once. 
@@ -433,13 +406,14 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Get the element mean quality in metric space.
   real_t get_qmean() const{
+    int NElements = get_number_elements();
     real_t sum=0;
     int nele=0;
     
 #pragma omp parallel reduction(+:sum, nele)
     {
 #pragma omp for schedule(static)
-      for(size_t i=0;i<_NElements;i++){
+      for(int i=0;i<NElements;i++){
         const index_t *n=get_element(i);
         if(n[0]<0)
           continue;
@@ -469,11 +443,12 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Get the element minimum quality in metric space.
   real_t get_qmin() const{
+    size_t NElements = get_number_elements();
     double qmin=1; // Where 1 is ideal.
 
     // This is not urgent - but when OpenMP 3.1 is more common we
     // should stick a proper min reduction in here.
-    for(size_t i=0;i<_NElements;i++){
+    for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
@@ -495,11 +470,12 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
   real_t get_qrms() const{
+    size_t NElements = get_number_elements();
     double mean = get_qmean();
 
     real_t rms=0;
     int nele=0;
-    for(size_t i=0;i<_NElements;i++){
+    for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
@@ -527,20 +503,6 @@ template<typename real_t, typename index_t> class Mesh{
   }
 #endif
 
-  /// Return the thread that ownes the node.
-  int get_node_towner(int i) const{
-    if(node_towner.size())
-      return node_towner[i];
-    return 0;
-  }
-
-  /// Return the thread that ownes the element.
-  int get_element_towner(int i) const{
-    if(element_towner.size())
-      return element_towner[i];
-    return 0;
-  }
-
   /// Return a pointer to the element-node list.
   const int *get_element(size_t eid) const{
     return &(_ENList[eid*nloc]);
@@ -565,7 +527,8 @@ template<typename real_t, typename index_t> class Mesh{
   /// Grow a node patch around node id's until it reaches a minimum size.
   std::set<index_t> get_node_patch(index_t nid, size_t min_patch_size){
     std::set<index_t> patch = get_node_patch(nid);
-    
+    size_t NNodes = get_number_nodes();
+
     if(patch.size()<min_patch_size){
       std::set<index_t> front = patch, new_front;
       for(;;){
@@ -578,7 +541,7 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
         
-        if(patch.size()>=std::min(min_patch_size, _NNodes))
+        if(patch.size()>=std::min(min_patch_size, NNodes))
           break;
         
         front.swap(new_front);
@@ -674,8 +637,9 @@ template<typename real_t, typename index_t> class Mesh{
   
   real_t maximal_edge_length(){
     double L_max = 0;
-    
-    for(int i=0;i<(int)_NNodes;i++){
+    index_t NNodes = get_number_nodes();
+
+    for(index_t i=0;i<NNodes;i++){
       if(is_owned_node(i) && (NNList[i].size()>0))
         for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           if(i<*it){ // Ensure that every edge length is only calculated once. 
@@ -693,34 +657,21 @@ template<typename real_t, typename index_t> class Mesh{
   }
   
   /// This is used to verify that the mesh and its metadata is correct.
-  void verify() const{
-    // Check for the correctness of number of elements.
-    if(rank==0){
-      std::cout<<"VERIFY: NElements...............";
-      if(_ENList.size()/nloc==_NElements)
-        std::cout<<"pass\n";
-      else
-        std::cout<<"fail\n";
-    }
-    
-    // Check for the correctness of number of nodes.
-    if(rank==0){
-      std::cout<<"VERIFY: NNodes..................";
-      if(_coords.size()/ndims==_NNodes)
-        std::cout<<"pass\n";
-      else
-        std::cout<<"fail\n";
-    }
+  bool verify() const{
+    bool state = true;
 
-    std::vector<int> mpi_node_owner(_NNodes, rank);
+    size_t NElements = get_number_elements();
+    size_t NNodes = get_number_nodes();
+
+    std::vector<int> mpi_node_owner(NNodes, rank);
     if(mpi_nparts>1)
       for(int p=0;p<mpi_nparts;p++)
         for(std::vector<int>::const_iterator it=recv[p].begin();it!=recv[p].end();++it){
           mpi_node_owner[*it] = p;
         }
-    std::vector<int> mpi_ele_owner(_NElements, rank);
+    std::vector<int> mpi_ele_owner(NElements, rank);
     if(mpi_nparts>1)
-      for(size_t i=0;i<_NElements;i++){
+      for(size_t i=0;i<NElements;i++){
         if(_ENList[i*nloc]<0)
           continue;
         int owner = mpi_node_owner[_ENList[i*nloc]];
@@ -730,9 +681,9 @@ template<typename real_t, typename index_t> class Mesh{
       }
     
     // Check for the correctness of NNList and NEList.
-    std::vector< std::set<index_t> > local_NEList(_NNodes);
-    std::vector< std::set<index_t> > local_NNList(_NNodes);
-    for(size_t i=0; i<_NElements; i++){
+    std::vector< std::set<index_t> > local_NEList(NNodes);
+    std::vector< std::set<index_t> > local_NNList(NNodes);
+    for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
       
@@ -753,7 +704,7 @@ template<typename real_t, typename index_t> class Mesh{
         if(rank==0) std::cout<<"empty\n";
       }else{
         bool valid_nnlist=true;
-        for(size_t i=0;i<_NNodes;i++){
+        for(size_t i=0;i<NNodes;i++){
           size_t active_cnt=0;
           for(size_t j=0;j<NNList[i].size();j++){
             if(NNList[i][j]>=0)
@@ -763,10 +714,13 @@ template<typename real_t, typename index_t> class Mesh{
             valid_nnlist=false;
 
             std::cerr<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
-            std::cerr<<"local_NNList[i].count(NNList[i][j])==0\n";
             std::cerr<<"NNList["
                      <<i
-                     <<"("<<send_halo.count(i)<<", "<<recv_halo.count(i)<<")] =       ";
+                     <<"("
+                     <<get_coords(i)[0]<<", "
+                     <<get_coords(i)[1]<<", ";
+            if(ndims==3) std::cerr<<get_coords(i)[2]<<", ";
+            std::cerr<<send_halo.count(i)<<", "<<recv_halo.count(i)<<")] =       ";
             for(size_t j=0;j<NNList[i].size();j++)
               std::cerr<<NNList[i][j]<<"("<<NNList[NNList[i][j]].size()<<", "
                        <<send_halo.count(NNList[i][j])<<", "
@@ -776,14 +730,17 @@ template<typename real_t, typename index_t> class Mesh{
             for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
               std::cerr<<*kt<<" ";
             std::cerr<<std::endl;
-            exit(-1);
+            
+            state = false;
           }
         }
         if(rank==0){
-          if(valid_nnlist)
+          if(valid_nnlist){
             std::cout<<"pass\n";
-          else
+          }else{
+            state = false;
             std::cout<<"warn\n";
+          }
         }
       }
     }
@@ -795,16 +752,19 @@ template<typename real_t, typename index_t> class Mesh{
       }else{
         if(NEList.size()!=local_NEList.size()){
           result = "fail (NEList.size()!=local_NEList.size())\n";
+          state = false;
         }else{
-          for(size_t i=0;i<_NNodes;i++){
+          for(size_t i=0;i<NNodes;i++){
             if(local_NEList[i].size()!=NEList[i].size()){
               result = "fail (NEList[i].size()!=local_NEList[i].size())\n";
+              state = false;
               break;
             }
             if(local_NEList[i].size()==0)
               continue;
             if(local_NEList[i]!=NEList[i]){
               result = "fail (local_NEList[i]!=NEList[i])\n";
+              state = false;
               break;
             }
           }
@@ -815,7 +775,7 @@ template<typename real_t, typename index_t> class Mesh{
     if(ndims==2){
       real_t area=0, min_ele_area=0, max_ele_area=0;
       size_t i=0;
-      for(;i<_NElements;i++){
+      for(;i<NElements;i++){
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
@@ -827,7 +787,7 @@ template<typename real_t, typename index_t> class Mesh{
         max_ele_area = area;
         i++; break;
       }
-      for(;i<_NElements;i++){
+      for(;i<NElements;i++){
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
@@ -852,13 +812,15 @@ template<typename real_t, typename index_t> class Mesh{
 
       if(rank==0){
         std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
+        if(fabs(area-1.0)>1.0e-6)
+          state = false;
         std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
         std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
       }
     }else{
       real_t volume=0, min_ele_vol=0, max_ele_vol=0;
       size_t i=0;
-      for(;i<_NElements;i++){
+      for(;i<NElements;i++){
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
@@ -871,7 +833,7 @@ template<typename real_t, typename index_t> class Mesh{
         max_ele_vol = volume;
         i++; break;
       }
-      for(;i<_NElements;i++){
+      for(;i<NElements;i++){
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
@@ -904,6 +866,16 @@ template<typename real_t, typename index_t> class Mesh{
       std::cout<<"VERIFY: min quality...."<<qmin<<std::endl;
       std::cout<<"VERIFY: rms quality...."<<qrms<<std::endl;
     }
+
+#ifdef HAVE_MPI
+    int false_cnt = state?0:1;
+    if(mpi_nparts>1){
+      MPI_Allreduce(MPI_IN_PLACE, &false_cnt, 1, MPI_INT, MPI_SUM, _mpi_comm);
+    }
+    state = (false_cnt == 0);
+#endif
+
+    return state;
   }
 
   void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
@@ -984,9 +956,6 @@ template<typename real_t, typename index_t> class Mesh{
       etype = 2; // METIS: tetrahedra
     }
 
-    _NNodes = NNodes;
-    _NElements = NElements;
-
     // From the globalENList, create the halo and a local ENList if mpi_nparts>1.
     const index_t *ENList;
     std::map<index_t, index_t> gnn2lnn;
@@ -995,13 +964,13 @@ template<typename real_t, typename index_t> class Mesh{
     }else{
 #ifdef HAVE_MPI
       assert(lnn2gnn!=NULL);
-      for(size_t i=0;i<_NNodes;i++){
+      for(size_t i=0;i<(size_t)NNodes;i++){
         gnn2lnn[lnn2gnn[i]] = i;
       }
 
       std::vector< std::set<int> > recv_set(mpi_nparts);
-      index_t *localENList = new index_t[_NElements*nloc];
-      for(size_t i=0;i<_NElements*nloc;i++){
+      index_t *localENList = new index_t[NElements*nloc];
+      for(size_t i=0;i<(size_t)NElements*nloc;i++){
         index_t gnn = globalENList[i];
         for(int j=0;j<mpi_nparts;j++){
           if(gnn<owner_range[j+1]){
@@ -1061,8 +1030,8 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
     }
 
-    _ENList.resize(_NElements*nloc);
-    _coords.resize(_NNodes*ndims);
+    _ENList.resize(NElements*nloc);
+    _coords.resize(NNodes*ndims);
 
     // Partition the nodes and elements so that the mesh can be
     // topologically mapped to the computer node topology. If we have
@@ -1074,7 +1043,7 @@ template<typename real_t, typename index_t> class Mesh{
       int numflag = 0;
       int edgecut;
       
-      std::vector<idxtype> metis_ENList(_NElements*nloc);
+      std::vector<idxtype> metis_ENList(NElements*nloc);
       for(size_t i=0;i<NElements*nloc;i++)
         metis_ENList[i] = ENList[i];
       METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &numa_nparts,
@@ -1089,7 +1058,7 @@ template<typename real_t, typename index_t> class Mesh{
         elements[epart[i]].push_back(i);
       
       std::vector< std::set<int> > edomains(numa_nparts);
-      for(size_t i=0; i<_NElements; i++){
+      for(size_t i=0; i<(size_t)NElements; i++){
         edomains[epart[i]].insert(i);
       }
       
@@ -1102,7 +1071,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       // Create seperate graphs for each partition.
       std::vector< std::map<index_t, std::set<index_t> > > pNNList(numa_nparts);
-      for(size_t i=0; i<_NElements; i++){
+      for(size_t i=0; i<(size_t)NElements; i++){
         for(size_t j=0;j<nloc;j++){
           int jnid = ENList[i*nloc+j];
           int jpart = npart[jnid];
@@ -1143,8 +1112,8 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
     }else{
-      std::vector< std::set<index_t> > lNNList(_NNodes);
-      for(size_t i=0; i<_NElements; i++){
+      std::vector< std::set<index_t> > lNNList(NNodes);
+      for(size_t i=0; i<(size_t)NElements; i++){
         for(size_t j=0;j<nloc;j++){
           index_t nid_j = ENList[i*nloc+j];
           for(size_t k=j+1;k<nloc;k++){
@@ -1156,46 +1125,40 @@ template<typename real_t, typename index_t> class Mesh{
       }
       Metis<index_t>::reorder(lNNList, nid_new2old);
       
-      eid_new2old.resize(_NElements);
-      for(size_t e=0;e<_NElements;e++)
+      eid_new2old.resize(NElements);
+      for(size_t e=0;e<(size_t)NElements;e++)
         eid_new2old[e] = e;
     }
     
     // Reverse mapping of renumbering.
-    std::vector<index_t> nid_old2new(_NNodes);
-    for(size_t i=0;i<_NNodes;i++){
+    std::vector<index_t> nid_old2new(NNodes);
+    for(size_t i=0;i<(size_t)NNodes;i++){
       nid_old2new[nid_new2old[i]] = i;
     }
     
     // Enforce first-touch policy
-    element_towner.resize(_NElements);
-    node_towner.resize(_NNodes);
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<(int)_NElements;i++){
+      for(int i=0;i<(int)NElements;i++){
         for(size_t j=0;j<nloc;j++){
           _ENList[i*nloc+j] = nid_old2new[ENList[eid_new2old[i]*nloc+j]];
         }
-        element_towner[i] = epart[eid_new2old[i]];
       }
       if(ndims==2){
 #pragma omp for schedule(static)
-        for(int i=0;i<(int)_NNodes;i++){
+        for(int i=0;i<(int)NNodes;i++){
           _coords[i*ndims  ] = x[nid_new2old[i]];
           _coords[i*ndims+1] = y[nid_new2old[i]];
         }
       }else{
 #pragma omp for schedule(static)
-        for(int i=0;i<(int)_NNodes;i++){
+        for(int i=0;i<(int)NNodes;i++){
           _coords[i*ndims  ] = x[nid_new2old[i]];
           _coords[i*ndims+1] = y[nid_new2old[i]];
           _coords[i*ndims+2] = z[nid_new2old[i]];
         }
       }
-#pragma omp for schedule(static)
-      for(int i=0;i<(int)_NNodes;i++)
-        node_towner[i] = npart[nid_new2old[i]];
     }
 
     if(mpi_nparts>1){
@@ -1222,7 +1185,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Set the orientation of elements.
     property = NULL;
-    for(size_t i=0;i<_NElements;i++){
+    for(size_t i=0;i<(size_t)NElements;i++){
       const int *n=get_element(i);
       if(n[0]<0)
         continue;
@@ -1350,12 +1313,15 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Create required adjacency lists.
   void create_adjancy(){
-    // Create new NNList and NEList.
-    std::vector< std::set<index_t> > NNList_set(_NNodes);
-    NEList.clear();
-    NEList.resize(_NNodes);
+    size_t NNodes = get_number_nodes();
+    size_t NElements = get_number_elements();
 
-    for(size_t i=0; i<_NElements; i++){
+    // Create new NNList and NEList.
+    std::vector< std::set<index_t> > NNList_set(NNodes);
+    NEList.clear();
+    NEList.resize(NNodes);
+
+    for(size_t i=0; i<NElements; i++){
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
         if(nid_j<0)
@@ -1371,8 +1337,8 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Compress NNList
     NNList.clear();
-    NNList.resize(_NNodes);
-    for(size_t i=0;i<_NNodes;i++)
+    NNList.resize(NNodes);
+    for(size_t i=0;i<NNodes;i++)
       NNList[i].insert(NNList[i].end(), NNList_set[i].begin(), NNList_set[i].end());
   }
 
@@ -1420,22 +1386,47 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
   
-  inline index_t get_new_vertex_omp(index_t n0, index_t n1, std::vector< std::vector<index_t> > &refined_edges){
-		index_t minID = std::min(n0, n1);
-		index_t maxID = std::max(n0, n1);
-		index_t pos = 0;
-		while(NNList[minID][pos] != maxID) ++pos;
-
-		return refined_edges[minID][2*pos];
+  inline index_t get_new_vertex(index_t n0, index_t n1, std::vector< std::vector<index_t> > &refined_edges) const{
+    index_t v1 = -1;
+    if(!refined_edges[n0].empty()){
+      for(size_t i=0;i<NNList[n0].size();i++){
+        if(NNList[n0][i]==n1){
+          v1 = refined_edges[n0][2*i];
+          break;
+        }
+      }
+    }
+    
+    if(v1>=0)
+      return v1;
+    
+    index_t v2 = -1;
+    if(!refined_edges[n1].empty()){
+      for(size_t i=0;i<NNList[n1].size();i++){
+        if(NNList[n1][i]==n0){
+          v2 = refined_edges[n1][2*i];
+          break;
+        }
+      }
+    }
+    
+    return v2;
   }
 
-  size_t _NNodes, _NElements, ndims, nloc;
+  inline int get_tid() const{
+#ifdef _OPENMP
+    return omp_get_thread_num();
+#else
+    return 0;
+#endif
+  }
+
+  size_t ndims, nloc;
   std::vector<index_t> _ENList;
 
   std::vector<real_t> _coords;
 
   std::vector<index_t> nid_new2old;
-  std::vector<int> element_towner, node_towner;
 
   // Adjancy lists
   std::vector< std::set<index_t> > NEList;

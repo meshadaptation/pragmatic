@@ -298,11 +298,6 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_node_numbering->SetNumberOfTuples(NNodes);
     vtk_node_numbering->SetName("nid");
 
-    vtkIntArray *vtk_node_tpartition = vtkIntArray::New();
-    vtk_node_tpartition->SetNumberOfComponents(1);
-    vtk_node_tpartition->SetNumberOfTuples(NNodes);
-    vtk_node_tpartition->SetName("node_tpartition");
-
     vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
     vtk_metric->SetNumberOfComponents(ndims*ndims);
     vtk_metric->SetNumberOfTuples(NNodes);
@@ -330,7 +325,6 @@ template<typename real_t, typename index_t> class VTKTools{
       if(vtk_psi!=NULL)
         vtk_psi->SetTuple1(i, psi[i]);
       vtk_node_numbering->SetTuple1(i, i);
-      vtk_node_tpartition->SetTuple1(i, mesh->get_node_towner(i));
       if(ndims==2){
         vtk_points->SetPoint(i, r[0], r[1], 0.0);
         vtk_metric->SetTuple4(i,
@@ -371,9 +365,6 @@ template<typename real_t, typename index_t> class VTKTools{
 
     ug->GetPointData()->AddArray(vtk_node_numbering);
     vtk_node_numbering->Delete();
-  
-    ug->GetPointData()->AddArray(vtk_node_tpartition);
-    vtk_node_tpartition->Delete();
 
     ug->GetPointData()->AddArray(vtk_metric);
     vtk_metric->Delete();
@@ -391,11 +382,6 @@ template<typename real_t, typename index_t> class VTKTools{
     vtk_cell_numbering->SetNumberOfComponents(1);
     vtk_cell_numbering->SetNumberOfTuples(NElements);
     vtk_cell_numbering->SetName("eid");
-  
-    vtkIntArray *vtk_cell_tpartition = vtkIntArray::New();
-    vtk_cell_tpartition->SetNumberOfComponents(1);
-    vtk_cell_tpartition->SetNumberOfTuples(NElements);
-    vtk_cell_tpartition->SetName("cell_tpartition");
 
     vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
     vtk_quality->SetNumberOfComponents(1);
@@ -433,16 +419,12 @@ template<typename real_t, typename index_t> class VTKTools{
       }
 
       vtk_cell_numbering->SetTuple1(k, i);
-      vtk_cell_tpartition->SetTuple1(k, mesh->get_element_towner(i));      
 
       k++;
     }
 
     ug->GetCellData()->AddArray(vtk_cell_numbering);
     vtk_cell_numbering->Delete();
-  
-    ug->GetCellData()->AddArray(vtk_cell_tpartition);
-    vtk_cell_tpartition->Delete();
 
     ug->GetCellData()->AddArray(vtk_quality);
     vtk_quality->Delete();
