@@ -1386,31 +1386,24 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
   
-  inline index_t get_new_vertex(index_t n0, index_t n1, std::vector< std::vector<index_t> > &refined_edges) const{
-    index_t v1 = -1;
+  inline index_t get_new_vertex(index_t n0, index_t n1,
+      std::vector< std::vector<index_t> > &refined_edges, std::vector<index_t> &lnn2gnn) const{
+    if(lnn2gnn[n0]>lnn2gnn[n1]){
+      // Needs to be swapped because we want the lesser gnn first.
+      index_t tmp_n0=n0;
+      n0=n1;
+      n1=tmp_n0;
+    }
+
     if(!refined_edges[n0].empty()){
       for(size_t i=0;i<NNList[n0].size();i++){
         if(NNList[n0][i]==n1){
-          v1 = refined_edges[n0][2*i];
-          break;
+          return refined_edges[n0][2*i];
         }
       }
     }
     
-    if(v1>=0)
-      return v1;
-    
-    index_t v2 = -1;
-    if(!refined_edges[n1].empty()){
-      for(size_t i=0;i<NNList[n1].size();i++){
-        if(NNList[n1][i]==n0){
-          v2 = refined_edges[n1][2*i];
-          break;
-        }
-      }
-    }
-    
-    return v2;
+    return -1;
   }
 
   inline int get_tid() const{
@@ -1428,7 +1421,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   std::vector<index_t> nid_new2old;
 
-  // Adjancy lists
+  // Adjacency lists
   std::vector< std::set<index_t> > NEList;
   std::vector< std::deque<index_t> > NNList;
 

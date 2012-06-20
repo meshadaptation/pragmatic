@@ -324,161 +324,7 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void refine(std::map< Edge<index_t>, index_t> &refined_edges){
-    if(refined_edges.size()==0){
-      return;
-    }
-    
-    // Given the refined edges, refine facets.
-    int lNSElements = get_number_facets();
-    if(ndims==2){
-      for(int i=0;i<lNSElements;i++){
-        // Check if this element has been erased - if so continue to next element.
-        int *n=&(SENList[i*snloc]);
-        if(n[0]<0)
-          continue;
-        
-        // Check if this edge has been refined.
-        typename std::map< Edge<index_t>, index_t>::const_iterator edge = 
-          refined_edges.find(Edge<index_t>(n[0], n[1]));
-        
-        // If it's not refined then just jump onto the next one.
-        if(edge==refined_edges.end())
-          continue;
-
-        // Renumber existing facet and add the new one.
-        index_t cache_n1 = n[1];
-        n[1] = edge->second;
-
-        SENList.push_back(edge->second);
-        SENList.push_back(cache_n1);
-
-        coplanar_ids.push_back(coplanar_ids[i]);
-        for(size_t j=0;j<ndims;j++)
-          normals.push_back(normals[ndims*i+j]);
-      }
-    }else{      
-      for(int i=0;i<lNSElements;i++){
-        // Check if this element has been erased - if so continue to next element.
-        int *n=&(SENList[i*snloc]);
-        if(n[0]<0)
-          continue;
-    
-        // Delete this facet if it's parent element has been deleted.
-        bool erase_facet=true;
-        for(size_t j=0;j<3;j++)
-          if(!_mesh->is_halo_node(n[j])){
-            erase_facet = false;
-            break;
-          }
-        if(erase_facet){
-          for(size_t j=0;j<3;j++)
-            n[j] = -1;
-          continue;
-        }
-
-        std::vector<typename std::map< Edge<index_t>, index_t>::const_iterator> split;
-        for(size_t j=0;j<3;j++)
-          for(size_t k=j+1;k<3;k++){
-            typename std::map< Edge<index_t>, index_t>::const_iterator it =
-              refined_edges.find(Edge<index_t>(n[j], n[k]));
-            if(it!=refined_edges.end())
-              split.push_back(it);
-          }
-        int refine_cnt=split.size();
-        
-        if(refine_cnt==0)
-          continue;
-        
-        // Apply refinement templates.
-        if(refine_cnt==1){
-          // Find the opposit vertex
-          int n0;
-          for(size_t j=0;j<snloc;j++){
-            if((split[0]->first.edge.first!=n[j])&&(split[0]->first.edge.second!=n[j])){
-              n0 = n[j];
-              break;
-            }
-          }
-            
-          // Renumber existing facet and add the new one.
-          n[0] = split[0]->first.edge.first;
-          n[1] = split[0]->second;
-          n[2] = n0;
-
-          SENList.push_back(split[0]->second);
-          SENList.push_back(split[0]->first.edge.second);
-          SENList.push_back(n0);
-          
-          coplanar_ids.push_back(coplanar_ids[i]);
-          for(size_t j=0;j<ndims;j++)
-            normals.push_back(normals[ndims*i+j]);
-        }else{
-          assert(refine_cnt==3);
-
-          index_t m[6];
-          m[0] = n[0];
-          m[1] = refined_edges.find(Edge<index_t>(n[0], n[1]))->second;
-          m[2] = n[1];
-          m[3] = refined_edges.find(Edge<index_t>(n[1], n[2]))->second;
-          m[4] = n[2];
-          m[5] = refined_edges.find(Edge<index_t>(n[2], n[0]))->second;
-          
-          // Renumber existing facet and add the new one.
-          n[0] = m[0];
-          n[1] = m[1];
-          n[2] = m[5];
-          
-          SENList.push_back(m[1]);
-          SENList.push_back(m[3]);
-          SENList.push_back(m[5]);
-          
-          coplanar_ids.push_back(coplanar_ids[i]);
-          for(size_t j=0;j<ndims;j++)
-            normals.push_back(normals[ndims*i+j]);
-
-          SENList.push_back(m[1]);
-          SENList.push_back(m[2]);
-          SENList.push_back(m[3]);
-          
-          coplanar_ids.push_back(coplanar_ids[i]);
-          for(size_t j=0;j<ndims;j++)
-            normals.push_back(normals[ndims*i+j]);
-
-          SENList.push_back(m[3]);
-          SENList.push_back(m[4]);
-          SENList.push_back(m[5]);
-          
-          coplanar_ids.push_back(coplanar_ids[i]);
-          for(size_t j=0;j<ndims;j++)
-            normals.push_back(normals[ndims*i+j]);
-        }
-      }
-    }
-
-    size_t NNodes = _mesh->get_number_nodes();
-    size_t NSElements = get_number_facets();
-
-    SNEList.clear();
-    surface_nodes.resize(NNodes);
-    for(size_t i=0;i<NNodes;i++)
-      surface_nodes[i] = false;
-    
-    for(size_t i=0;i<NSElements;i++){
-      const int *n=get_facet(i);
-      if(n[0]<0)
-        continue;
-      
-      for(size_t j=0;j<snloc;j++){
-        const int *n=get_facet(i);
-        
-        SNEList[n[j]].insert(i);
-        surface_nodes[n[j]] = true;
-      }
-    }
-  }
-
-  void refine(std::vector< std::vector<index_t> > &refined_edges){
+  void refine(std::vector< std::vector<index_t> > &refined_edges, std::vector<index_t> &lnn2gnn){
     // Given the refined edges, refine facets.
     std::vector< std::vector<index_t> > private_SENList;
     std::vector< std::vector<index_t> > private_coplanar_ids;
@@ -517,7 +363,7 @@ template<typename real_t, typename index_t>
             continue;
           
           // Check if this edge has been refined.
-          index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges);
+          index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, lnn2gnn);
           
           // If it's not refined then just jump onto the next one.
           if(newVertex < 0)
@@ -568,7 +414,7 @@ template<typename real_t, typename index_t>
           index_t vertexID;
           for(size_t j=0;j<3;j++)
             for(size_t k=j+1;k<3;k++){
-              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges);
+              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn);
               if(vertexID >= 0){
               	splitEdges.push_back(Edge<index_t>(n[j], n[k]));
               	newVertex.push_back(vertexID);

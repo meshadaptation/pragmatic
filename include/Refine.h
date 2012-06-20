@@ -165,6 +165,15 @@ template<typename real_t, typename index_t> class Refine{
          its length is greater than L_max in transformed space. */
 #pragma omp for schedule(dynamic)
       for(size_t i=0;i<NNodes;++i){
+        /*
+         * Space must be allocated for refined_edges[i] in any case, no matter
+         * whether any of the edges adjacent to vertex i will be refined or not.
+         * This is because function mark_edge(...) assumes that space has already
+         * been allocated. Allocating space for refined_edges[i] on demand, i.e.
+         * inside mark_edge(...), is not possible, since mark_edge(...) may be
+         * called for the same vertex i by two threads at the same time.
+         */
+        refined_edges[i].resize(2*_mesh->NNList[i].size(), -1);
       	for(index_t it=0;it<(int)_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
           
@@ -177,12 +186,10 @@ template<typename real_t, typename index_t> class Refine{
           if(lnn2gnn[i]<lnn2gnn[otherVertex]){
             double length = _mesh->calc_edge_length(i, otherVertex);
             if(length>L_max){ /* Here is why length must be calculated
-                                 exactly the same away across all
+                                 exactly the same way across all
                                  processes - need to ensure all
                                  processes that have this edge will
                                  decide to refine it. */
-              if(refined_edges[i].empty())
-                refined_edges[i].resize(2*_mesh->NNList[i].size(), -1);
 
               refined_edges[i][2*it]   = splitCnt[tid]++;
               refined_edges[i][2*it+1] = tid;
@@ -211,16 +218,8 @@ template<typename real_t, typename index_t> class Refine{
           typename std::vector< Edge<index_t> > split_set;
           for(size_t j=0;j<nloc;j++){
             for(size_t k=j+1;k<nloc;k++){
-              index_t n0, n1;
-              if(lnn2gnn[n[j]]<lnn2gnn[n[k]]){
-                n0 = n[j];
-                n1 = n[k];
-              }else{
-                n0 = n[k];
-                n1 = n[j];
-              }              
-              if(_mesh->get_new_vertex(n0, n1, refined_edges) >= 0)
-                split_set.push_back(Edge<index_t>(n0, n1));
+              if(_mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn) >= 0)
+                split_set.push_back(Edge<index_t>(n[j], n[k]));
             }
           }
           
@@ -417,20 +416,9 @@ template<typename real_t, typename index_t> class Refine{
         if(ndims==2){
           // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
           index_t newVertex[3];
-          if(lnn2gnn[n[1]]<lnn2gnn[n[2]])
-            newVertex[0] = _mesh->get_new_vertex(n[1], n[2], refined_edges);
-          else
-            newVertex[0] = _mesh->get_new_vertex(n[2], n[1], refined_edges);
-
-          if(lnn2gnn[n[2]]<lnn2gnn[n[0]])
-            newVertex[1] = _mesh->get_new_vertex(n[2], n[0], refined_edges);
-          else
-            newVertex[1] = _mesh->get_new_vertex(n[0], n[2], refined_edges);
-
-          if(lnn2gnn[n[0]]<lnn2gnn[n[1]])
-            newVertex[2] = _mesh->get_new_vertex(n[0], n[1], refined_edges);
-          else
-            newVertex[2] = _mesh->get_new_vertex(n[1], n[0], refined_edges);
+          newVertex[0] = _mesh->get_new_vertex(n[1], n[2], refined_edges, lnn2gnn);
+          newVertex[1] = _mesh->get_new_vertex(n[2], n[0], refined_edges, lnn2gnn);
+          newVertex[2] = _mesh->get_new_vertex(n[0], n[1], refined_edges, lnn2gnn);
           
           int refine_cnt=0;
           for(int j=0;j<3;j++)
@@ -512,7 +500,7 @@ template<typename real_t, typename index_t> class Refine{
           index_t vertexID;
           for(size_t j=0;j<4;j++)
             for(size_t k=j+1;k<4;k++){
-              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges);
+              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn);
               if(vertexID >= 0){
                 newVertex.push_back(vertexID);
                 splitEdges.push_back(Edge<index_t>(n[j], n[k]));
@@ -780,28 +768,8 @@ template<typename real_t, typename index_t> class Refine{
       }
     }
     
-    real_t total_volume=0;
-#pragma omp parallel for schedule(dynamic) reduction(+:total_volume)
-    for(int i=0;i<_mesh->get_number_elements();i++){
-      int *n=&(_mesh->_ENList[i*nloc]);
-      if(n[0]<0)
-        continue;
-      
-      real_t av;
-      if(ndims==2)
-        av = property->area(_mesh->get_coords(n[0]),
-                            _mesh->get_coords(n[1]),
-                            _mesh->get_coords(n[2]));
-      else
-        av = property->volume(_mesh->get_coords(n[0]),
-                              _mesh->get_coords(n[1]),
-                              _mesh->get_coords(n[2]),
-                              _mesh->get_coords(n[3]));
-      total_volume+=av;
-    }
-    
     // Finally, refine surface
-    _surface->refine(refined_edges);
+    _surface->refine(refined_edges, lnn2gnn);
     
     // Tidy up. Need to look at efficiencies here.
     _mesh->create_adjancy();
@@ -851,7 +819,7 @@ template<typename real_t, typename index_t> class Refine{
   }
 
   inline void mark_edge(index_t n0, index_t n1, std::vector< std::vector<index_t> > &refined_edges){
-    if(lnn2gnn[n0]>lnn2gnn[n0]){
+    if(lnn2gnn[n0]>lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;
       n0=n1;
