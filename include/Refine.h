@@ -121,16 +121,15 @@ template<typename real_t, typename index_t> class Refine{
       
       // Initialise the lnn2gnn numbering.
       lnn2gnn.resize(NNodes);
-#pragma omp parallel
-      {
-#pragma omp for schedule(static)
-        for(size_t i=0;i<NNodes;i++)
-          lnn2gnn[i] = gnn_offset+i;
-      }
+
+      #pragma omp parallel for schedule(static)
+      for(size_t i=0;i<NNodes;i++)
+        lnn2gnn[i] = gnn_offset+i;
             
       // Update halo values.
       _mesh->halo_update(&(lnn2gnn[0]), 1);
 
+      #pragma omp parallel for schedule(static)
       for(size_t i=0;i<NNodes;i++)
         gnn2lnn[lnn2gnn[i]] = i;
     }
@@ -643,7 +642,7 @@ template<typename real_t, typename index_t> class Refine{
     NElements = _mesh->get_number_elements();
 
 #ifdef HAVE_MPI
-    // Time to ammend halo.
+    // Time to amend halo.
     assert(node_owner.size()==NNodes);
 
     if(nprocs>1){
@@ -779,7 +778,8 @@ template<typename real_t, typename index_t> class Refine{
   
  private:
   
-  void refine_edge(index_t n0, index_t n1, std::vector< DirectedEdge<index_t> > &newVertices, std::vector<real_t> &coords, std::vector<real_t> &metric){
+  void refine_edge(index_t n0, index_t n1, std::vector< DirectedEdge<index_t> > &newVertices,
+      std::vector<real_t> &coords, std::vector<real_t> &metric){
     if(lnn2gnn[n0]>lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;

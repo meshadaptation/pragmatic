@@ -1395,11 +1395,9 @@ template<typename real_t, typename index_t> class Mesh{
       n1=tmp_n0;
     }
 
-    if(!refined_edges[n0].empty()){
-      for(size_t i=0;i<NNList[n0].size();i++){
-        if(NNList[n0][i]==n1){
-          return refined_edges[n0][2*i];
-        }
+    for(size_t i=0;i<NNList[n0].size();i++){
+      if(NNList[n0][i]==n1){
+        return refined_edges[n0][2*i];
       }
     }
     
