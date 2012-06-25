@@ -129,7 +129,6 @@ template<typename real_t, typename index_t> class Refine{
       // Update halo values.
       _mesh->halo_update(&(lnn2gnn[0]), 1);
 
-      #pragma omp parallel for schedule(static)
       for(size_t i=0;i<NNodes;i++)
         gnn2lnn[lnn2gnn[i]] = i;
     }
