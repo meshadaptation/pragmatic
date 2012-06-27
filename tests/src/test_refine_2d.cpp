@@ -82,7 +82,7 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   if(verbose){
     int nelements = mesh->get_number_elements();      
-    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+    std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
              <<"Number elements:      "<<nelements<<std::endl
              <<"Edge length RMS:      "<<lrms<<std::endl
              <<"Quality RMS:          "<<qrms<<std::endl;

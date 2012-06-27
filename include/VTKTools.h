@@ -143,7 +143,7 @@ template<typename real_t, typename index_t> class VTKTools{
         MPI::COMM_WORLD.Bcast(&(epart[0]), NElements, MPI_INT, 0);
         MPI::COMM_WORLD.Bcast(&(npart[0]), NNodes, MPI_INT, 0);
         
-        // Seperate out owned nodes.
+        // Separate out owned nodes.
         std::vector< std::deque<index_t> > node_partition(nparts);
         for(size_t i=0;i<NNodes;i++)
           node_partition[npart[i]].push_back(i);

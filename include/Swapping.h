@@ -185,7 +185,7 @@ template<typename real_t, typename index_t> class Swapping{
         assert(n[(n_off+1)%3]==m[(m_off+2)%3]);
         
         int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
-        int m_swap[] = {n[n_off], n[(n_off+1)%3], m[(m_off)%3]};   // new eid1
+        int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};   // new eid1
         
         real_t worst_q = std::min(quality[eid0], quality[eid1]);
         real_t q0 = property->lipnikov(_mesh->get_coords(n_swap[0]),
@@ -229,7 +229,7 @@ template<typename real_t, typename index_t> class Swapping{
           nnlist[n[n_off]].insert(m[m_off]);
           nnlist[m[m_off]].insert(n[n_off]);
           
-          // Put back in new adjancy info
+          // Put back in new adjacency info
           for(std::map<int, std::set<int> >::const_iterator it=nnlist.begin();it!=nnlist.end();++it){
             _mesh->NNList[it->first].clear();
             for(typename std::set<index_t>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt)
@@ -240,7 +240,7 @@ template<typename real_t, typename index_t> class Swapping{
           // Update node-element list.
           //
           
-          // Erase old node-element adjancies.
+          // Erase old node-element adjacency.
           for(size_t i=0;i<nloc;i++){
             _mesh->NEList[n[i]].erase(eid0);
             _mesh->NEList[m[i]].erase(eid1);
@@ -254,11 +254,13 @@ template<typename real_t, typename index_t> class Swapping{
           for(size_t i=0;i<nloc;i++){
             _mesh->_ENList[eid0*nloc+i] = n_swap[i];
             _mesh->_ENList[eid1*nloc+i] = m_swap[i];
-            
-            // Also update the edges that have to be rechecked.
-            dynamic_edges.insert(Edge<index_t>(n_swap[i], n_swap[(i+1)%3]));
-            dynamic_edges.insert(Edge<index_t>(m_swap[i], m_swap[(i+1)%3]));
           }
+
+          // Also update the edges that have to be rechecked.
+          dynamic_edges.insert(Edge<index_t>(n_swap[0], n_swap[2]));
+          dynamic_edges.insert(Edge<index_t>(n_swap[1], n_swap[2]));
+          dynamic_edges.insert(Edge<index_t>(m_swap[0], m_swap[1]));
+          dynamic_edges.insert(Edge<index_t>(m_swap[1], m_swap[2]));
         }
       }
     }else{
@@ -891,7 +893,7 @@ template<typename real_t, typename index_t> class Swapping{
         }
     }
     
-    // recalculate adjancies
+    // recalculate adjacency
     _mesh->create_adjancy();
 
     return;

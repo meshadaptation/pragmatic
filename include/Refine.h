@@ -83,9 +83,10 @@ template<typename real_t, typename index_t> class Refine{
     }
 #endif
 
-    nthreads=1;
 #ifdef _OPENMP
     nthreads = omp_get_max_threads();
+#else
+    nthreads=1;
 #endif
   }
   
