@@ -1,3 +1,9 @@
+pragmatic (1.1.0ubuntu3) precise; urgency=low
+
+  * Updated refinement algorith, 
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Sat, 30 Jun 2012 13:28:21 +0100
+
 pragmatic (1.1.0ubuntu2) oneiric; urgency=low
 
   * Update rules such that docs are not built by default.
