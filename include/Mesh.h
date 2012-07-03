@@ -71,10 +71,9 @@ template<typename real_t, typename index_t> class Mesh{
    * @param x is the X coordinate.
    * @param y is the Y coordinate.
    */
-  Mesh(int NNodes, int NElements, const index_t *ENList,
-       const real_t *x, const real_t *y){
+  Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y){
 #ifdef HAVE_MPI
-      _mpi_comm = MPI_COMM_WORLD;      
+    _mpi_comm = MPI_COMM_WORLD;      
 #endif
     _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
   }
@@ -148,8 +147,8 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Create look-up tables for halos.
     std::map<index_t, std::set<int> > send_set, recv_set;
-    if(mpi_nparts>1){
-      for(int k=0;k<mpi_nparts;k++){
+    if(num_processes>1){
+      for(int k=0;k<num_processes;k++){
         for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt)
           send_set[k].insert(*jt);
         for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt)
@@ -190,7 +189,7 @@ template<typename real_t, typename index_t> class Mesh{
         (*active_vertex_map)[nid]=0;
       
         if(halo_element){
-          for(int k=0;k<mpi_nparts;k++){
+          for(int k=0;k<num_processes;k++){
             if(recv_set[k].count(nid)){
               new_recv_set[k].insert(nid);
               neigh.insert(k);
@@ -249,8 +248,8 @@ template<typename real_t, typename index_t> class Mesh{
     metric.swap(defrag_metric);
     
     // Renumber halo
-    if(mpi_nparts>1){
-      for(int k=0;k<mpi_nparts;k++){
+    if(num_processes>1){
+      for(int k=0;k<num_processes;k++){
         std::vector<int> new_halo;
         for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
           if(new_send_set[k].count(*jt))
@@ -258,7 +257,7 @@ template<typename real_t, typename index_t> class Mesh{
         }
         send[k].swap(new_halo);
       }
-      for(int k=0;k<mpi_nparts;k++){
+      for(int k=0;k<num_processes;k++){
         std::vector<int> new_halo;
         for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
           if(new_recv_set[k].count(*jt))
@@ -269,7 +268,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       {
         send_halo.clear();
-        for(int k=0;k<mpi_nparts;k++){
+        for(int k=0;k<num_processes;k++){
           for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
             send_halo.insert(*jt);
           }
@@ -277,7 +276,7 @@ template<typename real_t, typename index_t> class Mesh{
       }    
       {
         recv_halo.clear();
-        for(int k=0;k<mpi_nparts;k++){
+        for(int k=0;k<num_processes;k++){
           for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
             recv_halo.insert(*jt);
           }
@@ -360,7 +359,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
     
 #ifdef HAVE_MPI
-    if(mpi_nparts>1){
+    if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
@@ -393,7 +392,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
 #ifdef HAVE_MPI
-    if(mpi_nparts>1){
+    if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
@@ -430,7 +429,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
 #ifdef HAVE_MPI
-    if(mpi_nparts>1){
+    if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
@@ -461,7 +460,7 @@ template<typename real_t, typename index_t> class Mesh{
                                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
     }
 #ifdef HAVE_MPI
-    if(mpi_nparts>1){
+    if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
     }
 #endif
@@ -577,11 +576,6 @@ template<typename real_t, typename index_t> class Mesh{
     return;
   }
 
-  /// Return new local node number given on original node number.
-  int new2old(int nid) const{
-    return nid_new2old[nid];
-  }
-
   /// Returns true if the node is in any of the partitioned elements.
   bool is_halo_node(int nid) const{
     return (send_halo.count(nid)+recv_halo.count(nid))>0;
@@ -649,7 +643,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
     
 #ifdef HAVE_MPI
-    if(mpi_nparts>1)
+    if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
 #endif
 
@@ -664,13 +658,13 @@ template<typename real_t, typename index_t> class Mesh{
     size_t NNodes = get_number_nodes();
 
     std::vector<int> mpi_node_owner(NNodes, rank);
-    if(mpi_nparts>1)
-      for(int p=0;p<mpi_nparts;p++)
+    if(num_processes>1)
+      for(int p=0;p<num_processes;p++)
         for(std::vector<int>::const_iterator it=recv[p].begin();it!=recv[p].end();++it){
           mpi_node_owner[*it] = p;
         }
     std::vector<int> mpi_ele_owner(NElements, rank);
-    if(mpi_nparts>1)
+    if(num_processes>1)
       for(size_t i=0;i<NElements;i++){
         if(_ENList[i*nloc]<0)
           continue;
@@ -869,7 +863,7 @@ template<typename real_t, typename index_t> class Mesh{
 
 #ifdef HAVE_MPI
     int false_cnt = state?0:1;
-    if(mpi_nparts>1){
+    if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &false_cnt, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
     state = (false_cnt == 0);
@@ -881,8 +875,8 @@ template<typename real_t, typename index_t> class Mesh{
   void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
     int NNodes = get_number_nodes();
     
-    NPNodes.resize(mpi_nparts);    
-    if(mpi_nparts>1){
+    NPNodes.resize(num_processes);    
+    if(num_processes>1){
       NPNodes[rank] = NNodes - recv_halo.size();
       
       // Allgather NPNodes
@@ -927,39 +921,37 @@ template<typename real_t, typename index_t> class Mesh{
   void _init(int NNodes, int NElements, const index_t *globalENList,
              const real_t *x, const real_t *y, const real_t *z,
              const index_t *lnn2gnn, const index_t *owner_range){
-    mpi_nparts = 1;
+    num_processes = 1;
     rank=0;
 #ifdef HAVE_MPI
     if(MPI::Is_initialized()){
-      MPI_Comm_size(_mpi_comm, &mpi_nparts);
+      MPI_Comm_size(_mpi_comm, &num_processes);
       MPI_Comm_rank(_mpi_comm, &rank);
     }
 #endif
 
-    numa_nparts = 1;
+    num_threads = 1;
 #ifdef _OPENMP
-    // Set a upper limit on the number of NUMA regions.
-    numa_nparts = omp_get_max_threads();
+    num_threads = omp_get_max_threads();
 #endif
+
+    num_uma = num_threads; // Assume the worst
 #ifdef HAVE_LIBNUMA
-    numa_nparts =numa_max_node()+1;
+    num_uma = numa_max_node()+1;
 #endif
     
-    int etype;
     if(z==NULL){
       nloc = 3;
       ndims = 2;
-      etype = 1; // METIS: triangles
     }else{
       nloc = 4;
       ndims = 3;
-      etype = 2; // METIS: tetrahedra
     }
 
-    // From the globalENList, create the halo and a local ENList if mpi_nparts>1.
+    // From the globalENList, create the halo and a local ENList if num_processes>1.
     const index_t *ENList;
     std::map<index_t, index_t> gnn2lnn;
-    if(mpi_nparts==1){
+    if(num_processes==1){
       ENList = globalENList;
     }else{
 #ifdef HAVE_MPI
@@ -968,11 +960,11 @@ template<typename real_t, typename index_t> class Mesh{
         gnn2lnn[lnn2gnn[i]] = i;
       }
 
-      std::vector< std::set<int> > recv_set(mpi_nparts);
+      std::vector< std::set<int> > recv_set(num_processes);
       index_t *localENList = new index_t[NElements*nloc];
       for(size_t i=0;i<(size_t)NElements*nloc;i++){
         index_t gnn = globalENList[i];
-        for(int j=0;j<mpi_nparts;j++){
+        for(int j=0;j<num_processes;j++){
           if(gnn<owner_range[j+1]){
             if(j!=rank)
               recv_set[j].insert(gnn);
@@ -981,22 +973,22 @@ template<typename real_t, typename index_t> class Mesh{
         }
         localENList[i] = gnn2lnn[gnn];
       }
-      std::vector<int> recv_size(mpi_nparts);
-      recv.resize(mpi_nparts);
-      for(int j=0;j<mpi_nparts;j++){
+      std::vector<int> recv_size(num_processes);
+      recv.resize(num_processes);
+      for(int j=0;j<num_processes;j++){
         for(typename std::set<int>::const_iterator it=recv_set[j].begin();it!=recv_set[j].end();++it){
           recv[j].push_back(*it);
         }
         recv_size[j] = recv[j].size();
       }
-      std::vector<int> send_size(mpi_nparts);
+      std::vector<int> send_size(num_processes);
       MPI_Alltoall(&(recv_size[0]), 1, MPI_INT,
                    &(send_size[0]), 1, MPI_INT, _mpi_comm);
       
       // Setup non-blocking receives
-      send.resize(mpi_nparts);      
-      std::vector<MPI_Request> request(mpi_nparts*2);
-      for(int i=0;i<mpi_nparts;i++){
+      send.resize(num_processes);      
+      std::vector<MPI_Request> request(num_processes*2);
+      for(int i=0;i<num_processes;i++){
         if((i==rank)||(send_size[i]==0)){
           request[i] =  MPI_REQUEST_NULL;
         }else{
@@ -1006,19 +998,19 @@ template<typename real_t, typename index_t> class Mesh{
       }
       
       // Non-blocking sends.
-      for(int i=0;i<mpi_nparts;i++){
+      for(int i=0;i<num_processes;i++){
         if((i==rank)||(recv_size[i]==0)){
-          request[mpi_nparts+i] =  MPI_REQUEST_NULL;
+          request[num_processes+i] =  MPI_REQUEST_NULL;
         }else{
-          MPI_Isend(&(recv[i][0]), recv_size[i], MPI_INT, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+          MPI_Isend(&(recv[i][0]), recv_size[i], MPI_INT, i, 0, _mpi_comm, &(request[num_processes+i]));
         }
       }
       
-      std::vector<MPI_Status> status(mpi_nparts*2);
-      MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
-      MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+      std::vector<MPI_Status> status(num_processes*2);
+      MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+      MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
 
-      for(int j=0;j<mpi_nparts;j++){
+      for(int j=0;j<num_processes;j++){
         for(int k=0;k<recv_size[j];k++)
           recv[j][k] = gnn2lnn[recv[j][k]];
         
@@ -1032,109 +1024,6 @@ template<typename real_t, typename index_t> class Mesh{
 
     _ENList.resize(NElements*nloc);
     _coords.resize(NNodes*ndims);
-
-    // Partition the nodes and elements so that the mesh can be
-    // topologically mapped to the computer node topology. If we have
-    // NUMA library dev support then we use the number of memory
-    // nodes. Otherwise, play it save and use the number of threads.
-    std::vector<int> eid_new2old;
-    std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
-    if(numa_nparts>1){
-      int numflag = 0;
-      int edgecut;
-      
-      std::vector<idxtype> metis_ENList(NElements*nloc);
-      for(size_t i=0;i<NElements*nloc;i++)
-        metis_ENList[i] = ENList[i];
-      METIS_PartMeshNodal(&NElements, &NNodes, &(metis_ENList[0]), &etype, &numflag, &numa_nparts,
-                          &edgecut, &(epart[0]), &(npart[0]));
-      metis_ENList.clear();
-
-      // Create sets of nodes and elements in each partition
-      std::vector< std::deque<int> > nodes(numa_nparts), elements(numa_nparts);
-      for(int i=0;i<NNodes;i++)
-        nodes[npart[i]].push_back(i);
-      for(int i=0;i<NElements;i++)
-        elements[epart[i]].push_back(i);
-      
-      std::vector< std::set<int> > edomains(numa_nparts);
-      for(size_t i=0; i<(size_t)NElements; i++){
-        edomains[epart[i]].insert(i);
-      }
-      
-      // Create element renumbering
-      for(int i=0;i<numa_nparts;i++){
-        for(std::set<int>::const_iterator it=edomains[i].begin();it!=edomains[i].end();++it){
-          eid_new2old.push_back(*it);
-        }
-      }
-      
-      // Create seperate graphs for each partition.
-      std::vector< std::map<index_t, std::set<index_t> > > pNNList(numa_nparts);
-      for(size_t i=0; i<(size_t)NElements; i++){
-        for(size_t j=0;j<nloc;j++){
-          int jnid = ENList[i*nloc+j];
-          int jpart = npart[jnid];
-          for(size_t k=j+1;k<nloc;k++){
-            int knid = ENList[i*nloc+k];
-            int kpart = npart[knid];
-            if(jpart!=kpart)
-              continue;
-            pNNList[jpart][jnid].insert(knid);
-            pNNList[jpart][knid].insert(jnid);
-          }
-        }
-      }
-      
-      // Renumber nodes within each partition.
-      for(int p=0;p<numa_nparts;p++){
-        // Create mapping from node numbering to local thread partition numbering, and it's inverse.
-        std::map<index_t, index_t> nid2tnid;
-        std::deque<index_t> tnid2nid(pNNList[p].size());
-        index_t loc=0;
-        for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
-          tnid2nid[loc] = it->first;
-          nid2tnid[it->first] = loc++;
-        }
-        
-        std::vector< std::set<index_t> > pgraph(nid2tnid.size());
-        for(typename std::map<index_t, std::set<index_t> >::const_iterator it=pNNList[p].begin();it!=pNNList[p].end();++it){
-          for(typename std::set<index_t>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
-            pgraph[nid2tnid[it->first]].insert(nid2tnid[*jt]);
-          }
-        }
-        
-        std::vector<int> porder;
-        Metis<index_t>::reorder(pgraph, porder);
-        
-        for(typename std::vector<index_t>::const_iterator it=porder.begin();it!=porder.end();++it){
-          nid_new2old.push_back(tnid2nid[*it]);
-        }
-      }
-    }else{
-      std::vector< std::set<index_t> > lNNList(NNodes);
-      for(size_t i=0; i<(size_t)NElements; i++){
-        for(size_t j=0;j<nloc;j++){
-          index_t nid_j = ENList[i*nloc+j];
-          for(size_t k=j+1;k<nloc;k++){
-            index_t nid_k = ENList[i*nloc+k];
-            lNNList[nid_j].insert(nid_k);
-            lNNList[nid_k].insert(nid_j);
-          }
-        }
-      }
-      Metis<index_t>::reorder(lNNList, nid_new2old);
-      
-      eid_new2old.resize(NElements);
-      for(size_t e=0;e<(size_t)NElements;e++)
-        eid_new2old[e] = e;
-    }
-    
-    // Reverse mapping of renumbering.
-    std::vector<index_t> nid_old2new(NNodes);
-    for(size_t i=0;i<(size_t)NNodes;i++){
-      nid_old2new[nid_new2old[i]] = i;
-    }
     
     // Enforce first-touch policy
 #pragma omp parallel
@@ -1142,93 +1031,90 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
         for(size_t j=0;j<nloc;j++){
-          _ENList[i*nloc+j] = nid_old2new[ENList[eid_new2old[i]*nloc+j]];
+          _ENList[i*nloc+j] = ENList[i*nloc+j];
         }
       }
       if(ndims==2){
 #pragma omp for schedule(static)
         for(int i=0;i<(int)NNodes;i++){
-          _coords[i*ndims  ] = x[nid_new2old[i]];
-          _coords[i*ndims+1] = y[nid_new2old[i]];
+          _coords[i*ndims  ] = x[i];
+          _coords[i*ndims+1] = y[i];
         }
       }else{
 #pragma omp for schedule(static)
         for(int i=0;i<(int)NNodes;i++){
-          _coords[i*ndims  ] = x[nid_new2old[i]];
-          _coords[i*ndims+1] = y[nid_new2old[i]];
-          _coords[i*ndims+2] = z[nid_new2old[i]];
+          _coords[i*ndims  ] = x[i];
+          _coords[i*ndims+1] = y[i];
+          _coords[i*ndims+2] = z[i];
         }
       }
     }
 
-    if(mpi_nparts>1){
+    if(num_processes>1){
       // Take into account renumbering for halo.
-      for(int j=0;j<mpi_nparts;j++){
+      for(int j=0;j<num_processes;j++){
         for(size_t k=0;k<recv[j].size();k++){
-          int nid = nid_old2new[recv[j][k]];
-          recv[j][k] = nid;
-          recv_halo.insert(nid);
+          recv_halo.insert(recv[j][k]);
         }
         for(size_t k=0;k<send[j].size();k++){
-          int nid = nid_old2new[send[j][k]];
-          send[j][k] = nid;
-          send_halo.insert(nid);
+          send_halo.insert(send[j][k]);
         }
       }
     }
-
-    if(mpi_nparts>1){
+    
+    if(num_processes>1){
       delete [] ENList;
     }
-
+    
     create_adjancy();
-
+    
     // Set the orientation of elements.
-    property = NULL;
-    for(size_t i=0;i<(size_t)NElements;i++){
-      const int *n=get_element(i);
-      if(n[0]<0)
-        continue;
+    {
+      const int *n=get_element(0);
+      assert(n[0]>=0);
       
-      if(property==NULL){
-        if(ndims==2)
-          property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                 get_coords(n[1]),
-                                                 get_coords(n[2]));
-        else
-          property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                 get_coords(n[1]),
-                                                 get_coords(n[2]),
-                                                 get_coords(n[3]));
-      }else{
-        double volarea;
-        if(ndims==2)
-          volarea = property->area(get_coords(n[0]),
-                                   get_coords(n[1]),
-                                   get_coords(n[2]));
-        else
-          volarea = property->volume(get_coords(n[0]),
-                                     get_coords(n[1]),
-                                     get_coords(n[2]),
-                                     get_coords(n[2]));
+      if(ndims==2)
+        property = new ElementProperty<real_t>(get_coords(n[0]),
+                                               get_coords(n[1]),
+                                               get_coords(n[2]));
+      else
+        property = new ElementProperty<real_t>(get_coords(n[0]),
+                                               get_coords(n[1]),
+                                               get_coords(n[2]),
+                                               get_coords(n[3]));
+    }
 
-        if(volarea<0)
-          invert_element(i);
-      }
+    for(size_t i=1;i<(size_t)NElements;i++){
+      const int *n=get_element(i);
+      assert(n[0]>=0);
+      
+      double volarea;
+      if(ndims==2)
+        volarea = property->area(get_coords(n[0]),
+                                 get_coords(n[1]),
+                                 get_coords(n[2]));
+      else
+        volarea = property->volume(get_coords(n[0]),
+                                   get_coords(n[1]),
+                                   get_coords(n[2]),
+                                   get_coords(n[2]));
+      
+      if(volarea<0)
+        invert_element(i);
     }
   }
 
   void halo_update(real_t *vec, int block){
 #ifdef HAVE_MPI
-    if(mpi_nparts<2)
+    if(num_processes<2)
       return;
 
     // MPI_Requests for all non-blocking communications.
-    std::vector<MPI_Request> request(mpi_nparts*2);
+    std::vector<MPI_Request> request(num_processes*2);
     
     // Setup non-blocking receives.
-    std::vector< std::vector<real_t> > recv_buff(mpi_nparts);
-    for(int i=0;i<mpi_nparts;i++){
+    std::vector< std::vector<real_t> > recv_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
       if((i==rank)||(recv[i].size()==0)){
         request[i] =  MPI_REQUEST_NULL;
       }else{
@@ -1238,24 +1124,24 @@ template<typename real_t, typename index_t> class Mesh{
     }
     
     // Non-blocking sends.
-    std::vector< std::vector<real_t> > send_buff(mpi_nparts);
-    for(int i=0;i<mpi_nparts;i++){
+    std::vector< std::vector<real_t> > send_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
       if((i==rank)||(send[i].size()==0)){
-        request[mpi_nparts+i] = MPI_REQUEST_NULL;
+        request[num_processes+i] = MPI_REQUEST_NULL;
       }else{
         for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
           for(int j=0;j<block;j++){
             send_buff[i].push_back(vec[(*it)*block+j]);
           }
-        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_DOUBLE, i, 0, _mpi_comm, &(request[num_processes+i]));
       }
     }
     
-    std::vector<MPI_Status> status(mpi_nparts*2);
-    MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
-    MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+    std::vector<MPI_Status> status(num_processes*2);
+    MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+    MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
     
-    for(int i=0;i<mpi_nparts;i++){
+    for(int i=0;i<num_processes;i++){
       int k=0;
       for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
         for(int j=0;j<block;j++)
@@ -1267,15 +1153,15 @@ template<typename real_t, typename index_t> class Mesh{
 
   void halo_update(index_t *vec, int block){
 #ifdef HAVE_MPI
-    if(mpi_nparts<2)
+    if(num_processes<2)
       return;
 
     // MPI_Requests for all non-blocking communications.
-    std::vector<MPI_Request> request(mpi_nparts*2);
+    std::vector<MPI_Request> request(num_processes*2);
     
     // Setup non-blocking receives.
-    std::vector< std::vector<index_t> > recv_buff(mpi_nparts);
-    for(int i=0;i<mpi_nparts;i++){
+    std::vector< std::vector<index_t> > recv_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
       if((i==rank)||(recv[i].size()==0)){
         request[i] =  MPI_REQUEST_NULL;
       }else{
@@ -1285,24 +1171,24 @@ template<typename real_t, typename index_t> class Mesh{
     }
     
     // Non-blocking sends.
-    std::vector< std::vector<index_t> > send_buff(mpi_nparts);
-    for(int i=0;i<mpi_nparts;i++){
+    std::vector< std::vector<index_t> > send_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
       if((i==rank)||(send[i].size()==0)){
-        request[mpi_nparts+i] = MPI_REQUEST_NULL;
+        request[num_processes+i] = MPI_REQUEST_NULL;
       }else{
         for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
           for(int j=0;j<block;j++){
             send_buff[i].push_back(vec[(*it)*block+j]);
           }
-        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_INT, i, 0, _mpi_comm, &(request[mpi_nparts+i]));
+        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_INT, i, 0, _mpi_comm, &(request[num_processes+i]));
       }
     }
     
-    std::vector<MPI_Status> status(mpi_nparts*2);
-    MPI_Waitall(mpi_nparts, &(request[0]), &(status[0]));
-    MPI_Waitall(mpi_nparts, &(request[mpi_nparts]), &(status[mpi_nparts]));
+    std::vector<MPI_Status> status(num_processes*2);
+    MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+    MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
     
-    for(int i=0;i<mpi_nparts;i++){
+    for(int i=0;i<num_processes;i++){
       int k=0;
       for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
         for(int j=0;j<block;j++)
@@ -1345,7 +1231,7 @@ template<typename real_t, typename index_t> class Mesh{
   void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){
     int NNodes = get_number_nodes();
 
-    if(mpi_nparts>1){
+    if(num_processes>1){
       NPNodes = NNodes - recv_halo.size();
       
       // Calculate the global numbering offset for this partition.
@@ -1370,7 +1256,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       
       // Finish writing node ownerships.
-      for(int i=0;i<mpi_nparts;i++){
+      for(int i=0;i<num_processes;i++){
         for(std::vector<int>::const_iterator it=recv[i].begin();it!=recv[i].end();++it){
           owner[*it] = i;
         }
@@ -1414,10 +1300,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   size_t ndims, nloc;
   std::vector<index_t> _ENList;
-
   std::vector<real_t> _coords;
-
-  std::vector<index_t> nid_new2old;
 
   // Adjacency lists
   std::vector< std::set<index_t> > NEList;
@@ -1429,7 +1312,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<real_t> metric;
 
   // Parallel support.
-  int rank, mpi_nparts, numa_nparts;
+  int rank, num_processes, num_uma, num_threads;
   std::vector< std::vector<int> > send, recv;
   std::set<int> send_halo, recv_halo;
 

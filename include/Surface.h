@@ -55,17 +55,20 @@ template<typename real_t, typename index_t>
  public:
   
   /// Default constructor.
-  Surface(Mesh<real_t, index_t> &mesh, bool assume_bounding_box=false){
+  Surface(Mesh<real_t, index_t> &mesh){
     _mesh = &mesh;
-    use_bbox = assume_bounding_box;
-
+    
     ndims = mesh.get_number_dimensions();
     nloc = (ndims==2)?3:4;
     snloc = (ndims==2)?2:3;
 
+    size_t NNodes = _mesh->get_number_nodes();
+    surface_nodes.resize(NNodes);
+    for(size_t i=0;i<NNodes;i++)
+      surface_nodes[i] = false;
+    
+    // Default coplanar tolerance.
     set_coplanar_tolerance(0.9999999);
-
-    find_surface();
   }
   
   /// Default destructor.
@@ -73,7 +76,7 @@ template<typename real_t, typename index_t>
   }
 
   /// Append a facet to the surface
-  void append_facet(const int *facet, int coplanar_id, bool check_duplicates=false){
+  void append_facet(const int *facet, int boundary_id, int coplanar_id, bool check_duplicates=false){
     if(check_duplicates){
       std::set<index_t> Intersection;
       set_intersection(SNEList[facet[0]].begin(), SNEList[facet[0]].end(),
@@ -91,6 +94,8 @@ template<typename real_t, typename index_t>
     }
 
     index_t eid = coplanar_ids.size();
+
+    boundary_ids.push_back(boundary_id);
     coplanar_ids.push_back(coplanar_id);
     for(size_t i=0;i<snloc;i++){
       index_t nid = facet[i];
@@ -103,8 +108,15 @@ template<typename real_t, typename index_t>
 
       SENList.push_back(nid);
     }
+    
+    double normal[3];
+    if(ndims==2)
+      calculate_normal_2d(facet, normal);
+    else
+      calculate_normal_3d(facet, normal);
+    
     for(size_t i=0;i<ndims;i++)
-      normals.push_back(0);
+      normals.push_back(normal[i]);
   }
 
   /// True if surface contains vertex nid.
@@ -118,15 +130,78 @@ template<typename real_t, typename index_t>
     return surface_nodes[nid];
   }
 
-  /// True if node nid is a corner vertex.
+  /// Detects the surface nodes of the domain.
+  void find_surface(bool assume_bounding_box=false){
+    use_bbox = assume_bounding_box;
+
+    size_t NElements = _mesh->get_number_elements();
+    
+    std::map< std::set<index_t>, std::vector<int> > facets;
+    for(size_t i=0;i<NElements;i++){
+      for(size_t j=0;j<nloc;j++){
+        std::set<index_t> facet;
+        for(size_t k=1;k<nloc;k++){
+          facet.insert(_mesh->_ENList[i*nloc+(j+k)%nloc]);
+        }
+        if(facets.count(facet)){
+          facets.erase(facet);
+        }else{
+          std::vector<int> element;
+          if(snloc==3){
+            if(j==0){
+              element.push_back(_mesh->_ENList[i*nloc+1]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+2]);
+            }else if(j==1){
+              element.push_back(_mesh->_ENList[i*nloc+2]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+0]);
+            }else if(j==2){
+              element.push_back(_mesh->_ENList[i*nloc+0]);
+              element.push_back(_mesh->_ENList[i*nloc+3]);
+              element.push_back(_mesh->_ENList[i*nloc+1]);
+            }else if(j==3){
+              element.push_back(_mesh->_ENList[i*nloc+0]);
+              element.push_back(_mesh->_ENList[i*nloc+1]);
+              element.push_back(_mesh->_ENList[i*nloc+2]);
+            }
+          }else{
+            element.push_back(_mesh->_ENList[i*nloc+(j+1)%nloc]);
+            element.push_back(_mesh->_ENList[i*nloc+(j+2)%nloc]);
+          }
+
+          // Only recognise this as a valid boundary node if at least one node is owned.
+          bool interpartition_boundary=true;
+          for(std::vector<int>::const_iterator it=element.begin();it!=element.end();++it)
+            if(_mesh->is_owned_node(*it)){
+              interpartition_boundary=false;
+              break;
+            }
+          if(!interpartition_boundary)
+            facets[facet] = element;
+        }
+      }
+    }
+    
+    for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
+      SENList.insert(SENList.end(), it->second.begin(), it->second.end());
+      for(typename std::set<index_t>::const_iterator jt=it->first.begin();jt!=it->first.end();++jt)
+        surface_nodes[*jt] = true;
+    }
+
+    calculate_coplanar_ids();
+  }
+
+  /// True if node nid is a corner vertex OR if more than ndims boundary lables are incident on the vertex.
   bool is_corner_vertex(index_t nid) const{
     typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid);
     if(iSNEList==SNEList.end())
       return false;
 
     std::set<int> incident_plane;
-    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it)
+    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it){
       incident_plane.insert(coplanar_ids[*it]);
+    }
     
     return (incident_plane.size()>=ndims);
   }
@@ -150,9 +225,10 @@ template<typename real_t, typename index_t>
     std::set<int> incident_plane_free;
     typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid_free);
     assert(iSNEList!=SNEList.end());
-    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it)
+    for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it){
       incident_plane_free.insert(coplanar_ids[*it]);
-    
+    }
+
     // Non-collapsible if nid_free is a corner node.
     if(incident_plane_free.size()>=ndims){
       return false;
@@ -233,7 +309,8 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<NNodes;i++)
       surface_nodes[i] = false;
     
-    std::vector<index_t> defrag_SENList, defrag_coplanar_ids;
+    std::vector<index_t> defrag_SENList;
+    std::vector<int> defrag_boundary_ids, defrag_coplanar_ids;
     std::vector<real_t> defrag_normals;
     size_t NSElements = get_number_facets();
     for(size_t i=0;i<NSElements;i++){
@@ -259,11 +336,13 @@ template<typename real_t, typename index_t>
         defrag_SENList.push_back(nid);
         surface_nodes[nid] = true;
       }
+      defrag_boundary_ids.push_back(boundary_ids[i]);
       defrag_coplanar_ids.push_back(coplanar_ids[i]);
       for(size_t j=0;j<ndims;j++)
         defrag_normals.push_back(normals[i*ndims+j]);
     }
     defrag_SENList.swap(SENList);
+    defrag_boundary_ids.swap(boundary_ids);
     defrag_coplanar_ids.swap(coplanar_ids);
     defrag_normals.swap(normals);
     
@@ -327,7 +406,8 @@ template<typename real_t, typename index_t>
   void refine(std::vector< std::vector<index_t> > &refined_edges, std::vector<index_t> &lnn2gnn){
     // Given the refined edges, refine facets.
     std::vector< std::vector<index_t> > private_SENList;
-    std::vector< std::vector<index_t> > private_coplanar_ids;
+    std::vector< std::vector<int> > private_boundary_ids;
+    std::vector< std::vector<int> > private_coplanar_ids;
     std::vector< std::vector<real_t> > private_normals;
     std::vector<unsigned int> threadIdx, splitCnt;
     unsigned int nthreads;
@@ -339,6 +419,7 @@ template<typename real_t, typename index_t>
 #pragma omp master
       {
       	private_SENList.resize(nthreads);
+      	private_boundary_ids.resize(nthreads);
       	private_coplanar_ids.resize(nthreads);
       	private_normals.resize(nthreads);
       	threadIdx.resize(nthreads);
@@ -376,6 +457,7 @@ template<typename real_t, typename index_t>
           private_SENList[tid].push_back(newVertex);
           private_SENList[tid].push_back(cache_n1);
           
+          private_boundary_ids[tid].push_back(boundary_ids[i]);
           private_coplanar_ids[tid].push_back(coplanar_ids[i]);
           for(size_t j=0;j<ndims;j++)
             private_normals[tid].push_back(normals[ndims*i+j]);
@@ -445,6 +527,7 @@ template<typename real_t, typename index_t>
             private_SENList[tid].push_back(splitEdges[0].edge.second);
             private_SENList[tid].push_back(n0);
             
+            private_boundary_ids[tid].push_back(boundary_ids[i]);
             private_coplanar_ids[tid].push_back(coplanar_ids[i]);
             for(size_t j=0;j<ndims;j++)
               private_normals[tid].push_back(normals[ndims*i+j]);
@@ -470,6 +553,7 @@ template<typename real_t, typename index_t>
             private_SENList[tid].push_back(m[3]);
             private_SENList[tid].push_back(m[5]);
 
+            private_boundary_ids[tid].push_back(boundary_ids[i]);
             private_coplanar_ids[tid].push_back(coplanar_ids[i]);
             for(size_t j=0;j<ndims;j++)
               private_normals[tid].push_back(normals[ndims*i+j]);
@@ -478,6 +562,7 @@ template<typename real_t, typename index_t>
             private_SENList[tid].push_back(m[2]);
             private_SENList[tid].push_back(m[3]);
 
+            private_boundary_ids[tid].push_back(boundary_ids[i]);
             private_coplanar_ids[tid].push_back(coplanar_ids[i]);
             for(size_t j=0;j<ndims;j++)
             	private_normals[tid].push_back(normals[ndims*i+j]);
@@ -486,6 +571,7 @@ template<typename real_t, typename index_t>
             private_SENList[tid].push_back(m[4]);
             private_SENList[tid].push_back(m[5]);
 
+            private_boundary_ids[tid].push_back(boundary_ids[i]);
             private_coplanar_ids[tid].push_back(coplanar_ids[i]);
             for(size_t j=0;j<ndims;j++)
             	private_normals[tid].push_back(normals[ndims*i+j]);
@@ -532,6 +618,7 @@ template<typename real_t, typename index_t>
       	const int newSize = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
         
       	SENList.resize(snloc*newSize);
+        boundary_ids.resize(newSize);
         coplanar_ids.resize(newSize);
         normals.resize(ndims*newSize);
       }
@@ -539,7 +626,8 @@ template<typename real_t, typename index_t>
       
       // Append new elements to the surface
       memcpy(&SENList[snloc*threadIdx[tid]], &private_SENList[tid][0], snloc*splitCnt[tid]*sizeof(index_t));
-      memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(index_t));
+      memcpy(&boundary_ids[threadIdx[tid]], &private_boundary_ids[tid][0], splitCnt[tid]*sizeof(int));
+      memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
     }
     
@@ -578,6 +666,14 @@ template<typename real_t, typename index_t>
     return _mesh->get_number_nodes();
   }
 
+  int get_boundary_id(int eid) const{
+    return boundary_ids[eid];
+  }
+
+  const int* get_boundary_ids() const{
+    return &(boundary_ids[0]);
+  }
+
   int get_coplanar_id(int eid) const{
     return coplanar_ids[eid];
   }
@@ -599,119 +695,103 @@ template<typename real_t, typename index_t>
   void set_coplanar_tolerance(real_t tol){
     COPLANAR_MAGIC_NUMBER = tol;
   }
-  
+
+  /// Set surface.
+  void set_surface(int NSElements, const int *senlist, const int *boundary_ids_, const int *coplanar_ids_){
+    boundary_ids.resize(NSElements);
+    coplanar_ids.resize(NSElements);
+    SENList.resize(NSElements*snloc);
+    surface_nodes.resize(_mesh->get_number_nodes());
+    fill(surface_nodes.begin(), surface_nodes.end(), false);
+    SNEList.clear();
+    for(int i=0;i<NSElements;i++){
+      boundary_ids[i] = boundary_ids_[i];
+      coplanar_ids[i] = coplanar_ids_[i];
+      const int *n = senlist+i*snloc;
+      for(size_t j=0;j<snloc;j++){
+        SNEList[n[j]].insert(i);
+        surface_nodes[n[j]] = true;
+        
+        SENList[i*snloc+j] = n[j];
+      }
+    }
+
+    calculate_normals();
+  }
+
  private:
   template<typename _real_t, typename _index_t> friend class VTKTools;
   template<typename _real_t, typename _index_t> friend class CUDATools;
 
-  /// Detects the surface nodes of the domain.
-  void find_surface(){
-    size_t NNodes = _mesh->get_number_nodes();
-    size_t NElements = _mesh->get_number_elements();
-    
-    surface_nodes.resize(NNodes);
-    for(size_t i=0;i<NNodes;i++)
-      surface_nodes[i] = false;
-
-    std::map< std::set<index_t>, std::vector<int> > facets;
-    for(size_t i=0;i<NElements;i++){
-      for(size_t j=0;j<nloc;j++){
-        std::set<index_t> facet;
-        for(size_t k=1;k<nloc;k++){
-          facet.insert(_mesh->_ENList[i*nloc+(j+k)%nloc]);
-        }
-        if(facets.count(facet)){
-          facets.erase(facet);
-        }else{
-          std::vector<int> element;
-          if(snloc==3){
-            if(j==0){
-              element.push_back(_mesh->_ENList[i*nloc+1]);
-              element.push_back(_mesh->_ENList[i*nloc+3]);
-              element.push_back(_mesh->_ENList[i*nloc+2]);
-            }else if(j==1){
-              element.push_back(_mesh->_ENList[i*nloc+2]);
-              element.push_back(_mesh->_ENList[i*nloc+3]);
-              element.push_back(_mesh->_ENList[i*nloc+0]);
-            }else if(j==2){
-              element.push_back(_mesh->_ENList[i*nloc+0]);
-              element.push_back(_mesh->_ENList[i*nloc+3]);
-              element.push_back(_mesh->_ENList[i*nloc+1]);
-            }else if(j==3){
-              element.push_back(_mesh->_ENList[i*nloc+0]);
-              element.push_back(_mesh->_ENList[i*nloc+1]);
-              element.push_back(_mesh->_ENList[i*nloc+2]);
-            }
-          }else{
-            element.push_back(_mesh->_ENList[i*nloc+(j+1)%nloc]);
-            element.push_back(_mesh->_ENList[i*nloc+(j+2)%nloc]);
-          }
-
-          // Only recognise this as a valid boundary node if at least one node is owned.
-          bool interpartition_boundary=true;
-          for(std::vector<int>::const_iterator it=element.begin();it!=element.end();++it)
-            if(_mesh->is_owned_node(*it)){
-              interpartition_boundary=false;
-              break;
-            }
-          if(!interpartition_boundary)
-            facets[facet] = element;
-        }
-      }
-    }
-    
-    for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
-      SENList.insert(SENList.end(), it->second.begin(), it->second.end());
-      for(typename std::set<index_t>::const_iterator jt=it->first.begin();jt!=it->first.end();++jt)
-        surface_nodes[*jt] = true;
-    }
-
-    calculate_coplanar_ids();
-  }
-
-  /// Calculate co-planar patches.
-  void calculate_coplanar_ids(){
+  /// Calculate surface normals.
+  void calculate_normals(){
     // Calculate all element normals
     size_t NSElements = get_number_facets();
     normals.resize(NSElements*ndims);
     if(ndims==2){
-      for(size_t i=0;i<NSElements;i++){
-        normals[i*2] = sqrt(1 - pow((get_x(SENList[2*i+1]) - get_x(SENList[2*i]))
-                                    /(get_y(SENList[2*i+1]) - get_y(SENList[2*i])), 2));
-        if(isnan(normals[i*2])){
-          errno = 0;
-          normals[i*2] = 0;
-          normals[i*2+1] = 1;
-        }else{
-          normals[i*2+1] = sqrt(1 - pow(normals[i*2], 2));
-        }
-        
-        if(get_y(SENList[2*i+1]) - get_y(SENList[2*i])>0)
-          normals[i*2] *= -1;
-
-        if(get_x(SENList[2*i]) - get_x(SENList[2*i+1])>0)
-          normals[i*2+1] *= -1;
+#pragma omp parallel
+      {
+#pragma omp for schedule(static)
+        for(size_t i=0;i<NSElements;i++)
+          calculate_normal_2d(&(SENList[2*i]), &(normals[i*2]));
       }
     }else{
-      for(size_t i=0;i<NSElements;i++){
-        real_t x1 = get_x(SENList[3*i+1]) - get_x(SENList[3*i]);
-        real_t y1 = get_y(SENList[3*i+1]) - get_y(SENList[3*i]);
-        real_t z1 = get_z(SENList[3*i+1]) - get_z(SENList[3*i]);
-        
-        real_t x2 = get_x(SENList[3*i+2]) - get_x(SENList[3*i]);
-        real_t y2 = get_y(SENList[3*i+2]) - get_y(SENList[3*i]);
-        real_t z2 = get_z(SENList[3*i+2]) - get_z(SENList[3*i]);
-        
-        normals[i*3  ] = y1*z2 - y2*z1;
-        normals[i*3+1] =-x1*z2 + x2*z1;
-        normals[i*3+2] = x1*y2 - x2*y1;
-        
-        real_t invmag = 1/sqrt(normals[i*3]*normals[i*3]+normals[i*3+1]*normals[i*3+1]+normals[i*3+2]*normals[i*3+2]);
-        normals[i*3  ]*=invmag;
-        normals[i*3+1]*=invmag;
-        normals[i*3+2]*=invmag;
+#pragma omp parallel
+      {
+#pragma omp for schedule(static)
+        for(size_t i=0;i<NSElements;i++){
+          calculate_normal_3d(&(SENList[3*i]), &(normals[i*3]));
+        }
       }
     }
+  }
+
+  /// Calculate facet normal (2D).
+  inline void calculate_normal_2d(const index_t *facet, double *normal){
+    normal[0] = sqrt(1 - pow((get_x(facet[1]) - get_x(facet[0]))
+                             /(get_y(facet[1]) - get_y(facet[0])), 2));
+    if(isnan(normal[0])){
+      errno = 0;
+      normal[0] = 0;
+      normal[1] = 1;
+    }else{
+      normal[1] = sqrt(1 - pow(normal[0], 2));
+    }
+    
+    if(get_y(facet[1]) - get_y(facet[0])>0)
+      normal[0] *= -1;
+    
+    if(get_x(facet[0]) - get_x(facet[1])>0)
+      normal[1] *= -1;
+  }
+
+
+  /// Calculate facet normal (3D).
+  inline void calculate_normal_3d(const index_t *facet, double *normal){
+    real_t x1 = get_x(facet[1]) - get_x(facet[0]);
+    real_t y1 = get_y(facet[1]) - get_y(facet[0]);
+    real_t z1 = get_z(facet[1]) - get_z(facet[0]);
+    
+    real_t x2 = get_x(facet[2]) - get_x(facet[0]);
+    real_t y2 = get_y(facet[2]) - get_y(facet[0]);
+    real_t z2 = get_z(facet[2]) - get_z(facet[0]);
+    
+    normal[0] = y1*z2 - y2*z1;
+    normal[1] =-x1*z2 + x2*z1;
+    normal[2] = x1*y2 - x2*y1;
+    
+    real_t invmag = 1/sqrt(normal[0]*normal[0]+normal[1]*normal[1]+normal[2]*normal[2]);
+    normal[0]*=invmag;
+    normal[1]*=invmag;
+    normal[2]*=invmag;
+  }
+
+  /// Calculate co-planar patches.
+  void calculate_coplanar_ids(){
+    if(normals.empty())
+      calculate_normals();
+
+    size_t NSElements = get_number_facets();
 
     // Create Node-Element list
     for(size_t i=0;i<NSElements;i++){
@@ -719,7 +799,9 @@ template<typename real_t, typename index_t>
         SNEList[SENList[snloc*i+j]].insert(i);
       }
     }
-      
+
+    boundary_ids.resize(NSElements);
+    std::fill(boundary_ids.begin(), boundary_ids.end(), 0);
 
     coplanar_ids.resize(NSElements);
     std::fill(coplanar_ids.begin(), coplanar_ids.end(), 0);
@@ -839,7 +921,8 @@ template<typename real_t, typename index_t>
   size_t ndims, nloc, snloc;
   std::map<int, std::set<index_t> > SNEList;
   std::vector<bool> surface_nodes;
-  std::vector<index_t> SENList, coplanar_ids;
+  std::vector<index_t> SENList;
+  std::vector<int> boundary_ids, coplanar_ids;
   std::vector<real_t> normals;
   real_t COPLANAR_MAGIC_NUMBER;
   bool use_bbox;

@@ -34,12 +34,13 @@ module pragmatic
   public :: &
        pragmatic_begin, &
        pragmatic_add_field, &
+       pragmatic_set_surface, &
        pragmatic_set_metric, &
        pragmatic_adapt, &
        pragmatic_get_info, &
        pragmatic_get_coords, &
        pragmatic_get_elements, &
-       pragmatic_get_facets, &
+       pragmatic_get_surface, &
        pragmatic_get_lnn2gnn, &
        pragmatic_get_metric, &
        pragmatic_dump, &
@@ -83,25 +84,42 @@ module pragmatic
    !
    !> @param[in] psi Solutional variables stored at the mesh verticies.
    !> @param[in] error Target error.
+   !> @param[in] p_norm Set this optional argument to a positive integer to apply the p-norm scaling to the metric.
   interface pragmatic_add_field
-     subroutine pragmatic_add_field(psi, error) bind(c,name="pragmatic_add_field")
+     subroutine pragmatic_add_field(psi, error, pnorm) bind(c,name="pragmatic_add_field")
        use iso_c_binding
        implicit none
        real(c_double) :: psi(*)
        real(c_double) :: error
+       integer(c_int) :: pnorm
      end subroutine pragmatic_add_field
   end interface pragmatic_add_field
+
+  !> Set the surface mesh.
+  !
+  !> @param[in] nfacets Number of surface elements.
+  !> @param[in] facets Surface elements.
+  !> @param[in] boundary_ids Boundary ID's.
+  !> @param[in] coplanar_ids Co-planar ID's.
+  interface pragmatic_set_surface
+     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_set_surface")
+       use iso_c_binding
+       implicit none
+       integer(c_int) :: nfacets
+       integer(c_int) :: facets(*)
+       integer(c_int) :: boundary_ids(*)
+       integer(c_int) :: coplanar_ids(*)
+     end subroutine pragmatic_set_surface
+  end interface pragmatic_set_surface
   
   !> Set the metric tensor field.
   !
   !> @param[in] metric Metric tensor field.
-  !> @param[in] min_length Minimum edge length in the mesh.
-  !> @param[in] max_length Maximum edge length in the mesh.
   interface pragmatic_set_metric
-     subroutine pragmatic_set_metric(metric, min_length, max_length) bind(c,name="pragmatic_set_metric")
+     subroutine pragmatic_set_metric(metric) bind(c,name="pragmatic_set_metric")
        use iso_c_binding
        implicit none
-       real(c_double) :: metric(*), min_length, max_length
+       real(c_double) :: metric(*)
      end subroutine pragmatic_set_metric
   end interface pragmatic_set_metric
 
@@ -158,16 +176,20 @@ module pragmatic
      end subroutine pragmatic_get_elements
   end interface pragmatic_get_elements
 
-  !> Get the mesh elements.
+  !> Get the surface mesh.
   !
-  !> @param[out] facets List of facets.
-  interface pragmatic_get_facets
-     subroutine pragmatic_get_facets(facets) bind(c,name="pragmatic_get_facets")
+  !> @param[out] facets Surface elements.
+  !> @param[out] boundary_ids Boundary ID's.
+  !> @param[out] coplanar_ids Co-planar ID's.
+  interface pragmatic_get_surface
+     subroutine pragmatic_get_surface(facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_get_surface")
        use iso_c_binding
        implicit none
        integer(c_int) :: facets(*)
-     end subroutine pragmatic_get_facets
-  end interface pragmatic_get_facets
+       integer(c_int) :: boundary_ids(*)
+       integer(c_int) :: coplanar_ids(*)
+     end subroutine pragmatic_get_surface
+  end interface pragmatic_get_surface
 
   !> Get the global node numbering.
   !

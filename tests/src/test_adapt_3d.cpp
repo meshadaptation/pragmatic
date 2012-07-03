@@ -1,6 +1,6 @@
-/* 
+/*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -48,6 +48,7 @@ int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 
   Surface<double, int> surface(*mesh);
+  surface.find_surface();
 
   MetricField<double, int> metric_field(*mesh, surface);
 
@@ -70,7 +71,7 @@ int main(int argc, char **argv){
   double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
-  
+
   std::cout<<"Initial quality:\n"
            <<"Quality mean:  "<<qmean<<std::endl
            <<"Quality min:   "<<qmin<<std::endl

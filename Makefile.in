@@ -3,7 +3,7 @@ SHELL = /bin/bash
 MAKE = make -s
 
 PREFIX = @prefix@
-includedir = $(PREFIX)/include/pragmatic
+includedir = $(PREFIX)/include
 libdir = $(PREFIX)/lib
 docdir = $(PREFIX)/share/doc/pragmatic
 

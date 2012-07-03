@@ -59,8 +59,9 @@ int main(int argc, char **argv){
     const char *method = methods[m];
 
     Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
-    Surface<double, int> surface(*mesh, true);
-    
+    Surface<double, int> surface(*mesh);
+    surface.find_surface(true);
+
     MetricField<double, int> metric_field(*mesh, surface);
 
     size_t NNodes = mesh->get_number_nodes();

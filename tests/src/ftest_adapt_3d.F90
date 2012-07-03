@@ -55,7 +55,7 @@ program test_adapt
      metric((i-1)*9+7) = 0         ; metric((i-1)*9+8) = 0         ; metric((i-1)*9+9) = 1.0/hz**2
   end do  
 
-  call pragmatic_set_metric(metric, dh, maxh)
+  call pragmatic_set_metric(metric)
 
   call pragmatic_adapt()
 

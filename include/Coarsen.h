@@ -328,6 +328,7 @@ template<typename real_t, typename index_t> class Coarsen{
             const int *n=_surface->get_facet(*it);
             for(size_t i=0;i<snloc;i++)
               send_buffer[p].push_back(lnn2gnn[n[i]]);
+            send_buffer[p].push_back(_surface->get_boundary_id(*it));
             send_buffer[p].push_back(_surface->get_coplanar_id(*it));
           }
         }
@@ -463,9 +464,10 @@ template<typename real_t, typename index_t> class Coarsen{
               facet[j] = gnn2lnn[gnn];
             }
 
+            int boundary_id = recv_buffer[p][loc++];
             int coplanar_id = recv_buffer[p][loc++];
 
-            _surface->append_facet(&(facet[0]), coplanar_id, true);
+            _surface->append_facet(&(facet[0]), boundary_id, coplanar_id, true);
           }
         }
 

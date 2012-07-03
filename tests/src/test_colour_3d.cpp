@@ -63,9 +63,9 @@ int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
   reader->SetFileName(filename);
   reader->Update();
-  
+
   vtkUnstructuredGrid *ug = reader->GetOutput();
-  
+
   size_t NElements = ug->GetNumberOfCells();  
   std::vector<int> ENList(NElements*4);
   for(size_t i=0;i<NElements;i++){
@@ -78,7 +78,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = ug->GetNumberOfPoints();
   reader->Delete();
-   
+
   // Graph
   std::vector< std::set<int> > graph_ragged(NNodes);
   for(size_t i=0;i<NElements;i++){
@@ -91,13 +91,13 @@ int main(int argc, char **argv){
 
   // Colour.
   zoltan_colour_graph_t graph;
-  
+
   std::vector<int> colour(NNodes);
   graph.colour = &(colour[0]);
   graph.rank = rank; 
   graph.nnodes = NNodes;
   graph.npnodes = NNodes;
-  
+
   std::vector<size_t> nedges(NNodes);
   size_t sum = 0;
   for(size_t i=0;i<NNodes;i++){
@@ -107,7 +107,7 @@ int main(int argc, char **argv){
     sum+=cnt;
   }
   graph.nedges = &(nedges[0]);
-  
+
   std::vector<size_t> csr_edges(sum);
   sum=0;
   for(size_t i=0;i<NNodes;i++){
@@ -116,7 +116,7 @@ int main(int argc, char **argv){
     }
   }
   graph.csr_edges = &(csr_edges[0]);
-        
+
   std::vector<int> lnn2gnn(NNodes);
   std::vector<size_t> owner(NNodes, 0);
   for(size_t i=0;i<NNodes;i++){

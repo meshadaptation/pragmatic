@@ -1,3 +1,27 @@
+pragmatic (1.1.0ubuntu7) precise; urgency=low
+
+  * Various bugfixes. Updates to the fortran interface.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Tue, 03 Jul 2012 15:58:19 +0100
+
+pragmatic (1.1.0ubuntu6) precise; urgency=low
+
+  * Bugfixes
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Mon, 02 Jul 2012 01:32:00 +0100
+
+pragmatic (1.1.0ubuntu5) precise; urgency=low
+
+  * Updated API's to handle adding surfaces along with their boundary id's.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Sun, 01 Jul 2012 19:08:20 +0100
+
+pragmatic (1.1.0ubuntu4) precise; urgency=low
+
+  * Updated location of .mod files to avoid a complicated life.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Sun, 01 Jul 2012 11:08:58 +0100
+
 pragmatic (1.1.0ubuntu3) precise; urgency=low
 
   * Updated refinement algorith, 

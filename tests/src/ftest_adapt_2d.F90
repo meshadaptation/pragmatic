@@ -31,44 +31,27 @@ program test_adapt
   implicit none
 
   integer(kind=c_int) :: NNodes, NElements, NSElements
-  real(c_double), allocatable, dimension(:) :: xv, yv, metric
-  real(c_double), parameter :: eta=0.1, dh=0.02, maxh=1.0
+  real(c_double), allocatable, dimension(:) :: xv, yv, psi
+  real(c_double), parameter :: eta=0.002
   
   integer :: i
-  real :: x, y, d2fdx2, d2fdy2, d2fdxdy
+  real :: x, y
 
-  call pragmatic_begin("../data/box50x50.vtu"//C_NULL_CHAR)
+  call pragmatic_begin("../data/smooth_2d.vtu"//C_NULL_CHAR)
   
   call pragmatic_get_info(NNodes, NElements, NSElements)
 
   allocate(xv(NNodes), yv(NNodes))
   call pragmatic_get_coords(xv, yv)
 
-  allocate(metric(4*NNodes))
+  allocate(psi(NNodes))
   do i=1, NNodes
      x = 2*xv(i)-1
      y = 2*yv(i)-1
-
-     d2fdx2 = -0.8/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**3) + &
-          0.008/((0.01/(2*x - sin(5*y))* &
-          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
-          (2*x - sin(5*y))**5) - 250.0*sin(50*x)
      
-     d2fdy2 = 2.5*sin(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
-          (2*x - sin(5*y))**2) - 5.0*cos(5*y)*(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
-          (2*x - sin(5*y))**3) + 0.05*cos(5*y)*(5*y)/((0.01/(2*x - sin(5*y))* &
-          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**5)
-     
-     d2fdxdy = 2.0*cos(5*y)/((0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)* &
-          (2*x - sin(5*y))**3) - 0.02*cos(5*y)/((0.01/(2*x - sin(5*y))* &
-          (2*x - sin(5*y)) + 1)*(0.01/(2*x - sin(5*y))*(2*x - sin(5*y)) + 1)*(2*x - sin(5*y))**5)
-     
-     metric((i-1)*4+1) = d2fdx2/eta
-     metric((i-1)*4+2) = d2fdxdy/eta
-     metric((i-1)*4+3) = d2fdxdy/eta
-     metric((i-1)*4+4) = d2fdy2/eta
+     psi(i) = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, 2*x - sin(5*y))
   end do  
-  call pragmatic_set_metric(metric, dh, maxh)
+  call pragmatic_add_field(psi, eta, 1);
 
   call pragmatic_adapt()
 

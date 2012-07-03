@@ -76,6 +76,7 @@ int main(int argc, char **argv){
   Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
   Surface<double, int> surface(mesh);
+  surface.find_surface();
 
   MetricField<double, int> metric_field(mesh, surface);
   
@@ -84,7 +85,7 @@ int main(int argc, char **argv){
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray("Vm");
   for(int i=0;i<NNodes;i++){
-    psi[i] = p_scalars->GetTuple(mesh.new2old(i))[0];
+    psi[i] = p_scalars->GetTuple(i)[0];
   }
   
   reader->Delete();

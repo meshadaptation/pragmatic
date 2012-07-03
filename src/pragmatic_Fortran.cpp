@@ -50,16 +50,14 @@ extern "C" {
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
-    
-    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y);
-    _pragmatic_mesh = mesh;
-    
-    Surface<double, int> *surface = new Surface<double, int>(*mesh);
-    _pragmatic_surface = surface;
 
-    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
-    metric_field->set_hessian_method("qls");
-    _pragmatic_metric_field = metric_field;
+    int *fenlist = new int [(*NElements)*3];
+    for(int i=0;i<(*NElements)*3;i++)
+      fenlist[i] = enlist[i]-1;
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, fenlist, x, y);
+    delete [] fenlist;
+
+    _pragmatic_mesh = mesh;
   }
 
   void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
@@ -67,15 +65,13 @@ extern "C" {
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
     
-    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y, z);
+    int *fenlist = new int [(*NElements)*4];
+    for(int i=0;i<(*NElements)*4;i++)
+      fenlist[i] = enlist[i]-1;
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, fenlist, x, y, z);
+    delete [] fenlist;
+    
     _pragmatic_mesh = mesh;
-    
-    Surface<double, int> *surface = new Surface<double, int>(*mesh);
-    _pragmatic_surface = surface;
-    
-    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
-    metric_field->set_hessian_method("qls");
-    _pragmatic_metric_field = metric_field;
   }
 
   void pragmatic_vtk_begin(const char *filename){
@@ -85,63 +81,107 @@ extern "C" {
     
     Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu(filename);
     _pragmatic_mesh = mesh;
-    
-    Surface<double, int> *surface = new Surface<double, int>(*mesh, true);
+
+    Surface<double, int> *surface = new Surface<double, int>(*mesh);
     _pragmatic_surface = surface;
-    
-    MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
-    metric_field->set_hessian_method("qls");
-    _pragmatic_metric_field = metric_field;
+
+    surface->find_surface();
   }
   
-  void pragmatic_add_field(const double *psi, const double *error){
-    assert(_pragmatic_metric_field!=NULL);
-    
-    ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
-  }
-  
-  void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length){
-    ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->apply_min_edge_length(*min_length);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->apply_max_edge_length(*max_length);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
-  }
-  
-  void pragmatic_adapt(){
+  void pragmatic_add_field(const double *psi, const double *error, int *pnorm){
+    assert(_pragmatic_mesh!=NULL);
+    assert(_pragmatic_surface!=NULL);
+
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
     Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
     
+    if(_pragmatic_metric_field==NULL){
+      MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
+      _pragmatic_metric_field = metric_field;
+    }
+
+    ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+  }
+
+  void pragmatic_set_surface(const int *nfacets, const int *facets, const int *boundary_ids, const int *coplanar_ids){
+    assert(_pragmatic_mesh!=NULL);
+    assert(_pragmatic_surface==NULL);
+    
+    Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
+
+    Surface<double, int> *surface = new Surface<double, int>(*mesh);
+    _pragmatic_surface = surface;
+    
+    size_t NSElements = *nfacets;
+    
+    const size_t ndims = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions();
+    const size_t snloc = (ndims==2)?2:3;
+    
+    int *fenlist = new int [NSElements*snloc];
+    for(size_t i=0;i<NSElements*snloc;i++)
+      fenlist[i] = facets[i]-1;
+    surface->set_surface(NSElements, fenlist, boundary_ids, coplanar_ids);
+    delete [] fenlist;
+
+  }
+
+  void pragmatic_set_metric(const double *metric){
+    assert(_pragmatic_mesh!=NULL);
+    assert(_pragmatic_surface!=NULL);
+    assert(_pragmatic_metric_field==NULL);
+
+    Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
+    Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
+
+    if(_pragmatic_metric_field==NULL){
+      MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
+      _pragmatic_metric_field = metric_field;
+    }
+
+    ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+  }
+
+  void pragmatic_adapt(){
+    Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
+    Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
+
+    const size_t ndims = mesh->get_number_dimensions();
+
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
     double L_up = sqrt(2.0);
     double L_low = L_up*0.5;
-    
+
     Coarsen<double, int> coarsen(*mesh, *surface);
     Smooth<double, int> smooth(*mesh, *surface);
     Refine<double, int> refine(*mesh, *surface);
     Swapping<double, int> swapping(*mesh, *surface);
-    
+
     coarsen.coarsen(L_low, L_up);
-    
+
     double L_max = mesh->maximal_edge_length();
-    
-    double alpha = sqrt(2.0)/2.0;  
+
+    double alpha = sqrt(2.0)/2.0;
     for(size_t i=0;i<10;i++){
       double L_ref = std::max(alpha*L_max, L_up);
-      
+
       refine.refine(L_ref);
       coarsen.coarsen(L_low, L_ref);
       swapping.swap(0.95);
-      
+
       L_max = mesh->maximal_edge_length();
-      
+
       if((L_max-L_up)<0.01)
         break;
     }
-    
+
     std::map<int, int> active_vertex_map;
     mesh->defragment(&active_vertex_map);
     surface->defragment(&active_vertex_map);
+    
+    if(ndims==2)
+      smooth.smooth("optimisation Linf", 50);
   }
 
   void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements){
@@ -171,16 +211,18 @@ extern "C" {
     const size_t ndims = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions();
     const size_t NElements = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_elements();
     const size_t nloc = (ndims==2)?3:4;
-    
+
     for(size_t i=0;i<NElements;i++){
       const int *n=((Mesh<double, int> *)_pragmatic_mesh)->get_element(i);
-      
-      for(size_t j=0;j<nloc;j++)
-        elements[i*nloc+j] = n[j];
+
+      for(size_t j=0;j<nloc;j++){
+        assert(n[j]>=0);
+        elements[i*nloc+j] = n[j]+1;
+      }
     }
   }
 
-  void pragmatic_get_facets(int *facets){
+  void pragmatic_get_surface(int *facets, int *boundary_ids, int *coplanar_ids){
     const size_t ndims = ((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions();
     size_t NSElements = ((Surface<double, int> *)_pragmatic_surface)->get_number_facets();
     const size_t snloc = (ndims==2)?2:3;
@@ -188,8 +230,13 @@ extern "C" {
     for(size_t i=0;i<NSElements;i++){
       const int *n=((Surface<double, int> *)_pragmatic_surface)->get_facet(i);
       
-      for(size_t j=0;j<snloc;j++)
-        facets[i*snloc+j] = n[j];
+      for(size_t j=0;j<snloc;j++){
+        assert(n[j]>=0);
+        facets[i*snloc+j] = n[j]+1;
+      }
+
+      boundary_ids[i] = ((Surface<double, int> *)_pragmatic_surface)->get_boundary_id(i);
+      coplanar_ids[i] = ((Surface<double, int> *)_pragmatic_surface)->get_coplanar_id(i);
     }
   }
 
@@ -215,7 +262,10 @@ extern "C" {
 
   void pragmatic_end(){
     delete (Mesh<double, int> *)_pragmatic_mesh;
+    _pragmatic_mesh=NULL;
     delete (Surface<double, int> *)_pragmatic_surface;
-    delete (MetricField<double, int> *)_pragmatic_metric_field;
+    _pragmatic_surface=NULL;
+    delete (MetricField<double, int> *)_pragmatic_metric_field; 
+    _pragmatic_metric_field=NULL;
   }
 }

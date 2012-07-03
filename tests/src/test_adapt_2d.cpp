@@ -57,7 +57,8 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
 
-  Surface<double, int> surface(*mesh, true);
+  Surface<double, int> surface(*mesh);
+  surface.find_surface(true);
 
   MetricField<double, int> metric_field(*mesh, surface);
 
@@ -68,7 +69,7 @@ int main(int argc, char **argv){
   for(size_t i=0;i<NNodes;i++){
     double x = 2*mesh->get_coords(i)[0]-1;
     double y = 2*mesh->get_coords(i)[1]-1;
-    
+
     psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 

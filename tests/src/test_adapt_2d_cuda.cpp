@@ -1,6 +1,6 @@
-/* 
+/*
  *    Copyright (C) 2010 Imperial College London and others.
- *    
+ *
  *    Please see the AUTHORS file in the main source directory for a full list
  *    of copyright holders.
  *
@@ -10,7 +10,7 @@
  *    Imperial College London
  *
  *    amcgsoftware@imperial.ac.uk
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation,
@@ -53,7 +53,8 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
 
-  Surface<double, int> surface(*mesh, true);
+  Surface<double, int> surface(*mesh);
+  surface.find_surface(true);
 
   MetricField<double, int> metric_field(*mesh, surface);
 
