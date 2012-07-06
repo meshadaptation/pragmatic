@@ -2,7 +2,7 @@ Summary:   Anisotropic mesh adaptivity
 Name:	   pragmatic
 Version:   0.1
 Release:   0
-License:   LGPL
+License:   BSD 2-Clause
 Group:	   Applications/Programming
 Vendor:    Applied Modelling and Computation Group (AMCG), Imperial College London
 Packager:  Gerard Gorman <g.gorman@imperial.ac.uk>
