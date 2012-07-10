@@ -399,7 +399,7 @@ template<typename real_t, typename index_t> class Swapping{
             // Create set of nodes for quick lookup.
             std::set<int> ele0_set;
             for(int j=0;j<4;j++)
-              ele0_set.insert(n[0]);
+              ele0_set.insert(n[j]);
             
             for(int j=0;j<4;j++){  
               int eid1 = partialEEList[eid0][j];
