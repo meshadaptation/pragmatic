@@ -103,7 +103,7 @@ int main(int argc, char **argv){
     
     Smooth<double, int> smooth(*mesh, surface);
     
-    int max_smooth_iter=1000;
+    int max_smooth_iter=2;
     
     double tic = get_wtime();
     smooth.smooth(method, max_smooth_iter);
