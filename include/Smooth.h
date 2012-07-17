@@ -188,7 +188,7 @@ template<typename real_t, typename index_t>
     int NNodes = _mesh->get_number_nodes();
     std::vector<int> active_vertices(NNodes, 0);
 
-    // First sweep through all vertices. Add vertices adjancent to any
+    // First sweep through all vertices. Add vertices adjacent to any
     // vertex moved into the active_vertex list.
     int max_colour = colour_sets.rbegin()->first;
 #ifdef HAVE_MPI

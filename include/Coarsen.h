@@ -141,7 +141,7 @@ template<typename real_t, typename index_t> class Coarsen{
           recalculate_collapse[i] = false;
         }
       }
-      
+
       // Use a bitmap to indicate the maximal independent set.
       assert(NNodes>=NPNodes);
       std::vector<bool> maximal_independent_set(NNodes, false);
@@ -250,7 +250,7 @@ template<typename real_t, typename index_t> class Coarsen{
         }
         
         // Communicate collapses.
-        // Stuff in list of verticies that have to be communicated.
+        // Stuff in list of vertices that have to be communicated.
         std::vector< std::vector<int> > send_edges(nprocs);
         std::vector< std::set<int> > send_elements(nprocs), send_nodes(nprocs);
         for(int i=0;i<NNodes;i++){
@@ -445,7 +445,7 @@ template<typename real_t, typename index_t> class Coarsen{
               // Add element
               int eid = _mesh->append_element(&(element[0]));
               
-              // Update adjancies: edges, NEList, NNList
+              // Update adjacency: edges, NEList, NNList
               for(size_t l=0;l<nloc;l++){
                 _mesh->NEList[element[l]].insert(eid);
                 
@@ -589,7 +589,7 @@ template<typename real_t, typename index_t> class Coarsen{
        onto the next shortest.*/
     std::multimap<real_t, index_t> short_edges;
     for(typename std::deque<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      // For now impose the restriction that we will not coarsen across partition boundarys.
+      // For now impose the restriction that we will not coarsen across partition boundaries.
       if(_mesh->recv_halo.count(*nn))
         continue;
       
@@ -704,11 +704,11 @@ template<typename real_t, typename index_t> class Coarsen{
       _surface->collapse(rm_vertex, target_vertex);
     }
 
-    // Remove deleted elements from node-elemement adjancy list.
+    // Remove deleted elements from node-element adjacency list.
     for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
       const int *n=_mesh->get_element(*de);
       
-      // Delete element adjancies from NEList.      
+      // Delete element adjacency from NEList.
       for(size_t i=0;i<nloc;i++){
         typename std::set<index_t>::iterator ele = _mesh->NEList[n[i]].find(*de);
         if(ele!=_mesh->NEList[n[i]].end())
@@ -728,7 +728,7 @@ template<typename real_t, typename index_t> class Coarsen{
         }
       }
       
-      // Add element to target node-elemement adjancy list.
+      // Add element to target node-element adjacency list.
       _mesh->NEList[target_vertex].insert(*ee);
     }
     

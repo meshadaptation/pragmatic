@@ -1298,14 +1298,6 @@ template<typename real_t, typename index_t> class Mesh{
     return -1;
   }
 
-  inline int get_tid() const{
-#ifdef _OPENMP
-    return omp_get_thread_num();
-#else
-    return 0;
-#endif
-  }
-
   size_t ndims, nloc;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
@@ -1328,4 +1320,13 @@ template<typename real_t, typename index_t> class Mesh{
   MPI_Comm _mpi_comm;
 #endif
 };
+
+inline int get_tid(){
+#ifdef _OPENMP
+  return omp_get_thread_num();
+#else
+  return 0;
+#endif
+}
+
 #endif

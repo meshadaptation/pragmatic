@@ -398,6 +398,16 @@ template<typename real_t, typename index_t> class Refine{
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
 
+      /*
+       * TODO: a possible improvement for the following loop
+       * Instead of visiting ALL mesh vertices and examining whether an adjacent
+       * edge has been refined, we can have a per-thread set of refined edges,
+       * which will contain those edges which were refined by that particular
+       * thread. This way, every thread will fix the IDs of the new vertices it
+       * created and only the edges which were actually refined will be visited.
+       * This approach seems better only for subsequent calls to refine(),where
+       * only a few edges are expected to be refined.
+       */
       // Fix IDs of new vertices in refined_edges
 #pragma omp for schedule(dynamic)
       for(size_t i=0; i<refined_edges.size(); ++i){
@@ -849,14 +859,6 @@ template<typename real_t, typename index_t> class Refine{
   inline void append_element(const index_t *elem, std::vector<index_t> &ENList){
     for(size_t i=0; i<nloc; ++i)
       ENList.push_back(elem[i]);
-  }
-  
-  inline int get_tid() const{
-#ifdef _OPENMP
-    return omp_get_thread_num();
-#else
-    return 0;
-#endif
   }
 
   Mesh<real_t, index_t> *_mesh;

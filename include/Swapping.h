@@ -41,6 +41,7 @@
 #include <algorithm>
 #include <set>
 #include <vector>
+#include <limits>
 
 #include "ElementProperty.h"
 #include "Mesh.h"
@@ -123,6 +124,413 @@ template<typename real_t, typename index_t> class Swapping{
     }
 
     if(ndims==2){
+#if 1
+      // Initialise list of dynamic edges.
+      typename std::vector< std::vector<char> > marked_edges(_mesh->NNList.size());
+      index_t n_marked_edges = 0;
+      originalVertexDegree.clear();
+      originalVertexDegree.resize(_mesh->NNList.size(), (size_t) 0);
+      typename std::vector< std::vector<index_t> > NEList(_mesh->NEList.size());
+
+      #pragma omp parallel for schedule(static) reduction(+:n_marked_edges)
+      for(int i=0;i<(int)_mesh->NNList.size();i++){
+        size_t size = _mesh->NNList[i].size();
+        if(size == 0)
+          continue;
+
+        originalVertexDegree[i] = size;
+        _mesh->NNList[i].resize(3 * size, (index_t) -1);
+        marked_edges[i].resize(size, (char) 0);
+        NEList[i].resize(2 * size, (index_t) -1);
+        std::copy(_mesh->NEList[i].begin(), _mesh->NEList[i].end(), NEList[i].begin());
+
+        for(int it=0; it<(int)size; ++it){
+          if(i < _mesh->NNList[i][it] && !_mesh->is_halo_node(i)){
+            marked_edges[i][it] = 1;
+            ++n_marked_edges;
+          }
+        }
+      }
+
+      // -
+      while(n_marked_edges > 0){
+        //cout << n_marked_edges << " to go" << std::endl << std::flush;
+        n_marked_edges = 0;
+        #pragma omp parallel
+        {
+          #pragma omp for schedule(dynamic)
+          for(int i=0;i<(int)_mesh->NNList.size();i++){
+            if(_mesh->is_halo_node(i))
+              continue;
+
+            for(int it=0; it<(int)originalVertexDegree[i]; ++it){
+              if(marked_edges[i][it] != 1)
+                continue;
+
+              index_t opposite = _mesh->NNList[i][it];
+
+              if(_mesh->is_halo_node(opposite)){
+                marked_edges[i][it] = 0;
+                continue;
+              }
+
+              std::vector<index_t> neigh_elements;
+              for(size_t k=0; k<NEList[i].size()/2; ++k){
+                if(NEList[i][k] != -1)
+                  for(size_t l=0; l<NEList[opposite].size()/2; ++l)
+                    if(NEList[i][k] == NEList[opposite][l])
+                      neigh_elements.push_back(NEList[i][k]);
+              }
+
+              if(neigh_elements.size()!=2){
+                marked_edges[i][it] = 0;
+                continue;
+              }
+
+              int eid0 = *neigh_elements.begin();
+              int eid1 = *neigh_elements.rbegin();
+
+              /*
+              if(std::min(quality[eid0], quality[eid1])>Q_min)
+                continue;
+              */
+
+              const int *n = _mesh->get_element(eid0);
+              const int *m = _mesh->get_element(eid1);
+
+              int n_off=-1;
+              for(size_t k=0;k<3;k++){
+                if((n[k]!=i) && (n[k]!=opposite)){
+                  n_off = k;
+                  break;
+                }
+              }
+
+              int m_off=-1;
+              for(size_t k=0;k<3;k++){
+                if((m[k]!=i) && (m[k]!=opposite)){
+                  m_off = k;
+                  break;
+                }
+              }
+
+              //
+              // Decision algorithm
+              //
+
+              /*
+               * If the following condition is true, it means that this thread had
+               * a stale view of NEList and ENList, which in turn means that another
+               * thread performed swapping on one of the lateral edges, so anyway
+               * this edge would not be a candidate for swapping during this round.
+               */
+              if(n_off<0 || m_off<0 || n[(n_off+2)%3]!=m[(m_off+1)%3] || n[(n_off+1)%3]!=m[(m_off+2)%3])
+                continue;
+
+              index_t lateral_n = n[n_off];
+              index_t lateral_m = m[m_off];
+
+              // i's index in lateral_n's and lateral_m's list
+              int idx_in_n = -1, idx_in_m = -1;
+              // lateral_n's and lateral_m's index in i's list
+              int idx_of_n = -1, idx_of_m = -1;
+              // Min and max ID between opposite and lateral_n, max's index in min's list
+              int min_opp_n = -1, max_opp_n = -1, idx_opp_n = -1;
+              // Min and max ID between opposite and lateral_m, max's index in min's list
+              int min_opp_m = -1, max_opp_m = -1, idx_opp_m = -1;
+
+              /*
+               * Are lateral edges marked for processing?
+               * (This also checks whether the four participating
+               * vertices are original neighbours of one another)
+               */
+              if(i > lateral_n){
+                idx_in_n = originalNeighborIndex(lateral_n, i);
+                if(idx_in_n >= (int) originalVertexDegree[lateral_n])
+                  continue;
+                if(marked_edges[lateral_n][idx_in_n] == 1)
+                  continue;
+
+                if(opposite < lateral_n){
+                  min_opp_n = opposite;
+                  max_opp_n = lateral_n;
+                }else{
+                  min_opp_n = lateral_n;
+                  max_opp_n = opposite;
+                }
+
+                idx_opp_n = originalNeighborIndex(min_opp_n, max_opp_n);
+                if(idx_opp_n >= (int) originalVertexDegree[min_opp_n])
+                  continue;
+                if(marked_edges[min_opp_n][idx_opp_n] == 1)
+                  continue;
+              }
+
+              if(i > lateral_m){
+                idx_in_m = originalNeighborIndex(lateral_m, i);
+                if(idx_in_m >= (int) originalVertexDegree[lateral_m])
+                  continue;
+                if(marked_edges[lateral_m][idx_in_m] == 1)
+                  continue;
+
+                if(opposite < lateral_m){
+                  min_opp_m = opposite;
+                  max_opp_m = lateral_m;
+                }else{
+                  min_opp_m = lateral_m;
+                  max_opp_m = opposite;
+                }
+
+                idx_opp_m = originalNeighborIndex(min_opp_m, max_opp_m);
+                if(idx_opp_m >= (int) originalVertexDegree[min_opp_m])
+                  continue;
+                if(marked_edges[min_opp_m][idx_opp_m] == 1)
+                  continue;
+              }
+
+              /*
+               * Are lateral neighbours original ones?
+               * (only perform this check if it wasn't
+               * performed during the previous decision block)
+               */
+              if(idx_in_n == -1){
+                idx_of_n = originalNeighborIndex(i, lateral_n);
+                if(idx_of_n >= (int) originalVertexDegree[i])
+                  continue;
+              }
+
+              if(idx_in_m == -1){
+                idx_of_m = originalNeighborIndex(i, lateral_m);
+                if(idx_of_m >= (int) originalVertexDegree[i])
+                  continue;
+              }
+
+              if(idx_opp_n == -1){
+                if(originalNeighborIndex(lateral_n, opposite) >= originalVertexDegree[lateral_n])
+                  continue;
+              }
+
+              if(idx_opp_m == -1){
+                if(originalNeighborIndex(lateral_m, opposite) >= originalVertexDegree[lateral_m])
+                  continue;
+              }
+
+              // If execution reaches this point, it means that the edge can be processed
+
+              int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
+              int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};       // new eid1
+
+              real_t worst_q = std::min(quality[eid0], quality[eid1]);
+              real_t q0 = property->lipnikov(_mesh->get_coords(n_swap[0]),
+                                             _mesh->get_coords(n_swap[1]),
+                                             _mesh->get_coords(n_swap[2]),
+                                             _mesh->get_metric(n_swap[0]),
+                                             _mesh->get_metric(n_swap[1]),
+                                             _mesh->get_metric(n_swap[2]));
+              real_t q1 = property->lipnikov(_mesh->get_coords(m_swap[0]),
+                                             _mesh->get_coords(m_swap[1]),
+                                             _mesh->get_coords(m_swap[2]),
+                                             _mesh->get_metric(m_swap[0]),
+                                             _mesh->get_metric(m_swap[1]),
+                                             _mesh->get_metric(m_swap[2]));
+              real_t new_worst_q = std::min(q0, q1);
+
+              if(new_worst_q>worst_q){
+                // Cache new quality measures.
+                quality[eid0] = q0;
+                quality[eid1] = q1;
+
+                //
+                // Update NNList[i], NNList[opposite], NNList[lateral_n] and NNList[lateral_m]
+                //
+
+                // Remove opposite from i's list
+                _mesh->NNList[i][it] = -1;
+
+                // Remove i from opposite's list
+                _mesh->NNList[opposite][originalNeighborIndex(opposite, i)] = -1;
+
+                // Add lateral_m in lateral_n's list
+                if(idx_in_n == -1)
+                  idx_in_n = originalNeighborIndex(lateral_n, i);
+                int pos = originalVertexDegree[lateral_n] + idx_in_n;
+                if(_mesh->NNList[lateral_n][pos] != -1)
+                  pos += originalVertexDegree[lateral_n];
+                assert(_mesh->NNList[lateral_n][pos] == -1);
+                _mesh->NNList[lateral_n][pos] = lateral_m;
+
+                // Add lateral_n in lateral_m's list
+                if(idx_in_m == -1)
+                  idx_in_m = originalNeighborIndex(lateral_m, i);
+                pos = originalVertexDegree[lateral_m] + idx_in_m;
+                if(_mesh->NNList[lateral_m][pos] != -1)
+                  pos += originalVertexDegree[lateral_m];
+                assert(_mesh->NNList[lateral_m][pos] == -1);
+                _mesh->NNList[lateral_m][pos] = lateral_n;
+
+                //
+                // Update node-element list.
+                //
+
+                // Erase old node-element adjacency.
+                index_t vertex;
+                size_t halfSize;
+                typename std::vector<index_t>::iterator it;
+
+                vertex = n_swap[0];
+                halfSize = NEList[vertex].size()/2;
+                it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid0);
+                assert(it != NEList[vertex].begin() + halfSize);
+                it += halfSize;
+                assert(*it == -1);
+                *it = eid1;
+
+                vertex = n_swap[1];
+                halfSize = NEList[vertex].size()/2;
+                it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid1);
+                assert(it != NEList[vertex].begin() + halfSize);
+                it += halfSize;
+                assert(*it == -1);
+                *it = eid0;
+
+                vertex = n_swap[2];
+                halfSize = NEList[vertex].size()/2;
+                it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid1);
+                assert(it != NEList[vertex].begin() + halfSize);
+                assert(*it == eid1);
+                *it = -1;
+
+                vertex = m_swap[1];
+                halfSize = NEList[vertex].size()/2;
+                it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid0);
+                assert(it != NEList[vertex].begin() + halfSize);
+                assert(*it == eid0);
+                *it = -1;
+
+                // Update element-node list for this element.
+                for(size_t k=0;k<nloc;k++){
+                  _mesh->_ENList[eid0*nloc+k] = n_swap[k];
+                  _mesh->_ENList[eid1*nloc+k] = m_swap[k];
+                }
+
+                // Also update the edges that have to be rechecked.
+                if(i < lateral_n)
+                  marked_edges[i][idx_of_n] = 1;
+                else
+                  marked_edges[lateral_n][idx_in_n] = 1;
+
+                if(i < lateral_m)
+                  marked_edges[i][idx_of_m] = 1;
+                else
+                  marked_edges[lateral_m][idx_in_m] = 1;
+
+                if(idx_opp_n == -1){
+                  if(opposite < lateral_n){
+                    min_opp_n = opposite;
+                    max_opp_n = lateral_n;
+                  }else{
+                    min_opp_n = lateral_n;
+                    max_opp_n = opposite;
+                  }
+                  idx_opp_n = originalNeighborIndex(min_opp_n, max_opp_n);
+                }
+                marked_edges[min_opp_n][idx_opp_n] = 1;
+
+                if(idx_opp_m == -1){
+                  if(opposite < lateral_m){
+                    min_opp_m = opposite;
+                    max_opp_m = lateral_m;
+                  }else{
+                    min_opp_m = lateral_m;
+                    max_opp_m = opposite;
+                  }
+                  idx_opp_m = originalNeighborIndex(min_opp_m, max_opp_m);
+                }
+                marked_edges[min_opp_m][idx_opp_m] = 1;
+              }
+
+              // Mark the swapped edge as processed
+              marked_edges[i][it] = 0;
+            }
+          }
+
+          #pragma omp for schedule(dynamic) reduction(+:n_marked_edges)
+          for(int i=0;i<(int)_mesh->NNList.size();i++){
+            n_marked_edges += std::count(marked_edges[i].begin(), marked_edges[i].end(), (char) 1);
+          }
+
+          /*
+           * This is used to determine whether swapping is finished.
+           * If this is the case, NNList[i] needs not be resized x3.
+           * Same for NEList.
+           */
+          int NNextend = (n_marked_edges > 0 ? 3 : 1);
+          int NEextend = (n_marked_edges > 0 ? 2 : 1);
+
+          // Compact NNList, NEList
+          #pragma omp for schedule(dynamic)
+          for(int i=0;i<(int)_mesh->NNList.size();i++){
+            if(_mesh->NNList[i].size() == 0)
+              continue;
+
+            size_t forward = 0, backward = _mesh->NNList[i].size() - 1;
+
+            while(forward < backward){
+              while(_mesh->NNList[i][forward] != -1) ++forward;
+              while(_mesh->NNList[i][backward] == -1) --backward;
+
+              if(forward < backward){
+                _mesh->NNList[i][forward] = _mesh->NNList[i][backward];
+                _mesh->NNList[i][backward] = -1;
+                if(backward < originalVertexDegree[i])
+                  marked_edges[i][forward] = marked_edges[i][backward];
+              }
+              else
+                break;
+
+              ++forward;
+              --backward;
+            }
+            if(_mesh->NNList[i][forward] != -1)
+              ++forward;
+
+            originalVertexDegree[i] = forward;
+            marked_edges[i].resize(forward, (char) 0);
+            _mesh->NNList[i].resize(NNextend*forward, (index_t) -1);
+
+            forward = 0, backward = NEList[i].size() - 1;
+
+            while(forward < backward){
+              while(NEList[i][forward] != -1) ++forward;
+              while(NEList[i][backward] == -1) --backward;
+
+              if(forward < backward){
+                NEList[i][forward] = NEList[i][backward];
+                NEList[i][backward] = -1;
+              }
+              else
+                break;
+
+              ++forward;
+              --backward;
+            }
+            if(NEList[i][forward] != -1)
+              ++forward;
+
+            NEList[i].resize(NEextend*forward, (index_t) -1);
+          }
+        }
+      }
+
+      #pragma omp parallel for schedule(dynamic)
+      for(int i=0;i<(int)_mesh->NNList.size();i++){
+        if(_mesh->NEList[i].empty())
+          continue;
+
+        _mesh->NEList[i].clear();
+        std::copy(NEList[i].begin(), NEList[i].end(), std::inserter(_mesh->NEList[i], _mesh->NEList[i].begin()));
+      }
+#else
       // Initialise list of dynamic edges.
       typename std::set<Edge<index_t> > dynamic_edges;
       for(int i=0;i<(int)_mesh->NNList.size();i++){
@@ -132,10 +540,10 @@ template<typename real_t, typename index_t> class Swapping{
             set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
                              _mesh->NEList[*it].begin(), _mesh->NEList[*it].end(),
                              inserter(neigh_elements, neigh_elements.begin()));
-            
+
             if(neigh_elements.size()!=2)
               continue;
-            
+
             for(typename std::set<index_t>::const_iterator jt=neigh_elements.begin();jt!=neigh_elements.end();++jt){
               if(quality[*jt]<Q_min){
                 dynamic_edges.insert(Edge<index_t>(i, *it));
@@ -145,32 +553,32 @@ template<typename real_t, typename index_t> class Swapping{
           }
         }
       }
-      
+
       // -
       while(!dynamic_edges.empty()){
         Edge<index_t> target_edge = *dynamic_edges.begin();
         dynamic_edges.erase(dynamic_edges.begin());
-        
+
         std::set<index_t> neigh_elements;
         set_intersection(_mesh->NEList[target_edge.edge.first].begin(), _mesh->NEList[target_edge.edge.first].end(),
                          _mesh->NEList[target_edge.edge.second].begin(), _mesh->NEList[target_edge.edge.second].end(),
                          inserter(neigh_elements, neigh_elements.begin()));
-            
+
         if(neigh_elements.size()!=2)
           continue;
-        
+
         if(_mesh->is_halo_node(target_edge.edge.first) || _mesh->is_halo_node(target_edge.edge.second))
           continue;
-        
+
         int eid0 = *neigh_elements.begin();
         int eid1 = *neigh_elements.rbegin();
-        
+
         if(std::min(quality[eid0], quality[eid1])>Q_min)
           continue;
-        
+
         const int *n = _mesh->get_element(eid0);
         const int *m = _mesh->get_element(eid1);
-        
+
         int n_off=-1;
         for(size_t i=0;i<3;i++){
           if((n[i]!=target_edge.edge.first) && (n[i]!=target_edge.edge.second)){
@@ -179,7 +587,7 @@ template<typename real_t, typename index_t> class Swapping{
           }
         }
         assert(n_off>=0);
-        
+
         int m_off=-1;
         for(size_t i=0;i<3;i++){
           if((m[i]!=target_edge.edge.first) && (m[i]!=target_edge.edge.second)){
@@ -188,13 +596,13 @@ template<typename real_t, typename index_t> class Swapping{
           }
         }
         assert(m_off>=0);
-        
+
         assert(n[(n_off+2)%3]==m[(m_off+1)%3]);
         assert(n[(n_off+1)%3]==m[(m_off+2)%3]);
-        
+
         int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
         int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};   // new eid1
-        
+
         real_t worst_q = std::min(quality[eid0], quality[eid1]);
         real_t q0 = property->lipnikov(_mesh->get_coords(n_swap[0]),
                                        _mesh->get_coords(n_swap[1]),
@@ -209,16 +617,16 @@ template<typename real_t, typename index_t> class Swapping{
                                        _mesh->get_metric(m_swap[1]),
                                        _mesh->get_metric(m_swap[2]));
         real_t new_worst_q = std::min(q0, q1);
-        
+
         if(new_worst_q>worst_q){
           // Cache new quality measures.
           quality[eid0] = q0;
           quality[eid1] = q1;
-                    
+
           //
           // Update node-node list.
           //
-          
+
           // Make local partial copy of nnlist
           std::map<int, std::set<int> > nnlist;
           for(size_t i=0;i<nloc;i++){
@@ -233,21 +641,21 @@ template<typename real_t, typename index_t> class Swapping{
           }
           nnlist[n[(n_off+1)%3]].erase(n[(n_off+2)%3]);
           nnlist[n[(n_off+2)%3]].erase(n[(n_off+1)%3]);
-          
+
           nnlist[n[n_off]].insert(m[m_off]);
           nnlist[m[m_off]].insert(n[n_off]);
-          
+
           // Put back in new adjacency info
           for(std::map<int, std::set<int> >::const_iterator it=nnlist.begin();it!=nnlist.end();++it){
             _mesh->NNList[it->first].clear();
             for(typename std::set<index_t>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt)
               _mesh->NNList[it->first].push_back(*jt);
           }
-          
+
           //
           // Update node-element list.
           //
-          
+
           // Erase old node-element adjacency.
           for(size_t i=0;i<nloc;i++){
             _mesh->NEList[n[i]].erase(eid0);
@@ -257,7 +665,7 @@ template<typename real_t, typename index_t> class Swapping{
             _mesh->NEList[n_swap[i]].insert(eid0);
             _mesh->NEList[m_swap[i]].insert(eid1);
           }
-          
+
           // Update element-node list for this element.
           for(size_t i=0;i<nloc;i++){
             _mesh->_ENList[eid0*nloc+i] = n_swap[i];
@@ -271,6 +679,7 @@ template<typename real_t, typename index_t> class Swapping{
           dynamic_edges.insert(Edge<index_t>(m_swap[1], m_swap[2]));
         }
       }
+#endif
     }else{
       assert(ndims==3);
       std::map<int, std::deque<int> > partialEEList;
@@ -306,7 +715,7 @@ template<typename real_t, typename index_t> class Swapping{
         }
       }
 
-      // Colour the graph and choose the maximal independant set.
+      // Colour the graph and choose the maximal independent set.
       std::map<int , std::set<int> > graph;
       for(std::map<int, std::deque<int> >::const_iterator it=partialEEList.begin();it!=partialEEList.end();++it){
         for(std::deque<int>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
@@ -380,7 +789,7 @@ template<typename real_t, typename index_t> class Swapping{
             
             assert(partialEEList[eid0].size()==4);
             
-            // Check adjancy is not toxic.
+            // Check adjacency is not toxic.
             bool toxic = false;
             for(int j=0;j<4;j++){
               int eid1 = partialEEList[eid0][j];
@@ -908,10 +1317,23 @@ template<typename real_t, typename index_t> class Swapping{
   }
 
  private:
+  inline size_t originalNeighborIndex(index_t source, index_t target) const{
+    size_t pos = 0;
+    while(pos < originalVertexDegree[source]){
+      if(_mesh->NNList[source][pos] == target)
+        return pos;
+      ++pos;
+    }
+    return std::numeric_limits<index_t>::max();
+  }
+
+  std::vector<size_t> originalVertexDegree;
+
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   size_t ndims, nloc;
+  int nthreads;
 };
 
 #endif
