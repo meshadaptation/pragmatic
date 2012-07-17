@@ -154,8 +154,8 @@ template<typename real_t, typename index_t> class Swapping{
 
       // -
       while(n_marked_edges > 0){
-        //cout << n_marked_edges << " to go" << std::endl << std::flush;
         n_marked_edges = 0;
+
         #pragma omp parallel
         {
           #pragma omp for schedule(dynamic)
@@ -174,6 +174,7 @@ template<typename real_t, typename index_t> class Swapping{
                 continue;
               }
 
+              // Find the two elements sharing this edge
               std::vector<index_t> neigh_elements;
               for(size_t k=0; k<NEList[i].size()/2; ++k){
                 if(NEList[i][k] != -1)
@@ -306,12 +307,30 @@ template<typename real_t, typename index_t> class Swapping{
               }
 
               if(idx_opp_n == -1){
-                if(originalNeighborIndex(lateral_n, opposite) >= originalVertexDegree[lateral_n])
+                if(opposite < lateral_n){
+                  min_opp_n = opposite;
+                  max_opp_n = lateral_n;
+                }else{
+                  min_opp_n = lateral_n;
+                  max_opp_n = opposite;
+                }
+
+                idx_opp_n = originalNeighborIndex(min_opp_n, max_opp_n);
+                if(idx_opp_n >= (int) originalVertexDegree[min_opp_n])
                   continue;
               }
 
               if(idx_opp_m == -1){
-                if(originalNeighborIndex(lateral_m, opposite) >= originalVertexDegree[lateral_m])
+                if(opposite < lateral_m){
+                  min_opp_m = opposite;
+                  max_opp_m = lateral_m;
+                }else{
+                  min_opp_m = lateral_m;
+                  max_opp_m = opposite;
+                }
+
+                idx_opp_m = originalNeighborIndex(min_opp_m, max_opp_m);
+                if(idx_opp_m >= (int) originalVertexDegree[min_opp_m])
                   continue;
               }
 
@@ -377,6 +396,7 @@ template<typename real_t, typename index_t> class Swapping{
                 size_t halfSize;
                 typename std::vector<index_t>::iterator it;
 
+                // lateral_n - add eid1
                 vertex = n_swap[0];
                 halfSize = NEList[vertex].size()/2;
                 it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid0);
@@ -385,6 +405,7 @@ template<typename real_t, typename index_t> class Swapping{
                 assert(*it == -1);
                 *it = eid1;
 
+                // lateral_m - add eid0
                 vertex = n_swap[1];
                 halfSize = NEList[vertex].size()/2;
                 it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid1);
@@ -393,6 +414,7 @@ template<typename real_t, typename index_t> class Swapping{
                 assert(*it == -1);
                 *it = eid0;
 
+                // i (or opposite) - remove eid1
                 vertex = n_swap[2];
                 halfSize = NEList[vertex].size()/2;
                 it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid1);
@@ -400,6 +422,7 @@ template<typename real_t, typename index_t> class Swapping{
                 assert(*it == eid1);
                 *it = -1;
 
+                // opposite (or i) - remove eid0
                 vertex = m_swap[1];
                 halfSize = NEList[vertex].size()/2;
                 it = std::find(NEList[vertex].begin(), NEList[vertex].begin() + halfSize, eid0);
@@ -424,28 +447,9 @@ template<typename real_t, typename index_t> class Swapping{
                 else
                   marked_edges[lateral_m][idx_in_m] = 1;
 
-                if(idx_opp_n == -1){
-                  if(opposite < lateral_n){
-                    min_opp_n = opposite;
-                    max_opp_n = lateral_n;
-                  }else{
-                    min_opp_n = lateral_n;
-                    max_opp_n = opposite;
-                  }
-                  idx_opp_n = originalNeighborIndex(min_opp_n, max_opp_n);
-                }
+                assert(idx_opp_n!=-1);
+                assert(idx_opp_m!=-1);
                 marked_edges[min_opp_n][idx_opp_n] = 1;
-
-                if(idx_opp_m == -1){
-                  if(opposite < lateral_m){
-                    min_opp_m = opposite;
-                    max_opp_m = lateral_m;
-                  }else{
-                    min_opp_m = lateral_m;
-                    max_opp_m = opposite;
-                  }
-                  idx_opp_m = originalNeighborIndex(min_opp_m, max_opp_m);
-                }
                 marked_edges[min_opp_m][idx_opp_m] = 1;
               }
 
@@ -1308,10 +1312,9 @@ template<typename real_t, typename index_t> class Swapping{
             }
           }
         }
+      // recalculate adjacency
+      _mesh->create_adjancy();
     }
-    
-    // recalculate adjacency
-    _mesh->create_adjancy();
 
     return;
   }
