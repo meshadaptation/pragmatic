@@ -220,7 +220,82 @@ template<typename real_t, typename index_t> class Mesh{
       it->second = cnt++;
       active_vertex.push_back(it->first);
     }
+    
+    int metis_nelements = active_element.size();
+    int metis_nnodes = active_vertex.size();
+    
+    idxtype *metis_enlist = new idxtype[metis_nelements*nloc];
+    cnt = 0;
+    for(typename std::deque<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
+      for(size_t i=0;i<nloc;i++){
+        metis_enlist[cnt++] = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+      }
+    }
+    
+    idxtype *epart = new idxtype[metis_nelements];
+    idxtype *npart = new idxtype[metis_nnodes];
+    int etype;
+    if(nloc==3){
+      etype = 1; // METIS: triangles
+    }else{
+      etype = 2; // METIS: tetrahedra
+    }
+    int numflag = 0;      
+    int nparts = std::max(1, metis_nelements/50); // numa_nparts; // What should this be?
+    int edgecut;
+    
+    if(nparts>1){
+      METIS_PartMeshNodal(&metis_nelements, &metis_nnodes, metis_enlist, &etype, &numflag, &nparts, &edgecut, epart, npart);
+    }else{
+      for(int i=0;i<metis_nelements;i++)
+        epart[i] = 0;
+      for(int i=0;i<metis_nnodes;i++)
+        npart[i] = 0;
+    }
 
+    std::vector<index_t> metis_vertex_offset(nparts+1, 0);
+    for(int i=0;i<metis_nnodes;i++)
+      metis_vertex_offset[1+npart[i]]++;
+    
+    std::vector<index_t> metis_element_offset(nparts+1, 0);
+    for(int i=0;i<metis_nelements;i++)
+      metis_element_offset[1+epart[i]]++;
+    
+    for(int i=1;i<=nparts;i++){
+      metis_vertex_offset[i] += metis_vertex_offset[i-1];
+      metis_element_offset[i] += metis_element_offset[i-1];
+    }
+
+    assert(metis_vertex_offset[nparts]==metis_nnodes);
+    assert(metis_element_offset[nparts]==metis_nelements);
+
+    std::vector<index_t> metis_vertex_cnt(nparts, 0);
+    std::vector<index_t> metis_vertex_renumber(metis_nnodes);
+    for(int i=0;i<metis_nnodes;i++){
+      int new_nid = metis_vertex_offset[npart[i]] + metis_vertex_cnt[npart[i]];
+
+      assert(new_nid<metis_nnodes);
+
+      metis_vertex_renumber[i] = new_nid;
+      ++metis_vertex_cnt[npart[i]];
+    }
+    delete [] npart;
+
+    // Update active_vertex_map
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
+      it->second = metis_vertex_renumber[it->second];
+    }
+    
+    std::vector<index_t> metis_element_cnt(nparts, 0);
+    std::vector<index_t> metis_element_renumber(metis_nelements);
+    for(int i=0;i<metis_nelements;i++){
+      metis_element_renumber[i] = metis_element_offset[epart[i]] + metis_element_cnt[epart[i]];
+      ++metis_element_cnt[epart[i]];
+    }
+    delete [] epart;
+    
+    // end of renumbering
+    
     // Compress data structures.
     index_t NNodes = active_vertex.size();
     NElements = active_element.size();
@@ -229,26 +304,48 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<real_t> defrag_metric(NNodes*ndims*ndims);
 
+    assert(NElements==metis_nelements);
+
 #pragma omp parallel
     {
+      // First sweep is to bind memory locally
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
-        index_t eid = active_element[i];
         for(size_t j=0;j<nloc;j++){
-          index_t nid = (*active_vertex_map)[_ENList[eid*nloc+j]];
-          assert(nid<NNodes);
-          defrag_ENList[i*nloc+j] = nid;
+          defrag_ENList[i*nloc+j] = 0;
         }
       }
 
+      // First sweep binds memory locally.
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NNodes;i++){
-        index_t nid=active_vertex[i];
         for(size_t j=0;j<ndims;j++)
-          defrag_coords[i*ndims+j] = _coords[nid*ndims+j];
+          defrag_coords[i*ndims+j] = 0.0;
         for(size_t j=0;j<ndims*ndims;j++)
-          defrag_metric[i*ndims*ndims+j] = metric[nid*ndims*ndims+j];
+          defrag_metric[i*ndims*ndims+j] = 0.0;
       }
+    }
+    
+    // Second sweep writes elements with new numbering.
+    for(int i=0;i<metis_nelements;i++){
+      index_t new_eid = metis_element_renumber[i];
+      for(size_t j=0;j<nloc;j++){
+        index_t new_nid = metis_vertex_renumber[metis_enlist[i*nloc+j]];
+        assert(new_nid<NNodes);
+        defrag_ENList[new_eid*nloc+j] = new_nid;
+      }
+    }
+    delete [] metis_enlist;
+
+    // Second sweep writes node wata with new numbering.
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
+      index_t old_nid = it->first;
+      index_t new_nid = it->second;
+      
+      for(size_t j=0;j<ndims;j++)
+        defrag_coords[new_nid*ndims+j] = _coords[old_nid*ndims+j];
+      for(size_t j=0;j<ndims*ndims;j++)
+        defrag_metric[new_nid*ndims*ndims+j] = metric[old_nid*ndims*ndims+j];
     }
 
     _ENList.swap(defrag_ENList);
