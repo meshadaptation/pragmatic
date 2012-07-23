@@ -5672,8 +5672,7 @@ _ACEOF
   LIBS="-lmetis $LIBS"
 
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: No METIS support available." >&5
-$as_echo "$as_me: WARNING: No METIS support available." >&2;}
+  as_fn_error $? "No METIS support available." "$LINENO" 5
 fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ParMETIS_V3_PartKway in -lparmetis" >&5
@@ -5720,8 +5719,7 @@ _ACEOF
   LIBS="-lparmetis $LIBS"
 
 else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: No ParMETIS support available." >&5
-$as_echo "$as_me: WARNING: No ParMETIS support available." >&2;}
+  as_fn_error $? "No ParMETIS support available." "$LINENO" 5
 fi
 
 
