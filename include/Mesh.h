@@ -221,78 +221,67 @@ template<typename real_t, typename index_t> class Mesh{
       active_vertex.push_back(it->first);
     }
     
-    int metis_nelements = active_element.size();
     int metis_nnodes = active_vertex.size();
-    
-    idxtype *metis_enlist = new idxtype[metis_nelements*nloc];
-    cnt = 0;
+    int metis_nelements = active_element.size();
+    std::vector< std::set<index_t> > graph(metis_nnodes);
     for(typename std::deque<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
       for(size_t i=0;i<nloc;i++){
-        metis_enlist[cnt++] = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+        index_t nid0 = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+        for(size_t j=i+1;j<nloc;j++){
+          index_t nid1 = (*active_vertex_map)[_ENList[(*ie)*nloc+j]];
+          graph[nid0].insert(nid1);
+          graph[nid1].insert(nid0);
+        }
       }
     }
     
-    idxtype *epart = new idxtype[metis_nelements];
-    idxtype *npart = new idxtype[metis_nnodes];
-    int etype;
-    if(nloc==3){
-      etype = 1; // METIS: triangles
-    }else{
-      etype = 2; // METIS: tetrahedra
+    // Compress graph
+    std::vector<idxtype> xadj(metis_nnodes+1), adjncy;
+    int pos=0;
+    xadj[0]=0;
+    for(int i=0;i<metis_nnodes;i++){
+      for(typename std::set<index_t>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
+        assert((*jt)>=0);
+        assert((*jt)<metis_nnodes);
+        adjncy.push_back(*jt);
+        pos++;
+      }
+      xadj[i+1] = pos;
     }
-    int numflag = 0;      
-    int nparts = std::max(1, metis_nelements/50); // numa_nparts; // What should this be?
-    int edgecut;
     
-    if(nparts>1){
-      METIS_PartMeshNodal(&metis_nelements, &metis_nnodes, metis_enlist, &etype, &numflag, &nparts, &edgecut, epart, npart);
-    }else{
-      for(int i=0;i<metis_nelements;i++)
-        epart[i] = 0;
-      for(int i=0;i<metis_nnodes;i++)
-        npart[i] = 0;
-    }
-
-    std::vector<index_t> metis_vertex_offset(nparts+1, 0);
-    for(int i=0;i<metis_nnodes;i++)
-      metis_vertex_offset[1+npart[i]]++;
+    std::vector<int> norder(metis_nnodes);
+    std::vector<int> inorder(metis_nnodes);
+    int numflag=0, options[] = {0};
     
-    std::vector<index_t> metis_element_offset(nparts+1, 0);
-    for(int i=0;i<metis_nelements;i++)
-      metis_element_offset[1+epart[i]]++;
+    METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
     
-    for(int i=1;i<=nparts;i++){
-      metis_vertex_offset[i] += metis_vertex_offset[i-1];
-      metis_element_offset[i] += metis_element_offset[i-1];
-    }
-
-    assert(metis_vertex_offset[nparts]==metis_nnodes);
-    assert(metis_element_offset[nparts]==metis_nelements);
-
-    std::vector<index_t> metis_vertex_cnt(nparts, 0);
     std::vector<index_t> metis_vertex_renumber(metis_nnodes);
     for(int i=0;i<metis_nnodes;i++){
-      int new_nid = metis_vertex_offset[npart[i]] + metis_vertex_cnt[npart[i]];
-
-      assert(new_nid<metis_nnodes);
-
-      metis_vertex_renumber[i] = new_nid;
-      ++metis_vertex_cnt[npart[i]];
+      metis_vertex_renumber[i] = inorder[i];
     }
-    delete [] npart;
 
     // Update active_vertex_map
     for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
       it->second = metis_vertex_renumber[it->second];
     }
     
-    std::vector<index_t> metis_element_cnt(nparts, 0);
-    std::vector<index_t> metis_element_renumber(metis_nelements);
+    // Renumber elements
+    std::map< std::set<index_t>, index_t > ordered_elements;
     for(int i=0;i<metis_nelements;i++){
-      metis_element_renumber[i] = metis_element_offset[epart[i]] + metis_element_cnt[epart[i]];
-      ++metis_element_cnt[epart[i]];
+      index_t old_eid = active_element[i];
+      std::set<index_t> sorted_element;
+      for(size_t j=0;j<nloc;j++){
+        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        sorted_element.insert(new_nid);
+      }
+      assert(ordered_elements.find(sorted_element)==ordered_elements.end());
+      ordered_elements[sorted_element] = old_eid;
     }
-    delete [] epart;
+    std::vector<index_t> metis_element_renumber;
+    metis_element_renumber.reserve(metis_nelements);
+    for(typename std::map< std::set<index_t>, index_t >::const_iterator it=ordered_elements.begin();it!=ordered_elements.end();++it){
+      metis_element_renumber.push_back(it->second);
+    }
     
     // end of renumbering
     
@@ -304,11 +293,11 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<real_t> defrag_metric(NNodes*ndims*ndims);
 
-    assert(NElements==metis_nelements);
+    assert(NElements==(size_t)metis_nelements);
 
+    // This first touch is to bind memory locally.
 #pragma omp parallel
     {
-      // First sweep is to bind memory locally
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
         for(size_t j=0;j<nloc;j++){
@@ -316,7 +305,6 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
 
-      // First sweep binds memory locally.
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NNodes;i++){
         for(size_t j=0;j<ndims;j++)
@@ -328,14 +316,14 @@ template<typename real_t, typename index_t> class Mesh{
     
     // Second sweep writes elements with new numbering.
     for(int i=0;i<metis_nelements;i++){
-      index_t new_eid = metis_element_renumber[i];
+      index_t old_eid = metis_element_renumber[i];
+      index_t new_eid = i;
       for(size_t j=0;j<nloc;j++){
-        index_t new_nid = metis_vertex_renumber[metis_enlist[i*nloc+j]];
+        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
         assert(new_nid<NNodes);
         defrag_ENList[new_eid*nloc+j] = new_nid;
       }
     }
-    delete [] metis_enlist;
 
     // Second sweep writes node wata with new numbering.
     for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){

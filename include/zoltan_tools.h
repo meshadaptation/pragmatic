@@ -86,9 +86,14 @@ extern "C" {
     /* Graph colouring.
      */
     int *colour;
-  } zoltan_colour_graph_t;
+
+    /* Re-order.
+     */
+    int *order;
+  } zoltan_graph_t;
   
-  void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm);
+  void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm);
+  void zoltan_reorder(zoltan_graph_t *graph);
   
 #ifdef __cplusplus
 }

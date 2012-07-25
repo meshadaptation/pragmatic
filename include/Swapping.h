@@ -758,7 +758,7 @@ template<typename real_t, typename index_t> class Swapping{
         }
       }
 
-      zoltan_colour_graph_t flat_graph;
+      zoltan_graph_t flat_graph;
       flat_graph.rank=0;
       flat_graph.npnodes = graph.size();
       flat_graph.nnodes = graph.size();

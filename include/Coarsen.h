@@ -43,7 +43,7 @@
 #include <vector>
 
 #include "ElementProperty.h"
-#include "zoltan_colour.h"
+#include "zoltan_tools.h"
 #include "Mesh.h"
 
 /*! \brief Performs 2D and 3D mesh coarsening.
@@ -177,7 +177,7 @@ template<typename real_t, typename index_t> class Coarsen{
         }
 
         // Colour.
-        zoltan_colour_graph_t graph;
+        zoltan_graph_t graph;
         std::vector<int> colour(NNodes);
         
         graph.rank = rank;
