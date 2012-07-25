@@ -145,7 +145,7 @@ template<typename real_t, typename index_t> class Swapping{
         std::copy(_mesh->NEList[i].begin(), _mesh->NEList[i].end(), NEList[i].begin());
 
         for(int it=0; it<(int)size; ++it){
-          if(i < _mesh->NNList[i][it] && !_mesh->is_halo_node(i)){
+          if(i < _mesh->NNList[i][it]){
             marked_edges[i][it] = 1;
             ++n_marked_edges;
           }
@@ -160,8 +160,10 @@ template<typename real_t, typename index_t> class Swapping{
         {
           #pragma omp for schedule(dynamic)
           for(int i=0;i<(int)_mesh->NNList.size();i++){
-            if(_mesh->is_halo_node(i))
+            if(_mesh->is_halo_node(i)){
+           	  fill(marked_edges[i].begin(), marked_edges[i].end(), (char) 0);
               continue;
+            }
 
             for(int it=0; it<(int)originalVertexDegree[i]; ++it){
               if(marked_edges[i][it] != 1)
