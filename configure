@@ -694,6 +694,8 @@ enable_option_checking
 enable_openmp
 enable_fortran
 enable_debugging
+with_metis
+with_parmetis
 with_zoltan
 with_trilinos
 enable_cuda
@@ -1337,6 +1339,9 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-metis=METIS_ROOT root installation of METIS
+  --with-parmetis=PARMETIS_ROOT
+                          root installation of PARMETIS
   --with-zoltan=ZOLTAN_ROOT
                           root installation of Zoltan
   --with-trilinos=TRILINOS_ROOT
@@ -5628,6 +5633,17 @@ else
 $as_echo "$as_me: WARNING: No NUMA support available." >&2;}
 fi
 
+
+
+# Check whether --with-metis was given.
+if test "${with_metis+set}" = set; then :
+  withval=$with_metis;
+fi
+
+if test -n "$with_metis" ; then
+  LIBS="$LIBS -L$with_metis/lib"
+  CPPFLAGS="$CPPFLAGS -I$with_metis/include"
+fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for METIS_NodeND in -lmetis" >&5
 $as_echo_n "checking for METIS_NodeND in -lmetis... " >&6; }
 if ${ac_cv_lib_metis_METIS_NodeND+:} false; then :
@@ -5675,6 +5691,17 @@ else
   as_fn_error $? "No METIS support available." "$LINENO" 5
 fi
 
+
+
+# Check whether --with-parmetis was given.
+if test "${with_parmetis+set}" = set; then :
+  withval=$with_parmetis;
+fi
+
+if test -n "$with_parmetis" ; then
+  LIBS="$LIBS -L$with_parmetis/lib"
+  CPPFLAGS="$CPPFLAGS -I$with_parmetis/include"
+fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ParMETIS_V3_PartKway in -lparmetis" >&5
 $as_echo_n "checking for ParMETIS_V3_PartKway in -lparmetis... " >&6; }
 if ${ac_cv_lib_parmetis_ParMETIS_V3_PartKway+:} false; then :
@@ -5719,7 +5746,8 @@ _ACEOF
   LIBS="-lparmetis $LIBS"
 
 else
-  as_fn_error $? "No ParMETIS support available." "$LINENO" 5
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: No ParMETIS support available." >&5
+$as_echo "$as_me: WARNING: No ParMETIS support available." >&2;}
 fi
 
 

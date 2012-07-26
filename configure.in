@@ -154,8 +154,20 @@ fi
 AC_CHECK_LIB(stdc++,fclose,,) 
 AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
+
+AC_ARG_WITH(metis, [AS_HELP_STRING([--with-metis=METIS_ROOT], [root installation of METIS])])
+if test -n "$with_metis" ; then
+  LIBS="$LIBS -L$with_metis/lib"
+  CPPFLAGS="$CPPFLAGS -I$with_metis/include"
+fi
 AC_CHECK_LIB(metis,METIS_NodeND,,AC_MSG_ERROR([No METIS support available.]))
-AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_ERROR([No ParMETIS support available.]))
+
+AC_ARG_WITH(parmetis, [AS_HELP_STRING([--with-parmetis=PARMETIS_ROOT], [root installation of PARMETIS])])
+if test -n "$with_parmetis" ; then
+  LIBS="$LIBS -L$with_parmetis/lib"
+  CPPFLAGS="$CPPFLAGS -I$with_parmetis/include"
+fi
+AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_WARN([No ParMETIS support available.]))
 
 ACX_ZOLTAN()
 
