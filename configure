@@ -3346,7 +3346,7 @@ rm -f core conftest.err conftest.$ac_objext \
          LIBS=$OLD_LIBS
          CPPFLAGS=$OLD_CPPFLAGS
      else
-         Echo Unable to find suitable MPI Compiler. Try setting MPICXX.
+         echo Unable to find suitable MPI Compiler. Try setting MPICXX.
          have_CXX_mpi='no'
      fi
 
