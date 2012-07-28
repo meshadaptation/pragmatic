@@ -59,6 +59,11 @@ using namespace std;
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
 
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+  
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
@@ -89,10 +94,10 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
-  if(rank==0) std::cout<<"Initial quality:\n"
-           	<<"Quality mean:  "<<qmean<<std::endl
-           	<<"Quality min:   "<<qmin<<std::endl
-           	<<"Quality RMS:   "<<qrms<<std::endl;
+  if((rank==0)&&(verbose)) std::cout<<"Initial quality:\n"
+                                    <<"Quality mean:  "<<qmean<<std::endl
+                                    <<"Quality min:   "<<qmin<<std::endl
+                                    <<"Quality RMS:   "<<qrms<<std::endl;
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -110,14 +115,15 @@ int main(int argc, char **argv){
   coarsen.coarsen(L_low, L_up);
   time_coarsen += get_wtime()-tic;
 
-  if(!mesh->verify()){
-    std::map<int, int> active_vertex_map;
-    mesh->defragment(&active_vertex_map);
-    surface.defragment(&active_vertex_map);
-    
-    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
-    exit(-1);
-  }
+  if(verbose)
+    if(!mesh->verify()){
+      std::map<int, int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
+      
+      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
+      exit(-1);
+    }
 
   double L_max = mesh->maximal_edge_length();
   
@@ -129,44 +135,56 @@ int main(int argc, char **argv){
     refine.refine(L_ref);
     time_refine += get_wtime() - tic;
     
-    if(rank==0) std::cout<<"INFO: Verify quality after refine.\n";
-    if(!mesh->verify()){    
-      std::map<int, int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after refine.\n";
       
-      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
-      exit(-1);
+      if(!mesh->verify()){    
+        std::map<int, int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
+        
+        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
+        exit(-1);
+      }
     }
 
     tic = get_wtime();
     coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
 
-    if(rank==0) std::cout<<"INFO: Verify quality after coarsen.\n";
-    if(!mesh->verify()){
-      std::map<int, int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after coarsen.\n";
       
-      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
-      exit(-1);
+      if(!mesh->verify()){
+        std::map<int, int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
+        
+        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
+        exit(-1);
+      }
     }
 
     tic = get_wtime();
     swapping.swap(0.95);
     time_swap += get_wtime() - tic;
-    
-    if(rank==0) std::cout<<"INFO: Verify quality after swapping.\n";
-    if(!mesh->verify()){
-      std::map<int, int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after swapping.\n";
       
-      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
-      exit(-1);
+      if(!mesh->verify()){
+        std::map<int, int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
+        
+        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+        exit(-1);
+      }
     }
-    
+
     L_max = mesh->maximal_edge_length();
     
     if((L_max-L_up)<0.01)
@@ -176,21 +194,27 @@ int main(int argc, char **argv){
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-  
-  if(rank==0) std::cout<<"Basic quality:\n";
-  mesh->verify();
-  
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
+
+  if(verbose){
+    if(rank==0)
+      std::cout<<"Basic quality:\n";
+    mesh->verify();
     
+    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
+  }
+  
   tic = get_wtime();
   smooth.smooth("optimisation Linf", 200);
   time_smooth += get_wtime()-tic;
   
   time_adapt = get_wtime()-time_adapt;
 
-  if(rank==0) std::cout<<"After optimisation based smoothing:\n";
-  mesh->verify();
-  
+  if(verbose){
+    if(rank==0)
+      std::cout<<"After optimisation based smoothing:\n";
+    mesh->verify();
+  }
+
   NNodes = mesh->get_number_nodes();
   psi.resize(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -210,7 +234,11 @@ int main(int argc, char **argv){
   delete mesh;
 
   std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
-  std::cout<<"BENCHMARK: "<<time_coarsen<<" "<<time_refine<<" "<<time_swap<<" "<<time_smooth<<"\n";
+  std::cout<<"BENCHMARK: "
+           <<std::setw(12)<<time_coarsen<<" "
+           <<std::setw(11)<<time_refine<<" "
+           <<std::setw(9)<<time_swap<<" "
+           <<std::setw(11)<<time_smooth<<"\n";
 
   if(rank==0){
     if((qmean>0.8)&&(qmin>0.4))
