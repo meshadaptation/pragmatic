@@ -20,7 +20,7 @@ VPATH = ./:./src
 ifeq (@USING_FORTRAN@,yes)
 fortran_objs = pragmatic.o  pragmatic_Fortran.o
 endif
-objects = zoltan_colour.o $(fortran_objs)
+objects = zoltan_tools.o $(fortran_objs)
 
 .SUFFIXES: .F90 .cpp .c .o
 

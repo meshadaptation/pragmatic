@@ -31,7 +31,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 
-#include "zoltan_colour.h"
+#include "zoltan_tools.h"
 
 #include "zoltan.h"
 
@@ -61,7 +61,7 @@ void pragmatic_zoltan_verify(int ierr, const char *str){
 int num_obj_fn(void* data, int* ierr){
   *ierr = ZOLTAN_OK;
   
-  zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
+  zoltan_graph_t *graph = (zoltan_graph_t *)data;
   return graph->npnodes;
 }
 
@@ -81,7 +81,7 @@ void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID
 
   *ierr = ZOLTAN_OK; 
   
-  zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
+  zoltan_graph_t *graph = (zoltan_graph_t *)data;
 
   for(i=0;i<graph->nnodes;i++){
     if(graph->owner[i]==graph->rank){
@@ -104,7 +104,7 @@ void num_edges_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
 
   *ierr = ZOLTAN_OK; 
   
-  zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
+  zoltan_graph_t *graph = (zoltan_graph_t *)data;
   
   for(i=0;i<graph->nnodes;i++){
     if(graph->owner[i]==graph->rank)
@@ -119,7 +119,7 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
 
   *ierr = ZOLTAN_OK;
   
-  zoltan_colour_graph_t *graph = (zoltan_colour_graph_t *)data;
+  zoltan_graph_t *graph = (zoltan_graph_t *)data;
   
   for(i=0;i<graph->nnodes;i++){
     if(graph->owner[i]==graph->rank){
@@ -136,7 +136,7 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
   }
 }
 
-void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm){
+void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   int ierr, i, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
@@ -205,6 +205,69 @@ void zoltan_colour(zoltan_colour_graph_t *graph, int distance, MPI_Comm mpi_comm
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
   
   ierr = Zoltan_Color(zz, num_gid_entries, num_obj, global_ids, graph->colour);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Color\0");
+
+  ZOLTAN_FREE(&global_ids);
+  Zoltan_Destroy(&zz);
+}
+
+void zoltan_reorder(zoltan_graph_t *graph){
+  int ierr, i, loc=0;
+  float ver;
+  struct Zoltan_Struct *zz;
+  int num_gid_entries;
+  int num_obj;
+  ZOLTAN_ID_PTR global_ids;
+
+  ierr = Zoltan_Initialize(-1, NULL, &ver); 
+  pragmatic_zoltan_verify(ierr, "Zoltan_Initialize\0");
+
+  zz = Zoltan_Create(MPI_COMM_SELF);
+  
+  /* The number of array entries used to describe a single global ID.
+   */
+  num_gid_entries = 1;
+
+  /* Number of objects for which we want to know the color on this
+     processor. Objects may be non-local or duplicated. */
+  num_obj = graph->nnodes;
+
+  /* An array of global IDs of objects for which we want to know the
+     color on this processor. Size of this array must be num_obj. */
+  global_ids = (ZOLTAN_ID_PTR) ZOLTAN_MALLOC(num_obj*sizeof(ZOLTAN_ID_TYPE));
+  for(i=0;i<graph->nnodes;i++)
+    global_ids[loc++] = i;
+
+#ifndef NDEBUG 
+  ierr = Zoltan_Set_Param(zz, "CHECK_GRAPH", "2");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+#else
+  ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+#endif
+
+  ierr = Zoltan_Set_Param(zz, "ORDER_METHOD", "METIS");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  /* Register the callbacks.
+   */
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (ZOLTAN_VOID_FN *)&num_obj_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (ZOLTAN_VOID_FN *)&obj_list_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&num_edges_multi_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+
+  ierr = Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_MULTI_FN_TYPE, (ZOLTAN_VOID_FN *)&edge_list_multi_fn, (void *)graph);
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Fn\0");
+  
+  ierr = Zoltan_Order(zz, num_gid_entries, num_obj, global_ids, graph->order);
+
   pragmatic_zoltan_verify(ierr, "Zoltan_Color\0");
 
   ZOLTAN_FREE(&global_ids);

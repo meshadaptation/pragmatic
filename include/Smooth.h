@@ -62,7 +62,7 @@
 #include "CUDATools.h"
 #endif
 
-#include "zoltan_colour.h"
+#include "zoltan_tools.h"
 
 /*! \brief Applies Laplacian smoothen in metric space.
  */
@@ -970,7 +970,7 @@ template<typename real_t, typename index_t>
   void init_cache(std::string method){
     colour_sets.clear();
 
-    zoltan_colour_graph_t graph;
+    zoltan_graph_t graph;
     graph.rank = rank; 
     
     int NNodes = _mesh->get_number_nodes();

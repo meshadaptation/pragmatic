@@ -220,7 +220,71 @@ template<typename real_t, typename index_t> class Mesh{
       it->second = cnt++;
       active_vertex.push_back(it->first);
     }
+    
+    int metis_nnodes = active_vertex.size();
+    int metis_nelements = active_element.size();
+    std::vector< std::set<index_t> > graph(metis_nnodes);
+    for(typename std::deque<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
+      for(size_t i=0;i<nloc;i++){
+        index_t nid0 = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+        for(size_t j=i+1;j<nloc;j++){
+          index_t nid1 = (*active_vertex_map)[_ENList[(*ie)*nloc+j]];
+          graph[nid0].insert(nid1);
+          graph[nid1].insert(nid0);
+        }
+      }
+    }
+    
+    // Compress graph
+    std::vector<idxtype> xadj(metis_nnodes+1), adjncy;
+    int pos=0;
+    xadj[0]=0;
+    for(int i=0;i<metis_nnodes;i++){
+      for(typename std::set<index_t>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
+        assert((*jt)>=0);
+        assert((*jt)<metis_nnodes);
+        adjncy.push_back(*jt);
+        pos++;
+      }
+      xadj[i+1] = pos;
+    }
+    
+    std::vector<int> norder(metis_nnodes);
+    std::vector<int> inorder(metis_nnodes);
+    int numflag=0, options[] = {0};
+    
+    METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
+    
+    std::vector<index_t> metis_vertex_renumber(metis_nnodes);
+    for(int i=0;i<metis_nnodes;i++){
+      metis_vertex_renumber[i] = inorder[i];
+    }
 
+    // Update active_vertex_map
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
+      it->second = metis_vertex_renumber[it->second];
+    }
+    
+    // Renumber elements
+    std::map< std::set<index_t>, index_t > ordered_elements;
+    for(int i=0;i<metis_nelements;i++){
+      index_t old_eid = active_element[i];
+      std::set<index_t> sorted_element;
+      for(size_t j=0;j<nloc;j++){
+        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        sorted_element.insert(new_nid);
+      }
+      assert(ordered_elements.find(sorted_element)==ordered_elements.end());
+      ordered_elements[sorted_element] = old_eid;
+    }
+    std::vector<index_t> metis_element_renumber;
+    metis_element_renumber.reserve(metis_nelements);
+    for(typename std::map< std::set<index_t>, index_t >::const_iterator it=ordered_elements.begin();it!=ordered_elements.end();++it){
+      metis_element_renumber.push_back(it->second);
+    }
+    
+    // end of renumbering
+    
     // Compress data structures.
     index_t NNodes = active_vertex.size();
     NElements = active_element.size();
@@ -229,26 +293,47 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<real_t> defrag_metric(NNodes*ndims*ndims);
 
+    assert(NElements==(size_t)metis_nelements);
+
+    // This first touch is to bind memory locally.
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
-        index_t eid = active_element[i];
         for(size_t j=0;j<nloc;j++){
-          index_t nid = (*active_vertex_map)[_ENList[eid*nloc+j]];
-          assert(nid<NNodes);
-          defrag_ENList[i*nloc+j] = nid;
+          defrag_ENList[i*nloc+j] = 0;
         }
       }
 
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NNodes;i++){
-        index_t nid=active_vertex[i];
         for(size_t j=0;j<ndims;j++)
-          defrag_coords[i*ndims+j] = _coords[nid*ndims+j];
+          defrag_coords[i*ndims+j] = 0.0;
         for(size_t j=0;j<ndims*ndims;j++)
-          defrag_metric[i*ndims*ndims+j] = metric[nid*ndims*ndims+j];
+          defrag_metric[i*ndims*ndims+j] = 0.0;
       }
+    }
+    
+    // Second sweep writes elements with new numbering.
+    for(int i=0;i<metis_nelements;i++){
+      index_t old_eid = metis_element_renumber[i];
+      index_t new_eid = i;
+      for(size_t j=0;j<nloc;j++){
+        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        assert(new_nid<NNodes);
+        defrag_ENList[new_eid*nloc+j] = new_nid;
+      }
+    }
+
+    // Second sweep writes node wata with new numbering.
+    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
+      index_t old_nid = it->first;
+      index_t new_nid = it->second;
+      
+      for(size_t j=0;j<ndims;j++)
+        defrag_coords[new_nid*ndims+j] = _coords[old_nid*ndims+j];
+      for(size_t j=0;j<ndims*ndims;j++)
+        defrag_metric[new_nid*ndims*ndims+j] = metric[old_nid*ndims*ndims+j];
     }
 
     _ENList.swap(defrag_ENList);

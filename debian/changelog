@@ -1,3 +1,9 @@
+pragmatic (1.1.0ubuntu8) precise; urgency=low
+
+  * Renumber mesh entities after defragmentation of data structures.
+
+ -- Gerard Gorman <g.gorman@imperial.ac.uk>  Sat, 28 Jul 2012 10:39:44 +0100
+
 pragmatic (1.1.0ubuntu7) precise; urgency=low
 
   * Various bugfixes. Updates to the fortran interface.
