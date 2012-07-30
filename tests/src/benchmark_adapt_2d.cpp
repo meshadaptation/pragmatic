@@ -59,7 +59,11 @@
 using namespace std;
 
 int main(int argc, char **argv){
+  const double pi = 3.141592653589793;
+  const double period = 100.0;
+
   MPI::Init(argc,argv);
+  int rank = MPI::COMM_WORLD.Get_rank();
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
@@ -71,10 +75,10 @@ int main(int argc, char **argv){
 
   char filename[256];
   double eta=0.001;
-  
-  for(int t=0;t<100;t++){
-    std::cout<<".";
 
+  if(rank==0)
+    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";  
+  for(int t=0;t<5;t++){
     size_t NNodes = mesh->get_number_nodes();
     
     MetricField<double, int> metric_field(*mesh, surface);        
@@ -83,23 +87,13 @@ int main(int argc, char **argv){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
       
-      psi[i] = atan2(-0.100000000000000, (double)(2*x - sin(t/5.0)*sin(5*y)));
-      // psi[i] = atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
-      
-      // double dxx = -0.8*(2*x - sin(5*y))/pow(pow(2*x - sin(5*y), 2) + 0.01,2);
-      // double dxy = 2.0*(2*x - sin(5*y))*cos(5*y)/pow(pow(2*x - sin(5*y),2) + 0.01,2);
-      // double dyy = -5.0*(2*x - sin(5*y))*pow(cos(5*y),2)/pow(pow(2*x - sin(5*y), 2) + 0.01,2) + 2.5*sin(5*y)/(pow(2*x - sin(5*y),2) + 0.01);
-      //double m[] =
-      //  {dxx, dxy,
-      //   dxy, dyy};
-      //metric_field.set_metric(m, i);
+      psi[i] = 0.1*sin(50*x+2*pi*t/period) + atan2(-0.1, (double)(2*x - sin(5*y + 2*pi*t/period)));
     }
     
-    metric_field.add_field(&(psi[0]), eta, 1);
-    metric_field.apply_nelements(5000);
+    metric_field.add_field(&(psi[0]), eta, 2);
     metric_field.update_mesh();
     
-    sprintf(filename, "../data/test_adapt_2d-init-%d", t);
+    sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
     VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
     
     double T1 = get_wtime();
@@ -121,8 +115,8 @@ int main(int argc, char **argv){
     double L_max = mesh->maximal_edge_length();
     
     double alpha = sqrt(2.0)/2;  
-        
-    for(size_t i=0;i<100;i++){
+
+    for(size_t i=0;i<10;i++){
       double L_ref = std::max(alpha*L_max, L_up);
       
       tic = get_wtime();
@@ -131,7 +125,7 @@ int main(int argc, char **argv){
       if(t>0) time_refine += (toc-tic);
 
       tic = get_wtime();
-      coarsen.coarsen(L_low, L_up);
+      coarsen.coarsen(L_low, L_up, 1);
       toc = get_wtime();
       if(t>0) time_coarsen += (toc-tic);
 
@@ -164,22 +158,20 @@ int main(int argc, char **argv){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
 
-      // psi[i] = atan2(-0.100000000000000, (double)(2*x - sin(t/5.0)*sin(5*y)));
-      psi[i] = atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+      psi[i] = 0.1*sin(50*x+2*pi*t/period) + atan2(-0.1, (double)(2*x - sin(5*y + 2*pi*t/period)));
     }
 
-    sprintf(filename, "../data/test_adapt_2d-%d", t);
+    if((t>0)&&(rank==0))
+      std::cout<<"BENCHMARK: "
+               <<std::setw(12)<<time_coarsen/t<<" "
+               <<std::setw(11)<<time_refine/t<<" "
+               <<std::setw(9)<<time_swap/t<<" "
+               <<std::setw(11)<<time_smooth/t<<" "
+               <<std::setw(10)<<time_adapt/t<<"\n";
+    
+    sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
     VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
   }
-  std::cout<<std::endl;
-
-  std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";
-  std::cout<<"BENCHMARK: "
-           <<std::setw(12)<<time_coarsen/99<<" "
-           <<std::setw(11)<<time_refine/99<<" "
-           <<std::setw(9)<<time_swap/99<<" "
-           <<std::setw(11)<<time_smooth/99<<" "
-           <<std::setw(10)<<time_adapt/99<<"\n";
 
   delete mesh;
 

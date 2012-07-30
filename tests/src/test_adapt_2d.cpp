@@ -150,7 +150,7 @@ int main(int argc, char **argv){
     }
 
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref);
+    coarsen.coarsen(L_low, L_ref, 1);
     time_coarsen += get_wtime() - tic;
 
     if(verbose){
