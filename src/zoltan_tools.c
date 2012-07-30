@@ -173,13 +173,7 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 #endif
-
-  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "L");
-  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
-
-  ierr = Zoltan_Set_Param(zz, "RECOLORING_NUM_OF_ITERATIONS", "2");
-  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
-
+  
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
     pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
@@ -189,6 +183,24 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   }else{
     fprintf(stderr, "WARNING unexpected distance for coloring graph.\n");
   }
+
+  ierr = Zoltan_Set_Param(zz, "SUPERSTEP_SIZE", "1000");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "COMM_PATTERN", "A");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "N");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "RECOLORING_NUM_OF_ITERATIONS", "0");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "RECOLORING_TYPE", "ASYNCHRONOUS");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
+
+  ierr = Zoltan_Set_Param(zz, "RECOLORING_PERMUTATION", "NONDECREASING");
+  pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 
   /* Register the callbacks.
    */
