@@ -3346,7 +3346,7 @@ rm -f core conftest.err conftest.$ac_objext \
          LIBS=$OLD_LIBS
          CPPFLAGS=$OLD_CPPFLAGS
      else
-         echo Unable to find suitable MPI Compiler. Try setting MPICXX.
+         Echo Unable to find suitable MPI Compiler. Try setting MPICXX.
          have_CXX_mpi='no'
      fi
 
@@ -5483,14 +5483,14 @@ elif test "x$FCC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$GCC" = "xyes" ; then
-    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated -frounding-math"
+    CXXFLAGS="$CXXFLAGS -Wall -Wno-deprecated"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         CFLAGS="-g -O0 $CFLAGS"
         FCFLAGS="-g -O0 $FCFLAGS"
         LDFLAGS="-g $LDFLAGS"
     else
-        CXXFLAGS="-O3 -fexpensive-optimizations $CXXFLAGS"
+        CXXFLAGS="-O3 -fexpensive-optimizations -funsafe-math-optimizations -fno-rounding-math $CXXFLAGS"
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 fi
