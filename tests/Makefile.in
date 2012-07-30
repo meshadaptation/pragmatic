@@ -67,4 +67,4 @@ bin/%: src/%.cu
 	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
 
 clean:
-	rm -rf *.o $(TEST_BIN) bin/test*
+	rm -rf *.o $(TEST_BIN) bin/test* bin/benchmark*
