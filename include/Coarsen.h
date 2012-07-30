@@ -89,7 +89,7 @@ template<typename real_t, typename index_t> class Coarsen{
   /*! Perform coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
-  void coarsen(real_t L_low, real_t L_max){
+  void coarsen(real_t L_low, real_t L_max, int max_num_sweeps=100){
     int nprocs = 1, rank = 0;
     if(MPI::Is_initialized()){
       nprocs = MPI::COMM_WORLD.Get_size();
@@ -109,7 +109,7 @@ template<typename real_t, typename index_t> class Coarsen{
     }
 
     // Loop until the maximum independent set is NULL.
-    for(int loop=0;loop<100;loop++){
+    for(int loop=0;loop<max_num_sweeps;loop++){
       NNodes = _mesh->get_number_nodes();
       
       if(loop==99)
