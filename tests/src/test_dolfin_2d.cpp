@@ -145,18 +145,17 @@ int main(int argc, char **argv){
   surface.find_surface();
 
   // Need to get the metric from the xml file - but for now just add this dummy.
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double, int> metric_field(*mesh, surface);
 
   // Begin dummy...
-  double I[] = {1.0, 0, 0, 1.0};
+  double I[] = {1.0, 0.0, 1.0};
   for(int i=0;i<NNodes;i++){
     double x = mesh->get_coords(i)[0];
     double y = mesh->get_coords(i)[1];
 
     I[0] = 10000.0*(x*x)/((x*x) + (y*y)) + 50.000*(y*y)/((x*x) + (y*y));
     I[1] = 9950.00*x*y/((x*x) + (y*y));
-    I[2] = 9950.00*x*y/((x*x) + (y*y));
-    I[3] = 50.000*(x*x)/((x*x) + (y*y)) + 10000.0*(y*y)/((x*x) + (y*y));
+    I[2] = 50.000*(x*x)/((x*x) + (y*y)) + 10000.0*(y*y)/((x*x) + (y*y));
 
     metric_field.set_metric(I, i);
   }

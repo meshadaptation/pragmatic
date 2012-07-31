@@ -187,7 +187,7 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   ierr = Zoltan_Set_Param(zz, "SUPERSTEP_SIZE", "1000");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 
-  ierr = Zoltan_Set_Param(zz, "COMM_PATTERN", "A");
+  ierr = Zoltan_Set_Param(zz, "COMM_PATTERN", "S");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 
   ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "N");

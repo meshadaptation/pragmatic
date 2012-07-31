@@ -74,7 +74,7 @@ int main(int argc, char **argv){
   Surface<double, int> surface(*mesh);
   surface.find_surface(true);
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.002;
@@ -233,14 +233,14 @@ int main(int argc, char **argv){
   
   delete mesh;
 
-  std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
-  std::cout<<"BENCHMARK: "
-           <<std::setw(12)<<time_coarsen<<" "
-           <<std::setw(11)<<time_refine<<" "
-           <<std::setw(9)<<time_swap<<" "
-           <<std::setw(11)<<time_smooth<<"\n";
-
   if(rank==0){
+    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
+    std::cout<<"BENCHMARK: "
+             <<std::setw(12)<<time_coarsen<<" "
+             <<std::setw(11)<<time_refine<<" "
+             <<std::setw(9)<<time_swap<<" "
+             <<std::setw(11)<<time_smooth<<"\n";
+
     if((qmean>0.8)&&(qmin>0.4))
       std::cout<<"pass"<<std::endl;
     else

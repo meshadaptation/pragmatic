@@ -69,7 +69,7 @@ int main(int argc, char **argv){
   Surface<double, int> surface(*mesh);
   surface.find_surface(true);
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 

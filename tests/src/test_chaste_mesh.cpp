@@ -87,7 +87,7 @@ int main(int argc, char **argv){
   Surface<double, int> surface(mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(mesh, surface);
+  MetricField3D<double, int> metric_field(mesh, surface);
   
   vector<double> psi(NNodes);
   

@@ -329,7 +329,7 @@ template<typename real_t, typename index_t> class VTKTools{
 
     for(size_t i=0;i<NNodes;i++){
       const real_t *r = mesh->get_coords(i);
-      const real_t *m = mesh->get_metric(i);
+      const float *m = mesh->get_metric(i);
 
       if(vtk_psi!=NULL)
         vtk_psi->SetTuple1(i, psi[i]);
@@ -338,25 +338,36 @@ template<typename real_t, typename index_t> class VTKTools{
         vtk_points->SetPoint(i, r[0], r[1], 0.0);
         vtk_metric->SetTuple4(i,
                               m[0], m[1],
-                              m[2], m[3]);
+                              m[1], m[2]);
       }else{
         vtk_points->SetPoint(i, r[0], r[1], r[2]);
         vtk_metric->SetTuple9(i,
                               m[0], m[1], m[2],
-                              m[3], m[4], m[5],
-                              m[6], m[7], m[8]); 
+                              m[1], m[3], m[4],
+                              m[2], m[4], m[5]); 
       }
       int nedges=mesh->NNList[i].size();
       real_t mean_edge_length=0;
       real_t max_desired_edge_length=0;
       real_t min_desired_edge_length=DBL_MAX;
-      for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
-        double length = mesh->calc_edge_length(i, *it);
-        mean_edge_length += length;
-        
-        MetricTensor<real_t> M(ndims, m);
-        max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
-        min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
+      if(ndims==2){
+        for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+          double length = mesh->calc_edge_length(i, *it);
+          mean_edge_length += length;
+          
+          MetricTensor2D<float> M(m);
+          max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
+          min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
+        }
+      }else{
+        for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+          double length = mesh->calc_edge_length(i, *it);
+          mean_edge_length += length;
+          
+          MetricTensor3D<float> M(m);
+          max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
+          min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
+        }
       }
       mean_edge_length/=nedges;
       vtk_edge_length->SetTuple1(i, mean_edge_length);

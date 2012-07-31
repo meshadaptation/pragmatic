@@ -60,6 +60,7 @@ template<typename real_t, typename index_t> class Coarsen{
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
     snloc = (ndims==2)?2:3;
+    msize = (ndims==2)?3:6;
 
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
@@ -151,7 +152,7 @@ template<typename real_t, typename index_t> class Coarsen{
         std::vector<size_t> nedges(NNodes), graph_owner(NNodes);
         {
           for(int i=0;i<NNodes;i++){
-            if(owner[i]==(size_t)rank){
+            if((owner[i]==(size_t)rank)&&((dynamic_vertex[i]>=0)||_mesh->is_halo_node(i))){
               size_t cnt = _mesh->NNList[i].size();
               if(cnt){
                 nedges[i] = cnt;
@@ -167,8 +168,8 @@ template<typename real_t, typename index_t> class Coarsen{
         {
           size_t pos=0;
           for(int i=0;i<NNodes;i++){
-            if((owner[i]==(size_t)rank)&&(_mesh->NNList[i].size()>0)){
-              for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+            if((owner[i]==(size_t)rank)&&((dynamic_vertex[i]>=0)||_mesh->is_halo_node(i))){
+              for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
                 assert(_mesh->NNList[*it].size()>0);
                 csr_edges[pos++] = *it;                
               }
@@ -292,7 +293,7 @@ template<typename real_t, typename index_t> class Coarsen{
 
         // Push data to be sent onto the send_buffer.
         std::vector< std::vector<int> > send_buffer(nprocs);
-        size_t node_package_int_size = (ndims+1)*ndims*sizeof(real_t)/sizeof(int);
+        size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
         for(int p=0;p<nprocs;p++){
           if(send_edges[p].size()==0)
             continue;
@@ -306,9 +307,9 @@ template<typename real_t, typename index_t> class Coarsen{
             // Stuff in coordinates and metric via int's.
             std::vector<int> ivertex(node_package_int_size);
             real_t *rcoords = (real_t *) &(ivertex[0]);
-            
+            float *rmetric = (float *) &(rcoords[ndims]);
             _mesh->get_coords(*it, rcoords);
-            _mesh->get_metric(*it, rcoords+ndims);
+            _mesh->get_metric(*it, rmetric);
 
             send_buffer[p].insert(send_buffer[p].end(), ivertex.begin(), ivertex.end());
           }
@@ -389,7 +390,7 @@ template<typename real_t, typename index_t> class Coarsen{
             extra_halo_receives[lowner].insert(gnn);
 
             real_t *coords = (real_t *) &(recv_buffer[p][loc]);
-            real_t *metric = coords + ndims;
+            float *metric = (float *) &(coords[ndims]);
             loc+=node_package_int_size;
             
             // Add vertex+metric if we have not already received this data.
@@ -768,7 +769,7 @@ template<typename real_t, typename index_t> class Coarsen{
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
-  size_t ndims, nloc, snloc;
+  size_t ndims, nloc, snloc,msize;
 };
 
 #endif

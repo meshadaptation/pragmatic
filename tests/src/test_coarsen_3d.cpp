@@ -64,14 +64,17 @@ int main(int argc, char **argv){
   Surface<double, int> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField3D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
     double m[] =
-      {0.5, 0.0, 0.0,
-       0.0, 0.5, 0.0,
-       0.0, 0.0, 0.5};
+      {0.5, 
+       0.0, 
+       0.0,
+       0.5, 
+       0.0,
+       0.5};
 
     metric_field.set_metric(m, i);
   }

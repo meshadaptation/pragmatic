@@ -104,12 +104,22 @@ extern "C" {
     Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
     
     if(_pragmatic_metric_field==NULL){
-      MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
-      _pragmatic_metric_field = metric_field;
+      if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+        MetricField2D<double, int> *metric_field = new MetricField2D<double, int>(*mesh, *surface);
+        _pragmatic_metric_field = metric_field;
+      }else{
+        MetricField3D<double, int> *metric_field = new MetricField3D<double, int>(*mesh, *surface);
+        _pragmatic_metric_field = metric_field;
+      }
     }
 
-    ((MetricField<double, int> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+    if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+      ((MetricField2D<double, int> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
+      ((MetricField2D<double, int> *)_pragmatic_metric_field)->update_mesh();
+    }else{
+      ((MetricField3D<double, int> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
+      ((MetricField3D<double, int> *)_pragmatic_metric_field)->update_mesh();
+    }
   }
 
   void pragmatic_set_surface(const int *nfacets, const int *facets, const int *boundary_ids, const int *coplanar_ids){
@@ -143,12 +153,22 @@ extern "C" {
     Surface<double, int> *surface = (Surface<double, int> *)_pragmatic_surface;
 
     if(_pragmatic_metric_field==NULL){
-      MetricField<double, int> *metric_field = new MetricField<double, int>(*mesh, *surface);
-      _pragmatic_metric_field = metric_field;
+      if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+        MetricField2D<double, int> *metric_field = new MetricField2D<double, int>(*mesh, *surface);
+        _pragmatic_metric_field = metric_field;
+      }else{
+        MetricField3D<double, int> *metric_field = new MetricField3D<double, int>(*mesh, *surface);
+        _pragmatic_metric_field = metric_field;
+      }
     }
 
-    ((MetricField<double, int> *)_pragmatic_metric_field)->set_metric(metric);
-    ((MetricField<double, int> *)_pragmatic_metric_field)->update_mesh();
+    if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+      ((MetricField2D<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField2D<double, int> *)_pragmatic_metric_field)->update_mesh();
+    }else{
+      ((MetricField3D<double, int> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField3D<double, int> *)_pragmatic_metric_field)->update_mesh();
+    }
   }
 
   void pragmatic_adapt(){
@@ -261,7 +281,11 @@ extern "C" {
   }
 
   void pragmatic_get_metric(double *metric){
-    ((MetricField<double, int> *)_pragmatic_metric_field)->get_metric(metric);
+    if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+      ((MetricField2D<double, int> *)_pragmatic_metric_field)->get_metric(metric);
+    }else{
+      ((MetricField3D<double, int> *)_pragmatic_metric_field)->get_metric(metric);
+    }
   }
 
   void pragmatic_dump(const char *filename){
@@ -269,11 +293,16 @@ extern "C" {
   }
 
   void pragmatic_end(){
+    if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
+      delete (MetricField2D<double, int> *)_pragmatic_metric_field; 
+    }else{
+      delete (MetricField3D<double, int> *)_pragmatic_metric_field; 
+    }
+    _pragmatic_metric_field=NULL;
+
     delete (Mesh<double, int> *)_pragmatic_mesh;
     _pragmatic_mesh=NULL;
     delete (Surface<double, int> *)_pragmatic_surface;
     _pragmatic_surface=NULL;
-    delete (MetricField<double, int> *)_pragmatic_metric_field; 
-    _pragmatic_metric_field=NULL;
   }
 }

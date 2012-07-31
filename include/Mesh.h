@@ -291,7 +291,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);
-    std::vector<real_t> defrag_metric(NNodes*ndims*ndims);
+    std::vector<float> defrag_metric(NNodes*msize);
 
     assert(NElements==(size_t)metis_nelements);
 
@@ -309,8 +309,8 @@ template<typename real_t, typename index_t> class Mesh{
       for(int i=0;i<(int)NNodes;i++){
         for(size_t j=0;j<ndims;j++)
           defrag_coords[i*ndims+j] = 0.0;
-        for(size_t j=0;j<ndims*ndims;j++)
-          defrag_metric[i*ndims*ndims+j] = 0.0;
+        for(size_t j=0;j<msize;j++)
+          defrag_metric[i*msize+j] = 0.0;
       }
     }
     
@@ -333,7 +333,7 @@ template<typename real_t, typename index_t> class Mesh{
       for(size_t j=0;j<ndims;j++)
         defrag_coords[new_nid*ndims+j] = _coords[old_nid*ndims+j];
       for(size_t j=0;j<ndims*ndims;j++)
-        defrag_metric[new_nid*ndims*ndims+j] = metric[old_nid*ndims*ndims+j];
+        defrag_metric[new_nid*msize+j] = metric[old_nid*msize+j];
     }
 
     _ENList.swap(defrag_ENList);
@@ -384,11 +384,11 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Add a new vertex
-  index_t append_vertex(const real_t *x, const real_t *m){
+  index_t append_vertex(const real_t *x, const float *m){
     for(size_t i=0;i<ndims;i++)
       _coords.push_back(x[i]);
     
-    for(size_t i=0;i<ndims*ndims;i++)
+    for(size_t i=0;i<msize;i++)
       metric.push_back(m[i]);
     
     NEList.push_back(std::set<index_t>());
@@ -536,7 +536,7 @@ template<typename real_t, typename index_t> class Mesh{
   /// Get the element minimum quality in metric space.
   real_t get_qmin() const{
     size_t NElements = get_number_elements();
-    double qmin=1; // Where 1 is ideal.
+    float qmin=1; // Where 1 is ideal.
 
     // This is not urgent - but when OpenMP 3.1 is more common we
     // should stick a proper min reduction in here.
@@ -656,16 +656,16 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Return metric at that vertex.
-  const real_t *get_metric(size_t nid) const{
+  const float *get_metric(size_t nid) const{
     assert(metric.size()>0);
-    return &(metric[nid*ndims*ndims]);
+    return &(metric[nid*msize]);
   }
 
   /// Return copy of metric.
-  void get_metric(size_t nid, real_t *m) const{
+  void get_metric(size_t nid, float *m) const{
     assert(metric.size()>0);
-    for(size_t i=0;i<ndims*ndims;i++)
-      m[i] = metric[nid*ndims*ndims+i];
+    for(size_t i=0;i<msize;i++)
+      m[i] = metric[nid*msize+i];
     return;
   }
 
@@ -695,27 +695,22 @@ template<typename real_t, typename index_t> class Mesh{
   real_t calc_edge_length(index_t nid0, index_t nid1) const{
     real_t length=-1.0;
     if(ndims==2){
-      real_t ml00 = (metric[nid0*ndims*ndims]+metric[nid1*ndims*ndims])*0.5;
-      real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
-      real_t ml11 = (metric[nid0*ndims*ndims+3]+metric[nid1*ndims*ndims+3])*0.5;
-
-      const real_t m[] = {ml00, ml01,
-                          ml01, ml11};
+      float m[3];
+      m[0] = (metric[nid0*msize]+metric[nid1*msize])*0.5;
+      m[1] = (metric[nid0*msize+1]+metric[nid1*msize+1])*0.5;
+      m[2] = (metric[nid0*msize+2]+metric[nid1*msize+2])*0.5;
 
       length = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), m);
     }else{
-      real_t ml00 = (metric[nid0*ndims*ndims  ]+metric[nid1*ndims*ndims  ])*0.5;
-      real_t ml01 = (metric[nid0*ndims*ndims+1]+metric[nid1*ndims*ndims+1])*0.5;
-      real_t ml02 = (metric[nid0*ndims*ndims+2]+metric[nid1*ndims*ndims+2])*0.5;
+      float m[6];
+      m[0] = (metric[nid0*msize  ]+metric[nid1*msize  ])*0.5;
+      m[1] = (metric[nid0*msize+1]+metric[nid1*msize+1])*0.5;
+      m[2] = (metric[nid0*msize+2]+metric[nid1*msize+2])*0.5;
       
-      real_t ml11 = (metric[nid0*ndims*ndims+4]+metric[nid1*ndims*ndims+4])*0.5;
-      real_t ml12 = (metric[nid0*ndims*ndims+5]+metric[nid1*ndims*ndims+5])*0.5;
+      m[3] = (metric[nid0*msize+3]+metric[nid1*msize+3])*0.5;
+      m[4] = (metric[nid0*msize+4]+metric[nid1*msize+4])*0.5;
       
-      real_t ml22 = (metric[nid0*ndims*ndims+8]+metric[nid1*ndims*ndims+8])*0.5;
-
-      const real_t m[] = {ml00, ml01, ml02,
-                          ml01, ml11, ml12,
-                          ml02, ml12, ml22};
+      m[5] = (metric[nid0*msize+5]+metric[nid1*msize+5])*0.5;
       
       length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
     }
@@ -1002,7 +997,8 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
  private:
-  template<typename _real_t, typename _index_t> friend class MetricField;
+  template<typename _real_t, typename _index_t> friend class MetricField2D;
+  template<typename _real_t, typename _index_t> friend class MetricField3D;
   template<typename _real_t, typename _index_t> friend class Smooth;
   template<typename _real_t, typename _index_t> friend class Swapping;
   template<typename _real_t, typename _index_t> friend class Coarsen;
@@ -1036,9 +1032,11 @@ template<typename real_t, typename index_t> class Mesh{
     if(z==NULL){
       nloc = 3;
       ndims = 2;
+      msize = 3;
     }else{
       nloc = 4;
       ndims = 3;
+      msize = 6;
     }
 
     // From the globalENList, create the halo and a local ENList if num_processes>1.
@@ -1197,7 +1195,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
 
-  void halo_update(real_t *vec, int block){
+  void halo_update(float *vec, int block){
 #ifdef HAVE_MPI
     if(num_processes<2)
       return;
@@ -1206,7 +1204,53 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<MPI_Request> request(num_processes*2);
     
     // Setup non-blocking receives.
-    std::vector< std::vector<real_t> > recv_buff(num_processes);
+    std::vector< std::vector<float> > recv_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
+      if((i==rank)||(recv[i].size()==0)){
+        request[i] =  MPI_REQUEST_NULL;
+      }else{
+        recv_buff[i].resize(recv[i].size()*block);  
+        MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), MPI_FLOAT, i, 0, _mpi_comm, &(request[i]));
+      }
+    }
+    
+    // Non-blocking sends.
+    std::vector< std::vector<float> > send_buff(num_processes);
+    for(int i=0;i<num_processes;i++){
+      if((i==rank)||(send[i].size()==0)){
+        request[num_processes+i] = MPI_REQUEST_NULL;
+      }else{
+        for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
+          for(int j=0;j<block;j++){
+            send_buff[i].push_back(vec[(*it)*block+j]);
+          }
+        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_FLOAT, i, 0, _mpi_comm, &(request[num_processes+i]));
+      }
+    }
+    
+    std::vector<MPI_Status> status(num_processes*2);
+    MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+    MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
+    
+    for(int i=0;i<num_processes;i++){
+      int k=0;
+      for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
+        for(int j=0;j<block;j++)
+          vec[(*it)*block+j] = recv_buff[i][k*block+j];
+    }
+#endif
+  }
+
+  void halo_update(double *vec, int block){
+#ifdef HAVE_MPI
+    if(num_processes<2)
+      return;
+    
+    // MPI_Requests for all non-blocking communications.
+    std::vector<MPI_Request> request(num_processes*2);
+    
+    // Setup non-blocking receives.
+    std::vector< std::vector<double> > recv_buff(num_processes);
     for(int i=0;i<num_processes;i++){
       if((i==rank)||(recv[i].size()==0)){
         request[i] =  MPI_REQUEST_NULL;
@@ -1217,7 +1261,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
     
     // Non-blocking sends.
-    std::vector< std::vector<real_t> > send_buff(num_processes);
+    std::vector< std::vector<double> > send_buff(num_processes);
     for(int i=0;i<num_processes;i++){
       if((i==rank)||(send[i].size()==0)){
         request[num_processes+i] = MPI_REQUEST_NULL;
@@ -1383,7 +1427,7 @@ template<typename real_t, typename index_t> class Mesh{
     return -1;
   }
 
-  size_t ndims, nloc;
+  size_t ndims, nloc, msize;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
 
@@ -1394,7 +1438,7 @@ template<typename real_t, typename index_t> class Mesh{
   ElementProperty<real_t> *property;
 
   // Metric tensor field.
-  std::vector<real_t> metric;
+  std::vector<float> metric;
 
   // Parallel support.
   int rank, num_processes, num_uma, num_threads;

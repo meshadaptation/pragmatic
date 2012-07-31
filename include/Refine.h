@@ -62,6 +62,7 @@ template<typename real_t, typename index_t> class Refine{
     size_t NElements = _mesh->get_number_elements();
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
+    msize = (ndims==2)?3:6;
 
     // Set the orientation of elements.
     property = NULL;
@@ -160,7 +161,7 @@ template<typename real_t, typename index_t> class Refine{
     std::vector< std::vector<index_t> > refined_edges(NNodes);
     std::vector< std::vector< DirectedEdge<index_t> > > newVertices(nthreads);
     std::vector< std::vector<real_t> > newCoords(nthreads);
-    std::vector< std::vector<real_t> > newMetric(nthreads);
+    std::vector< std::vector<float> > newMetric(nthreads);
     std::vector< std::vector<index_t> > newElements(nthreads);
     std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
 
@@ -381,8 +382,8 @@ template<typename real_t, typename index_t> class Refine{
       {
         const int newSize = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
         
-        _mesh->_coords.resize(ndims * newSize);
-        _mesh->metric.resize(ndims * ndims * newSize);
+        _mesh->_coords.resize(ndims*newSize);
+        _mesh->metric.resize(msize*newSize);
         _mesh->NEList.resize(newSize);
         _mesh->NNList.resize(newSize);
         node_owner.resize(newSize, -1);
@@ -391,7 +392,7 @@ template<typename real_t, typename index_t> class Refine{
       
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
-      memcpy(&_mesh->metric[ndims*ndims*threadIdx[tid]], &newMetric[tid][0], ndims*ndims*splitCnt[tid]*sizeof(real_t));
+      memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(float));
 
       assert(newVertices[tid].size()==splitCnt[tid]);
       for(size_t i=0;i<splitCnt[tid];i++){
@@ -797,7 +798,7 @@ template<typename real_t, typename index_t> class Refine{
  private:
   
   void refine_edge(index_t n0, index_t n1, std::vector< DirectedEdge<index_t> > &newVertices,
-      std::vector<real_t> &coords, std::vector<real_t> &metric){
+      std::vector<real_t> &coords, std::vector<float> &metric){
     if(lnn2gnn[n0]>lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;
@@ -810,10 +811,10 @@ template<typename real_t, typename index_t> class Refine{
     // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
     real_t x, m;
     const real_t *x0 = _mesh->get_coords(n0);
-    const real_t *m0 = _mesh->get_metric(n0);
+    const float *m0 = _mesh->get_metric(n0);
     
     const real_t *x1 = _mesh->get_coords(n1);
-    const real_t *m1 = _mesh->get_metric(n1);
+    const float *m1 = _mesh->get_metric(n1);
     
     real_t weight = 1.0/(1.0 + sqrt(property->length(x0, x1, m0)/
                                     property->length(x0, x1, m1)));
@@ -825,7 +826,7 @@ template<typename real_t, typename index_t> class Refine{
     }
     
     // Interpolate new metric and append it to OMP thread's temp storage
-    for(size_t i=0;i<ndims*ndims;i++){
+    for(size_t i=0;i<msize;i++){
       m = m0[i]+weight*(m1[i] - m0[i]);
       metric.push_back(m);
       if(isnan(m))
@@ -869,7 +870,7 @@ template<typename real_t, typename index_t> class Refine{
   std::map<index_t, index_t> gnn2lnn;
   std::vector<int> node_owner;
 
-  size_t ndims, nloc;
+  size_t ndims, nloc, msize;
   int nprocs, rank, nthreads;
 };
 

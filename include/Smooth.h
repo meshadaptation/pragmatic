@@ -76,6 +76,7 @@ template<typename real_t, typename index_t>
 
     ndims = _mesh->get_number_dimensions();
     nloc = (ndims==2)?3:4;
+    msize = (ndims==2)?3:6;
     
     mpi_nparts = 1;
     rank=0;
@@ -240,7 +241,7 @@ template<typename real_t, typename index_t>
 
       }
       _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-      _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+      _mesh->halo_update(&(_mesh->metric[0]), msize);
       for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
         quality[*ie] = -1;
     }
@@ -289,7 +290,7 @@ template<typename real_t, typename index_t>
 
         }
         _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-        _mesh->halo_update(&(_mesh->metric[0]), ndims*ndims);
+        _mesh->halo_update(&(_mesh->metric[0]), msize);
         for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
           quality[*ie] = -1;
       }
@@ -327,7 +328,7 @@ template<typename real_t, typename index_t>
     if(!valid)
       return false;
     
-    real_t mp[4];
+    float mp[3];
     valid = generate_location_2d(node, p, mp);
     if(!valid)
       return false;
@@ -335,8 +336,8 @@ template<typename real_t, typename index_t>
     for(size_t j=0;j<2;j++)
       _mesh->_coords[node*2+j] = p[j];
     
-    for(size_t j=0;j<4;j++)
-      _mesh->metric[node*4+j] = mp[j];
+    for(size_t j=0;j<3;j++)
+      _mesh->metric[node*3+j] = mp[j];
     
     return true;
   }
@@ -346,7 +347,7 @@ template<typename real_t, typename index_t>
     if(!laplacian_2d_kernel(node, p))
       return false;
 
-    real_t mp[4];
+    float mp[3];
     bool valid = generate_location_2d(node, p, mp);
     if(!valid)
       return false;
@@ -364,8 +365,8 @@ template<typename real_t, typename index_t>
     _mesh->_coords[node*2  ] = p[0];
     _mesh->_coords[node*2+1] = p[1];
 
-    for(size_t j=0;j<4;j++)
-      _mesh->metric[node*4+j] = mp[j];
+    for(size_t j=0;j<3;j++)
+      _mesh->metric[node*3+j] = mp[j];
     
     return true;
   }
@@ -388,7 +389,7 @@ template<typename real_t, typename index_t>
     if(!std::isnormal(hat[0]+hat[1]))
       return false;
 
-    real_t mp[4];
+    float mp[3];
 
     // Initialise alpha.
     bool valid=false;
@@ -453,8 +454,8 @@ template<typename real_t, typename index_t>
     _mesh->_coords[node*2  ] = p[0];
     _mesh->_coords[node*2+1] = p[1];
 
-    for(size_t j=0;j<4;j++)
-      _mesh->metric[node*4+j] = mp[j];
+    for(size_t j=0;j<3;j++)
+      _mesh->metric[node*3+j] = mp[j];
     
     return true;
   }
@@ -497,15 +498,15 @@ template<typename real_t, typename index_t>
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
 
     for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
-      const real_t *m0 = _mesh->get_metric(node);
-      const real_t *m1 = _mesh->get_metric(*il);
+      const float *m0 = _mesh->get_metric(node);
+      const float *m1 = _mesh->get_metric(*il);
       
-      real_t ml00 = 0.5*(m0[0]+m1[0]);
-      real_t ml01 = 0.5*(m0[1]+m1[1]);
-      real_t ml11 = 0.5*(m0[3]+m1[3]);
+      float ml00 = 0.5*(m0[0]+m1[0]);
+      float ml01 = 0.5*(m0[1]+m1[1]);
+      float ml11 = 0.5*(m0[2]+m1[2]);
       
-      real_t x = get_x(*il)-x0;
-      real_t y = get_y(*il)-y0;
+      float x = get_x(*il)-x0;
+      float y = get_y(*il)-y0;
       
       q[0] += (ml00*x + ml01*y);
       q[1] += (ml01*x + ml11*y);
@@ -535,21 +536,22 @@ template<typename real_t, typename index_t>
   }
 
   bool laplacian_3d_kernel(index_t node){
-    real_t p[3], mp[9];
+    real_t p[3];
+    float mp[6];
     if(laplacian_3d_kernel(node, p, mp)){
       // Looks good so lets copy it back;
       for(size_t j=0;j<3;j++)
         _mesh->_coords[node*3+j] = p[j];
       
-      for(size_t j=0;j<9;j++)
-        _mesh->metric[node*9+j] = mp[j];
+      for(size_t j=0;j<6;j++)
+        _mesh->metric[node*6+j] = mp[j];
       
       return true;
     }
     return false;
   }
 
-  bool laplacian_3d_kernel(index_t node, real_t *p, real_t *mp){
+  bool laplacian_3d_kernel(index_t node, real_t *p, float *mp){
     const real_t *normal[]={NULL, NULL};
     std::deque<index_t> adj_nodes;
     if(_surface->contains_node(node)){
@@ -593,15 +595,15 @@ template<typename real_t, typename index_t>
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
     for(typename std::deque<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
-      const real_t *m0 = _mesh->get_metric(node);
-      const real_t *m1 = _mesh->get_metric(*il);
+      const float *m0 = _mesh->get_metric(node);
+      const float *m1 = _mesh->get_metric(*il);
       
-      real_t ml00 = 0.5*(m0[0] + m1[0]);
-      real_t ml01 = 0.5*(m0[1] + m1[1]);
-      real_t ml02 = 0.5*(m0[2] + m1[2]);
-      real_t ml11 = 0.5*(m0[4] + m1[4]);
-      real_t ml12 = 0.5*(m0[5] + m1[5]);
-      real_t ml22 = 0.5*(m0[8] + m1[8]);
+      float ml00 = 0.5*(m0[0] + m1[0]);
+      float ml01 = 0.5*(m0[1] + m1[1]);
+      float ml02 = 0.5*(m0[2] + m1[2]);
+      float ml11 = 0.5*(m0[3] + m1[3]);
+      float ml12 = 0.5*(m0[4] + m1[4]);
+      float ml22 = 0.5*(m0[5] + m1[5]);
       
       q[0] += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
       q[1] += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
@@ -719,19 +721,20 @@ template<typename real_t, typename index_t>
       const index_t *n=_mesh->get_element(best_e);
       assert(n[0]>=0);
 
-      for(size_t i=0;i<9;i++)
+      for(size_t i=0;i<6;i++)
         mp[i] =
-          (l[0]*_mesh->metric[n[0]*9+i]+
-           l[1]*_mesh->metric[n[1]*9+i]+
-           l[2]*_mesh->metric[n[2]*9+i]+
-           l[3]*_mesh->metric[n[3]*9+i])/L;
+          (l[0]*_mesh->metric[n[0]*6+i]+
+           l[1]*_mesh->metric[n[1]*6+i]+
+           l[2]*_mesh->metric[n[2]*6+i]+
+           l[3]*_mesh->metric[n[3]*6+i])/L;
     }
 
     return true;
   }
   
   bool smart_laplacian_3d_kernel(index_t node){
-    real_t p[3], mp[9];
+    real_t p[3];
+    float mp[6];
     if(!laplacian_3d_kernel(node, p, mp))
       return false;
     
@@ -786,8 +789,8 @@ template<typename real_t, typename index_t>
     for(size_t j=0;j<3;j++)
       _mesh->_coords[node*3+j] = p[j];
     
-    for(size_t j=0;j<9;j++)
-      _mesh->metric[node*9+j] = mp[j];
+    for(size_t j=0;j<6;j++)
+      _mesh->metric[node*6+j] = mp[j];
     
     return true;
   }
@@ -817,8 +820,8 @@ template<typename real_t, typename index_t>
         const real_t *r1=_mesh->get_coords(ele[(loc+1)%3]);
         const real_t *r2=_mesh->get_coords(ele[(loc+2)%3]);
         
-        const real_t *m1=_mesh->get_metric(ele[(loc+1)%3]);
-        const real_t *m2=_mesh->get_metric(ele[(loc+2)%3]);
+        const float *m1=_mesh->get_metric(ele[(loc+1)%3]);
+        const float *m2=_mesh->get_metric(ele[(loc+2)%3]);
         
         std::vector<real_t> grad_functional(2);
         grad_r(node,
@@ -887,7 +890,8 @@ template<typename real_t, typename index_t>
         break;
 
       // -
-      real_t p[2], gp[2], mp[4];
+      real_t p[2], gp[2];
+      float mp[3];
       std::map<int, real_t> new_quality;
       bool valid_move = false;
       for(int i=0;i<10;i++){
@@ -914,7 +918,7 @@ template<typename real_t, typename index_t>
         }
 
         assert(std::isnormal(p[0]+p[0]));
-        assert(std::isnormal(mp[0]+mp[1]+mp[3]));
+        assert(std::isnormal(mp[0]+mp[1]+mp[2]));
 
         // Check if this position improves the local mesh quality.
         for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
@@ -959,8 +963,8 @@ template<typename real_t, typename index_t>
       _mesh->_coords[node*2  ] = gp[0];
       _mesh->_coords[node*2+1] = gp[1];
       
-      for(size_t j=0;j<4;j++)
-        _mesh->metric[node*4+j] = mp[j];
+      for(size_t j=0;j<3;j++)
+        _mesh->metric[node*3+j] = mp[j];
     }
 
     return update;
@@ -1051,59 +1055,55 @@ template<typename real_t, typename index_t>
   void grad_r(real_t a0, real_t a1, real_t a2, real_t a3, real_t a4, real_t a5,
               real_t b0, real_t b1, real_t b2, real_t b3, real_t b4, real_t b5,
               real_t c0, real_t c1, real_t c2, real_t c3, real_t c4, real_t c5,
-              const real_t *r1, const real_t *m1,
-              const real_t *r2, const real_t *m2,
+              const real_t *r1, const float *m1,
+              const real_t *r2, const float *m2,
               real_t *grad){
     real_t linf = std::max(std::max(fabs(r1[0]), fabs(r2[0])), std::max(fabs(r1[1]), fabs(r2[1])));    
     real_t delta=linf*1.0e-2;
 
     real_t p[2];
-    real_t mp[4];
+    float mp[3];
     
     p[0] = -delta/2; p[1] = 0;
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
-    mp[2] = mp[1];
-    mp[3] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor<real_t>::positive_definiteness(2, mp);
-    real_t functional_minus_dx = property->lipnikov(p, r1, r2, 
-                                                    mp, m1, m2);
+    mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
+    MetricTensor2D<real_t>::positive_definiteness(mp);
+    float functional_minus_dx = property->lipnikov(p, r1, r2, 
+                                                   mp, m1, m2);
 
     p[0] = delta/2; p[1] = 0;
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
-    mp[2] = mp[1];
-    mp[3] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor<real_t>::positive_definiteness(2, mp);
-    real_t functional_plus_dx = property->lipnikov(p, r1, r2, 
-                                                    mp, m1, m2);
+    mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
+    MetricTensor2D<real_t>::positive_definiteness(mp);
+    float functional_plus_dx = property->lipnikov(p, r1, r2, 
+                                                  mp, m1, m2);
     
     grad[0] = (functional_plus_dx-functional_minus_dx)/delta;
     
     p[0] = 0; p[1] = -delta/2;
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
-    mp[2] = mp[1];
-    mp[3] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor<real_t>::positive_definiteness(2, mp);
-    real_t functional_minus_dy = property->lipnikov(p, r1, r2, 
+    mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
+    MetricTensor2D<real_t>::positive_definiteness(mp);
+    float functional_minus_dy = property->lipnikov(p, r1, r2, 
                                                     mp, m1, m2);
     
     p[0] = 0; p[1] = delta/2;
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
-    mp[2] = mp[1];
-    mp[3] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor<real_t>::positive_definiteness(2, mp);
-    real_t functional_plus_dy = property->lipnikov(p, r1, r2, 
+    mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
+    MetricTensor2D<real_t>::positive_definiteness(mp);
+    float functional_plus_dy = property->lipnikov(p, r1, r2, 
                                                    mp, m1, m2);
     
     grad[1] = (functional_plus_dy-functional_minus_dy)/delta;
   }
 
   void grad_r(index_t node,
-              const real_t *r1, const real_t *m1,
-              const real_t *r2, const real_t *m2,
+              const real_t *r1, const float *m1,
+              const real_t *r2, const float *m2,
               std::vector<real_t> &grad){
 
     grad[0] = 0;
@@ -1118,7 +1118,7 @@ template<typename real_t, typename index_t>
     real_t delta_y=linf_y*1.0e-1;
 
     real_t p[2];
-    real_t mp[4];
+    float mp[3];
 
     bool valid_move_minus_x=false, valid_move_plus_x=false;
     real_t functional_minus_dx=0, functional_plus_dx=0;
@@ -1195,7 +1195,8 @@ template<typename real_t, typename index_t>
       if(quality[*ie]<0){
         const int *n=_mesh->get_element(*ie);
         assert(n[0]>=0);
-        std::vector<const real_t *> x(nloc), m(nloc);
+        std::vector<const real_t *> x(nloc);
+        std::vector<const float *> m(nloc);
         for(size_t i=0;i<nloc;i++){
           x[i] = _mesh->get_coords(n[i]);
           m[i] = _mesh->get_metric(n[i]);
@@ -1214,7 +1215,7 @@ template<typename real_t, typename index_t>
     return patch_quality;
   }
   
-  real_t functional_Linf(index_t node, const real_t *p, const real_t *mp) const{
+  real_t functional_Linf(index_t node, const real_t *p, const float *mp) const{
     real_t functional = DBL_MAX;
     for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
       const index_t *n=_mesh->get_element(*ie);
@@ -1237,7 +1238,7 @@ template<typename real_t, typename index_t>
     return functional;
   }
 
-  bool generate_location_2d(index_t node, const real_t *p, real_t *mp){
+  bool generate_location_2d(index_t node, const real_t *p, float *mp){
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1};
     int best_e=-1;
@@ -1290,11 +1291,11 @@ template<typename real_t, typename index_t>
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
     
-    for(size_t i=0;i<4;i++)
+    for(size_t i=0;i<3;i++)
       mp[i] = 
-        l[0]*_mesh->metric[n[0]*4+i]+
-        l[1]*_mesh->metric[n[1]*4+i]+
-        l[2]*_mesh->metric[n[2]*4+i];
+        l[0]*_mesh->metric[n[0]*3+i]+
+        l[1]*_mesh->metric[n[1]*3+i]+
+        l[2]*_mesh->metric[n[2]*3+i];
     
     return true;
   }
@@ -1308,7 +1309,7 @@ template<typename real_t, typename index_t>
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
-  size_t ndims, nloc;
+  size_t ndims, nloc, msize;
   int mpi_nparts, rank;
   real_t good_q, sigma_q;
   std::vector<real_t> quality;
