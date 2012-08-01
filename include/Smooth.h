@@ -936,8 +936,8 @@ template<typename real_t, typename index_t>
           const real_t *x1 = _mesh->get_coords(n[loc1]);
           const real_t *x2 = _mesh->get_coords(n[loc2]);
           
-          real_t functional = property->lipnikov(gp, x1, x2, 
-                                                 mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
+          float functional = property->lipnikov(gp, x1, x2, 
+                                                mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
           assert(std::isnormal(functional));
           if(functional-functional_0<sigma_q){
             alpha/=2;
@@ -1088,7 +1088,7 @@ template<typename real_t, typename index_t>
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
     MetricTensor2D<real_t>::positive_definiteness(mp);
     float functional_minus_dy = property->lipnikov(p, r1, r2, 
-                                                    mp, m1, m2);
+                                                   mp, m1, m2);
     
     p[0] = 0; p[1] = delta/2;
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
@@ -1096,7 +1096,7 @@ template<typename real_t, typename index_t>
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
     MetricTensor2D<real_t>::positive_definiteness(mp);
     float functional_plus_dy = property->lipnikov(p, r1, r2, 
-                                                   mp, m1, m2);
+                                                  mp, m1, m2);
     
     grad[1] = (functional_plus_dy-functional_minus_dy)/delta;
   }

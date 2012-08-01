@@ -332,7 +332,7 @@ template<typename real_t, typename index_t> class Mesh{
       
       for(size_t j=0;j<ndims;j++)
         defrag_coords[new_nid*ndims+j] = _coords[old_nid*ndims+j];
-      for(size_t j=0;j<ndims*ndims;j++)
+      for(size_t j=0;j<msize;j++)
         defrag_metric[new_nid*msize+j] = metric[old_nid*msize+j];
     }
 

@@ -769,7 +769,7 @@ template<typename real_t, typename index_t> class Coarsen{
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
-  size_t ndims, nloc, snloc,msize;
+  size_t ndims, nloc, snloc, msize;
 };
 
 #endif
