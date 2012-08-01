@@ -814,13 +814,13 @@ template<typename real_t, typename index_t>
     // Form quadratic system to be solved. The quadratic fit is:
     // P = 1 + x + y + z + x^2 + y^2 + z^2 + xy + xz + yz
     // A = P^TP
-    Eigen::Matrix<float, 10, 10> A = Eigen::Matrix<float, 10, 10>::Zero(10,10);
-    Eigen::Matrix<float, 10, 1> b = Eigen::Matrix<float, 10, 1>::Zero(10);
+    Eigen::Matrix<real_t, 10, 10> A = Eigen::Matrix<real_t, 10, 10>::Zero(10,10);
+    Eigen::Matrix<real_t, 10, 1> b = Eigen::Matrix<real_t, 10, 1>::Zero(10);
 
     real_t x0=_mesh->_coords[i*3], y0=_mesh->_coords[i*3+1], z0=_mesh->_coords[i*3+2];
     
     for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
-      float x=_mesh->_coords[(*n)*3]-x0, y=_mesh->_coords[(*n)*3+1]-y0, z=_mesh->_coords[(*n)*3+2]-z0;
+      real_t x=_mesh->_coords[(*n)*3]-x0, y=_mesh->_coords[(*n)*3+1]-y0, z=_mesh->_coords[(*n)*3+2]-z0;
       
       A[0]+=1;
       A[10]+=x;   A[11]+=x*x;
@@ -846,7 +846,7 @@ template<typename real_t, typename index_t>
                                                                                                             A[78] = A[87]; A[79] = A[97];
                                                                                                                            A[89] = A[98];
                   
-    Eigen::Matrix<float, 10, 1> a = Eigen::Matrix<float, 10, 1>::Zero(10);
+    Eigen::Matrix<real_t, 10, 1> a = Eigen::Matrix<real_t, 10, 1>::Zero(10);
     A.svd().solve(b, &a);
 
     Hessian[i*6  ] = a[4]*2.0; // d2/dx2
