@@ -1411,6 +1411,9 @@ template<typename real_t, typename index_t> class Mesh{
   
   inline index_t get_new_vertex(index_t n0, index_t n1,
       std::vector< std::vector<index_t> > &refined_edges, std::vector<index_t> &lnn2gnn) const{
+    
+    assert((size_t)n0<lnn2gnn.size());
+    assert((size_t)n1<lnn2gnn.size());
     if(lnn2gnn[n0]>lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;

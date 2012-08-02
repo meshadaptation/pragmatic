@@ -142,7 +142,8 @@ template<typename real_t, typename index_t> class Refine{
       for(size_t i=0;i<NNodes;i++)
         gnn2lnn[lnn2gnn[i]] = i;
     }
-    
+    assert(lnn2gnn.size()==_mesh->NNList.size());
+
     {// Calculate node ownership.
       node_owner.resize(NNodes);
       for(size_t i=0;i<NNodes;i++)
@@ -423,15 +424,15 @@ template<typename real_t, typename index_t> class Refine{
     {
       int tid = get_tid();
       splitCnt[tid] = 0;
-      
+
+      if(ndims==2){      
 #pragma omp for schedule(dynamic)
-      for(size_t i=0;i<NElements;i++){
-        // Check if this element has been erased - if so continue to next element.
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
-        
-        if(ndims==2){
+        for(size_t i=0;i<NElements;i++){
+          // Check if this element has been erased - if so continue to next element.
+          const int *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
+          
           // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
           index_t newVertex[3];
           newVertex[0] = _mesh->get_new_vertex(n[1], n[2], refined_edges, lnn2gnn);
@@ -466,7 +467,7 @@ template<typename real_t, typename index_t> class Refine{
             append_element(ele1, newElements[tid]);
             splitCnt[tid] += 2;
           }else if(refine_cnt==2){
-            int rotated_ele[3];
+            int rotated_ele[3] = {-1, -1, -1};
             index_t vertexID[2];
             for(int j=0;j<3;j++){
               if(newVertex[j] < 0){
@@ -477,18 +478,9 @@ template<typename real_t, typename index_t> class Refine{
                 break;
               }
             }
-            
-            real_t ldiag0;
-            if(lnn2gnn[vertexID[0]]<lnn2gnn[rotated_ele[1]])
-              ldiag0 = _mesh->calc_edge_length(vertexID[0], rotated_ele[1]);
-            else
-              ldiag0 = _mesh->calc_edge_length(rotated_ele[1], vertexID[0]);
-            
-            real_t ldiag1;
-            if(lnn2gnn[vertexID[1]]<rotated_ele[2])
-              ldiag1 = _mesh->calc_edge_length(vertexID[1], rotated_ele[2]);
-            else
-              ldiag1 = _mesh->calc_edge_length(rotated_ele[2], vertexID[1]);
+
+            real_t ldiag0 = _mesh->calc_edge_length(rotated_ele[1], vertexID[0]);
+            real_t ldiag1 = _mesh->calc_edge_length(rotated_ele[2], vertexID[1]);
 
             const int offset = ldiag0 < ldiag1 ? 0 : 1;
             
@@ -512,7 +504,18 @@ template<typename real_t, typename index_t> class Refine{
             append_element(ele3, newElements[tid]);
             splitCnt[tid] += 4;
           }
-        }else{ // 3D
+
+          // Remove parent element.
+          _mesh->erase_element(i);
+        }
+      }else{ // else 3D
+#pragma omp for schedule(dynamic)
+        for(size_t i=0;i<NElements;i++){
+          // Check if this element has been erased - if so continue to next element.
+          const int *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
+          
           std::vector<index_t> newVertex;
           std::vector< Edge<index_t> > splitEdges;
           index_t vertexID;
@@ -611,10 +614,10 @@ template<typename real_t, typename index_t> class Refine{
             append_element(ele7, newElements[tid]);
             splitCnt[tid] += 8;
           }
+          
+          // Remove parent element.
+          _mesh->erase_element(i);
         }
-        
-        // Remove parent element.
-        _mesh->erase_element(i);
       }
       
       // Perform parallel prefix sum to find (for each OMP thread) the starting position

@@ -507,8 +507,16 @@ template<typename real_t, typename index_t> class Swapping{
             forward = 0, backward = NEList[i].size() - 1;
 
             while(forward < backward){
-              while(NEList[i][forward] != -1) ++forward;
-              while(NEList[i][backward] == -1) --backward;
+              while(NEList[i][forward] != -1){
+                ++forward;
+                if(forward>backward)
+                  break;
+              }
+              while(NEList[i][backward] == -1){
+                --backward;
+                if(forward>backward)
+                  break;
+              }
 
               if(forward < backward){
                 NEList[i][forward] = NEList[i][backward];
@@ -523,6 +531,7 @@ template<typename real_t, typename index_t> class Swapping{
             if(NEList[i][forward] != -1)
               ++forward;
 
+            assert((size_t)i<NEList.size());
             NEList[i].resize(NEextend*forward, (index_t) -1);
           }
         }
