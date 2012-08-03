@@ -98,7 +98,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
-  real_t area(const real_t *x0, const real_t *x1, const real_t *x2){
+  real_t area(const real_t *x0, const real_t *x1, const real_t *x2) const{
     real_t x01 = (x0[0] - x1[0]);
     real_t y01 = (x0[1] - x1[1]);
     
@@ -113,7 +113,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
-  real_t farea(const real_t *x0, const real_t *x1, const real_t *x2){
+  real_t farea(const real_t *x0, const real_t *x1, const real_t *x2) const{
     float x01 = (x0[0] - x1[0]);
     float y01 = (x0[1] - x1[1]);
     
@@ -129,7 +129,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
-  real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
+  real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
 
     // real_t x01 = (x0[0] - x1[0]);
     real_t x02 = (x0[0] - x2[0]);
@@ -152,7 +152,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in tetrahedron.
    * @param x3 pointer to 3D position for forth point in tetrahedron.
    */
-  float fvolume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
+  float fvolume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
 
     // float x01 = (x0[0] - x1[0]);
     float x02 = (x0[0] - x2[0]);
