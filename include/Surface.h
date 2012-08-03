@@ -411,7 +411,7 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void refine(std::vector< std::vector<index_t> > &refined_edges, std::vector<index_t> &lnn2gnn){
+  void refine(std::vector< std::vector<index_t> > &refined_edges, const index_t *lnn2gnn){
     // Given the refined edges, refine facets.
     std::vector< std::vector<index_t> > private_SENList;
     std::vector< std::vector<int> > private_boundary_ids;

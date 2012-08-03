@@ -64,6 +64,8 @@ template<typename real_t, typename index_t> class Refine{
     nloc = (ndims==2)?3:4;
     msize = (ndims==2)?3:6;
 
+    lnn2gnn = NULL;
+
     // Set the orientation of elements.
     property = NULL;
     for(size_t i=0;i<NElements;i++){
@@ -101,6 +103,9 @@ template<typename real_t, typename index_t> class Refine{
   
   /// Default destructor.
   ~Refine(){
+    if(lnn2gnn==NULL)
+      delete [] lnn2gnn;
+    
     delete property;
   }
 
@@ -130,19 +135,20 @@ template<typename real_t, typename index_t> class Refine{
 #endif
       
       // Initialise the lnn2gnn numbering.
-      lnn2gnn.resize(NNodes);
+      if(lnn2gnn!=NULL)
+        delete [] lnn2gnn;
+      lnn2gnn = new index_t[NNodes];
 
       #pragma omp parallel for schedule(static)
       for(size_t i=0;i<NNodes;i++)
         lnn2gnn[i] = gnn_offset+i;
             
       // Update halo values.
-      _mesh->halo_update(&(lnn2gnn[0]), 1);
+      _mesh->halo_update(lnn2gnn, 1);
 
       for(size_t i=0;i<NNodes;i++)
         gnn2lnn[lnn2gnn[i]] = i;
     }
-    assert(lnn2gnn.size()==_mesh->NNList.size());
 
     {// Calculate node ownership.
       node_owner.resize(NNodes);
@@ -454,8 +460,12 @@ template<typename real_t, typename index_t> class Refine{
             for(int j=0;j<3;j++)
               if(newVertex[j] >= 0){
                 vertexID = newVertex[j];
-                for(int k=0;k<3;k++)
-                  rotated_ele[k] = n[(j+k)%3];
+
+                // Loop hand unrolled because compiler could not vectorise.
+                rotated_ele[0] = n[j];
+                rotated_ele[1] = n[(j+1)%3];
+                rotated_ele[2] = n[(j+2)%3];
+                
                 break;
               }
             assert(vertexID!=-1);
@@ -473,8 +483,11 @@ template<typename real_t, typename index_t> class Refine{
               if(newVertex[j] < 0){
                 vertexID[0] = newVertex[(j+1)%3];
                 vertexID[1] = newVertex[(j+2)%3];
-                for(int k=0;k<3;k++)
-                  rotated_ele[k] = n[(j+k)%3];
+
+                rotated_ele[0] = n[j];
+                rotated_ele[1] = n[(j+1)%3];
+                rotated_ele[2] = n[(j+2)%3];
+
                 break;
               }
             }
@@ -578,12 +591,13 @@ template<typename real_t, typename index_t> class Refine{
                 m[4] = splitEdges[2].edge.second;
               m[5] = newVertex[1];
             }
-            for(int j=0;j<4;j++)
+            for(int j=0;j<4;j++){
               if((n[j]!=m[0])&&(n[j]!=m[2])&&(n[j]!=m[4])){
                 m[6] = n[j];
                 break;
               }
-            
+            }
+
             const int ele0[] = {m[0], m[1], m[5], m[6]};
             const int ele1[] = {m[1], m[2], m[3], m[6]};
             const int ele2[] = {m[5], m[3], m[4], m[6]};
@@ -765,30 +779,55 @@ template<typename real_t, typename index_t> class Refine{
 #endif
     
     // Fix orientations of new elements.
-#pragma omp parallel for schedule(dynamic)
-    for(int i=NElements;i<_mesh->get_number_elements();i++){
-      int *n=&(_mesh->_ENList[i*nloc]);
-      if(n[0]<0)
-        continue;
-      
-      real_t av;
-      if(ndims==2)
-        av = property->area(_mesh->get_coords(n[0]),
-                            _mesh->get_coords(n[1]),
-                            _mesh->get_coords(n[2]));
-      else
-        av = property->volume(_mesh->get_coords(n[0]),
-                              _mesh->get_coords(n[1]),
-                              _mesh->get_coords(n[2]),
-                              _mesh->get_coords(n[3]));
-      if(av<0){
-        // Flip element
-        int ntmp = n[0];
-        n[0] = n[1];
-        n[1] = ntmp;
+    int new_NElements = _mesh->get_number_elements();
+    int new_cnt = new_NElements - NElements;
+    index_t *tENList = &(_mesh->_ENList[NElements*nloc]);
+    real_t *tcoords = &(_mesh->_coords[0]);
+#pragma omp parallel
+    {
+      if(ndims==2){
+#pragma omp for schedule(dynamic)
+        for(int i=0;i<new_cnt;i++){
+          index_t n0 = tENList[i*nloc];
+          index_t n1 = tENList[i*nloc + 1];
+          index_t n2 = tENList[i*nloc + 2];
+          
+          const real_t *x0 = tcoords + n0*ndims;
+          const real_t *x1 = tcoords + n1*ndims;
+          const real_t *x2 = tcoords + n2*ndims;
+
+          real_t av = property->area(x0, x1, x2);
+          
+          if(av<0){
+            // Flip element
+            tENList[i*nloc] = n1;
+            tENList[i*nloc+1] = n0;
+          }
+        }
+      }else{ // 3D
+#pragma omp for schedule(dynamic)
+        for(int i=0;i<new_cnt;i++){
+          index_t n0 = tENList[i*nloc];
+          index_t n1 = tENList[i*nloc + 1];
+          index_t n2 = tENList[i*nloc + 2];
+          index_t n3 = tENList[i*nloc + 3];
+
+          const real_t *x0 = tcoords + n0*ndims;
+          const real_t *x1 = tcoords + n1*ndims;
+          const real_t *x2 = tcoords + n2*ndims;
+          const real_t *x3 = tcoords + n3*ndims;
+
+          real_t av = property->volume(x0, x1, x2, x3);
+
+          if(av<0){
+            // Flip element
+            tENList[i*nloc] = n1;
+            tENList[i*nloc+1] = n0;
+          }
+        }
       }
     }
-    
+
     // Finally, refine surface
     _surface->refine(refined_edges, lnn2gnn);
     
@@ -869,7 +908,7 @@ template<typename real_t, typename index_t> class Refine{
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   
-  std::vector<index_t> lnn2gnn;
+  index_t *lnn2gnn;
   std::map<index_t, index_t> gnn2lnn;
   std::vector<int> node_owner;
 

@@ -77,7 +77,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.002;
+  double eta=0.0002;
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -150,7 +150,7 @@ int main(int argc, char **argv){
     }
 
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref, 1);
+    coarsen.coarsen(L_low, L_ref, 2);
     time_coarsen += get_wtime() - tic;
 
     if(verbose){
