@@ -1338,32 +1338,54 @@ template<typename real_t, typename index_t> class Mesh{
   void create_adjancy(){
     size_t NNodes = get_number_nodes();
     size_t NElements = get_number_elements();
-
-    // Create new NNList and NEList.
-    std::vector< std::set<index_t> > NNList_set(NNodes);
+    
     NEList.clear();
     NEList.resize(NNodes);
 
-    for(size_t i=0; i<NElements; i++){
-      for(size_t j=0;j<nloc;j++){
-        index_t nid_j = _ENList[i*nloc+j];
-        if(nid_j<0)
-          break;
-        NEList[nid_j].insert(i);
-        for(size_t k=j+1;k<nloc;k++){
-          index_t nid_k = _ENList[i*nloc+k];
-          NNList_set[nid_j].insert(nid_k);
-          NNList_set[nid_k].insert(nid_j);
-        }
-      }
-    }
-
-    // Compress NNList
     NNList.clear();
     NNList.resize(NNodes);
-#pragma omp parallel for schedule(static)
-    for(size_t i=0;i<NNodes;i++)
-      NNList[i].insert(NNList[i].end(), NNList_set[i].begin(), NNList_set[i].end());
+
+    std::vector< std::vector<index_t> > NNList_set(NNodes);
+    std::vector< std::vector<index_t> > NEList_set(NNodes);
+
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(size_t i=0;i<NNodes;i++){
+        NNList_set[i].reserve(16);
+        NEList_set[i].reserve(16);
+      }
+
+#pragma omp master
+      {   
+        for(size_t i=0; i<NElements; i++){
+          if(_ENList[i*nloc]<0)
+            continue;
+          
+          for(size_t j=0;j<nloc;j++){
+            index_t nid_j = _ENList[i*nloc+j];
+            NEList_set[nid_j].push_back(i);
+            
+            for(size_t k=j+1;k<nloc;k++){
+              index_t nid_k = _ENList[i*nloc+k];
+              NNList_set[nid_j].push_back(nid_k);
+              NNList_set[nid_k].push_back(nid_j);
+            }
+          }
+        }
+      }
+#pragma omp barrier
+      
+      // Compress NNList
+#pragma omp for schedule(static)
+      for(size_t i=0;i<NNodes;i++){
+        std::sort(NNList_set[i].begin(), NNList_set[i].end());
+        std::unique_copy(NNList_set[i].begin(), NNList_set[i].end(), inserter(NNList[i], NNList[i].begin()));
+        
+        std::sort(NEList_set[i].begin(), NEList_set[i].end());
+        std::unique_copy(NEList_set[i].begin(), NEList_set[i].end(), inserter(NEList[i], NEList[i].begin()));
+      }
+    }
   }
 
   void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){
