@@ -234,12 +234,13 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(rank==0){
-    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
+    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";
     std::cout<<"BENCHMARK: "
              <<std::setw(12)<<time_coarsen<<" "
              <<std::setw(11)<<time_refine<<" "
              <<std::setw(9)<<time_swap<<" "
-             <<std::setw(11)<<time_smooth<<"\n";
+             <<std::setw(11)<<time_smooth<<" "
+             <<std::setw(10)<<time_adapt<<"\n";
 
     if((qmean>0.8)&&(qmin>0.4))
       std::cout<<"pass"<<std::endl;
