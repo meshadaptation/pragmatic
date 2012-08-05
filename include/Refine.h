@@ -391,7 +391,6 @@ template<typename real_t, typename index_t> class Refine{
         
         _mesh->_coords.resize(ndims*newSize);
         _mesh->metric.resize(msize*newSize);
-        _mesh->NNList.resize(newSize);
         node_owner.resize(newSize, -1);
       }
 #pragma omp barrier
