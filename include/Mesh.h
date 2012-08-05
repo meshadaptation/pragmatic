@@ -571,7 +571,7 @@ template<typename real_t, typename index_t> class Mesh{
     }
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_FLOAT, MPI_MIN, _mpi_comm);
     }
 #endif
     return qmin;
