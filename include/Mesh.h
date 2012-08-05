@@ -341,10 +341,10 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
 
-    // Second sweep writes node wata with new numbering.
+    // Second sweep writes node data with new numbering.
     for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
       index_t new_nid = (*active_vertex_map)[old_nid];
-      if(old_nid<0)
+      if(new_nid<0)
         continue;
       
       for(size_t j=0;j<ndims;j++)
