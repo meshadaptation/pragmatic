@@ -83,7 +83,7 @@ int main(int argc, char **argv){
   adapt.coarsen(0.4, sqrt(2.0));
   double toc = get_wtime();
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   

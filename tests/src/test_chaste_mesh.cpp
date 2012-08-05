@@ -131,7 +131,7 @@ int main(int argc, char **argv){
   double lrms = mesh.get_lrms();
   double qrms = mesh.get_qrms();
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh.defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 

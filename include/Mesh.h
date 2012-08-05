@@ -147,11 +147,19 @@ template<typename real_t, typename index_t> class Mesh{
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significently
     coarsened. */
-  void defragment(std::map<index_t, index_t> *active_vertex_map=NULL){
+  void defragment(std::vector<index_t> *active_vertex_map=NULL){
+    size_t NNodes = get_number_nodes();
+    size_t NElements = get_number_elements();
+    
     // Discover which verticies and elements are active.
     bool local_active_vertex_map=(active_vertex_map==NULL);
-    if(local_active_vertex_map)
-      active_vertex_map = new std::map<index_t, index_t>;
+    if(local_active_vertex_map){
+      active_vertex_map = new std::vector<index_t>();
+    }
+    (*active_vertex_map).resize(NNodes);
+#pragma omp parallel for schedule(static)
+    for(size_t i=0;i<NNodes;i++)
+      (*active_vertex_map)[i] = -1;
 
     // Create look-up tables for halos.
     std::map<index_t, std::set<int> > send_set, recv_set;
@@ -165,9 +173,11 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     // Identify active vertices and elements.
-    std::deque<index_t> active_vertex, active_element;
+    std::vector<index_t> active_vertex, active_element;
+    active_vertex.reserve(NNodes);
+    active_element.reserve(NElements);
+
     std::map<index_t, std::set<int> > new_send_set, new_recv_set;
-    size_t NElements = get_number_elements();
     for(size_t e=0;e<NElements;e++){
       index_t nid = _ENList[e*nloc];
       
@@ -216,15 +226,18 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Create a new numbering.
     index_t cnt=0;
-    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
-      it->second = cnt++;
-      active_vertex.push_back(it->first);
+    for(index_t i=0;i<NNodes;i++){
+      if((*active_vertex_map)[i]<0)
+        continue;
+
+      (*active_vertex_map)[i] = cnt++;
+      active_vertex.push_back(i);
     }
     
     int metis_nnodes = active_vertex.size();
     int metis_nelements = active_element.size();
     std::vector< std::set<index_t> > graph(metis_nnodes);
-    for(typename std::deque<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
+    for(typename std::vector<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
       for(size_t i=0;i<nloc;i++){
         index_t nid0 = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
         for(size_t j=i+1;j<nloc;j++){
@@ -261,8 +274,11 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     // Update active_vertex_map
-    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
-      it->second = metis_vertex_renumber[it->second];
+    for(size_t i=0;i<NNodes;i++){
+      if((*active_vertex_map)[i]<0)
+        continue;
+      
+      (*active_vertex_map)[i] = metis_vertex_renumber[(*active_vertex_map)[i]];
     }
     
     // Renumber elements
@@ -286,7 +302,7 @@ template<typename real_t, typename index_t> class Mesh{
     // end of renumbering
     
     // Compress data structures.
-    index_t NNodes = active_vertex.size();
+    NNodes = active_vertex.size();
     NElements = active_element.size();
 
     std::vector<index_t> defrag_ENList(NElements*nloc);
@@ -313,7 +329,7 @@ template<typename real_t, typename index_t> class Mesh{
           defrag_metric[i*msize+j] = 0.0;
       }
     }
-    
+
     // Second sweep writes elements with new numbering.
     for(int i=0;i<metis_nelements;i++){
       index_t old_eid = metis_element_renumber[i];
@@ -326,16 +342,17 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     // Second sweep writes node wata with new numbering.
-    for(typename std::map<index_t, index_t>::iterator it=active_vertex_map->begin();it!=active_vertex_map->end();++it){
-      index_t old_nid = it->first;
-      index_t new_nid = it->second;
+    for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
+      index_t new_nid = (*active_vertex_map)[old_nid];
+      if(old_nid<0)
+        continue;
       
       for(size_t j=0;j<ndims;j++)
         defrag_coords[new_nid*ndims+j] = _coords[old_nid*ndims+j];
       for(size_t j=0;j<msize;j++)
         defrag_metric[new_nid*msize+j] = metric[old_nid*msize+j];
     }
-
+    
     _ENList.swap(defrag_ENList);
     _coords.swap(defrag_coords);
     metric.swap(defrag_metric);
@@ -1345,45 +1362,64 @@ template<typename real_t, typename index_t> class Mesh{
     NNList.clear();
     NNList.resize(NNodes);
 
-    std::vector< std::vector<index_t> > NNList_set(NNodes);
     std::vector< std::vector<index_t> > NEList_set(NNodes);
 
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
       for(size_t i=0;i<NNodes;i++){
-        NNList_set[i].reserve(16);
         NEList_set[i].reserve(16);
       }
 
 #pragma omp master
-      {   
-        for(size_t i=0; i<NElements; i++){
-          if(_ENList[i*nloc]<0)
-            continue;
-          
-          for(size_t j=0;j<nloc;j++){
-            index_t nid_j = _ENList[i*nloc+j];
-            NEList_set[nid_j].push_back(i);
+      {
+        if(ndims==2){
+          for(size_t i=0; i<NElements; i++){
+            if(_ENList[i*nloc]<0)
+              continue;
             
-            for(size_t k=j+1;k<nloc;k++){
-              index_t nid_k = _ENList[i*nloc+k];
-              NNList_set[nid_j].push_back(nid_k);
-              NNList_set[nid_k].push_back(nid_j);
+            index_t nid_0 = _ENList[i*nloc];
+            index_t nid_1 = _ENList[i*nloc+1];
+            index_t nid_2 = _ENList[i*nloc+2];
+            
+            NEList_set[nid_0].push_back(i);
+            NEList_set[nid_1].push_back(i);
+            NEList_set[nid_2].push_back(i);
+          }
+        }else{
+          for(size_t i=0; i<NElements; i++){
+            if(_ENList[i*nloc]<0)
+              continue;
+            
+            for(size_t j=0;j<nloc;j++){
+              index_t nid_j = _ENList[i*nloc+j];
+              NEList_set[nid_j].push_back(i);
             }
           }
         }
       }
 #pragma omp barrier
       
-      // Compress NNList
-#pragma omp for schedule(static)
+      // Finalise
+#pragma omp for schedule(dynamic)
       for(size_t i=0;i<NNodes;i++){
-        std::sort(NNList_set[i].begin(), NNList_set[i].end());
-        std::unique_copy(NNList_set[i].begin(), NNList_set[i].end(), inserter(NNList[i], NNList[i].begin()));
+        if(NEList_set[i].size()==0)
+          continue;
         
         std::sort(NEList_set[i].begin(), NEList_set[i].end());
         std::unique_copy(NEList_set[i].begin(), NEList_set[i].end(), inserter(NEList[i], NEList[i].begin()));
+
+        std::vector<index_t> nnset;
+        nnset.reserve(64);
+        for(typename std::set<index_t>::const_iterator it=NEList[i].begin();it!=NEList[i].end();it++){
+          const index_t *n=&(_ENList[(*it)*nloc]);
+          for(size_t j=0;j<nloc;j++){
+            if(n[j]!=i)
+              nnset.push_back(n[j]);
+          }
+        }
+        std::sort(nnset.begin(), nnset.end());
+        std::unique_copy(nnset.begin(), nnset.end(), inserter(NNList[i], NNList[i].begin()));
       }
     }
   }

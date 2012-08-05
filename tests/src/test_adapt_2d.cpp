@@ -117,7 +117,7 @@ int main(int argc, char **argv){
 
   if(verbose)
     if(!mesh->verify()){
-      std::map<int, int> active_vertex_map;
+      std::vector<int> active_vertex_map;
       mesh->defragment(&active_vertex_map);
       surface.defragment(&active_vertex_map);
       
@@ -140,7 +140,7 @@ int main(int argc, char **argv){
         std::cout<<"INFO: Verify quality after refine.\n";
       
       if(!mesh->verify()){    
-        std::map<int, int> active_vertex_map;
+        std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
@@ -158,7 +158,7 @@ int main(int argc, char **argv){
         std::cout<<"INFO: Verify quality after coarsen.\n";
       
       if(!mesh->verify()){
-        std::map<int, int> active_vertex_map;
+        std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
@@ -176,7 +176,7 @@ int main(int argc, char **argv){
         std::cout<<"INFO: Verify quality after swapping.\n";
       
       if(!mesh->verify()){
-        std::map<int, int> active_vertex_map;
+        std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
@@ -191,7 +191,7 @@ int main(int argc, char **argv){
       break;
   }
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 

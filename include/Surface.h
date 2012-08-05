@@ -311,7 +311,7 @@ template<typename real_t, typename index_t>
 
   /*! Defragment surface mesh. This compresses the storage of internal data
     structures after the mesh has been defraged.*/
-  void defragment(std::map<index_t, index_t> *active_vertex_map){
+  void defragment(std::vector<index_t> *active_vertex_map){
     size_t NNodes = _mesh->get_number_nodes();
     surface_nodes.resize(NNodes);
     for(size_t i=0;i<NNodes;i++)
@@ -331,7 +331,7 @@ template<typename real_t, typename index_t>
       // Check all vertices are active.
       bool valid_facet=true;
       for(size_t j=0;j<snloc;j++){
-        if(active_vertex_map->count(n[j])==0){
+        if((*active_vertex_map)[n[j]]<0){
           valid_facet = false;
           break;
         }
