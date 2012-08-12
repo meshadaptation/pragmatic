@@ -54,8 +54,9 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(std::vector< std::deque<index_t> > &NNList, index_t *colour){
+  static void greedy(std::vector< std::vector<index_t> > &NNList, int *colour){
     size_t NNodes = NNList.size();
+    size_t max_colour=64;
 
     // Colour first active node.
     size_t node;
@@ -71,13 +72,20 @@ class Colour{
       if(NNList[node].size()==0)
         continue;
       
-      std::set<index_t> used_colours;
-      for(typename std::deque<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it)
-        if(*it<(int)node)
-          used_colours.insert(colour[*it]);
+      std::vector<bool> used_colours(max_colour, false);;
+      for(typename std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
+        if(*it<(int)node){
+          if(colour[*it]>=max_colour){
+            max_colour*=2;
+            used_colours.resize(max_colour, false);
+          }
+          
+          used_colours[colour[*it]] = true;
+        }
+      }
       
       for(index_t i=0;;i++)
-        if(used_colours.count(i)==0){
+        if(!used_colours[i]){
           colour[node] = i;
           break;
         }

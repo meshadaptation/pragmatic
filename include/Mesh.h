@@ -1364,32 +1364,34 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Create required adjacency lists.
-  void create_adjancy(){
-    size_t NNodes = get_number_nodes();
-    size_t NElements = get_number_elements();
-    
+  void create_adjancy(){    
     int NEList_size = NEList.size();
-#pragma omp for schedule(dynamic) nowait
+#pragma omp for schedule(static) nowait
     for(int i=0;i<NEList_size;i++){
       NEList[i].clear();
     }
-
+    
     int NNList_size = NNList.size();
-#pragma omp for schedule(dynamic) nowait
+#pragma omp for schedule(static) nowait
     for(int i=0;i<NNList_size;i++){
       NNList[i].clear();
     }
+
+    size_t NNodes = get_number_nodes();
 
 #pragma omp barrier
    
 #pragma omp single nowait
     NNList.resize(NNodes);
     
-#pragma omp single
+#pragma omp single nowait
     NEList.resize(NNodes);
     
     int tid = omp_get_thread_num();
     int nthreads = omp_get_max_threads();
+    size_t NElements = get_number_elements();
+
+#pragma omp barrier
 
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
@@ -1405,7 +1407,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp barrier
 
     // Finalise
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static)
     for(size_t i=0;i<NNodes;i++){
       if(NEList[i].empty())
         continue;

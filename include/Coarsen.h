@@ -49,6 +49,7 @@
 #include "ElementProperty.h"
 #include "zoltan_tools.h"
 #include "Mesh.h"
+#include "Colour.h"
 
 /*! \brief Performs 2D and 3D mesh coarsening.
  *
@@ -65,6 +66,19 @@ template<typename real_t, typename index_t> class Coarsen{
     nloc = (ndims==2)?3:4;
     snloc = (ndims==2)?2:3;
     msize = (ndims==2)?3:6;
+
+    nprocs = 1;
+    rank = 0;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      nprocs = MPI::COMM_WORLD.Get_size();
+      rank = MPI::COMM_WORLD.Get_rank();
+    }
+#endif
+    nthreads = 1;
+#ifdef _OPENMP
+    nthreads = omp_get_max_threads();
+#endif
 
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
@@ -95,35 +109,19 @@ template<typename real_t, typename index_t> class Coarsen{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
   void coarsen(real_t L_low, real_t L_max, int max_num_sweeps=100){
-    std::vector<index_t> dynamic_vertex;
-    std::vector<bool> recalculate_collapse;
     std::vector<bool> maximal_independent_set;
-    std::vector<int> lnn2gnn;
-    std::vector<size_t> owner;      
-#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-    boost::unordered_map<int, int> gnn2lnn;
-#else
-    stl::map<int, int> gnn2lnn;
-#endif
     int coarsen_cnt;
     
 #pragma omp parallel
-    {
-      int nprocs = 1, rank = 0;
-      if(MPI::Is_initialized()){
-        nprocs = MPI::COMM_WORLD.Get_size();
-        rank = MPI::COMM_WORLD.Get_rank();
-      }
-    
-      int NNodes = _mesh->get_number_nodes();
-    
-      // Initialise list of vertices to be collapsed (note first-touch).
-#pragma omp master
+    {    
+      int NNodes= _mesh->get_number_nodes();
+      
+      // Initialise list of vertices to be collapsed (applying first-touch).
+#pragma omp single
       {
         dynamic_vertex.resize(NNodes);
         recalculate_collapse.resize(NNodes);
       }
-#pragma omp barrier
 
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
@@ -133,17 +131,17 @@ template<typename real_t, typename index_t> class Coarsen{
     
       // Loop until the maximum independent set is NULL.
       for(int loop=0;loop<max_num_sweeps;loop++){
-        NNodes = _mesh->get_number_nodes();
-      
-        // Default for non-mpi
-        int NPNodes = NNodes;
-      
-        if(loop==99)
+
+        if(loop==(max_num_sweeps-1))
           std::cerr<<"WARNING: Possible excessive coarsening.\n";
-      
-        // Update edges that are to be collapsed.
+        
+        NNodes = _mesh->get_number_nodes();
+
+        // Update edges that are to be collapsed. Using dynamic
+        // schedule as load can get very irregular.
 #pragma omp single
         coarsen_cnt=0;
+
 #pragma omp for schedule(dynamic) reduction(+:coarsen_cnt)
         for(int i=0;i<NNodes;i++){
           if(_mesh->NNList[i].empty()){
@@ -163,414 +161,24 @@ template<typename real_t, typename index_t> class Coarsen{
         if(coarsen_cnt==0){
           break;
         }
-        
-#pragma omp master
-        {
-          lnn2gnn.clear();
-          owner.clear();
-          gnn2lnn.clear();
-        
-          // Create the global node numbering.
-          _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
-        
-          // Create a reverse lookup to map received gnn's back to lnn's.     
-          for(int i=0;i<NNodes;i++){
-            assert(gnn2lnn.find(lnn2gnn[i])==gnn2lnn.end());
-            gnn2lnn[lnn2gnn[i]] = i;
-          }
-          assert(gnn2lnn.size()==lnn2gnn.size());
-              
-          // Use a bitmap to indicate the maximal independent set.
-          assert(NNodes>=NPNodes);
-          maximal_independent_set.resize(NNodes);
-          std::fill(maximal_independent_set.begin(), maximal_independent_set.end(), false);
-        
-          // Find the size of the local graph and create a new lnn2gnn for the compressed graph.
-          size_t graph_length=0;
-          std::vector<size_t> nedges(NNodes), graph_owner(NNodes);
-          {
-            for(int i=0;i<NNodes;i++){
-              size_t cnt = _mesh->NNList[i].size();
-              if(cnt){
-                nedges[i] = cnt;
-              
-                graph_length+=cnt;
-              }
-            }
-          }
-        
-          // Create the graph in CSR.
-          std::vector<size_t> csr_edges(graph_length);
-          {
-            size_t pos=0;
-            for(int i=0;i<NNodes;i++){
-              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
-                assert(_mesh->NNList[*it].size()>0);
-                csr_edges[pos++] = *it;                
-              }
-            }
-          }
-          
-          // Colour.
-          zoltan_graph_t graph;
-          std::vector<int> colour(NNodes);
-        
-          graph.rank = rank;
-          graph.nnodes = NNodes;
-          graph.npnodes = NPNodes;
-          graph.nedges = &(nedges[0]);
-          graph.csr_edges = &(csr_edges[0]);
-        
-          graph.gid = &(lnn2gnn[0]);
-          graph.owner = &(owner[0]);
-        
-          graph.colour = &(colour[0]);
-        
-          zoltan_colour(&graph, 1, MPI_COMM_WORLD);
-          
-          // Given a colouring, determine the maximum independent set.
-          
-          // Count number of active vertices of each colour.
-          int max_colour = 0;
-          for(int i=0;i<NPNodes;i++){
-            max_colour = std::max(max_colour, colour[i]);
-          }
-          
-          if(MPI::Is_initialized())
-            MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-          
-          std::vector<int> ncolours(max_colour+1, 0);
-          for(int i=0;i<NPNodes;i++){
-            if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
-              ncolours[colour[i]]++;
-            }
-          }
-          
-          if(MPI::Is_initialized())
-            MPI_Allreduce(MPI_IN_PLACE, &(ncolours[0]), max_colour+1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-          
-          // Find the colour of the largest active set.
-          std::pair<int, int> MIS_colour(0, ncolours[0]);
-          for(int i=1;i<=max_colour;i++){
-            if(MIS_colour.second<ncolours[i]){
-              MIS_colour.first = i;
-              MIS_colour.second = ncolours[i];
-            }
-          }
-          
-          assert(MIS_colour.second!=0);
 
-          for(int i=0;i<NPNodes;i++){
-            if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
-              maximal_independent_set[i] = true;
-            }
-          }
-          
-          if(nprocs>1){
-            // Cache who knows what.
-            std::vector< std::set<int> > known_nodes(nprocs);
-            for(int p=0;p<nprocs;p++){
-              if(p==rank)
-                continue;
-              
-              for(std::vector<int>::const_iterator it=_mesh->send[p].begin();it!=_mesh->send[p].end();++it)
-                known_nodes[p].insert(*it);
-              
-              for(std::vector<int>::const_iterator it=_mesh->recv[p].begin();it!=_mesh->recv[p].end();++it)
-                known_nodes[p].insert(*it);
-            }
-            
-            // Communicate collapses.
-            // Stuff in list of vertices that have to be communicated.
-            std::vector< std::vector<int> > send_edges(nprocs);
-            std::vector< std::set<int> > send_elements(nprocs), send_nodes(nprocs);
-            for(int i=0;i<NNodes;i++){
-              if(!maximal_independent_set[i])
-                continue;
-              
-              // Is the vertex being collapsed contained in the halo?
-              if(_mesh->is_halo_node(i)){ 
-                // Yes. Discover where we have to send this edge.
-                for(int p=0;p<nprocs;p++){
-                  if(known_nodes[p].count(i)){
-                    send_edges[p].push_back(lnn2gnn[i]);
-                    send_edges[p].push_back(lnn2gnn[dynamic_vertex[i]]);
-                    
-                    send_elements[p].insert(_mesh->NEList[i].begin(), _mesh->NEList[i].end());
-                  }
-                }
-              }
-            }
-            
-            // Finalise list of additional elements and nodes to be sent.
-            for(int p=0;p<nprocs;p++){
-              for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();){
-                std::set<int>::iterator ele=it++;
-                const int *n=_mesh->get_element(*ele);
-                int cnt=0;
-                for(size_t i=0;i<nloc;i++){
-                  if(known_nodes[p].count(n[i])==0){
-                    send_nodes[p].insert(n[i]);
-                  }
-                  if(owner[n[i]]==(size_t)p)
-                    cnt++;
-                }
-                if(cnt){
-                  send_elements[p].erase(ele);
-                }
-              }
-            }
-            
-            // Push data to be sent onto the send_buffer.
-            std::vector< std::vector<int> > send_buffer(nprocs);
-            size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
-            for(int p=0;p<nprocs;p++){
-              if(send_edges[p].size()==0)
-                continue;
-              
-              // Push on the nodes that need to be communicated.
-              send_buffer[p].push_back(send_nodes[p].size());
-              for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
-                send_buffer[p].push_back(lnn2gnn[*it]);
-                send_buffer[p].push_back(owner[*it]);
-                
-                // Stuff in coordinates and metric via int's.
-                std::vector<int> ivertex(node_package_int_size);
-                real_t *rcoords = (real_t *) &(ivertex[0]);
-                float *rmetric = (float *) &(rcoords[ndims]);
-                _mesh->get_coords(*it, rcoords);
-                _mesh->get_metric(*it, rmetric);
-                
-                send_buffer[p].insert(send_buffer[p].end(), ivertex.begin(), ivertex.end());
-              }
-              
-              // Push on edges that need to be sent.
-              send_buffer[p].push_back(send_edges[p].size());
-              send_buffer[p].insert(send_buffer[p].end(), send_edges[p].begin(), send_edges[p].end());
-              
-              // Push on elements that need to be communicated; record facets that need to be sent with these elements.
-              send_buffer[p].push_back(send_elements[p].size());
-              std::set<int> send_facets;
-              for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();++it){
-                const int *n=_mesh->get_element(*it);
-                for(size_t j=0;j<nloc;j++)
-                  send_buffer[p].push_back(lnn2gnn[n[j]]);
-                
-                std::vector<int> lfacets;
-                _surface->find_facets(n, lfacets);
-                send_facets.insert(lfacets.begin(), lfacets.end());
-              }
-              
-              // Push on facets that need to be communicated.
-              send_buffer[p].push_back(send_facets.size());
-              for(std::set<int>::iterator it=send_facets.begin();it!=send_facets.end();++it){
-                const int *n=_surface->get_facet(*it);
-                for(size_t i=0;i<snloc;i++)
-                  send_buffer[p].push_back(lnn2gnn[n[i]]);
-                send_buffer[p].push_back(_surface->get_boundary_id(*it));
-                send_buffer[p].push_back(_surface->get_coplanar_id(*it));
-              }
-            }
-            
-            std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
-            for(int p=0;p<nprocs;p++)
-              send_buffer_size[p] = send_buffer[p].size();
-            MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
-            
-            // Setup non-blocking receives
-            std::vector< std::vector<int> > recv_buffer(nprocs);
-            std::vector<MPI_Request> request(nprocs*2);
-            for(int i=0;i<nprocs;i++){
-              if(recv_buffer_size[i]==0){
-                request[i] =  MPI_REQUEST_NULL;
-              }else{
-                recv_buffer[i].resize(recv_buffer_size[i]);
-                MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
-              }
-            }
-            
-            // Non-blocking sends.
-            for(int i=0;i<nprocs;i++){
-              if(send_buffer_size[i]==0){
-                request[nprocs+i] =  MPI_REQUEST_NULL;
-              }else{
-                MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
-              }
-            }
-            
-            // Wait for comms to finish.
-            std::vector<MPI_Status> status(nprocs*2);
-            MPI_Waitall(nprocs, &(request[0]), &(status[0]));
-            MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
-            
-            // Unpack received data into dynamic_vertex
-            std::vector< std::set<index_t> > extra_halo_receives(nprocs);
-            for(int p=0;p<nprocs;p++){
-              if(recv_buffer[p].empty())
-                continue;
-              
-              int loc = 0;
-              
-              // Unpack additional nodes.
-              int num_extra_nodes = recv_buffer[p][loc++];
-              for(int i=0;i<num_extra_nodes;i++){
-                int gnn = recv_buffer[p][loc++]; // think this through - can I get duplicates
-                int lowner = recv_buffer[p][loc++];
-                
-                extra_halo_receives[lowner].insert(gnn);
-                
-                real_t *coords = (real_t *) &(recv_buffer[p][loc]);
-                float *metric = (float *) &(coords[ndims]);
-                loc+=node_package_int_size;
-                
-                // Add vertex+metric if we have not already received this data.
-                if(gnn2lnn.find(gnn)==gnn2lnn.end()){
-                  index_t lnn = _mesh->append_vertex(coords, metric);
-                  
-                  lnn2gnn.push_back(gnn);
-                  owner.push_back(lowner);
-                  dynamic_vertex.push_back(-1);
-                  recalculate_collapse.push_back(false);
-                  
-                  gnn2lnn[gnn] = lnn;
-                }
-              }
-              
-              // Unpack edges
-              size_t edges_size=recv_buffer[p][loc++];
-              for(size_t i=0;i<edges_size;i+=2){
-                int rm_vertex = gnn2lnn[recv_buffer[p][loc++]];
-                int target_vertex = gnn2lnn[recv_buffer[p][loc++]];
-                assert(dynamic_vertex[rm_vertex]<0);
-                assert(target_vertex>=0);
-                dynamic_vertex[rm_vertex] = target_vertex;
-                maximal_independent_set[rm_vertex] = true;
-              }
-              
-              // Unpack elements.
-              int num_extra_elements = recv_buffer[p][loc++];
-              for(int i=0;i<num_extra_elements;i++){
-                std::vector<int> element(nloc);
-                for(size_t j=0;j<nloc;j++){
-                  element[j] = gnn2lnn[recv_buffer[p][loc++]];
-                }
-                
-                // See if this is a new element.
-                std::set<index_t> self_element;
-                set_intersection(_mesh->NEList[element[0]].begin(), _mesh->NEList[element[0]].end(),
-                                 _mesh->NEList[element[1]].begin(), _mesh->NEList[element[1]].end(),
-                                 inserter(self_element, self_element.begin()));
-                
-                for(size_t l=2;l<nloc;l++){
-                  std::set<index_t> neigh_elements;
-                  set_intersection(_mesh->NEList[element[l]].begin(), _mesh->NEList[element[l]].end(),
-                                   self_element.begin(), self_element.end(),
-                                   inserter(neigh_elements, neigh_elements.begin()));
-                  self_element.swap(neigh_elements);
-                  
-                  if(self_element.empty())
-                    break;
-                }
-                
-                if(self_element.empty()){
-                  // Add element
-                  int eid = _mesh->append_element(&(element[0]));
-                  
-                  // Update adjacency: edges, NEList, NNList
-                  for(size_t l=0;l<nloc;l++){
-                    _mesh->NEList[element[l]].insert(eid);
-                    
-                    for(size_t k=l+1;k<nloc;k++){
-                      std::vector<int>::iterator result0 = std::find(_mesh->NNList[element[l]].begin(), _mesh->NNList[element[l]].end(), element[k]);
-                      if(result0==_mesh->NNList[element[l]].end())
-                        _mesh->NNList[element[l]].push_back(element[k]);
-                      
-                      std::vector<int>::iterator result1 = std::find(_mesh->NNList[element[k]].begin(), _mesh->NNList[element[k]].end(), element[l]);
-                      if(result1==_mesh->NNList[element[k]].end())
-                        _mesh->NNList[element[k]].push_back(element[l]);
-                    }
-                  }
-                }
-              }
-              
-              // Unpack facets.
-              int num_extra_facets = recv_buffer[p][loc++];
-              for(int i=0;i<num_extra_facets;i++){
-                std::vector<int> facet(snloc);
-                for(size_t j=0;j<snloc;j++){
-                  index_t gnn = recv_buffer[p][loc++];
-                  assert(gnn2lnn.find(gnn)!=gnn2lnn.end());
-                  facet[j] = gnn2lnn[gnn];
-                }
-                
-                int boundary_id = recv_buffer[p][loc++];
-                int coplanar_id = recv_buffer[p][loc++];
-                
-                _surface->append_facet(&(facet[0]), boundary_id, coplanar_id, true);
-              }
-            }
-            
-            assert(gnn2lnn.size()==lnn2gnn.size());
-            
-            // Update halo.
-            for(int p=0;p<nprocs;p++){
-              send_buffer_size[p] = extra_halo_receives[p].size();
-              send_buffer[p].clear();
-              for(typename std::set<index_t>::const_iterator ht=extra_halo_receives[p].begin();ht!=extra_halo_receives[p].end();++ht)
-                send_buffer[p].push_back(*ht);
-              
-            }
-            MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
-            
-            // Setup non-blocking receives
-            for(int i=0;i<nprocs;i++){
-              recv_buffer[i].clear();
-              if(recv_buffer_size[i]==0){
-                request[i] =  MPI_REQUEST_NULL;
-              }else{
-                recv_buffer[i].resize(recv_buffer_size[i]);
-                MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
-              }
-            }
-            
-            // Non-blocking sends.
-            for(int i=0;i<nprocs;i++){
-              if(send_buffer_size[i]==0){
-                request[nprocs+i] =  MPI_REQUEST_NULL;
-              }else{
-                MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
-              }
-            }
-            
-            // Wait for comms to finish.
-            MPI_Waitall(nprocs, &(request[0]), &(status[0]));
-            MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
-            
-            // Use this data to update the halo information.
-            for(int i=0;i<nprocs;i++){
-              for(std::vector<int>::const_iterator it=recv_buffer[i].begin();it!=recv_buffer[i].end();++it){
-                assert(gnn2lnn.find(*it)!=gnn2lnn.end());
-                int lnn = gnn2lnn[*it];
-                _mesh->send[i].push_back(lnn);
-                _mesh->send_halo.insert(lnn);
-              }
-              for(std::vector<int>::const_iterator it=send_buffer[i].begin();it!=send_buffer[i].end();++it){
-                assert(gnn2lnn.find(*it)!=gnn2lnn.end());
-                int lnn = gnn2lnn[*it];
-                _mesh->recv[i].push_back(lnn);
-                _mesh->recv_halo.insert(lnn);
-              }
-            }
+#pragma omp single
+        { 
+          bool distributed_algorithm = false;
+          if(distributed_algorithm){
+            select_max_independent_set_distributed(maximal_independent_set);
+            NNodes = _mesh->get_number_nodes(); // This could have changed if data was migrated.
+          }else{
+            select_max_independent_set_serial(maximal_independent_set);
           }
         }
-
-#pragma omp barrier
 
         // Perform collapse operations.
 #pragma omp single nowait
         {
           // Perform surface coarsening.
           for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
+
             // Vertex to be removed: rm_vertex
             if(!maximal_independent_set[rm_vertex])
               continue;
@@ -583,7 +191,7 @@ template<typename real_t, typename index_t> class Coarsen{
             }
           }
         }
-        
+
 #pragma omp for schedule(dynamic)
         for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
           // Vertex to be removed: rm_vertex
@@ -835,11 +443,454 @@ template<typename real_t, typename index_t> class Coarsen{
     return target_vertex;
   }
 
+  void select_max_independent_set_distributed(std::vector<bool> &maximal_independent_set){
+    std::vector<int> lnn2gnn;
+    std::vector<size_t> owner;      
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+    boost::unordered_map<int, int> gnn2lnn;
+#else
+    stl::map<int, int> gnn2lnn;
+#endif
+    
+    int NNodes = _mesh->get_number_nodes();
+    int NPNodes = NNodes;
+
+    // Create the global node numbering.
+    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
+        
+    // Create a reverse lookup to map received gnn's back to lnn's.     
+    for(int i=0;i<NNodes;i++){
+      assert(gnn2lnn.find(lnn2gnn[i])==gnn2lnn.end());
+      gnn2lnn[lnn2gnn[i]] = i;
+    }
+    assert(gnn2lnn.size()==lnn2gnn.size());
+              
+    // Use a bitmap to indicate the maximal independent set.
+    assert(NNodes>=NPNodes);
+    maximal_independent_set.resize(NNodes);
+    std::fill(maximal_independent_set.begin(), maximal_independent_set.end(), false);
+    
+    // Find the size of the local graph and create a new lnn2gnn for the compressed graph.
+    size_t graph_length=0;
+    std::vector<size_t> nedges(NNodes), graph_owner(NNodes);
+    {
+      for(int i=0;i<NNodes;i++){
+        size_t cnt = _mesh->NNList[i].size();
+        if(cnt){
+          nedges[i] = cnt;
+              
+          graph_length+=cnt;
+        }
+      }
+    }
+        
+    // Create the graph in CSR.
+    std::vector<size_t> csr_edges(graph_length);
+    {
+      size_t pos=0;
+      for(int i=0;i<NNodes;i++){
+        for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+          assert(_mesh->NNList[*it].size()>0);
+          csr_edges[pos++] = *it;                
+        }
+      }
+    }
+          
+    // Colour.
+    zoltan_graph_t graph;
+    std::vector<int> colour(NNodes);
+        
+    graph.rank = rank;
+    graph.nnodes = NNodes;
+    graph.npnodes = NPNodes;
+    graph.nedges = &(nedges[0]);
+    graph.csr_edges = &(csr_edges[0]);
+        
+    graph.gid = &(lnn2gnn[0]);
+    graph.owner = &(owner[0]);
+        
+    graph.colour = &(colour[0]);
+        
+    zoltan_colour(&graph, 1, MPI_COMM_WORLD);
+          
+    // Given a colouring, determine the maximum independent set.
+          
+    // Count number of active vertices of each colour.
+    int max_colour = 0;
+    for(int i=0;i<NPNodes;i++){
+      max_colour = std::max(max_colour, colour[i]);
+    }
+          
+    if(MPI::Is_initialized())
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+          
+    std::vector<int> ncolours(max_colour+1, 0);
+    for(int i=0;i<NPNodes;i++){
+      if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
+        ncolours[colour[i]]++;
+      }
+    }
+          
+    if(MPI::Is_initialized())
+      MPI_Allreduce(MPI_IN_PLACE, &(ncolours[0]), max_colour+1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+          
+    // Find the colour of the largest active set.
+    std::pair<int, int> MIS_colour(0, ncolours[0]);
+    for(int i=1;i<=max_colour;i++){
+      if(MIS_colour.second<ncolours[i]){
+        MIS_colour.first = i;
+        MIS_colour.second = ncolours[i];
+      }
+    }
+          
+    assert(MIS_colour.second!=0);
+
+    for(int i=0;i<NPNodes;i++){
+      if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
+        maximal_independent_set[i] = true;
+      }
+    }
+
+    // This is really inefficient so it should not be called for 1 process runs.
+    // assert(nprocs>1);
+
+    // Cache who knows what.
+    std::vector< std::set<int> > known_nodes(nprocs);
+    for(int p=0;p<nprocs;p++){
+      if(p==rank)
+        continue;
+              
+      for(std::vector<int>::const_iterator it=_mesh->send[p].begin();it!=_mesh->send[p].end();++it)
+        known_nodes[p].insert(*it);
+              
+      for(std::vector<int>::const_iterator it=_mesh->recv[p].begin();it!=_mesh->recv[p].end();++it)
+        known_nodes[p].insert(*it);
+    }
+            
+    // Communicate collapses.
+    // Stuff in list of vertices that have to be communicated.
+    std::vector< std::vector<int> > send_edges(nprocs);
+    std::vector< std::set<int> > send_elements(nprocs), send_nodes(nprocs);
+    for(int i=0;i<NNodes;i++){
+      if(!maximal_independent_set[i])
+        continue;
+              
+      // Is the vertex being collapsed contained in the halo?
+      if(_mesh->is_halo_node(i)){ 
+        // Yes. Discover where we have to send this edge.
+        for(int p=0;p<nprocs;p++){
+          if(known_nodes[p].count(i)){
+            send_edges[p].push_back(lnn2gnn[i]);
+            send_edges[p].push_back(lnn2gnn[dynamic_vertex[i]]);
+                    
+            send_elements[p].insert(_mesh->NEList[i].begin(), _mesh->NEList[i].end());
+          }
+        }
+      }
+    }
+            
+    // Finalise list of additional elements and nodes to be sent.
+    for(int p=0;p<nprocs;p++){
+      for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();){
+        std::set<int>::iterator ele=it++;
+        const int *n=_mesh->get_element(*ele);
+        int cnt=0;
+        for(size_t i=0;i<nloc;i++){
+          if(known_nodes[p].count(n[i])==0){
+            send_nodes[p].insert(n[i]);
+          }
+          if(owner[n[i]]==(size_t)p)
+            cnt++;
+        }
+        if(cnt){
+          send_elements[p].erase(ele);
+        }
+      }
+    }
+            
+    // Push data to be sent onto the send_buffer.
+    std::vector< std::vector<int> > send_buffer(nprocs);
+    size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
+    for(int p=0;p<nprocs;p++){
+      if(send_edges[p].size()==0)
+        continue;
+              
+      // Push on the nodes that need to be communicated.
+      send_buffer[p].push_back(send_nodes[p].size());
+      for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
+        send_buffer[p].push_back(lnn2gnn[*it]);
+        send_buffer[p].push_back(owner[*it]);
+                
+        // Stuff in coordinates and metric via int's.
+        std::vector<int> ivertex(node_package_int_size);
+        real_t *rcoords = (real_t *) &(ivertex[0]);
+        float *rmetric = (float *) &(rcoords[ndims]);
+        _mesh->get_coords(*it, rcoords);
+        _mesh->get_metric(*it, rmetric);
+                
+        send_buffer[p].insert(send_buffer[p].end(), ivertex.begin(), ivertex.end());
+      }
+              
+      // Push on edges that need to be sent.
+      send_buffer[p].push_back(send_edges[p].size());
+      send_buffer[p].insert(send_buffer[p].end(), send_edges[p].begin(), send_edges[p].end());
+              
+      // Push on elements that need to be communicated; record facets that need to be sent with these elements.
+      send_buffer[p].push_back(send_elements[p].size());
+      std::set<int> send_facets;
+      for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();++it){
+        const int *n=_mesh->get_element(*it);
+        for(size_t j=0;j<nloc;j++)
+          send_buffer[p].push_back(lnn2gnn[n[j]]);
+                
+        std::vector<int> lfacets;
+        _surface->find_facets(n, lfacets);
+        send_facets.insert(lfacets.begin(), lfacets.end());
+      }
+              
+      // Push on facets that need to be communicated.
+      send_buffer[p].push_back(send_facets.size());
+      for(std::set<int>::iterator it=send_facets.begin();it!=send_facets.end();++it){
+        const int *n=_surface->get_facet(*it);
+        for(size_t i=0;i<snloc;i++)
+          send_buffer[p].push_back(lnn2gnn[n[i]]);
+        send_buffer[p].push_back(_surface->get_boundary_id(*it));
+        send_buffer[p].push_back(_surface->get_coplanar_id(*it));
+      }
+    }
+            
+    std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
+    for(int p=0;p<nprocs;p++)
+      send_buffer_size[p] = send_buffer[p].size();
+    MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+            
+    // Setup non-blocking receives
+    std::vector< std::vector<int> > recv_buffer(nprocs);
+    std::vector<MPI_Request> request(nprocs*2);
+    for(int i=0;i<nprocs;i++){
+      if(recv_buffer_size[i]==0){
+        request[i] =  MPI_REQUEST_NULL;
+      }else{
+        recv_buffer[i].resize(recv_buffer_size[i]);
+        MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
+      }
+    }
+            
+    // Non-blocking sends.
+    for(int i=0;i<nprocs;i++){
+      if(send_buffer_size[i]==0){
+        request[nprocs+i] =  MPI_REQUEST_NULL;
+      }else{
+        MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
+      }
+    }
+            
+    // Wait for comms to finish.
+    std::vector<MPI_Status> status(nprocs*2);
+    MPI_Waitall(nprocs, &(request[0]), &(status[0]));
+    MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
+            
+    // Unpack received data into dynamic_vertex
+    std::vector< std::set<index_t> > extra_halo_receives(nprocs);
+    for(int p=0;p<nprocs;p++){
+      if(recv_buffer[p].empty())
+        continue;
+              
+      int loc = 0;
+              
+      // Unpack additional nodes.
+      int num_extra_nodes = recv_buffer[p][loc++];
+      for(int i=0;i<num_extra_nodes;i++){
+        int gnn = recv_buffer[p][loc++]; // think this through - can I get duplicates
+        int lowner = recv_buffer[p][loc++];
+                
+        extra_halo_receives[lowner].insert(gnn);
+                
+        real_t *coords = (real_t *) &(recv_buffer[p][loc]);
+        float *metric = (float *) &(coords[ndims]);
+        loc+=node_package_int_size;
+                
+        // Add vertex+metric if we have not already received this data.
+        if(gnn2lnn.find(gnn)==gnn2lnn.end()){
+          index_t lnn = _mesh->append_vertex(coords, metric);
+                  
+          lnn2gnn.push_back(gnn);
+          owner.push_back(lowner);
+          dynamic_vertex.push_back(-1);
+          recalculate_collapse.push_back(false);
+          maximal_independent_set.push_back(false);     
+          gnn2lnn[gnn] = lnn;
+        }
+      }
+              
+      // Unpack edges
+      size_t edges_size=recv_buffer[p][loc++];
+      for(size_t i=0;i<edges_size;i+=2){
+        int rm_vertex = gnn2lnn[recv_buffer[p][loc++]];
+        int target_vertex = gnn2lnn[recv_buffer[p][loc++]];
+        assert(dynamic_vertex[rm_vertex]<0);
+        assert(target_vertex>=0);
+        dynamic_vertex[rm_vertex] = target_vertex;
+        maximal_independent_set[rm_vertex] = true;
+      }
+              
+      // Unpack elements.
+      int num_extra_elements = recv_buffer[p][loc++];
+      for(int i=0;i<num_extra_elements;i++){
+        std::vector<int> element(nloc);
+        for(size_t j=0;j<nloc;j++){
+          element[j] = gnn2lnn[recv_buffer[p][loc++]];
+        }
+                
+        // See if this is a new element.
+        std::set<index_t> self_element;
+        set_intersection(_mesh->NEList[element[0]].begin(), _mesh->NEList[element[0]].end(),
+                         _mesh->NEList[element[1]].begin(), _mesh->NEList[element[1]].end(),
+                         inserter(self_element, self_element.begin()));
+                
+        for(size_t l=2;l<nloc;l++){
+          std::set<index_t> neigh_elements;
+          set_intersection(_mesh->NEList[element[l]].begin(), _mesh->NEList[element[l]].end(),
+                           self_element.begin(), self_element.end(),
+                           inserter(neigh_elements, neigh_elements.begin()));
+          self_element.swap(neigh_elements);
+                  
+          if(self_element.empty())
+            break;
+        }
+                
+        if(self_element.empty()){
+          // Add element
+          int eid = _mesh->append_element(&(element[0]));
+                  
+          // Update adjacency: edges, NEList, NNList
+          for(size_t l=0;l<nloc;l++){
+            _mesh->NEList[element[l]].insert(eid);
+                    
+            for(size_t k=l+1;k<nloc;k++){
+              std::vector<int>::iterator result0 = std::find(_mesh->NNList[element[l]].begin(), _mesh->NNList[element[l]].end(), element[k]);
+              if(result0==_mesh->NNList[element[l]].end())
+                _mesh->NNList[element[l]].push_back(element[k]);
+                      
+              std::vector<int>::iterator result1 = std::find(_mesh->NNList[element[k]].begin(), _mesh->NNList[element[k]].end(), element[l]);
+              if(result1==_mesh->NNList[element[k]].end())
+                _mesh->NNList[element[k]].push_back(element[l]);
+            }
+          }
+        }
+      }
+              
+      // Unpack facets.
+      int num_extra_facets = recv_buffer[p][loc++];
+      for(int i=0;i<num_extra_facets;i++){
+        std::vector<int> facet(snloc);
+        for(size_t j=0;j<snloc;j++){
+          index_t gnn = recv_buffer[p][loc++];
+          assert(gnn2lnn.find(gnn)!=gnn2lnn.end());
+          facet[j] = gnn2lnn[gnn];
+        }
+                
+        int boundary_id = recv_buffer[p][loc++];
+        int coplanar_id = recv_buffer[p][loc++];
+                
+        _surface->append_facet(&(facet[0]), boundary_id, coplanar_id, true);
+      }
+    }
+            
+    assert(gnn2lnn.size()==lnn2gnn.size());
+            
+    // Update halo.
+    for(int p=0;p<nprocs;p++){
+      send_buffer_size[p] = extra_halo_receives[p].size();
+      send_buffer[p].clear();
+      for(typename std::set<index_t>::const_iterator ht=extra_halo_receives[p].begin();ht!=extra_halo_receives[p].end();++ht)
+        send_buffer[p].push_back(*ht);
+              
+    }
+    MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+            
+    // Setup non-blocking receives
+    for(int i=0;i<nprocs;i++){
+      recv_buffer[i].clear();
+      if(recv_buffer_size[i]==0){
+        request[i] =  MPI_REQUEST_NULL;
+      }else{
+        recv_buffer[i].resize(recv_buffer_size[i]);
+        MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
+      }
+    }
+            
+    // Non-blocking sends.
+    for(int i=0;i<nprocs;i++){
+      if(send_buffer_size[i]==0){
+        request[nprocs+i] =  MPI_REQUEST_NULL;
+      }else{
+        MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
+      }
+    }
+            
+    // Wait for comms to finish.
+    MPI_Waitall(nprocs, &(request[0]), &(status[0]));
+    MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
+            
+    // Use this data to update the halo information.
+    for(int i=0;i<nprocs;i++){
+      for(std::vector<int>::const_iterator it=recv_buffer[i].begin();it!=recv_buffer[i].end();++it){
+        assert(gnn2lnn.find(*it)!=gnn2lnn.end());
+        int lnn = gnn2lnn[*it];
+        _mesh->send[i].push_back(lnn);
+        _mesh->send_halo.insert(lnn);
+      }
+      for(std::vector<int>::const_iterator it=send_buffer[i].begin();it!=send_buffer[i].end();++it){
+        assert(gnn2lnn.find(*it)!=gnn2lnn.end());
+        int lnn = gnn2lnn[*it];
+        _mesh->recv[i].push_back(lnn);
+        _mesh->recv_halo.insert(lnn);
+      }
+    }
+  }
+
+  void select_max_independent_set_serial(std::vector<bool> &maximal_independent_set){
+    int NNodes = _mesh->get_number_nodes();
+    
+    std::vector<int> colour(NNodes);
+    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    
+    std::map<int, int> ncolours;
+    for(int i=0;i<NNodes;i++){
+      if(dynamic_vertex[i]>=0){
+        ncolours[colour[i]]++;
+      }
+    }
+
+    std::map<int, int>::const_iterator incolours = ncolours.begin();
+    std::pair<int, int> MIS_colour(incolours->first, incolours->second);
+    ++ incolours;
+    for(;incolours!=ncolours.end();++incolours){
+      if(MIS_colour.second<incolours->second){
+        MIS_colour.first = incolours->first;
+        MIS_colour.second = incolours->second;
+      }
+    }
+    maximal_independent_set.resize(NNodes);
+    std::fill(maximal_independent_set.begin(), maximal_independent_set.end(), false);
+    for(int i=0;i<NNodes;i++){
+      if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
+        maximal_independent_set[i] = true;
+      }
+    }
+  }
+
  private:
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
+  
+  std::vector<index_t> dynamic_vertex;
+  std::vector<bool> recalculate_collapse;
+
   size_t ndims, nloc, snloc, msize;
+  int nprocs, rank, nthreads;
 };
 
 #endif
