@@ -49,12 +49,23 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
+#ifdef HAVE_MPI
 #include <mpi.h>
+#endif
 
 using namespace std;
 
 int main(int argc, char **argv){
+#ifdef HAVE_MPI
   MPI::Init(argc,argv);
+#endif
+
+  int rank = 0;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    }
+#endif
 
   bool verbose = false;
   if(argc>1){
@@ -64,7 +75,7 @@ int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
-  surface.find_surface();
+  surface.find_surface(true);
 
   MetricField2D<double, int> metric_field(*mesh, surface);
 
@@ -94,10 +105,11 @@ int main(int argc, char **argv){
     double lrms = mesh->get_lrms();
     double qrms = mesh->get_qrms();
     
-    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl
-             <<"Edge length RMS:      "<<lrms<<std::endl
-             <<"Quality RMS:          "<<qrms<<std::endl;
+    if(rank==0)
+      std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+               <<"Number elements:      "<<nelements<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
   VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
@@ -105,12 +117,16 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if(nelements==2)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    if(nelements==2)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
 
+#ifdef HAVE_MPI
   MPI::Finalize();
+#endif
 
   return 0;
 }

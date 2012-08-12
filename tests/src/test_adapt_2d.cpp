@@ -57,7 +57,7 @@
 using namespace std;
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  MPI::Init_thread(argc,argv, MPI::THREAD_SERIALIZED);
 
   bool verbose = false;
   if(argc>1){

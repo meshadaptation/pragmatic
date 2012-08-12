@@ -222,8 +222,9 @@ template<typename real_t, typename index_t>
     }
 
     // If nid_free is not on the surface then it's unconstrained.
-    if(!surface_nodes[nid_free])
+    if(!surface_nodes[nid_free]){
       return true;
+    }
 
     // However, is nid_free is on the surface then nid_target must
     // also lie on a surface for it to be considered for collapse.
@@ -263,14 +264,15 @@ template<typename real_t, typename index_t>
     // collapsed to any other vertex on that plane.
     assert(incident_plane_free.size()==1);
 
+    bool on_plane = incident_plane_target.count(*incident_plane_free.begin())>0;
 
-    return incident_plane_target.count(*incident_plane_free.begin())>0;
+    return on_plane;
   }
 
   void collapse(index_t nid_free, index_t nid_target){
-    assert(is_collapsible(nid_free, nid_target));
     assert(SNEList.count(nid_free));
     assert(SNEList.count(nid_target));
+    assert(is_collapsible(nid_free, nid_target));
 
     surface_nodes[nid_free] = false; 
     

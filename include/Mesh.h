@@ -1364,43 +1364,39 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Create required adjacency lists.
-  void create_adjancy(){    
-    int NEList_size = NEList.size();
-#pragma omp for schedule(static) nowait
-    for(int i=0;i<NEList_size;i++){
-      NEList[i].clear();
-    }
-    
-    int NNList_size = NNList.size();
-#pragma omp for schedule(static) nowait
-    for(int i=0;i<NNList_size;i++){
-      NNList[i].clear();
-    }
-
+  void create_adjancy(){
     size_t NNodes = get_number_nodes();
 
-#pragma omp barrier
-   
 #pragma omp single nowait
-    NNList.resize(NNodes);
-    
-#pragma omp single nowait
-    NEList.resize(NNodes);
+      NNList.resize(NNodes);
+#pragma omp single
+      NEList.resize(NNodes);
+
+#pragma omp for schedule(static)
+    for(int i=0;i<NNodes;i++){
+      NEList[i].clear();
+      NNList[i].clear();
+    }
     
     int tid = omp_get_thread_num();
     int nthreads = omp_get_max_threads();
     size_t NElements = get_number_elements();
-
-#pragma omp barrier
-
+    
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
       
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
-        if((nid_j%nthreads)==tid)
+        if((nid_j%nthreads)==tid){
           NEList[nid_j].insert(NEList[nid_j].end(), i);
+          for(size_t k=0;k<nloc;k++){
+            if(j!=k){
+              index_t nid_k = _ENList[i*nloc+k];
+              NNList[nid_j].push_back(nid_k);
+            }
+          }
+        }
       }
     }
     
@@ -1409,18 +1405,11 @@ template<typename real_t, typename index_t> class Mesh{
     // Finalise
 #pragma omp for schedule(static)
     for(size_t i=0;i<NNodes;i++){
-      if(NEList[i].empty())
+      if(NNList[i].empty())
         continue;
       
       std::vector<index_t> nnset;
-      nnset.reserve(64);
-      for(typename std::set<index_t>::const_iterator it=NEList[i].begin();it!=NEList[i].end();it++){
-        const index_t *n=&(_ENList[(*it)*nloc]);
-        for(size_t j=0;j<nloc;j++){
-          if(n[j]!=(index_t)i)
-            nnset.push_back(n[j]);
-        }
-      }
+      NNList[i].swap(nnset);
       std::sort(nnset.begin(), nnset.end());
       std::unique_copy(nnset.begin(), nnset.end(), inserter(NNList[i], NNList[i].begin()));
     }

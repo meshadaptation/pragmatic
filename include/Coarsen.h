@@ -71,10 +71,11 @@ template<typename real_t, typename index_t> class Coarsen{
     rank = 0;
 #ifdef HAVE_MPI
     if(MPI::Is_initialized()){
-      nprocs = MPI::COMM_WORLD.Get_size();
-      rank = MPI::COMM_WORLD.Get_rank();
+      MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
+      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
     }
 #endif
+
     nthreads = 1;
 #ifdef _OPENMP
     nthreads = omp_get_max_threads();
@@ -111,6 +112,8 @@ template<typename real_t, typename index_t> class Coarsen{
   void coarsen(real_t L_low, real_t L_max, int max_num_sweeps=100){
     std::vector<bool> maximal_independent_set;
     int coarsen_cnt;
+
+    int phase=1;
     
 #pragma omp parallel
     {    
@@ -126,52 +129,63 @@ template<typename real_t, typename index_t> class Coarsen{
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
         dynamic_vertex[i] = -1;
-        recalculate_collapse[i] = true;
+        recalculate_collapse[i] = !(_mesh->NNList[i].empty());
       }
     
       // Loop until the maximum independent set is NULL.
       for(int loop=0;loop<max_num_sweeps;loop++){
-
-        if(loop==(max_num_sweeps-1))
-          std::cerr<<"WARNING: Possible excessive coarsening.\n";
         
         NNodes = _mesh->get_number_nodes();
 
-        // Update edges that are to be collapsed. Using dynamic
-        // schedule as load can get very irregular.
+        // Update edges that are to be collapsed.
 #pragma omp single
         coarsen_cnt=0;
 
 #pragma omp for schedule(dynamic) reduction(+:coarsen_cnt)
         for(int i=0;i<NNodes;i++){
-          if(_mesh->NNList[i].empty()){
-            dynamic_vertex[i] = -1;
-            recalculate_collapse[i] = false;
-          }
           if(recalculate_collapse[i]){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
             if(dynamic_vertex[i]>=0){
               coarsen_cnt++;
             }
-          }  
-          recalculate_collapse[i] = false;
-        }
-      
-        // Break if there is nothing left to coarsen.
-        if(coarsen_cnt==0){
-          break;
-        }
-
-#pragma omp single
-        { 
-          bool distributed_algorithm = false;
-          if(distributed_algorithm){
-            select_max_independent_set_distributed(maximal_independent_set);
-            NNodes = _mesh->get_number_nodes(); // This could have changed if data was migrated.
-          }else{
-            select_max_independent_set_serial(maximal_independent_set);
+            recalculate_collapse[i] = false;
           }
         }
+#ifdef HAVE_MPI
+#pragma omp master
+        {
+          if(nprocs>1)
+            MPI_Allreduce(MPI_IN_PLACE, &coarsen_cnt, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+        }
+#pragma omp barrier
+#endif
+
+        // Break if there is nothing left to coarsen.
+        if(coarsen_cnt==0){
+          if((nprocs==1)){
+            break;
+          }else{
+            /* MPI parallel. Phase one coarsens the internal
+               domain. Once this is finished we move to the halo.
+            */
+            if(phase==2){
+              break;
+            }
+#pragma omp barrier
+            phase++;
+          }
+        }
+
+#pragma omp master
+        {
+          if(phase==1){
+            select_max_independent_set_serial(maximal_independent_set);
+          }else{
+            select_max_independent_set_distributed(maximal_independent_set);
+            NNodes = _mesh->get_number_nodes(); // This could have changed if data was migrated.
+          }
+        }
+#pragma omp barrier
 
         // Perform collapse operations.
 #pragma omp single nowait
@@ -230,11 +244,18 @@ template<typename real_t, typename index_t> class Coarsen{
           if(_mesh->is_owned_node(target_vertex))
             for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it)
               recalculate_collapse[*it] = true;
-          
-          // Clear vertex.
-          _mesh->erase_vertex(rm_vertex);
         }
-      
+
+        // Clear vertex.
+#pragma omp for schedule(dynamic)
+        for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
+          if(maximal_independent_set[rm_vertex]){
+            _mesh->erase_vertex(rm_vertex);
+            dynamic_vertex[rm_vertex] = -1;
+            recalculate_collapse[rm_vertex] = false;
+          }
+        }
+
         _mesh->create_adjancy();
       }
     }
@@ -511,7 +532,7 @@ template<typename real_t, typename index_t> class Coarsen{
         
     graph.colour = &(colour[0]);
         
-    zoltan_colour(&graph, 1, MPI_COMM_WORLD);
+    zoltan_colour(&graph, 1,  _mesh->get_mpi_comm());
           
     // Given a colouring, determine the maximum independent set.
           
@@ -520,20 +541,24 @@ template<typename real_t, typename index_t> class Coarsen{
     for(int i=0;i<NPNodes;i++){
       max_colour = std::max(max_colour, colour[i]);
     }
-          
-    if(MPI::Is_initialized())
+       
+#ifdef HAVE_MPI
+    if(nprocs>1)
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-          
+#endif
+
     std::vector<int> ncolours(max_colour+1, 0);
     for(int i=0;i<NPNodes;i++){
       if((colour[i]>=0)&&(dynamic_vertex[i]>=0)){
         ncolours[colour[i]]++;
       }
     }
-          
-    if(MPI::Is_initialized())
+    
+#ifdef HAVE_MPI
+    if(nprocs>1)
       MPI_Allreduce(MPI_IN_PLACE, &(ncolours[0]), max_colour+1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-          
+#endif
+
     // Find the colour of the largest active set.
     std::pair<int, int> MIS_colour(0, ncolours[0]);
     for(int i=1;i<=max_colour;i++){
@@ -542,12 +567,12 @@ template<typename real_t, typename index_t> class Coarsen{
         MIS_colour.second = ncolours[i];
       }
     }
-          
-    assert(MIS_colour.second!=0);
-
-    for(int i=0;i<NPNodes;i++){
-      if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
-        maximal_independent_set[i] = true;
+    
+    if(MIS_colour.second>=0){
+      for(int i=0;i<NPNodes;i++){
+        if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
+          maximal_independent_set[i] = true;
+        }
       }
     }
 
@@ -662,8 +687,12 @@ template<typename real_t, typename index_t> class Coarsen{
     std::vector<int> send_buffer_size(nprocs), recv_buffer_size(nprocs);
     for(int p=0;p<nprocs;p++)
       send_buffer_size[p] = send_buffer[p].size();
-    MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
-            
+
+#ifdef HAVE_MPI
+    if(nprocs>1)
+      MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
+#endif
+
     // Setup non-blocking receives
     std::vector< std::vector<int> > recv_buffer(nprocs);
     std::vector<MPI_Request> request(nprocs*2);
@@ -857,16 +886,22 @@ template<typename real_t, typename index_t> class Coarsen{
     Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
     
     std::map<int, int> ncolours;
-    for(int i=0;i<NNodes;i++){
-      if(dynamic_vertex[i]>=0){
-        ncolours[colour[i]]++;
+    if(nprocs==1){
+      for(int i=0;i<NNodes;i++){
+        if(dynamic_vertex[i]>=0){
+          ncolours[colour[i]]++;
+        }
+      }
+    }else{
+      for(int i=0;i<NNodes;i++){
+        if((dynamic_vertex[i]>=0)&&(!_mesh->is_halo_node(i))){
+          ncolours[colour[i]]++;
+        }
       }
     }
 
-    std::map<int, int>::const_iterator incolours = ncolours.begin();
-    std::pair<int, int> MIS_colour(incolours->first, incolours->second);
-    ++ incolours;
-    for(;incolours!=ncolours.end();++incolours){
+    std::pair<int, int> MIS_colour(-1, -1);
+    for(std::map<int, int>::const_iterator incolours = ncolours.begin();incolours!=ncolours.end();++incolours){
       if(MIS_colour.second<incolours->second){
         MIS_colour.first = incolours->first;
         MIS_colour.second = incolours->second;
@@ -874,9 +909,17 @@ template<typename real_t, typename index_t> class Coarsen{
     }
     maximal_independent_set.resize(NNodes);
     std::fill(maximal_independent_set.begin(), maximal_independent_set.end(), false);
-    for(int i=0;i<NNodes;i++){
-      if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
-        maximal_independent_set[i] = true;
+    if(nprocs==1){
+      for(int i=0;i<NNodes;i++){
+        if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)){
+          maximal_independent_set[i] = true;
+        }
+      }
+    }else{
+      for(int i=0;i<NNodes;i++){
+        if((colour[i]==MIS_colour.first)&&(dynamic_vertex[i]>=0)&&(!_mesh->is_halo_node(i))){
+          maximal_independent_set[i] = true;
+        }
       }
     }
   }
