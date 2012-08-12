@@ -107,7 +107,7 @@ int main(int argc, char **argv){
   Coarsen<double, int> coarsen(*mesh, surface);  
   Smooth<double, int> smooth(*mesh, surface);
   Refine<double, int> refine(*mesh, surface);
-  Swapping<double, int> swapping(*mesh, surface);
+  Swapping2D<double, int> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
 
@@ -150,7 +150,7 @@ int main(int argc, char **argv){
     }
 
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref, 2);
+    coarsen.coarsen(L_low, L_ref, 10);
     time_coarsen += get_wtime() - tic;
 
     if(verbose){
@@ -168,7 +168,7 @@ int main(int argc, char **argv){
     }
 
     tic = get_wtime();
-    swapping.swap(0.95);
+    swapping.swap(0.7);
     time_swap += get_wtime() - tic;
 
     if(verbose){

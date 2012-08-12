@@ -181,35 +181,65 @@ extern "C" {
     double L_up = sqrt(2.0);
     double L_low = L_up*0.5;
 
-    Coarsen<double, int> coarsen(*mesh, *surface);
-    Smooth<double, int> smooth(*mesh, *surface);
-    Refine<double, int> refine(*mesh, *surface);
-    Swapping<double, int> swapping(*mesh, *surface);
-
-    coarsen.coarsen(L_low, L_up);
-
-    double L_max = mesh->maximal_edge_length();
-
-    double alpha = sqrt(2.0)/2.0;
-    for(size_t i=0;i<10;i++){
-      double L_ref = std::max(alpha*L_max, L_up);
-
-      refine.refine(L_ref);
-      coarsen.coarsen(L_low, L_ref);
-      swapping.swap(0.95);
-
-      L_max = mesh->maximal_edge_length();
-
-      if((L_max-L_up)<0.01)
-        break;
-    }
-
-    std::vector<int> active_vertex_map;
-    mesh->defragment(&active_vertex_map);
-    surface->defragment(&active_vertex_map);
-    
-    if(ndims==2)
+    if(ndims==2){
+      Coarsen<double, int> coarsen(*mesh, *surface);
+      Smooth<double, int> smooth(*mesh, *surface);
+      Refine<double, int> refine(*mesh, *surface);
+      Swapping2D<double, int> swapping(*mesh, *surface);
+      
+      coarsen.coarsen(L_low, L_up);
+      
+      double L_max = mesh->maximal_edge_length();
+      
+      double alpha = sqrt(2.0)/2.0;
+      for(size_t i=0;i<10;i++){
+        double L_ref = std::max(alpha*L_max, L_up);
+        
+        refine.refine(L_ref);
+        coarsen.coarsen(L_low, L_ref);
+        swapping.swap(0.95);
+        
+        L_max = mesh->maximal_edge_length();
+        
+        if((L_max-L_up)<0.01)
+          break;
+      }
+      
+      std::vector<int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface->defragment(&active_vertex_map);
+      
       smooth.smooth("optimisation Linf", 50);
+    }else{
+      Coarsen<double, int> coarsen(*mesh, *surface);
+      Smooth<double, int> smooth(*mesh, *surface);
+      Refine<double, int> refine(*mesh, *surface);
+      Swapping3D<double, int> swapping(*mesh, *surface);
+      
+      coarsen.coarsen(L_low, L_up);
+      
+      double L_max = mesh->maximal_edge_length();
+      
+      double alpha = sqrt(2.0)/2.0;
+      for(size_t i=0;i<10;i++){
+        double L_ref = std::max(alpha*L_max, L_up);
+        
+        refine.refine(L_ref);
+        coarsen.coarsen(L_low, L_ref);
+        swapping.swap(0.95);
+        
+        L_max = mesh->maximal_edge_length();
+        
+        if((L_max-L_up)<0.01)
+          break;
+      }
+      
+      std::vector<int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface->defragment(&active_vertex_map);
+      
+      smooth.smooth("optimisation Linf", 50);
+    }
   }
 
   void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements){

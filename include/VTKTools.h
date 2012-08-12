@@ -153,7 +153,7 @@ template<typename real_t, typename index_t> class VTKTools{
         MPI::COMM_WORLD.Bcast(&(npart[0]), NNodes, MPI_INT, 0);
         
         // Separate out owned nodes.
-        std::vector< std::deque<index_t> > node_partition(nparts);
+        std::vector< std::vector<index_t> > node_partition(nparts);
         for(size_t i=0;i<NNodes;i++)
           node_partition[npart[i]].push_back(i);
 
@@ -168,7 +168,7 @@ template<typename real_t, typename index_t> class VTKTools{
               renumber[node_partition[i][j]] = pos++;
           }
         }
-        std::deque<index_t> element_partition;
+        std::vector<index_t> element_partition;
         std::set<index_t> halo_nodes;
         for(size_t i=0;i<NElements;i++){
           std::set<index_t> residency;
@@ -351,7 +351,7 @@ template<typename real_t, typename index_t> class VTKTools{
       real_t max_desired_edge_length=0;
       real_t min_desired_edge_length=DBL_MAX;
       if(ndims==2){
-        for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+        for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
           
@@ -360,7 +360,7 @@ template<typename real_t, typename index_t> class VTKTools{
           min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
         }
       }else{
-        for(typename std::deque<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
+        for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
           

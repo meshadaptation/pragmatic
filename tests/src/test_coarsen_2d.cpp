@@ -70,7 +70,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
-    float m[] = {1.0, 0.0, 1.0};
+    float m[] = {0.5, 0.0, 0.5};
     metric_field.set_metric(m, i);
   }
   metric_field.update_mesh();

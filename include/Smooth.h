@@ -44,7 +44,6 @@
 #include <set>
 #include <map>
 #include <vector>
-#include <deque>
 #include <limits>
 
 #include "errno.h"
@@ -57,10 +56,6 @@
 #include "Surface.h"
 #include "Mesh.h"
 #include "MetricTensor.h"
-
-#if HAVE_CUDA
-#include "CUDATools.h"
-#endif
 
 #include "zoltan_tools.h"
 
@@ -130,7 +125,7 @@ template<typename real_t, typename index_t>
   void smooth(std::string method, int max_iterations=10){
     init_cache(method);
 
-    std::deque<int> halo_elements;
+    std::vector<int> halo_elements;
     int NElements = _mesh->get_number_elements();
     for(int i=0;i<NElements;i++){
       const int *n=_mesh->get_element(i);
@@ -146,44 +141,14 @@ template<typename real_t, typename index_t>
     } 
 
     bool (Smooth<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
-
-#if HAVE_CUDA
-    CUDATools<real_t, index_t> cudaTools;
-
-    // Check whether a CUDA-enabled device is to be used for smoothening
-    if(method.find("cuda", 0) != method.npos){
-      cudaTools.initialize();
-      if(cudaTools.isEnabled()){
-    	std::stringstream dims;
-    	dims << ndims;
-    	method.replace(0, 5, "");
-    	std::replace(method.begin(), method.end(), ' ', '_');
-    	std::transform(method.begin(), method.end(), method.begin(), tolower);
-    	method.append("_").append(dims.str()).append("d");
-    	cudaTools.setSmoothingKernel(method, smoothStatus);
-    	// Set smooth_kernel to an auxiliary function to keep compatibility
-    	// with CPU code with respect to active_vertices.
-    	smooth_kernel = &Smooth<real_t, index_t>::cudaHasBeenSmoothed;
-    	// Initialise the array used to mark vertices as smoothed or not-smoothed
-    	smoothStatus.resize(_mesh->_NNodes);
-      }
+    
+    MethodDims methodDims(method, ndims);
+    if(kernels.count(methodDims)){
+      smooth_kernel = kernels[methodDims];
+    }else{
+      std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"smart Laplacian\"\n";
+      smooth_kernel = kernels[MethodDims("smart Laplacian", ndims)];
     }
-
-    // Otherwise, run the smoothening kernel on conventional hardware
-    if(!cudaTools.isEnabled()){
-#endif
-
-      MethodDims methodDims(method, ndims);
-      if(kernels.count(methodDims)){
-       	smooth_kernel = kernels[methodDims];
-      }else{
-        std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"smart Laplacian\"\n";
-        smooth_kernel = kernels[MethodDims("smart Laplacian", ndims)];
-      }
-
-#if HAVE_CUDA
-    }
-#endif
 
     // Use this to keep track of vertices that are still to be visited.
     int NNodes = _mesh->get_number_nodes();
@@ -197,127 +162,83 @@ template<typename real_t, typename index_t>
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
 #endif
 
-#if HAVE_CUDA
-    if(cudaTools.isEnabled()) {
-    	cudaTools.copyMeshDataToDevice(_mesh, _surface, colour_sets, quality, property->getOrientation(), 2);
-    	cudaTools.reserveSmoothStatusMemory();
-    }
-#endif
-
-    for(int ic=1;ic<=max_colour;ic++){
-      if(colour_sets.count(ic)){
-
-#if HAVE_CUDA
-        if(cudaTools.isEnabled()){
-          cudaTools.copyCoordinatesToDevice(_mesh);
-          cudaTools.copyMetricToDevice(_mesh);
-          cudaTools.launchSmoothingKernel(ic);
-          cudaTools.copyCoordinatesFromDevice(_mesh);
-          cudaTools.copyMetricFromDevice(_mesh);
-          cudaTools.retrieveSmoothStatus(smoothStatus);
-        }
-
-        else{
-#endif
-
+    int nav = 0;
 #pragma omp parallel
-          {
-            int node_set_size = colour_sets[ic].size();
+    {    
+      for(int ic=1;ic<=max_colour;ic++){
+        if(colour_sets.count(ic)){
+          int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(static)
+          for(int cn=0;cn<node_set_size;cn++){
+            index_t node = colour_sets[ic][cn];
+            
+            if((this->*smooth_kernel)(node)){
+              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                active_vertices[*it] = 1;
+              }
+            }
+          }
+        }
+        
+#pragma omp master
+        {
+          _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+          _mesh->halo_update(&(_mesh->metric[0]), msize);
+        }
+        for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+          quality[*ie] = -1;
+#pragma omp barrier
+      }
+
+      for(int iter=1;iter<max_iterations;iter++){
+        for(int ic=1;ic<=max_colour;ic++){
+          if(colour_sets.count(ic)){
+            int node_set_size = colour_sets[ic].size();
+#pragma omp for schedule(dynamic)
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
-
+              
+              // Only process if it is active.
+              if(!active_vertices[node])
+                continue;
+              
+              // Reset mask
+              active_vertices[node] = 0;
+              
               if((this->*smooth_kernel)(node)){
-                for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                   active_vertices[*it] = 1;
                 }
               }
             }
           }
-
-#if HAVE_CUDA
+#pragma omp master
+          _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+          _mesh->halo_update(&(_mesh->metric[0]), msize);
+          for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+            quality[*ie] = -1;
+#pragma omp barrier
         }
-#endif
-
-      }
-      _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-      _mesh->halo_update(&(_mesh->metric[0]), msize);
-      for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-        quality[*ie] = -1;
-    }
-
-    for(int iter=1;iter<max_iterations;iter++){
-      for(int ic=1;ic<=max_colour;ic++){
-        if(colour_sets.count(ic)){
-
-#if HAVE_CUDA
-          if(cudaTools.isEnabled()){
-            cudaTools.copyCoordinatesToDevice(_mesh);
-            cudaTools.copyMetricToDevice(_mesh);
-            cudaTools.launchSmoothingKernel(ic);
-            cudaTools.copyCoordinatesFromDevice(_mesh);
-            cudaTools.copyMetricFromDevice(_mesh);
-            cudaTools.retrieveSmoothStatus(smoothStatus);
-          }
-          else{
-#endif
-
-#pragma omp parallel
-            {
-              int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(dynamic)
-              for(int cn=0;cn<node_set_size;cn++){
-                index_t node = colour_sets[ic][cn];
-
-                // Only process if it is active.
-                if(!active_vertices[node])
-                  continue;
-
-                // Reset mask
-                active_vertices[node] = 0;
-
-                if((this->*smooth_kernel)(node)){
-                  for(typename std::deque<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                    active_vertices[*it] = 1;
-                  }
-                }
-              }
-            }
-
-#if HAVE_CUDA
-          }
-#endif
-
-        }
-        _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-        _mesh->halo_update(&(_mesh->metric[0]), msize);
-        for(std::deque<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-          quality[*ie] = -1;
-      }
-      
-      // Count number of active vertices.
-      int nav = 0;      
-#pragma omp parallel reduction(+:nav)
-      {
-#pragma omp for schedule(static)
+        
+        // Count number of active vertices.
+        nav = 0;    
+#pragma omp for schedule(static) reduction(+:nav)
         for(int i=0;i<NNodes;i++){
           if(_mesh->is_owned_node(i))
             nav += active_vertices[i];
         }
-      }
+#pragma omp master
+        {
 #ifdef HAVE_MPI
-      if(mpi_nparts>1)
-        MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+          if(mpi_nparts>1)
+            MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 #endif
-      
-      if(nav==0)
-        break;
+        }
+#pragma omp barrier
+        if(nav==0)
+          break;
+      }
     }
-
-#if HAVE_CUDA
-    if(cudaTools.isEnabled())
-      cudaTools.freeResources();
-#endif
 
     return;
   }
@@ -553,7 +474,7 @@ template<typename real_t, typename index_t>
 
   bool laplacian_3d_kernel(index_t node, real_t *p, float *mp){
     const real_t *normal[]={NULL, NULL};
-    std::deque<index_t> adj_nodes;
+    std::vector<index_t> adj_nodes;
     if(_surface->contains_node(node)){
       // Check how many different planes intersect at this node.
       std::set<index_t> patch = _surface->get_surface_patch(node);
@@ -594,7 +515,7 @@ template<typename real_t, typename index_t>
       
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-    for(typename std::deque<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
+    for(typename std::vector<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
       const float *m0 = _mesh->get_metric(node);
       const float *m1 = _mesh->get_metric(*il);
       
@@ -999,7 +920,7 @@ template<typename real_t, typename index_t>
     std::vector<size_t> csr_edges(sum);
     sum=0;
     for(int i=0;i<NNodes;i++){
-      for(typename std::deque<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
+      for(typename std::vector<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
         csr_edges[sum++] = *it;
       }
     }
@@ -1300,12 +1221,6 @@ template<typename real_t, typename index_t>
     return true;
   }
 
-#if HAVE_CUDA
-  bool cudaHasBeenSmoothed(index_t node) {
-	return (bool) smoothStatus[node];
-  }
-#endif
-
   Mesh<real_t, index_t> *_mesh;
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
@@ -1313,11 +1228,7 @@ template<typename real_t, typename index_t>
   int mpi_nparts, rank;
   real_t good_q, sigma_q;
   std::vector<real_t> quality;
-  std::map<int, std::deque<index_t> > colour_sets;
-
-#if HAVE_CUDA
-  std::vector<unsigned char> smoothStatus;
-#endif
+  std::map<int, std::vector<index_t> > colour_sets;
 
   typedef std::pair<std::string, int> MethodDims;
   std::map<MethodDims, bool (Smooth<real_t, index_t>::*)(index_t)> kernels;

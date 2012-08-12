@@ -123,47 +123,6 @@ template<typename real_t, typename index_t> class Refine{
     size_t NElements = _mesh->get_number_elements();
     size_t origNElements = NElements;
     
-    // Establish global node numbering.
-    {
-      int gnn_offset=0;
-#ifdef HAVE_MPI
-      if(nprocs>1){
-        // Calculate the global numbering offset for this partition.
-        MPI_Scan(&NNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-        gnn_offset-=NNodes;
-      }
-#endif
-      
-      // Initialise the lnn2gnn numbering.
-      if(lnn2gnn!=NULL)
-        delete [] lnn2gnn;
-      lnn2gnn = new index_t[NNodes];
-
-      #pragma omp parallel for schedule(static)
-      for(size_t i=0;i<NNodes;i++)
-        lnn2gnn[i] = gnn_offset+i;
-            
-      // Update halo values.
-      _mesh->halo_update(lnn2gnn, 1);
-
-      for(size_t i=0;i<NNodes;i++)
-        gnn2lnn[lnn2gnn[i]] = i;
-    }
-
-    {// Calculate node ownership.
-      node_owner.resize(NNodes);
-      for(size_t i=0;i<NNodes;i++)
-        node_owner[i] = rank;
-      
-      if(nprocs>1){
-        for(int i=0;i<nprocs;i++){
-          for(std::vector<int>::const_iterator it=_mesh->recv[i].begin();it!=_mesh->recv[i].end();++it){
-            node_owner[*it] = i;
-          }
-        }
-      }
-    }
-    
     // Initialise a dynamic vertex list
     std::vector< std::vector<index_t> > refined_edges(NNodes);
     std::vector< std::vector< DirectedEdge<index_t> > > newVertices(nthreads);
@@ -174,6 +133,50 @@ template<typename real_t, typename index_t> class Refine{
 
 #pragma omp parallel
     {
+      
+      // Establish global node numbering.
+#pragma omp single nowait
+      {
+        int gnn_offset=0;
+#ifdef HAVE_MPI
+        if(nprocs>1){
+          // Calculate the global numbering offset for this partition.
+          MPI_Scan(&NNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+          gnn_offset-=NNodes;
+        }
+#endif
+        
+        // Initialise the lnn2gnn numbering.
+        if(lnn2gnn!=NULL)
+          delete [] lnn2gnn;
+        lnn2gnn = new index_t[NNodes];
+        
+#pragma omp parallel for schedule(static)
+        for(size_t i=0;i<NNodes;i++)
+          lnn2gnn[i] = gnn_offset+i;
+            
+        // Update halo values.
+        _mesh->halo_update(lnn2gnn, 1);
+        
+        for(size_t i=0;i<NNodes;i++)
+          gnn2lnn[lnn2gnn[i]] = i;
+      }
+
+#pragma omp single nowait
+      {// Calculate node ownership.
+        node_owner.resize(NNodes);
+        for(size_t i=0;i<NNodes;i++)
+          node_owner[i] = rank;
+        
+        if(nprocs>1){
+          for(int i=0;i<nprocs;i++){
+            for(std::vector<int>::const_iterator it=_mesh->recv[i].begin();it!=_mesh->recv[i].end();++it){
+              node_owner[*it] = i;
+            }
+          }
+        }
+      }
+      
       int tid = get_tid();
       
       /* Loop through all edges and select them for refinement if
@@ -421,12 +424,8 @@ template<typename real_t, typename index_t> class Refine{
           if(*it != -1)
             *it += threadIdx[*(it+1)];
       }
-    }
-    
-    // Perform element refinement.
-#pragma omp parallel
-    {
-      int tid = get_tid();
+      
+      // Perform element refinement.
       splitCnt[tid] = 0;
 
       if(ndims==2){      
@@ -638,7 +637,7 @@ template<typename real_t, typename index_t> class Refine{
       
 #pragma omp barrier
       
-      unsigned int blockSize = 1, tmp;
+      blockSize = 1;
       while(blockSize < threadIdx.size())
         {
           if((tid & blockSize) != 0)
@@ -670,119 +669,97 @@ template<typename real_t, typename index_t> class Refine{
       
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-    }
-
-    NNodes = _mesh->get_number_nodes();
-    NElements = _mesh->get_number_elements();
+      
+      
+      NNodes = _mesh->get_number_nodes();
+      NElements = _mesh->get_number_elements();
 
 #ifdef HAVE_MPI
-    // Time to amend halo.
-    assert(node_owner.size()==NNodes);
-
-    if(nprocs>1){
-      std::map<index_t, DirectedEdge<index_t> > lut_newVertices;
-      for(int i=0;i<nthreads;i++){
-        for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
-          assert(lut_newVertices.find(vert->id)==lut_newVertices.end());
-          lut_newVertices[vert->id] = *vert;
-          
-          int owner0 = node_owner[gnn2lnn[vert->edge.first]];
-          int owner1 = node_owner[gnn2lnn[vert->edge.second]];
-
-          int owner = std::min(owner0, owner1);
-          node_owner[vert->id] = owner;
-        }
-      }
-      
-      typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
-      for(size_t i=origNElements;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
+#pragma omp master
+      {
+        // Time to amend halo.
+        assert(node_owner.size()==NNodes);
         
-        std::set<int> processes;
-        for(size_t j=0;j<nloc;j++){
-          processes.insert(node_owner[n[j]]);
-        }
-        assert(processes.count(-1)==0);
-
-        // Element has no local vertices so we can erase it.
-        if(processes.count(rank)==0){
-          _mesh->erase_element(i);
-          continue;
-        }
-
-        if(processes.size()==1)
-          continue;
-        
-        // If we get this far it means that the element strides a halo.
-        for(size_t j=0;j<nloc;j++){
-          // Check if this is an old vertex.
-          if(n[j]<(int)origNNodes)
-            continue;
+        if(nprocs>1){
+          std::map<index_t, DirectedEdge<index_t> > lut_newVertices;
+          for(int i=0;i<nthreads;i++){
+            for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
+              assert(lut_newVertices.find(vert->id)==lut_newVertices.end());
+              lut_newVertices[vert->id] = *vert;
+              
+              int owner0 = node_owner[gnn2lnn[vert->edge.first]];
+              int owner1 = node_owner[gnn2lnn[vert->edge.second]];
+              
+              int owner = std::min(owner0, owner1);
+              node_owner[vert->id] = owner;
+            }
+          }
           
-          if(node_owner[n[j]]==rank){
-            // Send.
-            for(std::set<int>::const_iterator ip=processes.begin(); ip!=processes.end();++ip){
-              if(*ip==rank)
+          typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
+          for(size_t i=origNElements;i<NElements;i++){
+            const int *n=_mesh->get_element(i);
+            if(n[0]<0)
+              continue;
+            
+            std::set<int> processes;
+            for(size_t j=0;j<nloc;j++){
+              processes.insert(node_owner[n[j]]);
+            }
+            assert(processes.count(-1)==0);
+            
+            // Element has no local vertices so we can erase it.
+            if(processes.count(rank)==0){
+              _mesh->erase_element(i);
+              continue;
+            }
+            
+            if(processes.size()==1)
+              continue;
+            
+            // If we get this far it means that the element strides a halo.
+            for(size_t j=0;j<nloc;j++){
+              // Check if this is an old vertex.
+              if(n[j]<(int)origNNodes)
                 continue;
               
-              send_additional[*ip].insert(lut_newVertices[n[j]]);
+              if(node_owner[n[j]]==rank){
+                // Send.
+                for(std::set<int>::const_iterator ip=processes.begin(); ip!=processes.end();++ip){
+                  if(*ip==rank)
+                    continue;
+                  
+                  send_additional[*ip].insert(lut_newVertices[n[j]]);
+                }
+              }else{
+                // Receive.
+                recv_additional[node_owner[n[j]]].insert(lut_newVertices[n[j]]);
+              }
             }
-          }else{
-            // Receive.
-            recv_additional[node_owner[n[j]]].insert(lut_newVertices[n[j]]);
           }
-        }
-      }
-
-      /*
-      for(int i=0;i<nthreads;i++){
-        for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
-          int owner0 = node_owner[gnn2lnn[vert->edge.first]];
-          int owner1 = node_owner[gnn2lnn[vert->edge.second]];
           
-          // This new vertex is only a halo node if one of the
-          // original edge vertices is not owned by local rank.
-          std::cout<<"owner0, owner1 = "<<owner0<<", "<<owner1<<std::endl;
-          if((owner0!=rank)||(owner1!=rank)){
-            int owner = std::min(owner0, owner1);
-            std::cout<<"owner="<<owner<<" :: "<<owner0<<", "<<owner1<<std::endl;
-            if(owner==rank){
-              // The new vertex is owned. Place it into the send set.
-              send_additional[std::max(owner0, owner1)].insert(*vert);
-            }else{
-              // The new vertex is not owned. Place it into the recv set.
-              recv_additional[owner].insert(*vert);
+          for(int i=0;i<nprocs;i++){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+              _mesh->send[i].push_back(it->id);
+              _mesh->send_halo.insert(it->id);
+            }
+          }
+          
+          for(int i=0;i<nprocs;i++){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+              _mesh->recv[i].push_back(it->id);
+              _mesh->recv_halo.insert(it->id);
             }
           }
         }
       }
-      */
-
-      for(int i=0;i<nprocs;i++){
-        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-          _mesh->send[i].push_back(it->id);
-          _mesh->send_halo.insert(it->id);
-        }
-      }
-
-      for(int i=0;i<nprocs;i++){
-        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-          _mesh->recv[i].push_back(it->id);
-          _mesh->recv_halo.insert(it->id);
-        }
-      }
-    }
 #endif
-    
-    // Fix orientations of new elements.
-    int new_NElements = _mesh->get_number_elements();
-    int new_cnt = new_NElements - NElements;
-    index_t *tENList = &(_mesh->_ENList[NElements*nloc]);
-    real_t *tcoords = &(_mesh->_coords[0]);
-#pragma omp parallel
-    {
+      
+      // Fix orientations of new elements.
+      int new_NElements = _mesh->get_number_elements();
+      int new_cnt = new_NElements - NElements;
+      index_t *tENList = &(_mesh->_ENList[NElements*nloc]);
+      real_t *tcoords = &(_mesh->_coords[0]);
+      
       if(ndims==2){
 #pragma omp for schedule(dynamic)
         for(int i=0;i<new_cnt;i++){
@@ -824,13 +801,14 @@ template<typename real_t, typename index_t> class Refine{
           }
         }
       }
+      
+      // Refine surface
+#pragma omp single nowait
+      _surface->refine(refined_edges, lnn2gnn);
+      
+      // Tidy up. Need to look at efficiencies here.
+      _mesh->create_adjancy();
     }
-
-    // Finally, refine surface
-    _surface->refine(refined_edges, lnn2gnn);
-    
-    // Tidy up. Need to look at efficiencies here.
-    _mesh->create_adjancy();
 
     return;
   }

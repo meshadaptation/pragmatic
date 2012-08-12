@@ -151,8 +151,9 @@ template<typename real_t, typename index_t>
         for(size_t k=1;k<nloc;k++){
           facet.insert(_mesh->_ENList[i*nloc+(j+k)%nloc]);
         }
-        if(facets.count(facet)){
-          facets.erase(facet);
+        typename std::map< std::set<index_t>, std::vector<int> >::iterator target_facet=facets.find(facet);
+        if(target_facet!=facets.end()){
+          facets.erase(target_facet);
         }else{
           std::vector<int> element;
           if(snloc==3){
@@ -275,10 +276,9 @@ template<typename real_t, typename index_t>
     
     // Find deleted facets.
     std::set<index_t> deleted_facets;
-    for(typename std::set<index_t>::const_iterator it=SNEList[nid_free].begin();it!=SNEList[nid_free].end();++it){
-      if(SNEList[nid_target].count(*it))
-        deleted_facets.insert(*it);
-    }
+    set_intersection(SNEList[nid_free].begin(), SNEList[nid_free].end(),
+                     SNEList[nid_target].begin(), SNEList[nid_target].end(),
+                     inserter(deleted_facets, deleted_facets.begin()));
 
     // Renumber nodes in elements adjacent to rm_vertex, deleted
     // elements being collapsed, and make these elements adjacent to
@@ -286,9 +286,8 @@ template<typename real_t, typename index_t>
     for(typename std::set<index_t>::const_iterator ee=SNEList[nid_free].begin();ee!=SNEList[nid_free].end();++ee){
       // Delete if element is to be collapsed.
       if(deleted_facets.count(*ee)){
-        for(size_t i=0;i<snloc;i++){
-          SENList[snloc*(*ee)+i]=-1;
-        }
+        SENList[snloc*(*ee)]=-1;
+        
         continue;
       }
       

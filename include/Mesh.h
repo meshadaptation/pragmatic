@@ -41,7 +41,6 @@
 #include "pragmatic_config.h"
 
 #include <algorithm>
-#include <deque>
 #include <vector>
 #include <set>
 #include <stack>
@@ -226,7 +225,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Create a new numbering.
     index_t cnt=0;
-    for(index_t i=0;i<NNodes;i++){
+    for(size_t i=0;i<NNodes;i++){
       if((*active_vertex_map)[i]<0)
         continue;
 
@@ -267,7 +266,7 @@ template<typename real_t, typename index_t> class Mesh{
     int numflag=0, options[] = {0};
     
     METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
-    
+      
     std::vector<index_t> metis_vertex_renumber(metis_nnodes);
     for(int i=0;i<metis_nnodes;i++){
       metis_vertex_renumber[i] = inorder[i];
@@ -336,7 +335,7 @@ template<typename real_t, typename index_t> class Mesh{
       index_t new_eid = i;
       for(size_t j=0;j<nloc;j++){
         index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
-        assert(new_nid<NNodes);
+        assert(new_nid<(index_t)NNodes);
         defrag_ENList[new_eid*nloc+j] = new_nid;
       }
     }
@@ -394,6 +393,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }
 
+#pragma omp parallel
     create_adjancy();
 
     if(local_active_vertex_map)
@@ -409,7 +409,7 @@ template<typename real_t, typename index_t> class Mesh{
       metric.push_back(m[i]);
     
     NEList.push_back(std::set<index_t>());
-    NNList.push_back(std::deque<index_t>());
+    NNList.push_back(std::vector<index_t>());
       
     return get_number_nodes()-1;
   }
@@ -459,7 +459,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
-          for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once. 
               total_length += calc_edge_length(i, *it);
               nedges++;
@@ -492,7 +492,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
-          for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once. 
               rms+=pow(calc_edge_length(i, *it) - mean, 2);
               nedges++;
@@ -628,7 +628,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::set<index_t> get_node_patch(index_t nid) const{
     assert(nid<(index_t)NNList.size());
     std::set<index_t> patch;
-    for(typename std::deque<index_t>::const_iterator it=NNList[nid].begin();it!=NNList[nid].end();++it)
+    for(typename std::vector<index_t>::const_iterator it=NNList[nid].begin();it!=NNList[nid].end();++it)
       patch.insert(patch.end(), *it);
     return patch;
   }
@@ -642,7 +642,7 @@ template<typename real_t, typename index_t> class Mesh{
       std::set<index_t> front = patch, new_front;
       for(;;){
         for(typename std::set<index_t>::const_iterator it=front.begin();it!=front.end();it++){
-          for(typename std::deque<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
+          for(typename std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();jt++){
             if(patch.find(*jt)==patch.end()){
               new_front.insert(*jt);
               patch.insert(*jt);
@@ -740,7 +740,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     for(index_t i=0;i<NNodes;i++){
       if(is_owned_node(i) && (NNList[i].size()>0))
-        for(typename std::deque<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           if(i<*it){ // Ensure that every edge length is only calculated once. 
             L_max = std::max(L_max, calc_edge_length(i, *it));
           }
@@ -1017,7 +1017,8 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class MetricField2D;
   template<typename _real_t, typename _index_t> friend class MetricField3D;
   template<typename _real_t, typename _index_t> friend class Smooth;
-  template<typename _real_t, typename _index_t> friend class Swapping;
+  template<typename _real_t, typename _index_t> friend class Swapping2D;
+  template<typename _real_t, typename _index_t> friend class Swapping3D;
   template<typename _real_t, typename _index_t> friend class Coarsen;
   template<typename _real_t, typename _index_t> friend class Refine;
   template<typename _real_t, typename _index_t> friend class Surface;
@@ -1145,70 +1146,81 @@ template<typename real_t, typename index_t> class Mesh{
       if(ndims==2){
 #pragma omp for schedule(static)
         for(int i=0;i<(int)NNodes;i++){
-          _coords[i*ndims  ] = x[i];
-          _coords[i*ndims+1] = y[i];
+          _coords[i*2  ] = x[i];
+          _coords[i*2+1] = y[i];
         }
       }else{
 #pragma omp for schedule(static)
         for(int i=0;i<(int)NNodes;i++){
-          _coords[i*ndims  ] = x[i];
-          _coords[i*ndims+1] = y[i];
-          _coords[i*ndims+2] = z[i];
+          _coords[i*3  ] = x[i];
+          _coords[i*3+1] = y[i];
+          _coords[i*3+2] = z[i];
         }
       }
-    }
-
-    if(num_processes>1){
-      // Take into account renumbering for halo.
-      for(int j=0;j<num_processes;j++){
-        for(size_t k=0;k<recv[j].size();k++){
-          recv_halo.insert(recv[j][k]);
+    
+#pragma omp single nowait
+      if(num_processes>1){
+        // Take into account renumbering for halo.
+        for(int j=0;j<num_processes;j++){
+          for(size_t k=0;k<recv[j].size();k++){
+            recv_halo.insert(recv[j][k]);
+          }
+          for(size_t k=0;k<send[j].size();k++){
+            send_halo.insert(send[j][k]);
+          }
         }
-        for(size_t k=0;k<send[j].size();k++){
-          send_halo.insert(send[j][k]);
+        
+        delete [] ENList;
+      }
+      
+      create_adjancy();
+      
+
+      // Set the orientation of elements.
+#pragma omp single
+      {
+        const int *n=get_element(0);
+        assert(n[0]>=0);
+        
+        if(ndims==2)
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]));
+        else
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]),
+                                                 get_coords(n[3]));
+      }
+
+      if(ndims==2){
+#pragma omp for schedule(static)
+        for(size_t i=1;i<(size_t)NElements;i++){
+          const int *n=get_element(i);
+          assert(n[0]>=0);
+          
+          double volarea = property->area(get_coords(n[0]),
+                                          get_coords(n[1]),
+                                          get_coords(n[2]));
+          
+          if(volarea<0)
+            invert_element(i);
+        }
+      }else{
+#pragma omp for schedule(static)
+        for(size_t i=1;i<(size_t)NElements;i++){
+          const int *n=get_element(i);
+          assert(n[0]>=0);
+          
+          double volarea = property->volume(get_coords(n[0]),
+                                            get_coords(n[1]),
+                                            get_coords(n[2]),
+                                            get_coords(n[2]));
+          
+          if(volarea<0)
+            invert_element(i);
         }
       }
-    }
-    
-    if(num_processes>1){
-      delete [] ENList;
-    }
-    
-    create_adjancy();
-    
-    // Set the orientation of elements.
-    {
-      const int *n=get_element(0);
-      assert(n[0]>=0);
-      
-      if(ndims==2)
-        property = new ElementProperty<real_t>(get_coords(n[0]),
-                                               get_coords(n[1]),
-                                               get_coords(n[2]));
-      else
-        property = new ElementProperty<real_t>(get_coords(n[0]),
-                                               get_coords(n[1]),
-                                               get_coords(n[2]),
-                                               get_coords(n[3]));
-    }
-
-    for(size_t i=1;i<(size_t)NElements;i++){
-      const int *n=get_element(i);
-      assert(n[0]>=0);
-      
-      double volarea;
-      if(ndims==2)
-        volarea = property->area(get_coords(n[0]),
-                                 get_coords(n[1]),
-                                 get_coords(n[2]));
-      else
-        volarea = property->volume(get_coords(n[0]),
-                                   get_coords(n[1]),
-                                   get_coords(n[2]),
-                                   get_coords(n[2]));
-      
-      if(volarea<0)
-        invert_element(i);
     }
   }
 
@@ -1356,74 +1368,62 @@ template<typename real_t, typename index_t> class Mesh{
     size_t NNodes = get_number_nodes();
     size_t NElements = get_number_elements();
     
-    NEList.clear();
-    NEList.resize(NNodes);
+    int NEList_size = NEList.size();
+#pragma omp for schedule(dynamic) nowait
+    for(int i=0;i<NEList_size;i++){
+      NEList[i].clear();
+    }
 
-    NNList.clear();
-    NNList.resize(NNodes);
+    int NNList_size = NNList.size();
+#pragma omp for schedule(dynamic) nowait
+    for(int i=0;i<NNList_size;i++){
+      NNList[i].clear();
+    }
 
-    std::vector< std::vector<index_t> > NEList_set(NNodes);
-
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(size_t i=0;i<NNodes;i++){
-        NEList_set[i].reserve(16);
-      }
-
-#pragma omp master
-      {
-        if(ndims==2){
-          for(size_t i=0; i<NElements; i++){
-            if(_ENList[i*nloc]<0)
-              continue;
-            
-            index_t nid_0 = _ENList[i*nloc];
-            index_t nid_1 = _ENList[i*nloc+1];
-            index_t nid_2 = _ENList[i*nloc+2];
-            
-            NEList_set[nid_0].push_back(i);
-            NEList_set[nid_1].push_back(i);
-            NEList_set[nid_2].push_back(i);
-          }
-        }else{
-          for(size_t i=0; i<NElements; i++){
-            if(_ENList[i*nloc]<0)
-              continue;
-            
-            for(size_t j=0;j<nloc;j++){
-              index_t nid_j = _ENList[i*nloc+j];
-              NEList_set[nid_j].push_back(i);
-            }
-          }
-        }
-      }
 #pragma omp barrier
-      
-      // Finalise
-#pragma omp for schedule(dynamic)
-      for(size_t i=0;i<NNodes;i++){
-        if(NEList_set[i].size()==0)
-          continue;
-        
-        std::sort(NEList_set[i].begin(), NEList_set[i].end());
-        std::unique_copy(NEList_set[i].begin(), NEList_set[i].end(), inserter(NEList[i], NEList[i].begin()));
+   
+#pragma omp single nowait
+    NNList.resize(NNodes);
+    
+#pragma omp single
+    NEList.resize(NNodes);
+    
+    int tid = omp_get_thread_num();
+    int nthreads = omp_get_max_threads();
 
-        std::vector<index_t> nnset;
-        nnset.reserve(64);
-        for(typename std::set<index_t>::const_iterator it=NEList[i].begin();it!=NEList[i].end();it++){
-          const index_t *n=&(_ENList[(*it)*nloc]);
-          for(size_t j=0;j<nloc;j++){
-            if(n[j]!=i)
-              nnset.push_back(n[j]);
-          }
-        }
-        std::sort(nnset.begin(), nnset.end());
-        std::unique_copy(nnset.begin(), nnset.end(), inserter(NNList[i], NNList[i].begin()));
+    for(size_t i=0; i<NElements; i++){
+      if(_ENList[i*nloc]<0)
+        continue;
+      
+      for(size_t j=0;j<nloc;j++){
+        index_t nid_j = _ENList[i*nloc+j];
+        if((nid_j%nthreads)==tid)
+          NEList[nid_j].insert(NEList[nid_j].end(), i);
       }
     }
-  }
+    
+#pragma omp barrier
 
+    // Finalise
+#pragma omp for schedule(dynamic)
+    for(size_t i=0;i<NNodes;i++){
+      if(NEList[i].empty())
+        continue;
+      
+      std::vector<index_t> nnset;
+      nnset.reserve(64);
+      for(typename std::set<index_t>::const_iterator it=NEList[i].begin();it!=NEList[i].end();it++){
+        const index_t *n=&(_ENList[(*it)*nloc]);
+        for(size_t j=0;j<nloc;j++){
+          if(n[j]!=(index_t)i)
+            nnset.push_back(n[j]);
+        }
+      }
+      std::sort(nnset.begin(), nnset.end());
+      std::unique_copy(nnset.begin(), nnset.end(), inserter(NNList[i], NNList[i].begin()));
+    }
+  }
+  
   void create_global_node_numbering(int &NPNodes, std::vector<int> &lnn2gnn, std::vector<size_t> &owner){
     int NNodes = get_number_nodes();
 
@@ -1493,7 +1493,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   // Adjacency lists
   std::vector< std::set<index_t> > NEList;
-  std::vector< std::deque<index_t> > NNList;
+  std::vector< std::vector<index_t> > NNList;
 
   ElementProperty<real_t> *property;
 
