@@ -77,7 +77,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.002;
+  double eta=0.0002;
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
