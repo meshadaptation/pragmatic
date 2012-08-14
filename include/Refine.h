@@ -778,8 +778,10 @@ template<typename real_t, typename index_t> class Refine3D{
          to get a regular and conforming element refinement throughout
          the domain. */
       for(;;){
-#pragma omp single 
-        int new_edges_size = 0;
+#pragma omp single
+        {
+          new_edges_size = 0;
+        }
 #pragma omp for schedule(dynamic) reduction(+:new_edges_size)
         for(size_t i=0;i<NElements;i++){
           // Check if this element has been erased - if so continue to next element.
@@ -1095,7 +1097,7 @@ template<typename real_t, typename index_t> class Refine3D{
       
 #pragma omp barrier
       
-      unsigned int blockSize = 1, tmp;
+      blockSize = 1;
       while(blockSize < threadIdx.size())
         {
           if((tid & blockSize) != 0)

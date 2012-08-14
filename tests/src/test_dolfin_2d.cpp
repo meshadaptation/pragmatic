@@ -180,7 +180,7 @@ int main(int argc, char **argv){
 
   Coarsen<double, int> coarsen(*mesh, surface);  
   Smooth<double, int> smooth(*mesh, surface);
-  Refine<double, int> refine(*mesh, surface);
+  Refine2D<double, int> refine(*mesh, surface);
   Swapping2D<double, int> swapping(*mesh, surface);
 
   time_adapt = get_wtime();

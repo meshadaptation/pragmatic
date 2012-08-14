@@ -111,7 +111,7 @@ int main(int argc, char **argv){
   
   double L_max = mesh->maximal_edge_length();
   double alpha = 0.95; //sqrt(2.0)*0.5;
-  Refine<double, int> refine(*mesh, surface);
+  Refine3D<double, int> refine(*mesh, surface);
   for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     

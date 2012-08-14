@@ -79,7 +79,7 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 0.02);
   metric_field.update_mesh();
   
-  Refine<double, int> adapt(*mesh, surface);
+  Refine3D<double, int> adapt(*mesh, surface);
 
   double tic = get_wtime();
   adapt.refine(sqrt(2.0));
