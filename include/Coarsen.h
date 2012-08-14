@@ -99,11 +99,18 @@ template<typename real_t, typename index_t> class Coarsen{
                                                _mesh->get_coords(n[3]));
       break;
     }
+
+    nnodes_reserve = 0;
+    dynamic_vertex = NULL;
   }
   
   /// Default destructor.
   ~Coarsen(){
-    delete property;
+    if(property!=NULL)
+      delete property;
+
+    if(dynamic_vertex!=NULL)
+      delete [] dynamic_vertex;
   }
 
   /*! Perform coarsening.
@@ -122,14 +129,26 @@ template<typename real_t, typename index_t> class Coarsen{
       // Initialise list of vertices to be collapsed (applying first-touch).
 #pragma omp single
       {
-        dynamic_vertex.resize(NNodes);
-        recalculate_collapse.resize(NNodes);
+        if(nnodes_reserve<NNodes){
+          nnodes_reserve = 1.5*NNodes;
+          
+          if(dynamic_vertex!=NULL)
+            delete [] dynamic_vertex;
+          
+          dynamic_vertex = new index_t[nnodes_reserve];
+        }
       }
 
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
-        dynamic_vertex[i] = -1;
-        recalculate_collapse[i] = !(_mesh->NNList[i].empty());
+        /* dynamic_vertex[i] >= 0 :: target to collapse i
+           dynamic_vertex[i] = -1 :: node inactive
+           dynamic_vertex[i] = -2 :: recalculate collapse
+        */
+        if(_mesh->NNList[i].empty())
+          dynamic_vertex[i] = -1;
+        else
+          dynamic_vertex[i] = -2;
       }
     
       // Loop until the maximum independent set is NULL.
@@ -143,12 +162,11 @@ template<typename real_t, typename index_t> class Coarsen{
 
 #pragma omp for schedule(dynamic) reduction(+:coarsen_cnt)
         for(int i=0;i<NNodes;i++){
-          if(recalculate_collapse[i]){
+          if(dynamic_vertex[i]==-2){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
             if(dynamic_vertex[i]>=0){
               coarsen_cnt++;
             }
-            recalculate_collapse[i] = false;
           }
         }
 #ifdef HAVE_MPI
@@ -242,8 +260,13 @@ template<typename real_t, typename index_t> class Coarsen{
           
           // Mark collapse decision as out of date.
           if(_mesh->is_owned_node(target_vertex))
-            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it)
-              recalculate_collapse[*it] = true;
+            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it){
+              // This is a race condition. But as all threads would
+              // write the same value it doesn't actually matter. A
+              // neater solution may be to use atomic update in OpenMP 3.1.
+              // #pragma omp atomic update
+              dynamic_vertex[*it] = -2;
+            }
         }
 
         // Clear vertex.
@@ -252,7 +275,6 @@ template<typename real_t, typename index_t> class Coarsen{
           if(maximal_independent_set[rm_vertex]){
             _mesh->erase_vertex(rm_vertex);
             dynamic_vertex[rm_vertex] = -1;
-            recalculate_collapse[rm_vertex] = false;
           }
         }
 
@@ -745,8 +767,16 @@ template<typename real_t, typename index_t> class Coarsen{
                   
           lnn2gnn.push_back(gnn);
           owner.push_back(lowner);
-          dynamic_vertex.push_back(-1);
-          recalculate_collapse.push_back(false);
+          size_t nnodes_new = owner.size();
+          if(nnodes_reserve<nnodes_new){
+            nnodes_reserve*=1.5;
+            index_t *new_dynamic_vertex = new index_t[nnodes_reserve];
+            for(size_t k=0;k<nnodes_new-1;k++)
+              new_dynamic_vertex[k] = dynamic_vertex[k];
+            std::swap(dynamic_vertex, dynamic_vertex);
+            delete [] new_dynamic_vertex;
+          }
+          dynamic_vertex[nnodes_new-1] = -1;
           maximal_independent_set.push_back(false);     
           gnn2lnn[gnn] = lnn;
         }
@@ -929,8 +959,8 @@ template<typename real_t, typename index_t> class Coarsen{
   Surface<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   
-  std::vector<index_t> dynamic_vertex;
-  std::vector<bool> recalculate_collapse;
+  size_t nnodes_reserve;
+  index_t *dynamic_vertex;
 
   size_t ndims, nloc, snloc, msize;
   int nprocs, rank, nthreads;
