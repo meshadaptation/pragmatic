@@ -157,7 +157,10 @@ template<typename real_t, typename index_t> class Swapping2D{
         }
       }
       
-      n_marked_edges = 0;
+#pragma omp single
+      {
+        n_marked_edges = 0;
+      }
 #pragma omp for schedule(dynamic) reduction(+:n_marked_edges)
       for(size_t i=0;i<NNodes;i++){
         n_marked_edges += std::count(marked_edges[i].begin(), marked_edges[i].end(), (char) 1);
@@ -694,7 +697,7 @@ template<typename real_t, typename index_t> class Swapping3D{
       loc++;
     }
     
-    std::vector< std::deque<index_t> > NNList(graph.size());
+    std::vector< std::vector<index_t> > NNList(graph.size());
     for(std::map<int , std::set<int> >::const_iterator it=graph.begin();it!=graph.end();++it){
       for(std::set<int>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
         NNList[irenumber[it->first]].push_back(irenumber[*jt]);
@@ -702,31 +705,6 @@ template<typename real_t, typename index_t> class Swapping3D{
     }
     std::vector<index_t> colour(graph.size());
     Colour<index_t>::greedy(NNList, &(colour[0]));
-    
-    /*
-      std::vector<size_t> csr_edges;
-      for(std::map<int , std::set<int> >::const_iterator it=graph.begin();it!=graph.end();++it){
-      for(std::set<int>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
-      csr_edges.push_back(*jt);
-      }
-      }
-      
-      zoltan_graph_t flat_graph;
-      flat_graph.rank=0;
-      flat_graph.npnodes = graph.size();
-      flat_graph.nnodes = graph.size();
-      flat_graph.nedges = &(nedges[0]);
-      flat_graph.csr_edges = &(csr_edges[0]);
-      std::vector<int> gid(flat_graph.nnodes);
-      for(int i=0;i<flat_graph.nnodes;i++)
-      gid[i] = i;
-      flat_graph.gid = &(gid[0]);
-      std::vector<size_t> owner(flat_graph.nnodes, 0);
-      std::vector<int> colour(flat_graph.nnodes);
-      
-      zoltan_colour(&flat_graph, 2, MPI_COMM_NULL);
-      
-    */
     
     // Assume colour 0 will be the maximal independent set.
     

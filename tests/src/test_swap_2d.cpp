@@ -45,8 +45,6 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 
-#include "Coarsen.h"
-#include "Refine.h"
 #include "Swapping.h"
 #include "ticker.h"
 
@@ -57,20 +55,27 @@ using namespace std;
 int main(int argc, char **argv){
   MPI::Init(argc, argv);
 
+  int rank = 0;
+#ifdef HAVE_MPI
+  if(MPI::Is_initialized()){
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  }
+#endif
+  
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
-
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10.vtu");
-
+  
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50.vtu");
+  
   Surface<double, int> surface(*mesh);
-  surface.find_surface();
-
+  surface.find_surface(true);
+  
   MetricField2D<double, int> metric_field(*mesh, surface);
-
+  
   size_t NNodes = mesh->get_number_nodes();
-
+  
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
@@ -81,50 +86,28 @@ int main(int argc, char **argv){
   double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
-
-  std::cout<<"Initial quality:\n"
-            <<"Quality mean:   "<<qmean<<std::endl
-            <<"Quality min:    "<<qmin<<std::endl
-            <<"Quality RMS:    "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_swap_2d-initial", mesh);
-
-  double L_up = sqrt(2.0);
-  double L_low = L_up/2;
-
-  Coarsen<double, int> coarsen(*mesh, surface);
-  Refine<double, int> refine(*mesh, surface);
+  
+  if(verbose&&rank==0)
+    std::cout<<"Initial quality:\n"
+             <<"Quality mean:   "<<qmean<<std::endl
+             <<"Quality min:    "<<qmin<<std::endl
+             <<"Quality RMS:    "<<qrms<<std::endl;
+  
   Swapping2D<double, int> swapping(*mesh, surface);
-
-  coarsen.coarsen(L_low, L_up);
-
-  double L_max = mesh->maximal_edge_length();
-
-  double alpha = sqrt(2.0)/2;
-  for(size_t i=0;i<10;i++){
-    double L_ref = std::max(alpha*L_max, L_up);
-
-    refine.refine(L_ref);
-
-    coarsen.coarsen(L_low, L_ref);
-
-    L_max = mesh->maximal_edge_length();
-
-    if((L_max-L_up)<0.01)
-      break;
-  }
-
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
-
-  std::cout<<"Basic quality:\n";
-  mesh->verify();
-
-  VTKTools<double, int>::export_vtu("../data/test_swap_2d-basic", mesh);
-
+  
   double tic = get_wtime();
-  swapping.swap(0.95);
+  for(int i=0;i<100;i++)
+    swapping.swap(0.95);
   double toc = get_wtime();
+
+  if(!mesh->verify()){
+    std::vector<int> active_vertex_map;
+    mesh->defragment(&active_vertex_map);
+    surface.defragment(&active_vertex_map);
+    
+    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+    exit(-1);
+  }
 
   VTKTools<double, int>::export_vtu("../data/test_swap_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_swap_2d_surface", &surface);
@@ -132,15 +115,15 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-  if(verbose){
+  if(verbose&&rank==0){
     std::cout<<"Swap loop time: "<<toc-tic<<std::endl
              <<"Quality mean:   "<<qmean<<std::endl
              <<"Quality min:    "<<qmin<<std::endl
              <<"Quality RMS:    "<<qrms<<std::endl;
   }
-
+  
   delete mesh;
-
+  
   MPI::Finalize();
 
   return 0;

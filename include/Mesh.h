@@ -1020,7 +1020,8 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class Swapping2D;
   template<typename _real_t, typename _index_t> friend class Swapping3D;
   template<typename _real_t, typename _index_t> friend class Coarsen;
-  template<typename _real_t, typename _index_t> friend class Refine;
+  template<typename _real_t, typename _index_t> friend class Refine2D;
+  template<typename _real_t, typename _index_t> friend class Refine3D;
   template<typename _real_t, typename _index_t> friend class Surface;
   template<typename _real_t, typename _index_t> friend class VTKTools;
   template<typename _real_t, typename _index_t> friend class CUDATools;
@@ -1408,10 +1409,13 @@ template<typename real_t, typename index_t> class Mesh{
       if(NNList[i].empty())
         continue;
       
-      std::vector<index_t> nnset;
-      NNList[i].swap(nnset);
-      std::sort(nnset.begin(), nnset.end());
-      std::unique_copy(nnset.begin(), nnset.end(), inserter(NNList[i], NNList[i].begin()));
+      std::vector<index_t> *nnset = new std::vector<index_t>();
+      
+      std::sort(NNList[i].begin(),NNList[i].end());
+      std::unique_copy(NNList[i].begin(), NNList[i].end(), inserter(*nnset, nnset->begin()));
+      
+      NNList[i].swap(*nnset);
+      delete nnset;
     }
   }
   

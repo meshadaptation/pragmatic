@@ -62,9 +62,9 @@ int main(int argc, char **argv){
 
   int rank = 0;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    }
+  if(MPI::Is_initialized()){
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  }
 #endif
 
   bool verbose = false;

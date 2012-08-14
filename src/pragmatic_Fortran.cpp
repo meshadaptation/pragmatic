@@ -184,7 +184,7 @@ extern "C" {
     if(ndims==2){
       Coarsen<double, int> coarsen(*mesh, *surface);
       Smooth<double, int> smooth(*mesh, *surface);
-      Refine<double, int> refine(*mesh, *surface);
+      Refine2D<double, int> refine(*mesh, *surface);
       Swapping2D<double, int> swapping(*mesh, *surface);
       
       coarsen.coarsen(L_low, L_up);
@@ -213,7 +213,7 @@ extern "C" {
     }else{
       Coarsen<double, int> coarsen(*mesh, *surface);
       Smooth<double, int> smooth(*mesh, *surface);
-      Refine<double, int> refine(*mesh, *surface);
+      Refine2D<double, int> refine(*mesh, *surface);
       Swapping3D<double, int> swapping(*mesh, *surface);
       
       coarsen.coarsen(L_low, L_up);

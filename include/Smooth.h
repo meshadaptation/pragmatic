@@ -184,9 +184,10 @@ template<typename real_t, typename index_t>
         {
           _mesh->halo_update(&(_mesh->_coords[0]), ndims);
           _mesh->halo_update(&(_mesh->metric[0]), msize);
+
+          for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+            quality[*ie] = -1;
         }
-        for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-          quality[*ie] = -1;
 #pragma omp barrier
       }
 
@@ -213,33 +214,40 @@ template<typename real_t, typename index_t>
             }
           }
 #pragma omp master
-          _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-          _mesh->halo_update(&(_mesh->metric[0]), msize);
-          for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-            quality[*ie] = -1;
+          {
+            _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+            _mesh->halo_update(&(_mesh->metric[0]), msize);
+            
+            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+              quality[*ie] = -1;
+          }
 #pragma omp barrier
         }
         
         // Count number of active vertices.
-        nav = 0;    
+#pragma omp single
+        {
+          nav = 0;    
+        }
 #pragma omp for schedule(static) reduction(+:nav)
         for(int i=0;i<NNodes;i++){
           if(_mesh->is_owned_node(i))
             nav += active_vertices[i];
         }
-#pragma omp master
-        {
 #ifdef HAVE_MPI
-          if(mpi_nparts>1)
+        if(mpi_nparts>1){
+#pragma omp master
+          {
             MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
-#endif
+          }
         }
+#endif
 #pragma omp barrier
         if(nav==0)
           break;
       }
     }
-
+    
     return;
   }
 

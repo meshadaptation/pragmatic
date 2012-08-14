@@ -53,8 +53,17 @@
 using namespace std;
 
 int main(int argc, char **argv){
+#ifdef HAVE_MPI
   MPI::Init(argc, argv);
+#endif
 
+  int rank = 0;
+#ifdef HAVE_MPI
+  if(MPI::Is_initialized()){
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  }
+#endif
+  
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
@@ -63,7 +72,7 @@ int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10.vtu");
 
   Surface<double, int> surface(*mesh);
-  surface.find_surface();
+  surface.find_surface(true);
 
   MetricField2D<double, int> metric_field(*mesh, surface);
 
@@ -78,7 +87,7 @@ int main(int argc, char **argv){
   
   VTKTools<double, int>::export_vtu("../data/test_refine_2d-initial", mesh);
 
-  Refine<double, int> adapt(*mesh, surface);
+  Refine2D<double, int> adapt(*mesh, surface);
 
   double tic = get_wtime();
   for(int i=0;i<5;i++)
@@ -92,20 +101,25 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   if(verbose){
     int nelements = mesh->get_number_elements();      
-    std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl
-             <<"Edge length RMS:      "<<lrms<<std::endl
-             <<"Quality RMS:          "<<qrms<<std::endl;
+    if(rank==0)
+      std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
+               <<"Number elements:      "<<nelements<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  if((lrms<0.8)&&(qrms<0.3))
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    if((lrms<0.8)&&(qrms<0.3))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
 
   delete mesh;
 
+#ifdef HAVE_MPI
   MPI::Finalize();
+#endif
 
   return 0;
 }

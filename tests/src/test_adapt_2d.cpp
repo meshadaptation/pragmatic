@@ -77,7 +77,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0002;
+  double eta=0.002;
 
   vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -106,7 +106,7 @@ int main(int argc, char **argv){
 
   Coarsen<double, int> coarsen(*mesh, surface);  
   Smooth<double, int> smooth(*mesh, surface);
-  Refine<double, int> refine(*mesh, surface);
+  Refine2D<double, int> refine(*mesh, surface);
   Swapping2D<double, int> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
