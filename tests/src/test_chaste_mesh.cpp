@@ -118,7 +118,7 @@ int main(int argc, char **argv){
   
   int adapt_iter=0;
   double alpha = 0.95; //sqrt(2)/2;
-  Refine2D<double, int> refine(mesh, surface);
+  Refine3D<double, int> refine(mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
       
