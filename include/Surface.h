@@ -412,7 +412,8 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void refine(std::vector< std::vector<index_t> > &refined_edges, const index_t *lnn2gnn){
+  void refine(std::vector< std::vector<index_t> > &refined_edges,
+      std::vector< std::vector<index_t> > &NNList, const index_t *lnn2gnn){
     // Given the refined edges, refine facets.
     std::vector< std::vector<index_t> > private_SENList;
     std::vector< std::vector<int> > private_boundary_ids;
@@ -453,7 +454,7 @@ template<typename real_t, typename index_t>
             continue;
           
           // Check if this edge has been refined.
-          index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, lnn2gnn);
+          index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, NNList, lnn2gnn);
           
           // If it's not refined then just jump onto the next one.
           if(newVertex < 0)
@@ -505,7 +506,7 @@ template<typename real_t, typename index_t>
           index_t vertexID;
           for(size_t j=0;j<3;j++)
             for(size_t k=j+1;k<3;k++){
-              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn);
+              vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, NNList, lnn2gnn);
               if(vertexID >= 0){
               	splitEdges.push_back(Edge<index_t>(n[j], n[k]));
               	newVertex.push_back(vertexID);
@@ -638,23 +639,29 @@ template<typename real_t, typename index_t>
       memcpy(&boundary_ids[threadIdx[tid]], &private_boundary_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
-    }
-    
-    size_t NNodes = _mesh->get_number_nodes();
-    size_t NSElements = get_number_facets();
-    
-    SNEList.clear();
-    surface_nodes.clear();
-    surface_nodes.resize(NNodes, false);
-    
-    for(size_t i=0;i<NSElements;i++){
-      const int *n=get_facet(i);
-      if(n[0]<0)
-        continue;
+
+      size_t NNodes = _mesh->get_number_nodes();
+      size_t NSElements = get_number_facets();
       
-      for(size_t j=0;j<snloc;j++){
-        SNEList[n[j]].insert(i);
-        surface_nodes[n[j]] = true;
+#pragma omp single
+      {
+        SNEList.clear();
+        surface_nodes.clear();
+        surface_nodes.resize(NNodes, false);
+      }
+
+//#pragma omp for schedule(dynamic)
+      for(size_t i=0;i<NSElements;i++){
+        const int *n=get_facet(i);
+        if(n[0]<0)
+          continue;
+
+        for(size_t j=0;j<snloc;j++){
+          if(n[j]%nthreads == tid){
+            SNEList[n[j]].insert(i);
+            surface_nodes[n[j]] = true;
+          }
+        }
       }
     }
   }

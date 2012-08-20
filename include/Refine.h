@@ -117,14 +117,38 @@ template<typename real_t, typename index_t> class Refine2D{
     
     // Initialise a dynamic vertex list
     std::vector< std::vector<index_t> > refined_edges(NNodes);
+    std::vector< std::vector<size_t> > createdByThread(NNodes);
     std::vector< std::vector< DirectedEdge<index_t> > > newVertices(nthreads);
     std::vector< std::vector<real_t> > newCoords(nthreads);
     std::vector< std::vector<float> > newMetric(nthreads);
     std::vector< std::vector<index_t> > newElements(nthreads);
     std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
 
+    std::vector< std::vector<index_t> > NNList(NNodes);
+    std::vector< std::vector<index_t> > NEList(NNodes);
+
 #pragma omp parallel
     {
+      /*
+       * Convert _mesh->NEList from std::vector<std::set> to std::vector<std::vector>
+       * and create a local copy of _mesh->NNList. This copy of NNList is needed by
+       * _mesh->get_new_vertex() - since _mesh->NNList is updated in-place and newly
+       * created vertices delete the original adjacency information between the two vertices
+       * of the split edge, we need to keep a copy of the original adjacency info.
+       */
+#pragma omp for schedule(dynamic) nowait
+      for(size_t i=0;i<NNodes;i++){
+        if(_mesh->NNList[i].empty())
+          continue;
+
+        size_t size = _mesh->NNList[i].size();
+        NNList[i].resize(size);
+        std::copy(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), NNList[i].begin());
+
+        size = _mesh->NEList[i].size();
+        NEList[i].resize(size);
+        std::copy(_mesh->NEList[i].begin(), _mesh->NEList[i].end(), NEList[i].begin());
+      }
       
       // Establish global node numbering.
 #pragma omp master
@@ -161,7 +185,8 @@ template<typename real_t, typename index_t> class Refine2D{
         
         if(nprocs>1){
           for(int i=0;i<nprocs;i++){
-            for(std::vector<int>::const_iterator it=_mesh->recv[i].begin();it!=_mesh->recv[i].end();++it){
+            for(std::vector<int>::const_iterator it=_mesh->recv[i].begin();
+                it!=_mesh->recv[i].end();++it){
               node_owner[*it] = i;
             }
           }
@@ -182,7 +207,8 @@ template<typename real_t, typename index_t> class Refine2D{
          * inside mark_edge(...), is not possible, since mark_edge(...) may be
          * called for the same vertex i by two threads at the same time.
          */
-        refined_edges[i].resize(2*_mesh->NNList[i].size(), -1);
+        refined_edges[i].resize(_mesh->NNList[i].size(), -1);
+        createdByThread[i].resize(_mesh->NNList[i].size());
       	for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
           assert(otherVertex>=0);
@@ -201,8 +227,8 @@ template<typename real_t, typename index_t> class Refine2D{
                                  processes that have this edge will
                                  decide to refine it. */
 
-              refined_edges[i][2*it]   = splitCnt[tid]++;
-              refined_edges[i][2*it+1] = tid;
+              refined_edges[i][it]   = splitCnt[tid]++;
+              createdByThread[i][it] = tid;
 
               refine_edge(i, otherVertex, newVertices[tid], newCoords[tid], newMetric[tid]);
             }
@@ -242,11 +268,15 @@ template<typename real_t, typename index_t> class Refine2D{
 #pragma omp barrier
 #pragma omp single
       {
-        const int newSize = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
+        NNodes = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
         
-        _mesh->_coords.resize(ndims*newSize);
-        _mesh->metric.resize(msize*newSize);
-        node_owner.resize(newSize, -1);
+        _mesh->NNList.resize(NNodes);
+        _mesh->NEList.resize(NNodes);
+        NEList.resize(NNodes);
+        createdByThread.resize(NNodes);
+        _mesh->_coords.resize(ndims*NNodes);
+        _mesh->metric.resize(msize*NNodes);
+        node_owner.resize(NNodes, -1);
       }
 
       // Append new coords and metric to the mesh.
@@ -268,29 +298,143 @@ template<typename real_t, typename index_t> class Refine2D{
        * This approach seems better only for subsequent calls to refine(),where
        * only a few edges are expected to be refined.
        */
-      // Fix IDs of new vertices in refined_edges
+
+       // Fix IDs of new vertices in refined_edges and update NNList.
 #pragma omp for schedule(dynamic)
-      for(size_t i=0; i<refined_edges.size(); ++i){
-        for(typename std::vector<index_t>::iterator it=refined_edges[i].begin(); it!=refined_edges[i].end(); it+=2)
-          if(*it != -1)
-            *it += threadIdx[*(it+1)];
+      for(index_t i=0; i<(int)refined_edges.size(); ++i){
+        for(size_t j=0; j < refined_edges[i].size(); ++j)
+          if(refined_edges[i][j] != -1){
+            refined_edges[i][j] += threadIdx[createdByThread[i][j]];
+
+            /*
+             * i is the lesser ID vertex
+             * oppositeVertex is the greater ID vertex
+             * middleVertex is the newly created vertex
+             */
+            index_t middleVertex = refined_edges[i][j];
+            index_t oppositeVertex = _mesh->NNList[i][j];
+
+            // Add i in middleVertex's list
+            _mesh->NNList[middleVertex].push_back(i);
+
+            // Add oppositeVertex in middleVertex's list
+            _mesh->NNList[middleVertex].push_back(oppositeVertex);
+
+            /*
+             * Add middleVertex in i's list, replacing oppositeVertex
+             * which is no longer one of i's neighbours
+             */
+            assert(_mesh->NNList[i][j] == oppositeVertex);
+            _mesh->NNList[i][j] = middleVertex;
+
+            /*
+             * Add middleVertex in oppositeVertex's list, replacing i
+             * which is no longer one of oppositeVertex's neighbours
+             */
+            size_t pos = _mesh->indexOf(i, _mesh->NNList[oppositeVertex]);
+            assert(_mesh->NNList[oppositeVertex][pos] == i);
+            _mesh->NNList[oppositeVertex][pos] = middleVertex;
+          }
       }
       
+      //Resize NNList for the original nodes
+#pragma omp for schedule(static)
+      for(size_t i=0;i<origNNodes;i++){
+        if(_mesh->NNList[i].empty())
+          continue;
+
+        size_t size = _mesh->NNList[i].size();
+
+        /*
+         * An original vertex can only be connected to the newly created vertex
+         * on the opposite edge of the element. This can happen for each one of
+         * the elements of the cavity defined by the original vertex. There are
+         * NNList[original_vertex].size() elements the original vertex is part
+         * of, so NNList[original_vertex] needs to be doubled, i.e. create one
+         * empty slot for each element. If the element containing the new vertex
+         * is at index idx in NEList[original_vertex], then the new vertex will
+         * be added to NNList[original_vertex][original_size+idx].
+         */
+        _mesh->NNList[i].resize(2*size, (index_t) -1);
+      }
+
+      //Resize NNList for the new nodes
+#pragma omp for schedule(static)
+      for(size_t i=origNNodes;i<NNodes;i++){
+        /*
+         * A newly created vertex is by now connected to the two original vertices
+         * which used to define the split edge. It is also part of the two elements
+         * eid0 and eid1 which share the split edge. For each element, the new
+         * vertex can be connected:
+         * (1:2 case) --> to the opposite vertex
+         * (1:3 case) --> to the opposite vertex and one newly created vertex
+         * (1:4 case) --> to the two other newly created vertices
+         * So, for each element the new vertex can be connected to at most 2 other
+         * vertices, so we need to reserve 4 empty slots (2 for each element), so
+         * the total size of NNList[new_vertex] is 6 (4 + the 2 existing neighbours).
+         * The thread processing the lesser ID element (between eid0 and eid1) will
+         * write to NNList[new_vertex][2..3], the other thread to NNList[new_vertex][4..5].
+         * In order to find eid0 and eid1 we will use _mesh->NEList instead of the local
+         * NEList, because eid0 and eid1 are original elements (i.e. not new elements created
+         * by refinement) so we need the pre-refinement view of the mesh.
+         */
+        assert(_mesh->NNList[i].size() == 2);
+        _mesh->NNList[i].resize(6, (index_t) -1);
+      }
+
+      //Resize NEList for the original nodes
+#pragma omp for schedule(static)
+      for(size_t i=0;i<origNNodes;i++){
+        if(_mesh->NNList[i].empty())
+          continue;
+
+        size_t size = NEList[i].size();
+
+        /*
+         * An original vertex can become a member of at most 2 new elements for
+         * each adjacent old element (i.e. in case the element is bisected), so
+         * we need to reserve one additional slot in every NEList[i] (one of the
+         * new elements will be put into the old slot, so only one extra slot is
+         * needed). If the original element's index in NEList[original_vertex]
+         * is idx, the new elements will be added at NEList[original_vertex][idx]
+         * and NEList[original_vertex][original_size+idx]. As was the case with
+         * refined_edges, we need to keep track of which thread created the new elements.
+         */
+        NEList[i].resize(2*size, (index_t) -1);
+        createdByThread[i].clear();
+        createdByThread[i].resize(2*size, std::numeric_limits<size_t>::max());
+      }
+
+      //Resize NEList for the new nodes
+#pragma omp for schedule(static)
+      for(size_t i=origNNodes;i<NNodes;i++){
+        /*
+         * A newly created vertex can become a member of at most 3 new elements
+         * for each of the two old elements which share the edge on which the
+         * new vertex was created. So we need to reserve 6 slots. As was the case
+         * with NNList for new vertices, the thread processing the original
+         * element with the lesser ID will write into NEList[0..2], the other
+         * thread into NEList[3..5].
+         */
+        NEList[i].resize(6, (index_t) -1);
+        createdByThread[i].resize(6, std::numeric_limits<size_t>::max());
+      }
+
       // Perform element refinement.
       splitCnt[tid] = 0;
 
 #pragma omp for schedule(dynamic)
-      for(size_t i=0;i<NElements;i++){
+      for(index_t eid=0;eid<(int)NElements;eid++){
         // Check if this element has been erased - if so continue to next element.
-        const int *n=_mesh->get_element(i);
+        const int *n=_mesh->get_element(eid);
         if(n[0]<0)
           continue;
         
         // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
         index_t newVertex[3];
-        newVertex[0] = _mesh->get_new_vertex(n[1], n[2], refined_edges, lnn2gnn);
-        newVertex[1] = _mesh->get_new_vertex(n[2], n[0], refined_edges, lnn2gnn);
-        newVertex[2] = _mesh->get_new_vertex(n[0], n[1], refined_edges, lnn2gnn);
+        newVertex[0] = _mesh->get_new_vertex(n[1], n[2], refined_edges, NNList, lnn2gnn);
+        newVertex[1] = _mesh->get_new_vertex(n[2], n[0], refined_edges, NNList, lnn2gnn);
+        newVertex[2] = _mesh->get_new_vertex(n[0], n[1], refined_edges, NNList, lnn2gnn);
         
         int refine_cnt=0;
         for(int j=0;j<3;j++)
@@ -319,10 +463,58 @@ template<typename real_t, typename index_t> class Refine2D{
 
           const int ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
           const int ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
+
+          index_t ele0ID = splitCnt[tid]++;
+          index_t ele1ID = splitCnt[tid]++;
             
           append_element(ele0, newElements[tid]);
           append_element(ele1, newElements[tid]);
-          splitCnt[tid] += 2;
+
+          // Put vertexID in rotated_ele[0]'s NNList
+          size_t idx = originalIndexOf(eid, NEList[rotated_ele[0]],
+              createdByThread[rotated_ele[0]]);
+          size_t originalSize = _mesh->NNList[rotated_ele[0]].size() / 2;
+          _mesh->NNList[rotated_ele[0]][originalSize+idx] = vertexID;
+          // Put ele0 and ele1 in rotated_ele[0]'s NEList and remove eid
+          originalSize = NEList[rotated_ele[0]].size() / 2;
+          NEList[rotated_ele[0]][idx] = ele0ID;
+          NEList[rotated_ele[0]][originalSize+idx] = ele1ID;
+          createdByThread[rotated_ele[0]][idx] = tid;
+          createdByThread[rotated_ele[0]][originalSize+idx] = tid;
+
+          // Put rotated_ele[0] in vertexID's NNList
+          // Put ele0 and ele1 in vertexID's NEList
+          std::set<index_t> intersection;
+          set_intersection(_mesh->NEList[rotated_ele[1]].begin(),
+              _mesh->NEList[rotated_ele[1]].end(), _mesh->NEList[rotated_ele[2]].begin(),
+              _mesh->NEList[rotated_ele[2]].end(), inserter(intersection, intersection.begin()));
+          // If eid is the lesser ID element (or the only common element shared between
+          // rotated_ele[1] and rotated_ele[2] in case we are on the mesh surface)
+          if(eid == *intersection.begin()){
+            _mesh->NNList[vertexID][2] = rotated_ele[0];
+            NEList[vertexID][0] = ele0ID;
+            NEList[vertexID][1] = ele1ID;
+            createdByThread[vertexID][0] = tid;
+            createdByThread[vertexID][1] = tid;
+          }
+          else{
+            _mesh->NNList[vertexID][4] = rotated_ele[0];
+            NEList[vertexID][3] = ele0ID;
+            NEList[vertexID][4] = ele1ID;
+            createdByThread[vertexID][3] = tid;
+            createdByThread[vertexID][4] = tid;
+          }
+
+          // Replace eid with ele0 in rotated_ele[1]'s NEList
+          idx = originalIndexOf(eid, NEList[rotated_ele[1]], createdByThread[rotated_ele[1]]);
+          NEList[rotated_ele[1]][idx] = ele0ID;
+          createdByThread[rotated_ele[1]][idx] = tid;
+
+          // Replace eid with ele1 in rotated_ele[2]'s NEList
+          idx = originalIndexOf(eid, NEList[rotated_ele[2]], createdByThread[rotated_ele[2]]);
+          NEList[rotated_ele[2]][idx] = ele1ID;
+          createdByThread[rotated_ele[2]][idx] = tid;
+
         }else if(refine_cnt==2){
           int rotated_ele[3] = {-1, -1, -1};
           index_t vertexID[2];
@@ -347,26 +539,221 @@ template<typename real_t, typename index_t> class Refine2D{
           const int ele0[] = {rotated_ele[0], vertexID[1], vertexID[0]};
           const int ele1[] = {vertexID[offset], rotated_ele[1], rotated_ele[2]};
           const int ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
+
+          index_t ele0ID = splitCnt[tid]++;
+          index_t ele1ID = splitCnt[tid]++;
+          index_t ele2ID = splitCnt[tid]++;
             
           append_element(ele0, newElements[tid]);
           append_element(ele1, newElements[tid]);
           append_element(ele2, newElements[tid]);
-          splitCnt[tid] += 3;
+
+          /*
+           * Find the offset in NNList[vertexID[0]] at which neighbours of
+           * vertexID[0] should be appended (3 or 5, depending on whether the
+           * element we are processing has the lesser or the greater ID between
+           * the two elements sharing the edge on which vertexID[0] was created).
+           * We need the original node-element adjacency view, so we use
+           * _mesh->NEList instead of the local NEList.
+           */
+          char list_offset[2];
+
+          std::set<index_t> intersection;
+          set_intersection(_mesh->NEList[rotated_ele[0]].begin(),
+              _mesh->NEList[rotated_ele[0]].end(), _mesh->NEList[rotated_ele[2]].begin(),
+              _mesh->NEList[rotated_ele[2]].end(), inserter(intersection, intersection.begin()));
+          list_offset[0] = (eid == *intersection.begin() ? 2 : 4);
+
+          // Same for the offset in NNList[vertexID[1]]
+          intersection.clear();
+          set_intersection(_mesh->NEList[rotated_ele[0]].begin(),
+              _mesh->NEList[rotated_ele[0]].end(), _mesh->NEList[rotated_ele[1]].begin(),
+              _mesh->NEList[rotated_ele[1]].end(), inserter(intersection, intersection.begin()));
+          list_offset[1] = (eid == *intersection.begin() ? 2 : 4);
+
+          // Put vertexID[1] in vertexID[0]'s NNList
+          _mesh->NNList[vertexID[0]][list_offset[0]] = vertexID[1];
+          // Put vertexID[0] in vertexID[1]'s NNList
+          _mesh->NNList[vertexID[1]][list_offset[1]] = vertexID[0];
+
+          // vertexID[offset] and rotated_ele[offset+1] are the vertices on the diagonal
+          // Put rotated_ele[offset+1] in vertexID[offset]'s NNList
+          _mesh->NNList[vertexID[offset]][list_offset[offset]+1] = rotated_ele[offset+1];
+
+          // Put vertexID[offset] in rotated_ele[offset+1]'s NNList
+          size_t idx = originalIndexOf(eid, NEList[rotated_ele[offset+1]],
+              createdByThread[rotated_ele[offset+1]]);
+          size_t originalSize = _mesh->NNList[rotated_ele[offset+1]].size() / 2;
+          _mesh->NNList[rotated_ele[offset+1]][originalSize+idx] = vertexID[offset];
+
+          // rotated_ele[offset+1] is the old vertex which is on the diagonal
+          // Replace eid with ele1 and ele2 in rotated_ele[offset+1]'s NEList
+          originalSize = NEList[rotated_ele[offset+1]].size() / 2;
+          NEList[rotated_ele[offset+1]][idx] = ele1ID;
+          NEList[rotated_ele[offset+1]][originalSize+idx] = ele2ID;
+          createdByThread[rotated_ele[offset+1]][idx] = tid;
+          createdByThread[rotated_ele[offset+1]][originalSize+idx] = tid;
+
+          // rotated_ele[(offset+1)%2+1] is the old vertex which is not on the diagonal
+          // Replace eid with ele1 in rotated_ele[(offset+1)%2+1]'s NEList
+          size_t otherIdx = (offset+1)%2 + 1;
+          idx = originalIndexOf(eid, NEList[rotated_ele[otherIdx]],
+              createdByThread[rotated_ele[otherIdx]]);
+          NEList[rotated_ele[otherIdx]][idx] = ele1ID;
+          createdByThread[rotated_ele[otherIdx]][idx] = tid;
+
+          // Replace eid with ele0 in NEList[rotated_ele[0]]
+          idx = originalIndexOf(eid, NEList[rotated_ele[0]], createdByThread[rotated_ele[0]]);
+          NEList[rotated_ele[0]][idx] = ele0ID;
+          createdByThread[rotated_ele[0]][idx] = tid;
+
+          // Put ele0, ele1 and ele2 in vertexID[offset]'s NEList
+          if(list_offset[offset] == 2){
+            NEList[vertexID[offset]][0] = ele0ID;
+            NEList[vertexID[offset]][1] = ele1ID;
+            NEList[vertexID[offset]][2] = ele2ID;
+            createdByThread[vertexID[offset]][0] = tid;
+            createdByThread[vertexID[offset]][1] = tid;
+            createdByThread[vertexID[offset]][2] = tid;
+          }
+          else{
+            NEList[vertexID[offset]][3] = ele0ID;
+            NEList[vertexID[offset]][4] = ele1ID;
+            NEList[vertexID[offset]][5] = ele2ID;
+            createdByThread[vertexID[offset]][3] = tid;
+            createdByThread[vertexID[offset]][4] = tid;
+            createdByThread[vertexID[offset]][5] = tid;
+          }
+
+          // vertexID[(offset+1)%2] is the new vertex which is not on the diagonal
+          // Put ele0 and ele2 in vertexID[(offset+1)%2]'s NEList
+          otherIdx = (offset+1)%2;
+          if(list_offset[otherIdx] == 2){
+            NEList[vertexID[otherIdx]][0] = ele0ID;
+            NEList[vertexID[otherIdx]][1] = ele2ID;
+            createdByThread[vertexID[otherIdx]][0] = tid;
+            createdByThread[vertexID[otherIdx]][1] = tid;
+          }
+          else{
+            NEList[vertexID[otherIdx]][3] = ele0ID;
+            NEList[vertexID[otherIdx]][4] = ele2ID;
+            createdByThread[vertexID[otherIdx]][3] = tid;
+            createdByThread[vertexID[otherIdx]][4] = tid;
+          }
         }else if(refine_cnt==3){
           const int ele0[] = {n[0], newVertex[2], newVertex[1]};
           const int ele1[] = {n[1], newVertex[0], newVertex[2]};
           const int ele2[] = {n[2], newVertex[1], newVertex[0]};
           const int ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
-            
+
+          index_t ele0ID = splitCnt[tid]++;
+          index_t ele1ID = splitCnt[tid]++;
+          index_t ele2ID = splitCnt[tid]++;
+          index_t ele3ID = splitCnt[tid]++;
+
           append_element(ele0, newElements[tid]);
           append_element(ele1, newElements[tid]);
           append_element(ele2, newElements[tid]);
           append_element(ele3, newElements[tid]);
-          splitCnt[tid] += 4;
+
+          // Find offsets in NNList for newVertex[0], newVertex[1] and [newVertex[2].
+          char list_offset[3];
+
+          std::set<index_t> intersection;
+          set_intersection(_mesh->NEList[n[1]].begin(),
+              _mesh->NEList[n[1]].end(), _mesh->NEList[n[2]].begin(),
+              _mesh->NEList[n[2]].end(), inserter(intersection, intersection.begin()));
+          list_offset[0] = (eid == *intersection.begin() ? 2 : 4);
+
+          intersection.clear();
+          set_intersection(_mesh->NEList[n[0]].begin(),
+              _mesh->NEList[n[0]].end(), _mesh->NEList[n[2]].begin(),
+              _mesh->NEList[n[2]].end(), inserter(intersection, intersection.begin()));
+          list_offset[1] = (eid == *intersection.begin() ? 2 : 4);
+
+          intersection.clear();
+          set_intersection(_mesh->NEList[n[0]].begin(),
+              _mesh->NEList[n[0]].end(), _mesh->NEList[n[1]].begin(),
+              _mesh->NEList[n[1]].end(), inserter(intersection, intersection.begin()));
+          list_offset[2] = (eid == *intersection.begin() ? 2 : 4);
+
+          // Append newVertex[1] and newVertex[2] in newVertex[0]'s NNList
+          _mesh->NNList[newVertex[0]][list_offset[0]] = newVertex[1];
+          _mesh->NNList[newVertex[0]][list_offset[0]+1] = newVertex[2];
+
+          // Append newVertex[0] and newVertex[2] in newVertex[1]'s NNList
+          _mesh->NNList[newVertex[1]][list_offset[1]] = newVertex[0];
+          _mesh->NNList[newVertex[1]][list_offset[1]+1] = newVertex[2];
+
+          // Append newVertex[0] and newVertex[1] in newVertex[2]'s NNList
+          _mesh->NNList[newVertex[2]][list_offset[2]] = newVertex[0];
+          _mesh->NNList[newVertex[2]][list_offset[2]+1] = newVertex[1];
+
+          // Update NEList
+          size_t idx = originalIndexOf(eid, NEList[n[0]], createdByThread[n[0]]);
+          NEList[n[0]][idx] = ele0ID;
+          createdByThread[n[0]][idx] = tid;
+          idx = originalIndexOf(eid, NEList[n[1]], createdByThread[n[1]]);
+          NEList[n[1]][idx] = ele1ID;
+          createdByThread[n[1]][idx] = tid;
+          idx = originalIndexOf(eid, NEList[n[2]], createdByThread[n[2]]);
+          NEList[n[2]][idx] = ele2ID;
+          createdByThread[n[2]][idx] = tid;
+
+          if(list_offset[0] == 2){
+            NEList[newVertex[0]][0] = ele1ID;
+            NEList[newVertex[0]][1] = ele2ID;
+            NEList[newVertex[0]][2] = ele3ID;
+            createdByThread[newVertex[0]][0] = tid;
+            createdByThread[newVertex[0]][1] = tid;
+            createdByThread[newVertex[0]][2] = tid;
+          }
+          else{
+            NEList[newVertex[0]][3] = ele1ID;
+            NEList[newVertex[0]][4] = ele2ID;
+            NEList[newVertex[0]][5] = ele3ID;
+            createdByThread[newVertex[0]][3] = tid;
+            createdByThread[newVertex[0]][4] = tid;
+            createdByThread[newVertex[0]][5] = tid;
+          }
+
+          if(list_offset[1] == 2){
+            NEList[newVertex[1]][0] = ele0ID;
+            NEList[newVertex[1]][1] = ele2ID;
+            NEList[newVertex[1]][2] = ele3ID;
+            createdByThread[newVertex[1]][0] = tid;
+            createdByThread[newVertex[1]][1] = tid;
+            createdByThread[newVertex[1]][2] = tid;
+          }
+          else{
+            NEList[newVertex[1]][3] = ele0ID;
+            NEList[newVertex[1]][4] = ele2ID;
+            NEList[newVertex[1]][5] = ele3ID;
+            createdByThread[newVertex[1]][3] = tid;
+            createdByThread[newVertex[1]][4] = tid;
+            createdByThread[newVertex[1]][5] = tid;
+          }
+
+          if(list_offset[2] == 2){
+            NEList[newVertex[2]][0] = ele0ID;
+            NEList[newVertex[2]][1] = ele1ID;
+            NEList[newVertex[2]][2] = ele3ID;
+            createdByThread[newVertex[2]][0] = tid;
+            createdByThread[newVertex[2]][1] = tid;
+            createdByThread[newVertex[2]][2] = tid;
+          }
+          else{
+            NEList[newVertex[2]][3] = ele0ID;
+            NEList[newVertex[2]][4] = ele1ID;
+            NEList[newVertex[2]][5] = ele3ID;
+            createdByThread[newVertex[2]][3] = tid;
+            createdByThread[newVertex[2]][4] = tid;
+            createdByThread[newVertex[2]][5] = tid;
+          }
         }
 
         // Remove parent element.
-        _mesh->erase_element(i);
+        _mesh->erase_element(eid);
       }
       
       // Perform parallel prefix sum to find (for each OMP thread) the starting position
@@ -406,10 +793,16 @@ template<typename real_t, typename index_t> class Refine2D{
       
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-          
+
+      // Fix IDs of new elements in NEList
+#pragma omp for schedule(dynamic)
+     for(index_t i=0; i<(int)NEList.size(); ++i)
+       for(size_t j=0; j < NEList[i].size(); ++j)
+         if(createdByThread[i][j] != std::numeric_limits<size_t>::max())
+           NEList[i][j] += threadIdx[createdByThread[i][j]];
+
 #pragma omp single
       {
-        NNodes = _mesh->get_number_nodes();
         NElements = _mesh->get_number_elements();
       }
 
@@ -521,11 +914,164 @@ template<typename real_t, typename index_t> class Refine2D{
       // Refine surface
 #pragma omp single
       {
-        _surface->refine(refined_edges, lnn2gnn);
+        _surface->refine(refined_edges, NNList, lnn2gnn);
       }
 
-      // Recreate adjancy information.
-      _mesh->create_adjancy();
+      // Compact NNList
+#pragma omp for schedule(dynamic)
+      for(size_t i=0;i<origNNodes;i++){
+        if(_mesh->NNList[i].size() == 0)
+          continue;
+
+        /*
+         * The first NNList[i].size()/2 slots of the list are occupied
+         * for sure, so we can search only in the newly allocated slots.
+         */
+        size_t forward = _mesh->NNList[i].size() / 2;
+        size_t backward = _mesh->NNList[i].size() - 1;
+
+        while(forward < backward){
+          while(_mesh->NNList[i][forward] != -1){
+            ++forward;
+            if(forward == backward)
+              break;
+          }
+          while(_mesh->NNList[i][backward] == -1){
+            --backward;
+            if(forward > backward)
+              break;
+          }
+
+          if(forward < backward){
+            _mesh->NNList[i][forward++] = _mesh->NNList[i][backward];
+            _mesh->NNList[i][backward--] = -1;
+          }
+          else
+            break;
+        }
+        if(_mesh->NNList[i][forward] != -1)
+          ++forward;
+
+        _mesh->NNList[i].resize(forward);
+      }
+
+#pragma omp for schedule(dynamic)
+      for(size_t i=origNNodes;i<NNodes;i++){
+
+        /*
+         * The first 2 slots of the list are occupied for
+         * sure, so we can search only in the rest 4 slots.
+         */
+        size_t forward = 2;
+        size_t backward = 5;
+
+        while(forward < backward){
+          while(_mesh->NNList[i][forward] != -1){
+            ++forward;
+            if(forward == backward)
+              break;
+          }
+          while(_mesh->NNList[i][backward] == -1){
+            --backward;
+            if(forward > backward)
+              break;
+          }
+
+          if(forward < backward){
+            _mesh->NNList[i][forward++] = _mesh->NNList[i][backward];
+            _mesh->NNList[i][backward--] = -1;
+          }
+          else
+            break;
+        }
+        if(_mesh->NNList[i][forward] != -1)
+          ++forward;
+
+        _mesh->NNList[i].resize(forward);
+      }
+
+      // Compact NEList
+#pragma omp for schedule(dynamic)
+      for(size_t i=0;i<origNNodes;i++){
+        if(_mesh->NNList[i].size() == 0)
+          continue;
+
+        /*
+         * The first NEList[i].size()/2 slots of the list are occupied
+         * for sure, so we can search only in the newly allocated slots.
+         */
+        size_t forward = NEList[i].size() / 2;
+        size_t backward = NEList[i].size() - 1;
+
+        while(forward < backward){
+          while(NEList[i][forward] != -1){
+            ++forward;
+            if(forward==backward)
+              break;
+          }
+          while(NEList[i][backward] == -1){
+            --backward;
+            if(forward>backward)
+              break;
+          }
+
+          if(forward < backward){
+            NEList[i][forward++] = NEList[i][backward];
+            NEList[i][backward--] = -1;
+          }
+          else
+            break;
+        }
+        if(NEList[i][forward] != -1)
+          ++forward;
+
+        NEList[i].resize(forward);
+      }
+
+#pragma omp for schedule(dynamic)
+      for(size_t i=origNNodes;i<NNodes;i++){
+
+        /*
+         * The first 2 slots of the list are occupied for
+         * sure, so we can search only in the rest 4 slots.
+         */
+        size_t forward = 2;
+        size_t backward = 5;
+
+        while(forward < backward){
+          while(NEList[i][forward] != -1){
+            ++forward;
+            if(forward==backward)
+              break;
+          }
+          while(NEList[i][backward] == -1){
+            --backward;
+            if(forward>backward)
+              break;
+          }
+
+          if(forward < backward){
+            NEList[i][forward++] = NEList[i][backward];
+            NEList[i][backward--] = -1;
+          }
+          else
+            break;
+        }
+        if(NEList[i][forward] != -1)
+          ++forward;
+
+        NEList[i].resize(forward);
+      }
+
+      // Update _mesh->NEList
+#pragma omp for schedule(dynamic)
+      for(size_t i=0;i<NNodes;i++){
+        if(_mesh->NNList[i].empty())
+          continue;
+
+        _mesh->NEList[i].clear();
+        std::copy(NEList[i].begin(), NEList[i].end(), std::inserter(_mesh->NEList[i], _mesh->NEList[i].begin()));
+      }
     }
 
     return;
@@ -590,12 +1136,25 @@ template<typename real_t, typename index_t> class Refine2D{
      * a problem, since any thread accessing this place in memory will
      * write the same value (MAX_INT).
      */
-    refined_edges[n0][2*pos] = std::numeric_limits<index_t>::max();
+    refined_edges[n0][pos] = std::numeric_limits<index_t>::max();
   }
   
   inline void append_element(const index_t *elem, std::vector<index_t> &ENList){
     for(size_t i=0; i<nloc; ++i)
       ENList.push_back(elem[i]);
+  }
+
+  inline size_t originalIndexOf(index_t target, std::vector<index_t> &container,
+      std::vector<size_t> &original) const{
+    size_t pos = 0;
+    while(pos < container.size()/2){
+      if(container[pos] == target && original[pos] == std::numeric_limits<size_t>::max())
+        return pos;
+
+      ++pos;
+    }
+
+    return std::numeric_limits<size_t>::max();
   }
 
   Mesh<real_t, index_t> *_mesh;

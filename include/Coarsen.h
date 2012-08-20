@@ -129,7 +129,7 @@ template<typename real_t, typename index_t> class Coarsen{
       // Initialise list of vertices to be collapsed (applying first-touch).
 #pragma omp single
       {
-        if(nnodes_reserve<NNodes){
+        if(nnodes_reserve<(unsigned)NNodes){
           nnodes_reserve = 1.5*NNodes;
           
           if(dynamic_vertex!=NULL)

@@ -187,21 +187,9 @@ template<typename real_t, typename index_t> class Swapping2D{
             }
             
             // Find the two elements sharing this edge
-            index_t neigh_elements[2], neigh_elements_cnt=0;
-            for(size_t k=0; k<NEList[i].size()/2; ++k){
-              if(NEList[i][k] == -1)
-                continue;
-              
-              for(size_t l=0; l<NEList[opposite].size()/2; ++l){
-                if(NEList[i][k] == NEList[opposite][l]){
-                  neigh_elements[neigh_elements_cnt++] = NEList[i][k];
-                  break;
-                }
-              }
-
-              if(neigh_elements_cnt==2)
-                break;
-            }
+            index_t neigh_elements[2];
+            size_t neigh_elements_cnt = _mesh->intersectionOf(NEList[i], NEList[opposite],
+                NEList[i].size()/2, NEList[opposite].size()/2, 2, neigh_elements);
             
             if(neigh_elements_cnt!=2){
               marked_edges[i][it] = 0;
