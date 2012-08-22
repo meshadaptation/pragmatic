@@ -89,8 +89,8 @@ template<typename MatrixType> class Minor
     }
 
   protected:
-    const typename MatrixType::Nested m_matrix;
-    const int m_row, m_col;
+    typename MatrixType::Nested m_matrix;
+    int m_row, m_col;
 };
 
 /** \nonstableyet 

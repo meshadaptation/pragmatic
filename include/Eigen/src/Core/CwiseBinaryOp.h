@@ -131,9 +131,9 @@ class CwiseBinaryOp : ei_no_assignment_operator,
     }
 
   protected:
-    const LhsNested m_lhs;
-    const RhsNested m_rhs;
-    const BinaryOp m_functor;
+    LhsNested m_lhs;
+    RhsNested m_rhs;
+    BinaryOp m_functor;
 };
 
 /**\returns an expression of the difference of \c *this and \a other

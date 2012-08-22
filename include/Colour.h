@@ -56,7 +56,7 @@ class Colour{
    */
   static void greedy(std::vector< std::vector<index_t> > &NNList, int *colour){
     size_t NNodes = NNList.size();
-    size_t max_colour=64;
+    int max_colour=64;
 
     // Colour first active node.
     size_t node;
@@ -66,12 +66,12 @@ class Colour{
         break;
       }
     }
-    
+
     // Colour remaining active nodes.
     for(;node<NNodes;node++){
       if(NNList[node].size()==0)
         continue;
-      
+
       std::vector<bool> used_colours(max_colour, false);;
       for(typename std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
         if(*it<(int)node){
@@ -79,11 +79,11 @@ class Colour{
             max_colour*=2;
             used_colours.resize(max_colour, false);
           }
-          
+
           used_colours[colour[*it]] = true;
         }
       }
-      
+
       for(index_t i=0;;i++)
         if(!used_colours[i]){
           colour[node] = i;

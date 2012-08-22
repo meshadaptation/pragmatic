@@ -36,19 +36,10 @@
  */
 
 #include <iostream>
+#include <string>
 #include <vector>
-#include <unistd.h>
 
-#include <errno.h>
-#include <stdlib.h>
-
-#ifdef _OPENMP
 #include <omp.h>
-#endif
-
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
 
 #include "Mesh.h"
 #include "Surface.h"
@@ -58,13 +49,30 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
+
 using namespace std;
 
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);
+#endif
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  int rank = 0;
+#ifdef HAVE_MPI
+  if(MPI::Is_initialized()){
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  }
+#endif
+
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
   surface.find_surface(true);
@@ -72,36 +80,53 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-
-  vector<double> psi(NNodes, 0);
-  metric_field.add_field(&(psi[0]), 1.0);
+  for(size_t i=0;i<NNodes;i++){
+    float m[] = {0.5, 0.0, 0.5};
+    metric_field.set_metric(m, i);
+  }
   metric_field.update_mesh();
-  
+
   Coarsen<double, int> adapt(*mesh, surface);
 
+  double L_up = sqrt(2.0);
+  double L_low = L_up*0.5;
+
   double tic = get_wtime();
-  adapt.coarsen(0.4, sqrt(2.0));
+  adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
   
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
-  
-  mesh->verify();
 
-  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_2d_surface", &surface);
+  int nelements = mesh->get_number_elements();
+
+  if(verbose){
+    double lrms = mesh->get_lrms();
+    double qrms = mesh->get_qrms();
+
+    if(rank==0)
+      std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+               <<"Number elements:      "<<nelements<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
+  }
+
+  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
+  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 
-  if(MPI::COMM_WORLD.Get_rank()==0){
-    std::cout<<"Coarsen time = "<<toc-tic<<std::endl;
-    std::cout<<"pass"<<std::endl;
+  if(rank==0){
+    if(nelements==14)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
   }
 
+#ifdef HAVE_MPI
   MPI::Finalize();
-#else
-  std::cout<<"warning - no MPI compiled"<<std::endl;
 #endif
+
   return 0;
 }

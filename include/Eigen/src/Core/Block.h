@@ -279,7 +279,7 @@ class Block<MatrixType,BlockRows,BlockCols,PacketAccess,HasDirectAccess>
       : Base(data, blockRows, blockCols), m_matrix(matrix)
     {}
 
-    const typename MatrixType::Nested m_matrix;
+    typename MatrixType::Nested m_matrix;
 };
 
 /** \returns a dynamic-size expression of a block in *this.

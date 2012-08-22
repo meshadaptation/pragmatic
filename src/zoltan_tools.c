@@ -29,13 +29,10 @@
 
 #include <assert.h>
 #include <mpi.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "zoltan_tools.h"
-
-#include "zoltan.h"
-
-#include <stdio.h>
 
 void pragmatic_zoltan_verify(int ierr, const char *str){
   if(ierr==ZOLTAN_WARN){
@@ -76,8 +73,13 @@ int num_obj_fn(void* data, int* ierr){
    ZOLTAN_OBJ_LIST_FN is preferred for efficiency. */
 void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids,
                  ZOLTAN_ID_PTR local_ids, int wgt_dim, float* obj_wgts, int* ierr){
-  int i;
-  int loc=0;
+  size_t i;
+  int loc=0, verbose=0;
+  
+  if(verbose){
+    printf("VERBOSE: num_gid_entries=%d, num_lid_entries=%d, wgt_dim=%d, obj_wgts=%p\n",
+           num_gid_entries, num_lid_entries, wgt_dim, obj_wgts);
+  }
 
   *ierr = ZOLTAN_OK; 
   
@@ -99,8 +101,13 @@ void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID
    given object must share information is returned. */
 void num_edges_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
                         ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, int* ierr){
-  int i;
-  int loc=0;
+  size_t i;
+  int loc=0, verbose=0;
+
+  if(verbose){
+    printf("VERBOSE: num_gid_entries=%d, num_lid_entries=%d, num_obj=%d, local_ids=%p, global_ids=%p\n",
+           num_gid_entries, num_lid_entries, num_obj, local_ids, global_ids);
+  }
 
   *ierr = ZOLTAN_OK; 
   
@@ -115,7 +122,14 @@ void num_edges_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
 void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
                         ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, ZOLTAN_ID_PTR nbor_global_ids,
                         int* nbor_procs, int wgt_dim, float *ewgts, int* ierr){
-  int i, j, lid, loc=0, sum=0, sum2=0;
+  size_t i;
+  int j, lid, loc=0, sum=0, sum2=0;
+  int verbose=0;
+
+if(verbose){
+    printf("VERBOSE: num_gid_entries=%d, num_lid_entries=%d, num_obj=%d, int wgt_dim=%d, local_ids=%p, global_ids=%p, ewgts=%p\n",
+           num_gid_entries, num_lid_entries, num_obj, wgt_dim, local_ids, global_ids, ewgts);
+  }
 
   *ierr = ZOLTAN_OK;
   
@@ -137,7 +151,8 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
 }
 
 void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
-  int ierr, i, loc=0;
+  size_t i;
+  int ierr, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
   int num_gid_entries;
@@ -173,7 +188,7 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   ierr = Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 #endif
-  
+
   if(distance==1){
     ierr = Zoltan_Set_Param(zz, "COLORING_PROBLEM", "DISTANCE-1");
     pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
@@ -183,13 +198,13 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
   }else{
     fprintf(stderr, "WARNING unexpected distance for coloring graph.\n");
   }
-  
+
   ierr = Zoltan_Set_Param(zz, "SUPERSTEP_SIZE", "1000");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
-  
+
   ierr = Zoltan_Set_Param(zz, "COMM_PATTERN", "S");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
-  
+
   ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "N");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
   
@@ -224,7 +239,8 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
 }
 
 void zoltan_reorder(zoltan_graph_t *graph){
-  int ierr, i, loc=0;
+  size_t i;
+  int ierr, loc=0;
   float ver;
   struct Zoltan_Struct *zz;
   int num_gid_entries;

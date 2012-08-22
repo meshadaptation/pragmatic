@@ -123,8 +123,8 @@ template<typename LhsNested, typename RhsNested> class Product<LhsNested, RhsNes
     }
 
   protected:
-    const LhsNested m_lhs;
-    const RhsNested m_rhs;
+    LhsNested m_lhs;
+    RhsNested m_rhs;
 };
 
 #endif // EIGEN_DIAGONALPRODUCT_H
