@@ -431,8 +431,6 @@ class ElementProperty{
   }
 
  private:
-  int orientation;
-  const int dimension;
   const static real_t inv2 = 0.5;
   const static real_t inv6 = 1.0/6.0;
 
@@ -443,5 +441,8 @@ class ElementProperty{
 
   const static float lipnikov_const2d = 20.784609690826528; // 12.0*sqrt(3.0);
   const static float lipnikov_const3d = 1832.8207768355312; // pow(6.0, 4)*sqrt(2.0);
+
+  const int dimension;
+  int orientation;
 };
 #endif

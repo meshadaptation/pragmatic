@@ -93,7 +93,7 @@ class CwiseUnaryOp : ei_no_assignment_operator,
     }
 
   protected:
-    const typename MatrixType::Nested m_matrix;
+    typename MatrixType::Nested m_matrix;
     const UnaryOp m_functor;
 };
 

@@ -103,7 +103,7 @@ template<typename real_t, typename index_t> class Coarsen{
     nnodes_reserve = 0;
     dynamic_vertex = NULL;
   }
-  
+
   /// Default destructor.
   ~Coarsen(){
     if(property!=NULL)
@@ -121,26 +121,26 @@ template<typename real_t, typename index_t> class Coarsen{
     int coarsen_cnt;
 
     int phase=1;
-    
+
 #pragma omp parallel
-    {    
-      int NNodes= _mesh->get_number_nodes();
-      
+    {
+      size_t NNodes= _mesh->get_number_nodes();
+
       // Initialise list of vertices to be collapsed (applying first-touch).
 #pragma omp single
       {
         if(nnodes_reserve<NNodes){
           nnodes_reserve = 1.5*NNodes;
-          
+
           if(dynamic_vertex!=NULL)
             delete [] dynamic_vertex;
-          
+
           dynamic_vertex = new index_t[nnodes_reserve];
         }
       }
 
 #pragma omp for schedule(static)
-      for(int i=0;i<NNodes;i++){
+      for(size_t i=0;i<NNodes;i++){
         /* dynamic_vertex[i] >= 0 :: target to collapse i
            dynamic_vertex[i] = -1 :: node inactive
            dynamic_vertex[i] = -2 :: recalculate collapse
@@ -150,10 +150,10 @@ template<typename real_t, typename index_t> class Coarsen{
         else
           dynamic_vertex[i] = -2;
       }
-    
+
       // Loop until the maximum independent set is NULL.
       for(int loop=0;loop<max_num_sweeps;loop++){
-        
+
         NNodes = _mesh->get_number_nodes();
 
         // Update edges that are to be collapsed.
@@ -161,7 +161,7 @@ template<typename real_t, typename index_t> class Coarsen{
         coarsen_cnt=0;
 
 #pragma omp for schedule(dynamic) reduction(+:coarsen_cnt)
-        for(int i=0;i<NNodes;i++){
+        for(size_t i=0;i<NNodes;i++){
           if(dynamic_vertex[i]==-2){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
             if(dynamic_vertex[i]>=0){
@@ -209,15 +209,15 @@ template<typename real_t, typename index_t> class Coarsen{
 #pragma omp single nowait
         {
           // Perform surface coarsening.
-          for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
+          for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
 
             // Vertex to be removed: rm_vertex
             if(!maximal_independent_set[rm_vertex])
               continue;
-            
+
             int target_vertex=dynamic_vertex[rm_vertex];
             assert(target_vertex>=0);
-            
+
             if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
               _surface->collapse(rm_vertex, target_vertex);
             }
@@ -225,7 +225,7 @@ template<typename real_t, typename index_t> class Coarsen{
         }
 
 #pragma omp for schedule(dynamic)
-        for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
+        for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
           // Vertex to be removed: rm_vertex
           if(!maximal_independent_set[rm_vertex])
             continue;
@@ -238,26 +238,26 @@ template<typename real_t, typename index_t> class Coarsen{
           set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                            _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                            inserter(deleted_elements, deleted_elements.begin()));
-          
+
           // Remove deleted elements from node-element adjacency list.
           for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){             
             _mesh->erase_element(*de);
           }
-          
+
           // Renumber nodes in elements adjacent to rm_vertex.
           for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
             if(_mesh->_ENList[nloc*(*ee)]==-1)
               continue;
-            
+
             // Renumber.
             for(size_t i=0;i<nloc;i++){
-              if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
+              if(_mesh->_ENList[nloc*(*ee)+i]==(int)rm_vertex){
                 _mesh->_ENList[nloc*(*ee)+i]=target_vertex;
                 break;
               }
             }
           }
-          
+
           // Mark collapse decision as out of date.
           if(_mesh->is_owned_node(target_vertex))
             for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it){
@@ -271,7 +271,7 @@ template<typename real_t, typename index_t> class Coarsen{
 
         // Clear vertex.
 #pragma omp for schedule(dynamic)
-        for(int rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
+        for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
           if(maximal_independent_set[rm_vertex]){
             _mesh->erase_vertex(rm_vertex);
             dynamic_vertex[rm_vertex] = -1;
@@ -492,7 +492,7 @@ template<typename real_t, typename index_t> class Coarsen{
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     boost::unordered_map<int, int> gnn2lnn;
 #else
-    stl::map<int, int> gnn2lnn;
+    std::map<int, int> gnn2lnn;
 #endif
     
     int NNodes = _mesh->get_number_nodes();

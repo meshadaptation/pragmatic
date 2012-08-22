@@ -38,14 +38,15 @@
 #ifndef ZOLTAN_COLOUR_H
 #define ZOLTAN_COLOUR_H
 
-#include <stddef.h>
-#include "mpi.h"
-
 #include "pragmatic_config.h"
 
 #ifndef HAVE_ZOLTAN
 #error No Zoltan support.
 #endif
+
+#include <stddef.h>
+#include <mpi.h>
+#include <zoltan.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,12 +90,24 @@ extern "C" {
 
     /* Re-order.
      */
-    int *order;
+    unsigned int *order;
   } zoltan_graph_t;
   
   void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm);
   void zoltan_reorder(zoltan_graph_t *graph);
-  
+
+  /* Only used in zoltan_tools.c
+   */
+  void pragmatic_zoltan_verify(int ierr, const char *str);
+  int num_obj_fn(void* data, int* ierr);
+  void obj_list_fn(void* data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids,
+                   ZOLTAN_ID_PTR local_ids, int wgt_dim, float* obj_wgts, int* ierr);
+  void num_edges_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
+                          ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, int* ierr);
+  void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, int num_obj, 
+                          ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int* num_edges, ZOLTAN_ID_PTR nbor_global_ids,
+                          int* nbor_procs, int wgt_dim, float *ewgts, int* ierr);
+
 #ifdef __cplusplus
 }
 #endif

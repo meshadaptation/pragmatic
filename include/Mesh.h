@@ -1374,19 +1374,19 @@ template<typename real_t, typename index_t> class Mesh{
       NEList.resize(NNodes);
 
 #pragma omp for schedule(static)
-    for(int i=0;i<NNodes;i++){
+    for(size_t i=0;i<NNodes;i++){
       NEList[i].clear();
       NNList[i].clear();
     }
-    
+
     int tid = omp_get_thread_num();
     int nthreads = omp_get_max_threads();
     size_t NElements = get_number_elements();
-    
+
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
-      
+
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
         if((nid_j%nthreads)==tid){
