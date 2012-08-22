@@ -433,7 +433,7 @@ template<typename real_t, typename index_t>
     
 #pragma omp parallel
     {
-      const unsigned int tid = omp_get_thread_num();
+      const int tid = omp_get_thread_num();
       splitCnt[tid] = 0;
 
 #pragma omp for schedule(dynamic)
@@ -465,30 +465,10 @@ template<typename real_t, typename index_t>
         splitCnt[tid]++;
       }
     
-      // Perform parallel prefix sum to find (for each OMP thread) the starting position
+      // Perform prefix sum to find (for each OMP thread) the starting position
       // in SENList at which new elements should be appended.
-      threadIdx[tid] = splitCnt[tid];
-/*
-#pragma omp barrier
-      
-      unsigned int blockSize = 1, tmp;
-      while(blockSize < threadIdx.size())
-        {
-          if((tid & blockSize) != 0)
-            tmp = threadIdx[tid - ((tid & (blockSize - 1)) + 1)];
-          else
-            tmp = 0;
-          
-#pragma omp barrier
-          
-          threadIdx[tid] += tmp;
-          
-#pragma omp barrier
-          
-          blockSize *= 2;
-        }
-*/
-      for(int id=tid-1; id>=0; --id)
+      threadIdx[tid] = 0;
+      for(int id=0; id<=tid; ++id)
         threadIdx[tid] += splitCnt[id];
       
       threadIdx[tid] += get_number_facets() - splitCnt[tid];
@@ -554,7 +534,7 @@ template<typename real_t, typename index_t>
 
 #pragma omp parallel
     {
-      const unsigned int tid = omp_get_thread_num();
+      const int tid = omp_get_thread_num();
       splitCnt[tid] = 0;
 
 #pragma omp for schedule(static,10)
@@ -666,30 +646,10 @@ template<typename real_t, typename index_t>
         }
       }
 
-      // Perform parallel prefix sum to find (for each OMP thread) the starting position
+      // Perform prefix sum to find (for each OMP thread) the starting position
       // in SENList at which new elements should be appended.
-      threadIdx[tid] = splitCnt[tid];
-/*
-#pragma omp barrier
-
-      unsigned int blockSize = 1, tmp;
-      while(blockSize < threadIdx.size())
-        {
-          if((tid & blockSize) != 0)
-            tmp = threadIdx[tid - ((tid & (blockSize - 1)) + 1)];
-          else
-            tmp = 0;
-
-#pragma omp barrier
-
-          threadIdx[tid] += tmp;
-
-#pragma omp barrier
-
-          blockSize *= 2;
-        }
-*/
-      for(int id=tid-1; id>=0; --id)
+      threadIdx[tid] = 0;
+      for(int id=0; id<-tid; ++id)
         threadIdx[tid] += splitCnt[id];
 
       threadIdx[tid] += get_number_facets() - splitCnt[tid];
@@ -713,10 +673,10 @@ template<typename real_t, typename index_t>
       memcpy(&boundary_ids[threadIdx[tid]], &private_boundary_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
-
-      size_t NNodes = _mesh->get_number_nodes();
-      size_t NSElements = get_number_facets();
     }
+
+    size_t NNodes = _mesh->get_number_nodes();
+    size_t NSElements = get_number_facets();
 
     SNEList.clear();
     surface_nodes.clear();

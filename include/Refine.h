@@ -695,7 +695,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Fix IDs of new elements in NEList, compact _mesh->NNList update _mesh->NEList
 #pragma omp for schedule(dynamic)
-     for(index_t i=0; i<NNodes; ++i){
+     for(index_t i=0; i<(int)NNodes; ++i){
        if(_mesh->NNList[i].empty())
          continue;
 
@@ -706,7 +706,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
        // Compact _mesh->NNList
        size_t forward, backward;
-       if(i < origNNodes){
+       if(i < (int)origNNodes){
          /*
           * The first NNList[i].size()/2 slots of the list are occupied
           * for sure, so we can search only in the newly allocated slots.
@@ -746,7 +746,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
        _mesh->NNList[i].resize(forward);
 
-       if(i < origNNodes){
+       if(i < (int)origNNodes){
          /*
           * The first NEList[i].size()/2 slots of the list are occupied
           * for sure, so we can search only in the newly allocated slots.
@@ -785,7 +785,7 @@ template<typename real_t, typename index_t> class Refine2D{
          ++forward;
 
        // Update _mesh->NEList
-       if(i < origNNodes)
+       if(i < (int)origNNodes)
          _mesh->NEList[i].clear();
        std::copy(&NEList[i][0], &NEList[i][forward],
            std::inserter(_mesh->NEList[i], _mesh->NEList[i].begin()));
