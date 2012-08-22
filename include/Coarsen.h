@@ -492,7 +492,7 @@ template<typename real_t, typename index_t> class Coarsen{
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     boost::unordered_map<int, int> gnn2lnn;
 #else
-    stl::map<int, int> gnn2lnn;
+    std::map<int, int> gnn2lnn;
 #endif
     
     int NNodes = _mesh->get_number_nodes();
