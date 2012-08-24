@@ -53,15 +53,15 @@ program test_adapt
   allocate(xv(NNodes), yv(NNodes), zv(NNodes))
   call pragmatic_get_coords(xv, yv, zv)
 
-  allocate(metric(9*NNodes))
+  allocate(metric(6*NNodes))
   do i=1, NNodes
      hx=0.025 + 0.09*xv(i)
      hy=0.025 + 0.09*yv(i)
      hz=0.025 + 0.09*zv(i)
      
-     metric((i-1)*9+1) = 1.0/hx**2 ; metric((i-1)*9+2) = 0         ; metric((i-1)*9+3) = 0
-     metric((i-1)*9+4) = 0         ; metric((i-1)*9+5) = 1.0/hy**2 ; metric((i-1)*9+6) = 0
-     metric((i-1)*9+7) = 0         ; metric((i-1)*9+8) = 0         ; metric((i-1)*9+9) = 1.0/hz**2
+     metric((i-1)*6+1) = 1.0/hx**2 ; metric((i-1)*6+2) = 0         ; metric((i-1)*6+3) = 0
+                                     metric((i-1)*6+4) = 1.0/hy**2 ; metric((i-1)*6+5) = 0
+                                                                     metric((i-1)*6+6) = 1.0/hz**2
   end do  
 
   call pragmatic_set_metric(metric)

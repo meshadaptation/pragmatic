@@ -75,7 +75,7 @@ template<typename real_t, typename index_t>
   
   /*! Default constructor.
    */
-  MetricField2D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  MetricField2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _surface = &surface;
@@ -339,6 +339,8 @@ template<typename real_t, typename index_t>
   void apply_nelements(real_t nelements){
     float scale_factor = nelements/predict_nelements();
     
+    std::cerr<<"here\n";
+
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -441,7 +443,7 @@ template<typename real_t, typename index_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor2D<float> *_metric;
-  Surface<real_t, index_t> *_surface;
+  Surface2D<real_t, index_t> *_surface;
   Mesh<real_t, index_t> *_mesh;
 };
 
@@ -461,7 +463,7 @@ template<typename real_t, typename index_t>
 
   /*! Default constructor.
    */
-  MetricField3D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  MetricField3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _surface = &surface;
@@ -860,7 +862,7 @@ template<typename real_t, typename index_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor3D<float> *_metric;
-  Surface<real_t, index_t> *_surface;
+  Surface3D<real_t, index_t> *_surface;
   Mesh<real_t, index_t> *_mesh;
 };
 

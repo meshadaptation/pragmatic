@@ -98,9 +98,12 @@ template<typename index_t> class Edge{
   }
 
   template<typename _real_t, typename _index_t> friend class Mesh;
-  template<typename _real_t, typename _index_t> friend class Surface;
-  template<typename _real_t, typename _index_t> friend class Coarsen;
-  template<typename _real_t, typename _index_t> friend class Swapping;
+  template<typename _real_t, typename _index_t> friend class Surface2D;
+  template<typename _real_t, typename _index_t> friend class Surface3D;
+  template<typename _real_t, typename _index_t> friend class Coarsen2D;
+  template<typename _real_t, typename _index_t> friend class Coarsen3D;
+  template<typename _real_t, typename _index_t> friend class Swapping2D;
+  template<typename _real_t, typename _index_t> friend class Swapping3D;
   template<typename _real_t, typename _index_t> friend class Refine2D;
   template<typename _real_t, typename _index_t> friend class Refine3D;
 
@@ -169,9 +172,12 @@ template<typename index_t> class DirectedEdge{
   }
 
   template<typename _real_t, typename _index_t> friend class Mesh;
-  template<typename _real_t, typename _index_t> friend class Surface;
-  template<typename _real_t, typename _index_t> friend class Coarsen;
-  template<typename _real_t, typename _index_t> friend class Swapping;
+  template<typename _real_t, typename _index_t> friend class Surface2D;
+  template<typename _real_t, typename _index_t> friend class Surface3D;
+  template<typename _real_t, typename _index_t> friend class Coarsen2D;
+  template<typename _real_t, typename _index_t> friend class Coarsen3D;
+  template<typename _real_t, typename _index_t> friend class Swapping2D;
+  template<typename _real_t, typename _index_t> friend class Swapping3D;
   template<typename _real_t, typename _index_t> friend class Refine2D;
   template<typename _real_t, typename _index_t> friend class Refine3D;
 

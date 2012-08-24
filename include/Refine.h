@@ -55,7 +55,7 @@
 template<typename real_t, typename index_t> class Refine2D{
  public:
   /// Default constructor.
-  Refine2D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  Refine2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
     
@@ -599,7 +599,7 @@ template<typename real_t, typename index_t> class Refine2D{
   }
 
   Mesh<real_t, index_t> *_mesh;
-  Surface<real_t, index_t> *_surface;
+  Surface2D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   
   index_t *lnn2gnn;
@@ -618,7 +618,7 @@ template<typename real_t, typename index_t> class Refine2D{
 template<typename real_t, typename index_t> class Refine3D{
  public:
   /// Default constructor.
-  Refine3D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  Refine3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
     
@@ -1317,7 +1317,7 @@ template<typename real_t, typename index_t> class Refine3D{
   }
 
   Mesh<real_t, index_t> *_mesh;
-  Surface<real_t, index_t> *_surface;
+  Surface3D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   
   index_t *lnn2gnn;

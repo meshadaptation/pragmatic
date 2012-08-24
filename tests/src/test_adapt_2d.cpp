@@ -71,7 +71,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
 
   MetricField2D<double, int> metric_field(*mesh, surface);
@@ -104,8 +104,8 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen<double, int> coarsen(*mesh, surface);  
-  Smooth<double, int> smooth(*mesh, surface);
+  Coarsen2D<double, int> coarsen(*mesh, surface);  
+  Smooth2D<double, int> smooth(*mesh, surface);
   Refine2D<double, int> refine(*mesh, surface);
   Swapping2D<double, int> swapping(*mesh, surface);
 

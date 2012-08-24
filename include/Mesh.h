@@ -173,6 +173,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Identify active vertices and elements.
     std::vector<index_t> active_vertex, active_element;
+    
     active_vertex.reserve(NNodes);
     active_element.reserve(NElements);
 
@@ -289,8 +290,9 @@ template<typename real_t, typename index_t> class Mesh{
         index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
         sorted_element.insert(new_nid);
       }
-      assert(ordered_elements.find(sorted_element)==ordered_elements.end());
-      ordered_elements[sorted_element] = old_eid;
+      if(ordered_elements.find(sorted_element)==ordered_elements.end()){
+        ordered_elements[sorted_element] = old_eid;
+      }
     }
     std::vector<index_t> metis_element_renumber;
     metis_element_renumber.reserve(metis_nelements);
@@ -450,9 +452,9 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Get the mean edge length metric space.
-  real_t get_lmean(){
+  float get_lmean(){
     int NNodes = get_number_nodes();
-    double total_length=0;
+    float total_length=0;
     int nedges=0;
 #pragma omp parallel reduction(+:total_length,nedges)
     {
@@ -470,22 +472,22 @@ template<typename real_t, typename index_t> class Mesh{
     
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
     
-    double mean = total_length/nedges;
+    float mean = total_length/nedges;
     
     return mean;
   }
 
   /// Get the edge length RMS value in metric space.
-  real_t get_lrms(){
-    double mean = get_lmean();
+  float get_lrms(){
+    float mean = get_lmean();
     int NNodes = get_number_nodes();
 
-    double rms=0;
+    float rms=0;
     int nedges=0;
 #pragma omp parallel reduction(+:rms,nedges)
     {
@@ -503,7 +505,7 @@ template<typename real_t, typename index_t> class Mesh{
 
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
@@ -514,9 +516,9 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Get the element mean quality in metric space.
-  real_t get_qmean() const{
+  float get_qmean() const{
     int NElements = get_number_elements();
-    real_t sum=0;
+    float sum=0;
     int nele=0;
     
 #pragma omp parallel reduction(+:sum, nele)
@@ -540,18 +542,18 @@ template<typename real_t, typename index_t> class Mesh{
 
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
 
-    double mean = sum/nele;
+    float mean = sum/nele;
 
     return mean;
   }
 
   /// Get the element minimum quality in metric space.
-  real_t get_qmin() const{
+  float get_qmin() const{
     size_t NElements = get_number_elements();
     float qmin=1; // Where 1 is ideal.
 
@@ -578,11 +580,11 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
-  real_t get_qrms() const{
+  float get_qrms() const{
     size_t NElements = get_number_elements();
-    double mean = get_qmean();
+    float mean = get_qmean();
 
-    real_t rms=0;
+    float rms=0;
     int nele=0;
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
@@ -1016,13 +1018,16 @@ template<typename real_t, typename index_t> class Mesh{
  private:
   template<typename _real_t, typename _index_t> friend class MetricField2D;
   template<typename _real_t, typename _index_t> friend class MetricField3D;
-  template<typename _real_t, typename _index_t> friend class Smooth;
+  template<typename _real_t, typename _index_t> friend class Smooth2D;
+  template<typename _real_t, typename _index_t> friend class Smooth3D;
   template<typename _real_t, typename _index_t> friend class Swapping2D;
   template<typename _real_t, typename _index_t> friend class Swapping3D;
-  template<typename _real_t, typename _index_t> friend class Coarsen;
+  template<typename _real_t, typename _index_t> friend class Coarsen2D;
+  template<typename _real_t, typename _index_t> friend class Coarsen3D;
   template<typename _real_t, typename _index_t> friend class Refine2D;
   template<typename _real_t, typename _index_t> friend class Refine3D;
-  template<typename _real_t, typename _index_t> friend class Surface;
+  template<typename _real_t, typename _index_t> friend class Surface2D;
+  template<typename _real_t, typename _index_t> friend class Surface3D;
   template<typename _real_t, typename _index_t> friend class VTKTools;
   template<typename _real_t, typename _index_t> friend class CUDATools;
 

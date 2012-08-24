@@ -57,7 +57,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
 
   size_t NNodes = mesh->get_number_nodes();

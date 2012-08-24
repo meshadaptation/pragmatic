@@ -141,7 +141,7 @@ int main(int argc, char **argv){
   }
 
   // Stuff this into a pragmatic mesh.
-  Surface<double, int> surface(*mesh);
+  Surface2D<double, int> surface(*mesh);
   surface.find_surface();
 
   // Need to get the metric from the xml file - but for now just add this dummy.
@@ -178,8 +178,8 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen<double, int> coarsen(*mesh, surface);  
-  Smooth<double, int> smooth(*mesh, surface);
+  Coarsen2D<double, int> coarsen(*mesh, surface);  
+  Smooth2D<double, int> smooth(*mesh, surface);
   Refine2D<double, int> refine(*mesh, surface);
   Swapping2D<double, int> swapping(*mesh, surface);
 

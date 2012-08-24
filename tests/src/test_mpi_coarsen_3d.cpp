@@ -66,7 +66,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double, int> surface(*mesh);
   surface.find_surface(true);
 
   MetricField3D<double, int> metric_field(*mesh, surface);
@@ -77,7 +77,7 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
   
-  Coarsen<double, int> adapt(*mesh, surface);
+  Coarsen3D<double, int> adapt(*mesh, surface);
 
   double tic = get_wtime();
   adapt.coarsen(0.4, sqrt(2.0));

@@ -53,7 +53,7 @@ using namespace std;
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double, int> surface(*mesh);
   surface.find_surface();
 
   MetricField3D<double, int> metric_field(*mesh, surface);
@@ -72,7 +72,7 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
-  Smooth<double, int> smooth(*mesh, surface);
+  Smooth3D<double, int> smooth(*mesh, surface);
 
   double tic = get_wtime();
   smooth.smooth("smart Laplacian");

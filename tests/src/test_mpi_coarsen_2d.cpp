@@ -74,7 +74,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
 
   MetricField2D<double, int> metric_field(*mesh, surface);
@@ -86,7 +86,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  Coarsen<double, int> adapt(*mesh, surface);
+  Coarsen2D<double, int> adapt(*mesh, surface);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;

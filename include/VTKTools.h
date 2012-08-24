@@ -491,18 +491,15 @@ template<typename real_t, typename index_t> class VTKTools{
     return;
   }
 
-  static void export_vtu(const char *basename, const Surface<real_t, index_t> *surface){
+  static void export_vtu(const char *basename, const Surface2D<real_t, index_t> *surface){
     vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
   
     vtkPoints *vtk_points = vtkPoints::New();
     size_t NNodes = surface->get_number_nodes();
     vtk_points->SetNumberOfPoints(NNodes);
-    int ndims = surface->get_number_dimensions();
+    
     for(size_t i=0;i<NNodes;i++){
-      if(ndims==2)
-        vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), 0.0);
-      else
-        vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), surface->get_z(i));
+      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), 0.0);
     }
     ug->SetPoints(vtk_points);
     vtk_points->Delete();
@@ -511,13 +508,9 @@ template<typename real_t, typename index_t> class VTKTools{
     int NSElements = surface->get_number_facets();
     for(int i=0;i<NSElements;i++){
       const int *facet = surface->get_facet(i);
-      if(ndims==2){
-        vtkIdType pts[] = {facet[0], facet[1]};
-        ug->InsertNextCell(VTK_LINE, 2, pts);
-      }else{
-        vtkIdType pts[] = {facet[0], facet[1], facet[2]};
-        ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
-      }
+
+      vtkIdType pts[] = {facet[0], facet[1]};
+      ug->InsertNextCell(VTK_LINE, 2, pts);
     }
 
     // Need the facet ID's
@@ -537,10 +530,86 @@ template<typename real_t, typename index_t> class VTKTools{
     normal->SetName("normals");
     for(int i=0;i<NSElements;i++){
       const double *n = surface->get_normal(i);
-      if(ndims==2)
-        normal->SetTuple3(i, n[0], n[1], 0.0);
-      else
-        normal->SetTuple3(i, n[0], n[1], n[2]);
+      
+      normal->SetTuple3(i, n[0], n[1], 0.0);
+    }
+    ug->GetCellData()->AddArray(normal);
+    normal->Delete();
+    
+    int nparts=1;
+#ifdef HAVE_MPI
+    if(MPI::Is_initialized()){
+      nparts = MPI::COMM_WORLD.Get_size();
+    }
+#endif
+    if(nparts==1){
+      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".vtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetInput(ug);
+      writer->Write();
+      
+      writer->Delete();
+    }else{
+#ifdef HAVE_MPI
+      int rank = MPI::COMM_WORLD.Get_rank();
+      int nparts = MPI::COMM_WORLD.Get_size();
+      
+      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
+      std::string filename = std::string(basename)+std::string(".pvtu");
+      writer->SetFileName(filename.c_str());
+      writer->SetNumberOfPieces(nparts);
+      writer->SetGhostLevel(1);
+      writer->SetStartPiece(rank);
+      writer->SetEndPiece(rank);
+      writer->SetInput(ug);
+      writer->Write();
+      writer->Delete();
+#endif
+    }
+    
+    ug->Delete();
+  }
+
+  static void export_vtu(const char *basename, const Surface3D<real_t, index_t> *surface){
+    vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
+  
+    vtkPoints *vtk_points = vtkPoints::New();
+    size_t NNodes = surface->get_number_nodes();
+    vtk_points->SetNumberOfPoints(NNodes);
+
+    for(size_t i=0;i<NNodes;i++){
+      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), surface->get_z(i));
+    }
+    ug->SetPoints(vtk_points);
+    vtk_points->Delete();
+    
+    // Need to get out the facets
+    int NSElements = surface->get_number_facets();
+    for(int i=0;i<NSElements;i++){
+      const int *facet = surface->get_facet(i);
+      vtkIdType pts[] = {facet[0], facet[1], facet[2]};
+      ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
+    }
+
+    // Need the facet ID's
+    vtkIntArray *scalar = vtkIntArray::New();
+    scalar->SetNumberOfComponents(1);
+    scalar->SetNumberOfTuples(NSElements);
+    scalar->SetName("coplanar_ids");
+    for(int i=0;i<NSElements;i++){
+      scalar->SetTuple1(i, surface->get_coplanar_id(i));
+    }
+    ug->GetCellData()->AddArray(scalar);
+    scalar->Delete();
+  
+    vtkDoubleArray *normal = vtkDoubleArray::New();
+    normal->SetNumberOfComponents(3);
+    normal->SetNumberOfTuples(NSElements);
+    normal->SetName("normals");
+    for(int i=0;i<NSElements;i++){
+      const double *n = surface->get_normal(i);
+      normal->SetTuple3(i, n[0], n[1], n[2]);
     }
     ug->GetCellData()->AddArray(normal);
     normal->Delete();
@@ -579,5 +648,6 @@ template<typename real_t, typename index_t> class VTKTools{
     
     ug->Delete();
   }
+
 };
 #endif

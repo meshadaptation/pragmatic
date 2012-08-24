@@ -53,7 +53,7 @@
 template<typename real_t, typename index_t> class Swapping2D{
  public:
   /// Default constructor.
-  Swapping2D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  Swapping2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
     
@@ -581,7 +581,7 @@ template<typename real_t, typename index_t> class Swapping2D{
   std::vector<size_t> originalVertexDegree;
 
   Mesh<real_t, index_t> *_mesh;
-  Surface<real_t, index_t> *_surface;
+  Surface2D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   static const size_t ndims=2;
   static const size_t nloc=3;
@@ -591,7 +591,7 @@ template<typename real_t, typename index_t> class Swapping2D{
 template<typename real_t, typename index_t> class Swapping3D{
  public:
   /// Default constructor.
-  Swapping3D(Mesh<real_t, index_t> &mesh, Surface<real_t, index_t> &surface){
+  Swapping3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
     
@@ -1268,7 +1268,7 @@ template<typename real_t, typename index_t> class Swapping3D{
   std::vector<size_t> originalVertexDegree;
 
   Mesh<real_t, index_t> *_mesh;
-  Surface<real_t, index_t> *_surface;
+  Surface3D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   static const size_t ndims=3;
   static const size_t nloc=4;

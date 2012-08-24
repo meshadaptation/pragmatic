@@ -84,7 +84,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
-  Surface<double, int> surface(mesh);
+  Surface3D<double, int> surface(mesh);
   surface.find_surface();
 
   MetricField3D<double, int> metric_field(mesh, surface);
@@ -110,10 +110,10 @@ int main(int argc, char **argv){
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
     
-  Coarsen<double, int> coarsen(mesh, surface);
+  Coarsen3D<double, int> coarsen(mesh, surface);
   coarsen.coarsen(L_low, L_up);
   
-  Smooth<double, int> smooth(mesh, surface);
+  Smooth3D<double, int> smooth(mesh, surface);
   double L_max = mesh.maximal_edge_length();
   
   int adapt_iter=0;

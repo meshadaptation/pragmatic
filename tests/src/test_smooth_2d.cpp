@@ -68,7 +68,7 @@ int main(int argc, char **argv){
     const char *method = methods[m];
 
     Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
-    Surface<double, int> surface(*mesh);
+    Surface2D<double, int> surface(*mesh);
     surface.find_surface(true);
 
     MetricField2D<double, int> metric_field(*mesh, surface);
@@ -101,7 +101,7 @@ int main(int argc, char **argv){
                  <<"Quality RMS:     "<<qrms<<std::endl;
     }
     
-    Smooth<double, int> smooth(*mesh, surface);
+    Smooth2D<double, int> smooth(*mesh, surface);
     
     int max_smooth_iter=2;
     
