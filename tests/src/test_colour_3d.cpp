@@ -55,8 +55,6 @@
 
 #include "zoltan_colour.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
 

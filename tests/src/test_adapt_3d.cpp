@@ -51,8 +51,6 @@
 #include "Smooth.h"
 #include "Swapping.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
 

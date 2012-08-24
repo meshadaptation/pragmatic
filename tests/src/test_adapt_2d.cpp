@@ -54,8 +54,6 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init_thread(argc,argv, MPI::THREAD_SERIALIZED);
 
@@ -79,7 +77,7 @@ int main(int argc, char **argv){
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.0002;
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
     double x = 2*mesh->get_coords(i)[0]-1;
     double y = 2*mesh->get_coords(i)[1]-1;

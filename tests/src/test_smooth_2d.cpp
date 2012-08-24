@@ -54,8 +54,6 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init_thread(argc,argv, MPI::THREAD_SERIALIZED);
 
@@ -77,7 +75,7 @@ int main(int argc, char **argv){
 
     double eta=0.002;
 
-    vector<double> psi(NNodes);
+    std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
@@ -124,7 +122,7 @@ int main(int argc, char **argv){
                <<"Quality min:          "<<qmin<<std::endl
                <<"Quality RMS:          "<<qrms<<std::endl;
     
-    string vtu_filename = string("../data/test_smooth_2d_")+string(method);
+    std::string vtu_filename = std::string("../data/test_smooth_2d_")+std::string(method);
     VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh);
     delete mesh;
     

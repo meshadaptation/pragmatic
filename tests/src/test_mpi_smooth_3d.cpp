@@ -55,8 +55,6 @@
 #include "Smooth.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);
@@ -70,7 +68,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = 
       pow(mesh->get_coords(i)[0], 3) + 

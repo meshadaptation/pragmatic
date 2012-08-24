@@ -59,6 +59,12 @@
 
 #include "zoltan_tools.h"
 
+#ifdef _GNU_SOURCE
+#define pragmatic_isnormal(x) std::isnormal(x)
+#else
+#define pragmatic_isnormal(x) isnormal(x)
+#endif
+
 /*! \brief Applies Laplacian smoothen in metric space.
  */
 template<typename real_t, typename index_t>
@@ -301,7 +307,7 @@ template<typename real_t, typename index_t>
     real_t hat[] = {p[0]/mag, p[1]/mag};
 
     // This can happen if there is zero mag.
-    if(!std::isnormal(hat[0]+hat[1]))
+    if(!pragmatic_isnormal(hat[0]+hat[1]))
       return false;
 
     float mp[3];
@@ -542,7 +548,7 @@ template<typename real_t, typename index_t>
     for(int i=0;i<3;i++)
       p[i] = b[i];
 
-    if(!std::isnormal(p[0]+p[1]+p[2])){
+    if(!pragmatic_isnormal(p[0]+p[1]+p[2])){
       errno = 0;
       return false;
     }
@@ -772,7 +778,7 @@ template<typename real_t, typename index_t>
         alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
 
-        if((!std::isnormal(alpha)) || (alpha<0)){
+        if((!pragmatic_isnormal(alpha)) || (alpha<0)){
           alpha = -1;
           continue;
         }
@@ -793,7 +799,7 @@ template<typename real_t, typename index_t>
         real_t new_alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
 
-        if((!std::isnormal(new_alpha)) || (new_alpha<0))
+        if((!pragmatic_isnormal(new_alpha)) || (new_alpha<0))
           continue;
 
         if(new_alpha<alpha)
@@ -801,7 +807,7 @@ template<typename real_t, typename index_t>
       }
 
       // If there is no viable direction, break.
-      if((!std::isnormal(alpha))||(alpha<=0))
+      if((!pragmatic_isnormal(alpha))||(alpha<=0))
         break;
 
       // -
@@ -819,7 +825,7 @@ template<typename real_t, typename index_t>
         p[0] = alpha*hat0[0];
         p[1] = alpha*hat0[1];
 
-        if(!std::isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
+        if(!pragmatic_isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
           std::cerr<<"WARNING: apparently no gradients for mesh smoothing!!\n";
           break;
         }
@@ -832,8 +838,8 @@ template<typename real_t, typename index_t>
           continue;
         }
 
-        assert(std::isnormal(p[0]+p[0]));
-        assert(std::isnormal(mp[0]+mp[1]+mp[2]));
+        assert(pragmatic_isnormal(p[0]+p[0]));
+        assert(pragmatic_isnormal(mp[0]+mp[1]+mp[2]));
 
         // Check if this position improves the local mesh quality.
         for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
@@ -853,7 +859,7 @@ template<typename real_t, typename index_t>
           
           float functional = property->lipnikov(gp, x1, x2, 
                                                 mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-          assert(std::isnormal(functional));
+          assert(pragmatic_isnormal(functional));
           if(functional-functional_0<sigma_q){
             alpha/=2;
             valid_move = false;
@@ -1456,7 +1462,7 @@ template<typename real_t, typename index_t>
     real_t hat[] = {p[0]/mag, p[1]/mag};
 
     // This can happen if there is zero mag.
-    if(!std::isnormal(hat[0]+hat[1]))
+    if(!pragmatic_isnormal(hat[0]+hat[1]))
       return false;
 
     float mp[3];
@@ -1697,7 +1703,7 @@ template<typename real_t, typename index_t>
     for(int i=0;i<3;i++)
       p[i] = b[i];
 
-    if(!std::isnormal(p[0]+p[1]+p[2])){
+    if(!pragmatic_isnormal(p[0]+p[1]+p[2])){
       errno = 0;
       return false;
     }
@@ -1927,7 +1933,7 @@ template<typename real_t, typename index_t>
         alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
 
-        if((!std::isnormal(alpha)) || (alpha<0)){
+        if((!pragmatic_isnormal(alpha)) || (alpha<0)){
           alpha = -1;
           continue;
         }
@@ -1948,7 +1954,7 @@ template<typename real_t, typename index_t>
         real_t new_alpha = (quality[lg->first] - quality[target_element])/
           (mag0-(hat0[0]*hat1[0]+hat0[1]*hat1[1])*mag1);
 
-        if((!std::isnormal(new_alpha)) || (new_alpha<0))
+        if((!pragmatic_isnormal(new_alpha)) || (new_alpha<0))
           continue;
 
         if(new_alpha<alpha)
@@ -1956,7 +1962,7 @@ template<typename real_t, typename index_t>
       }
 
       // If there is no viable direction, break.
-      if((!std::isnormal(alpha))||(alpha<=0))
+      if((!pragmatic_isnormal(alpha))||(alpha<=0))
         break;
 
       // -
@@ -1974,7 +1980,7 @@ template<typename real_t, typename index_t>
         p[0] = alpha*hat0[0];
         p[1] = alpha*hat0[1];
 
-        if(!std::isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
+        if(!pragmatic_isnormal(p[0]+p[1])){ // This can happen if there is zero gradient.
           std::cerr<<"WARNING: apparently no gradients for mesh smoothing!!\n";
           break;
         }
@@ -1987,8 +1993,8 @@ template<typename real_t, typename index_t>
           continue;
         }
 
-        assert(std::isnormal(p[0]+p[0]));
-        assert(std::isnormal(mp[0]+mp[1]+mp[2]));
+        assert(pragmatic_isnormal(p[0]+p[0]));
+        assert(pragmatic_isnormal(mp[0]+mp[1]+mp[2]));
 
         // Check if this position improves the local mesh quality.
         for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
@@ -2008,7 +2014,7 @@ template<typename real_t, typename index_t>
           
           float functional = property->lipnikov(gp, x1, x2, 
                                                 mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
-          assert(std::isnormal(functional));
+          assert(pragmatic_isnormal(functional));
           if(functional-functional_0<sigma_q){
             alpha/=2;
             valid_move = false;

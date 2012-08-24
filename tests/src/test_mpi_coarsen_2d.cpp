@@ -53,8 +53,6 @@
 #include <mpi.h>
 #endif
 
-using namespace std;
-
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);

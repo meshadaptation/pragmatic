@@ -58,8 +58,6 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
   MPI::Init(argc,argv);
@@ -73,7 +71,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes, 0);
+  std::vector<double> psi(NNodes, 0);
   metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
   

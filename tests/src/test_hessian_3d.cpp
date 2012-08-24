@@ -46,8 +46,6 @@
 #include "MetricField.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
@@ -58,7 +56,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] =
       pow(mesh->get_coords(i)[0]+0.1, 2) +
@@ -70,7 +68,7 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
 
-  vector<double> metric(NNodes*6);
+  std::vector<double> metric(NNodes*6);
   metric_field.get_metric(&(metric[0]));
 
   double rms[] = {0., 0., 0., 0., 0., 0.};

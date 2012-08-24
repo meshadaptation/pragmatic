@@ -548,7 +548,7 @@ template<typename real_t, typename index_t>
     coplanar_ids.resize(NSElements);
     SENList.resize(NSElements*snloc);
     surface_nodes.resize(_mesh->get_number_nodes());
-    fill(surface_nodes.begin(), surface_nodes.end(), false);
+    std::fill(surface_nodes.begin(), surface_nodes.end(), false);
     SNEList.clear();
     for(int i=0;i<NSElements;i++){
       boundary_ids[i] = boundary_ids_[i];
@@ -1323,7 +1323,7 @@ template<typename real_t, typename index_t>
     coplanar_ids.resize(NSElements);
     SENList.resize(NSElements*snloc);
     surface_nodes.resize(_mesh->get_number_nodes());
-    fill(surface_nodes.begin(), surface_nodes.end(), false);
+    std::fill(surface_nodes.begin(), surface_nodes.end(), false);
     SNEList.clear();
     for(int i=0;i<NSElements;i++){
       boundary_ids[i] = boundary_ids_[i];

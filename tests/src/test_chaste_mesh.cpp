@@ -53,8 +53,6 @@
 #include "Surface.h"
 #include "VTKTools.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
   reader->SetFileName("../data/coarse_slab0003.vtu");
@@ -65,7 +63,7 @@ int main(int argc, char **argv){
   int NNodes = ug->GetNumberOfPoints();
   int NElements = ug->GetNumberOfCells();
 
-  vector<double> x(NNodes),  y(NNodes), z(NNodes);
+  std::vector<double> x(NNodes),  y(NNodes), z(NNodes);
   for(int i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
@@ -74,7 +72,7 @@ int main(int argc, char **argv){
     z[i] = r[2];
   }
 
-  vector<int> ENList;
+  std::vector<int> ENList;
   for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
     for(size_t j=0;j<4;j++){
@@ -89,7 +87,7 @@ int main(int argc, char **argv){
 
   MetricField3D<double, int> metric_field(mesh, surface);
   
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray("Vm");

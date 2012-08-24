@@ -171,7 +171,7 @@ template<typename real_t, typename index_t> class Swapping2D{
 #pragma omp for schedule(dynamic)
         for(size_t i=0;i<NNodes;i++){
           if(_mesh->is_halo_node(i)){
-            fill(marked_edges[i].begin(), marked_edges[i].end(), (char) 0);
+            std::fill(marked_edges[i].begin(), marked_edges[i].end(), (char) 0);
             continue;
           }
           
@@ -654,7 +654,7 @@ template<typename real_t, typename index_t> class Swapping3D{
       // Only start storing information for poor elements.
       if(quality[i]<Q_min){
         partialEEList[i].resize(4);
-        fill(partialEEList[i].begin(), partialEEList[i].end(), -1);
+        std::fill(partialEEList[i].begin(), partialEEList[i].end(), -1);
         
         for(size_t j=0;j<4;j++){
           std::set<index_t> intersection12;

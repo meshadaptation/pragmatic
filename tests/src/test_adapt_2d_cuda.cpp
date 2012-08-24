@@ -54,8 +54,6 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
   int rank = MPI::COMM_WORLD.Get_rank();

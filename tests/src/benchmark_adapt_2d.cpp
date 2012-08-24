@@ -56,8 +56,6 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
   const double pi = 3.141592653589793;
   const double period = 100.0;

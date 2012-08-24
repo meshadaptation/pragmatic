@@ -51,8 +51,6 @@
 #include "Mesh.h"
 #include "VTKTools.h"
 
-using namespace std;
-
 /* Tests
    1. Assert number of coplanar id's is 4.
  */

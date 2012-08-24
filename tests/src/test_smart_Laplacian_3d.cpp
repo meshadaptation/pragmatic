@@ -48,8 +48,6 @@
 #include "Smooth.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
@@ -60,7 +58,7 @@ int main(int argc, char **argv){
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);

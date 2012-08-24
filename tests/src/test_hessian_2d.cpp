@@ -50,8 +50,6 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
 
@@ -63,7 +61,7 @@ int main(int argc, char **argv){
   size_t NNodes = mesh->get_number_nodes();
 
   // Set up field - use first touch policy
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
 #pragma omp parallel
   {
 #pragma omp for schedule(static)
@@ -79,7 +77,7 @@ int main(int argc, char **argv){
   
   metric_field.update_mesh();
   
-  vector<float> metric(NNodes*3);
+  std::vector<float> metric(NNodes*3);
   metric_field.get_metric(&(metric[0]));
   
   double rms[] = {0., 0., 0.};
@@ -95,7 +93,7 @@ int main(int argc, char **argv){
     max_rms = std::max(max_rms, rms[i]);
   }
   
-  string vtu_filename("../data/test_hessian_2d");
+  std::string vtu_filename("../data/test_hessian_2d");
   VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
   
   std::cout<<"Hessian :: loop time = "<<toc-tic<<std::endl

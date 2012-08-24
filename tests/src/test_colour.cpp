@@ -42,8 +42,6 @@
 #include <mpi.h>
 #include "zoltan_colour.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   MPI::Init(argc,argv);
 
@@ -93,13 +91,13 @@ int main(int argc, char **argv){
   
   if((graph.colour[0]==1)&&(graph.colour[1]==2)&&
      (graph.colour[2]==1)&&(graph.colour[3]==2))
-    cout<<"pass\n";
+    std::cout<<"pass\n";
   else{
-    cout<<"Colouring = ";
+    std::cout<<"Colouring = ";
     for(int i=0;i<4;i++)
-      cout<<graph.colour[i]<<" ";
-    cout<<endl;
-    cout<<"fail\n";
+      std::cout<<graph.colour[i]<<" ";
+    std::cout<<std::endl;
+    std::cout<<"fail\n";
   }
 
   MPI::Finalize();
