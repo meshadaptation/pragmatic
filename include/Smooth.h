@@ -183,7 +183,10 @@ template<typename real_t, typename index_t>
 #pragma omp barrier
       }
 
-      for(int iter=1;iter<max_iterations;iter++){
+      int iter=1;
+      do{
+        iter++;
+        
         for(int ic=1;ic<=max_colour;ic++){
           if(colour_sets.count(ic)){
             int node_set_size = colour_sets[ic].size();
@@ -234,10 +237,9 @@ template<typename real_t, typename index_t>
           }
         }
 #endif
+
 #pragma omp barrier
-        if(nav==0)
-          break;
-      }
+      } while(nav>0);
     }
     
     return;
