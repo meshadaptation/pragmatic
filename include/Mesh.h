@@ -292,6 +292,11 @@ template<typename real_t, typename index_t> class Mesh{
       }
       if(ordered_elements.find(sorted_element)==ordered_elements.end()){
         ordered_elements[sorted_element] = old_eid;
+      }else{
+        std::cerr<<"dup! "
+                 <<(*active_vertex_map)[_ENList[old_eid*nloc]]<<" "
+                 <<(*active_vertex_map)[_ENList[old_eid*nloc+1]]<<" "
+                 <<(*active_vertex_map)[_ENList[old_eid*nloc+2]]<<std::endl;
       }
     }
     std::vector<index_t> metis_element_renumber;
@@ -299,12 +304,14 @@ template<typename real_t, typename index_t> class Mesh{
     for(typename std::map< std::set<index_t>, index_t >::const_iterator it=ordered_elements.begin();it!=ordered_elements.end();++it){
       metis_element_renumber.push_back(it->second);
     }
-    
+    // assert(metis_nelements==metis_element_renumber.size());
+    metis_nelements=metis_element_renumber.size();
     // end of renumbering
     
     // Compress data structures.
     NNodes = active_vertex.size();
-    NElements = active_element.size();
+    //NElements = active_element.size();
+    NElements = metis_nelements;
 
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);

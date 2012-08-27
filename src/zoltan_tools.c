@@ -125,12 +125,12 @@ void edge_list_multi_fn(void* data, int num_gid_entries, int num_lid_entries, in
   size_t i;
   int j, lid, loc=0, sum=0, sum2=0;
   int verbose=0;
-
-if(verbose){
+  
+  if(verbose){
     printf("VERBOSE: num_gid_entries=%d, num_lid_entries=%d, num_obj=%d, int wgt_dim=%d, local_ids=%p, global_ids=%p, ewgts=%p\n",
            num_gid_entries, num_lid_entries, num_obj, wgt_dim, local_ids, global_ids, ewgts);
   }
-
+  
   *ierr = ZOLTAN_OK;
   
   zoltan_graph_t *graph = (zoltan_graph_t *)data;
@@ -199,13 +199,13 @@ void zoltan_colour(zoltan_graph_t *graph, int distance, MPI_Comm mpi_comm){
     fprintf(stderr, "WARNING unexpected distance for coloring graph.\n");
   }
 
-  ierr = Zoltan_Set_Param(zz, "SUPERSTEP_SIZE", "1000");
+  ierr = Zoltan_Set_Param(zz, "SUPERSTEP_SIZE", "100");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 
   ierr = Zoltan_Set_Param(zz, "COMM_PATTERN", "S");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
 
-  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "N");
+  ierr = Zoltan_Set_Param(zz, "VERTEX_VISIT_ORDER", "S");
   pragmatic_zoltan_verify(ierr, "Zoltan_Set_Param\0");
   
   ierr = Zoltan_Set_Param(zz, "RECOLORING_NUM_OF_ITERATIONS", "0");

@@ -93,6 +93,10 @@ int main(int argc, char **argv){
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
   
+  if(!mesh->verify()){
+    std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
+  }
+
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -116,7 +120,7 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(rank==0){
-    if(nelements==14)
+    if(nelements==2)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

@@ -62,7 +62,7 @@ int main(int argc, char **argv){
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
   Surface3D<double, int> surface(*mesh);
-  surface.find_surface();
+  surface.find_surface(true);
 
   MetricField3D<double, int> metric_field(*mesh, surface);
 

@@ -67,7 +67,7 @@ int main(int argc, char **argv){
 
   int rank = MPI::COMM_WORLD.Get_rank();
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0002;
+  double eta=0.0001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -137,7 +137,9 @@ int main(int argc, char **argv){
       if(rank==0)
         std::cout<<"INFO: Verify quality after refine.\n";
       
-      if(!mesh->verify()){    
+      if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
+
         std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
@@ -148,7 +150,7 @@ int main(int argc, char **argv){
     }
 
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref, 10);
+    coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
 
     if(verbose){
@@ -156,6 +158,8 @@ int main(int argc, char **argv){
         std::cout<<"INFO: Verify quality after coarsen.\n";
       
       if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
+
         std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
@@ -174,6 +178,8 @@ int main(int argc, char **argv){
         std::cout<<"INFO: Verify quality after swapping.\n";
       
       if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after swapping.\n";
+
         std::vector<int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);

@@ -738,9 +738,9 @@ template<typename real_t, typename index_t>
    * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){    
+    float scale_factor = pow((nelements/predict_nelements()), 2.0/3.0);
 #pragma omp parallel
     {
-      real_t scale_factor = pow((nelements/predict_nelements()), 2.0/3.0);
 #pragma omp for schedule(static)
       for(int i=0;i<_NNodes;i++)
         _metric[i].scale(scale_factor);
