@@ -113,7 +113,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
-  real_t farea(const real_t *x0, const real_t *x1, const real_t *x2) const{
+  float farea(const real_t *x0, const real_t *x1, const real_t *x2) const{
     float x01 = (x0[0] - x1[0]);
     float y01 = (x0[1] - x1[1]);
     
@@ -131,7 +131,7 @@ class ElementProperty{
    */
   real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
 
-    // real_t x01 = (x0[0] - x1[0]);
+    real_t x01 = (x0[0] - x1[0]);
     real_t x02 = (x0[0] - x2[0]);
     real_t x03 = (x0[0] - x3[0]);
 
@@ -143,7 +143,7 @@ class ElementProperty{
     real_t z02 = (x0[2] - x2[2]);
     real_t z03 = (x0[2] - x3[2]);
 
-    return orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    return orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
   }
 
   /*! Calculate volume of tetrahedron.
@@ -154,7 +154,7 @@ class ElementProperty{
    */
   float fvolume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
 
-    // float x01 = (x0[0] - x1[0]);
+    float x01 = (x0[0] - x1[0]);
     float x02 = (x0[0] - x2[0]);
     float x03 = (x0[0] - x3[0]);
 
@@ -166,7 +166,7 @@ class ElementProperty{
     float z02 = (x0[2] - x2[2]);
     float z03 = (x0[2] - x3[2]);
 
-    return orientation*finv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    return orientation*finv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
   }
 
   /*! Length of an edge as measured in metric space.
