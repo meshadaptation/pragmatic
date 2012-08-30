@@ -77,7 +77,7 @@ template<typename real_t, typename index_t> class Swapping2D{
     
     typename std::vector< std::vector<char> > marked_edges;
     typename std::vector< std::vector<index_t> > NEList;
-    index_t n_marked_edges = 0;
+    int n_marked_edges = 0;
     
 #pragma omp parallel
     {

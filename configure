@@ -602,6 +602,8 @@ ac_includes_default="\
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
 ARFLAGS
+LINKER_FC
+LINKER_CXX
 NVCCFLAGS
 ENABLE_CUDA
 CUDA_LIBS
@@ -3357,6 +3359,8 @@ rm -f core conftest.err conftest.$ac_objext \
 CXX="$MPICXX"
 LIBS="$LIBS $MPI_CXXLDFLAGS"
 
+LINKER_CXX=$CXX
+
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -4750,6 +4754,8 @@ ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ex
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 
+LINKER_FC=$FC
+
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.
 
@@ -5468,9 +5474,13 @@ if test "x$ICPC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$FCC" = "xyes" ; then
+    $as_echo "#define COMPILER_FUJITSU 1" >>confdefs.h
+
+
     CXXFLAGS="$CXXFLAGS -w"
     CFLAGS="$CFLAGS -w"
-    FCFLAGS="$FCFLAGS -w"
+    FCFLAGS="$FCFLAGS"
+    LINKER_FC="$LINKER_CXX --linkfortran"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         CFLAGS="-g -O0 $CFLAGS"
@@ -6752,6 +6762,9 @@ fi
 
 fi
 # Make NVCCFLAGS available in Makefile.am
+
+
+
 
 
 

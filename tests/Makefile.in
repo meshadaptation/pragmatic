@@ -2,9 +2,11 @@ SHELL = /bin/bash
 
 CXX = @CXX@
 CXXFLAGS = @CXXFLAGS@ @OPENMP_CXXFLAGS@
+LINKER_CXX = @LINKER_CXX@
 
 FC = @FC@
 FCFLAGS = @FCFLAGS@ @OPENMP_FCFLAGS@
+LINKER_FC = @LINKER_FC@
 
 CPPFLAGS = @CPPFLAGS@ @CPPFLAGS_ZOLTAN@ -I../include -I./include -DTIXML_USE_STL
 LDFLAGS = @LDFLAGS@
@@ -113,17 +115,20 @@ bin3d/%: src/%.cpp $(objs)
 bin_generic/%: src/%.F90 $(objs)
 	@mkdir -p bin_generic
 	@echo "    FC $@"
-	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 bin2d/%: src/%.F90 $(objs)
 	@mkdir -p bin_2d
 	@echo "    FC $@"
-	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 bin3d/%: src/%.F90 $(objs) 
 	@mkdir -p bin_3d
 	@echo "    FC $@"
-	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 # Generic
 bin/%: src/%.cu

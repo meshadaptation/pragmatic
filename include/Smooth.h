@@ -59,10 +59,10 @@
 
 #include "zoltan_tools.h"
 
-#ifdef _GNU_SOURCE
-#define pragmatic_isnormal(x) std::isnormal(x)
+#ifdef COMPILER_FUJITSU
+#define pragmatic_isnormal isnormal
 #else
-#define pragmatic_isnormal(x) isnormal(x)
+#define pragmatic_isnormal std::isnormal
 #endif
 
 #include "Smooth2D.h"
