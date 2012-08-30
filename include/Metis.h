@@ -46,16 +46,21 @@
 #include <set>
 
 extern "C" {
-#ifdef HAVE_METIS_H
-#include <metis.h>
-#else
-#ifdef HAVE_METIS_METIS_H
-#include <metis/metis.h>
-#endif
-#endif
+  /*
+    #ifdef HAVE_METIS_H
+    #include <metis.h>
+    #else
+    #ifdef HAVE_METIS_METIS_H
+    #include <metis/metis.h>
+    #endif
+    #endif
+  */
+  typedef int idxtype;
+  void METIS_PartMeshNodal(int *, int *, idxtype *, int *, int *, int *, int *, idxtype *, idxtype *);
+  void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *); 
+  void METIS_PartGraphRecursive(int *, idxtype *, idxtype *, idxtype *, idxtype *, int *, int *, int *, int *, int *, idxtype *); 
+
 }
-
-
 
 /*! \brief Class provides a specialised interface to some METIS
  *   functionality.

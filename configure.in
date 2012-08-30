@@ -372,6 +372,8 @@ AC_CHECK_HEADERS(metis.h, [], [
 AC_CHECK_HEADERS(metis/metis.h)
 ])
 
+AC_CHECK_HEADERS(parmetis.h)
+
 AC_C_CONST
 AC_C_INLINE
 
