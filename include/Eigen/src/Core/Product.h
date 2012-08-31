@@ -254,8 +254,8 @@ template<typename LhsNested, typename RhsNested, int ProductMode> class Product 
     EIGEN_STRONG_INLINE const _RhsNested& rhs() const { return m_rhs; }
 
   protected:
-    LhsNested m_lhs;
-    RhsNested m_rhs;
+    const LhsNested m_lhs;
+    const RhsNested m_rhs;
 };
 
 /** \returns the matrix product of \c *this and \a other.

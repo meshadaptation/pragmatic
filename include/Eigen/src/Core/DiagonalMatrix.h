@@ -90,7 +90,7 @@ class DiagonalMatrix : ei_no_assignment_operator,
     inline const CoeffsVectorType& diagonal() const { return m_coeffs; }
 
   protected:
-    typename CoeffsVectorType::Nested m_coeffs;
+    const typename CoeffsVectorType::Nested m_coeffs;
 };
 
 /** \nonstableyet 

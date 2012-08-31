@@ -116,7 +116,7 @@ template<typename MatrixType> class Transpose
     }
 
   protected:
-    typename MatrixType::Nested m_matrix;
+    const typename MatrixType::Nested m_matrix;
 };
 
 /** \returns an expression of the transpose of *this.

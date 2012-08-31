@@ -124,7 +124,7 @@ template<typename MatrixType, unsigned int Mode> class Part
     }
 
   protected:
-    typename MatrixType::Nested m_matrix;
+    const typename MatrixType::Nested m_matrix;
 
   private:
     Part& operator=(const Part&);

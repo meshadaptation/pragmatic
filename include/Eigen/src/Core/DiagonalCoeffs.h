@@ -95,7 +95,7 @@ template<typename MatrixType> class DiagonalCoeffs
 
   protected:
 
-    typename MatrixType::Nested m_matrix;
+    const typename MatrixType::Nested m_matrix;
 };
 
 /** \returns an expression of the main diagonal of the matrix \c *this

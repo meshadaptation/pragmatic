@@ -126,7 +126,7 @@ template<typename real_t, typename index_t>
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
 #endif
 
-    int nav = 0;
+    int nav = 1;
 #pragma omp parallel
     {    
       for(int ic=1;ic<=max_colour;ic++){
@@ -155,7 +155,7 @@ template<typename real_t, typename index_t>
 #pragma omp barrier
       }
 
-      for(int iter=1;iter<max_iterations;iter++){
+      for(int iter=1;(iter<max_iterations)&&(nav>0);iter++){
         for(int ic=1;ic<=max_colour;ic++){
           if(colour_sets.count(ic)){
             int node_set_size = colour_sets[ic].size();
@@ -208,8 +208,6 @@ template<typename real_t, typename index_t>
 #endif
 
 #pragma omp barrier
-        if(nav==0)
-          break;
       }
     }
     
