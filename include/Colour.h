@@ -75,7 +75,7 @@ class Colour{
       std::vector<bool> used_colours(max_colour, false);;
       for(typename std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
         if(*it<(int)node){
-          if(colour[*it]>=max_colour){
+          if(colour[*it]>=(signed)max_colour){
             max_colour*=2;
             used_colours.resize(max_colour, false);
           }

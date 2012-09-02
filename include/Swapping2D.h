@@ -557,8 +557,6 @@ template<typename real_t, typename index_t> class Swapping2D{
       }
     }
 
-    omp_set_num_threads(2);
-
     return;
   }
 

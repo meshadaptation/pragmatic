@@ -1386,7 +1386,7 @@ template<typename real_t, typename index_t> class Mesh{
       NEList.resize(NNodes);
 
 #pragma omp for schedule(static)
-    for(size_t i=0;i<NNodes;i++){
+    for(int i=0;i<(int)NNodes;i++){
       NEList[i].clear();
       NNList[i].clear();
     }
@@ -1476,8 +1476,29 @@ template<typename real_t, typename index_t> class Mesh{
   }
   
   inline index_t get_new_vertex(index_t n0, index_t n1,
+      std::vector< std::vector<index_t> > &refined_edges,
+      std::vector< std::vector<index_t> > &oldNNList, const index_t *lnn2gnn) const{
+
+    if(lnn2gnn[n0]>lnn2gnn[n1]){
+      // Needs to be swapped because we want the lesser gnn first.
+      index_t tmp_n0=n0;
+      n0=n1;
+      n1=tmp_n0;
+    }
+
+    for(size_t i=0;i<oldNNList[n0].size();i++){
+      if(oldNNList[n0][i]==n1){
+        return refined_edges[n0][i];
+      }
+    }
+
+    return -1;
+  }
+
+  // This is used temporarily for 3D - it will be removed in the future.
+  inline index_t get_new_vertex(index_t n0, index_t n1,
       std::vector< std::vector<index_t> > &refined_edges, const index_t *lnn2gnn) const{
-    
+
     if(lnn2gnn[n0]>lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;
@@ -1487,11 +1508,50 @@ template<typename real_t, typename index_t> class Mesh{
 
     for(size_t i=0;i<NNList[n0].size();i++){
       if(NNList[n0][i]==n1){
-        return refined_edges[n0][2*i];
+        return refined_edges[n0][i];
       }
     }
-    
+
     return -1;
+  }
+
+  inline size_t indexOf(index_t target, std::vector<index_t> &container, size_t upTo) const{
+    size_t pos = 0;
+    while(pos < upTo){
+      if(container[pos] == target)
+        return pos;
+
+      ++pos;
+    }
+
+    return std::numeric_limits<size_t>::max();
+  }
+
+  inline size_t indexOf(index_t target, std::vector<index_t> &container) const{
+    return indexOf(target, container, container.size());
+  }
+
+  inline size_t intersectionOf(std::vector<index_t> &first, std::vector<index_t> &second,
+      size_t firstUpTo, size_t secondUpTo, size_t max_results, index_t intersection[]) const{
+
+    size_t cnt = 0;
+
+    for(size_t k=0; k<firstUpTo; ++k){
+      if(first[k] == -1)
+        continue;
+
+      for(size_t l=0; l<secondUpTo; ++l){
+        if(first[k] == second[l]){
+          intersection[cnt++] = first[k];
+          break;
+        }
+      }
+
+      if(cnt==max_results)
+        break;
+    }
+
+    return cnt;
   }
 
   size_t ndims, nloc, msize;

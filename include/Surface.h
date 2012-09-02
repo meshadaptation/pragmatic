@@ -366,56 +366,48 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void refine(std::vector< std::vector<index_t> > &refined_edges, const index_t *lnn2gnn){
-    // Given the refined edges, refine facets.
-    std::vector< std::vector<index_t> > private_SENList;
-    std::vector< std::vector<int> > private_boundary_ids;
-    std::vector< std::vector<int> > private_coplanar_ids;
-    std::vector< std::vector<real_t> > private_normals;
-    std::vector<unsigned int> threadIdx, splitCnt;
+  void refine(std::vector< std::vector<index_t> > &refined_edges,
+      std::vector< std::vector<index_t> > &NNList, const index_t *lnn2gnn){
     unsigned int nthreads;
     
-#pragma omp parallel
-    {
-      nthreads = omp_get_num_threads();
-      
-#pragma omp master
-      {
-      	private_SENList.resize(nthreads);
-      	private_boundary_ids.resize(nthreads);
-      	private_coplanar_ids.resize(nthreads);
-      	private_normals.resize(nthreads);
-      	threadIdx.resize(nthreads);
-      	splitCnt.resize(nthreads);
-      }
-#pragma omp barrier
-    }
+#ifdef _OPENMP
+    nthreads = omp_get_max_threads();
+#else
+    nthreads=1;
+#endif
+
+    // Given the refined edges, refine facets.
+    std::vector< std::vector<index_t> > private_SENList(nthreads);
+    std::vector< std::vector<int> > private_boundary_ids(nthreads);
+    std::vector< std::vector<int> > private_coplanar_ids(nthreads);
+    std::vector< std::vector<real_t> > private_normals(nthreads);
+    std::vector<unsigned int> threadIdx(nthreads), splitCnt(nthreads);
     
     int lNSElements = get_number_facets();
     
 #pragma omp parallel
     {
-      const unsigned int tid = omp_get_thread_num();
+      const int tid = omp_get_thread_num();
       splitCnt[tid] = 0;
-      
+
 #pragma omp for schedule(dynamic)
       for(int i=0;i<lNSElements;i++){
         // Check if this element has been erased - if so continue to next element.
         int *n=&(SENList[i*snloc]);
         if(n[0]<0)
           continue;
-        
+
         // Check if this edge has been refined.
-        index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, lnn2gnn);
-        
+        index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, NNList, lnn2gnn);
+
         // If it's not refined then just jump onto the next one.
         if(newVertex < 0)
           continue;
-        
+
         // Renumber existing facet and add the new one.
         index_t cache_n1 = n[1];
         n[1] = newVertex;
-        
+
         private_SENList[tid].push_back(newVertex);
         private_SENList[tid].push_back(cache_n1);
         
@@ -426,35 +418,14 @@ template<typename real_t, typename index_t>
         
         splitCnt[tid]++;
       }
-    }
     
-#pragma omp parallel
-    {
-      // Perform parallel prefix sum to find (for each OMP thread) the starting position
+      // Perform prefix sum to find (for each OMP thread) the starting position
       // in SENList at which new elements should be appended.
-      const unsigned int tid = omp_get_thread_num();
-      threadIdx[tid] = splitCnt[tid];
+      threadIdx[tid] = 0;
+      for(int id=0; id<tid; ++id)
+        threadIdx[tid] += splitCnt[id];
       
-#pragma omp barrier
-      
-      unsigned int blockSize = 1, tmp;
-      while(blockSize < threadIdx.size())
-        {
-          if((tid & blockSize) != 0)
-            tmp = threadIdx[tid - ((tid & (blockSize - 1)) + 1)];
-          else
-            tmp = 0;
-          
-#pragma omp barrier
-          
-          threadIdx[tid] += tmp;
-          
-#pragma omp barrier
-          
-          blockSize *= 2;
-        }
-      
-      threadIdx[tid] += get_number_facets() - splitCnt[tid];
+      threadIdx[tid] += get_number_facets();
       
 #pragma omp barrier
       
@@ -476,10 +447,10 @@ template<typename real_t, typename index_t>
       memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(int));
       memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
     }
-    
+
     size_t NNodes = _mesh->get_number_nodes();
     size_t NSElements = get_number_facets();
-    
+      
     SNEList.clear();
     surface_nodes.resize(NNodes);
     std::fill(surface_nodes.begin(), surface_nodes.end(), false);
@@ -488,7 +459,7 @@ template<typename real_t, typename index_t>
       const int *n=get_facet(i);
       if(n[0]<0)
         continue;
-      
+
       for(size_t j=0;j<snloc;j++){
         SNEList[n[j]].insert(i);
         surface_nodes[n[j]] = true;
