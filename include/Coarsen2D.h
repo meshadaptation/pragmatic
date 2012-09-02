@@ -72,9 +72,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
 #endif
 
-    nthreads = 1;
 #ifdef _OPENMP
     nthreads = omp_get_max_threads();
+#else
+    nthreads = 1;
 #endif
 
     property = NULL;
@@ -144,8 +145,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
       
       /* Initialise list of vertices to be coarsened. A dynamic
          schedule is used as previous coarsening may have introduced
-         significent gaps in the node list. This could lead to
-         significent load imbalance if a static schedule was used. */
+         significant gaps in the node list. This could lead to
+         significant load imbalance if a static schedule was used. */
 #pragma omp for schedule(dynamic) 
       for(size_t i=0;i<NNodes;i++){
         if(dynamic_vertex[i]==-2){
@@ -157,12 +158,12 @@ template<typename real_t, typename index_t> class Coarsen2D{
         /* Phase 1: Local process coarsening with all threads. Must
            partition process domain into thread blocks.
            
-           To acheive good load balance between threads; define the
-           vertex weight (vwgt) to be 1 is the vertex is dynamic, zero
+           To achieve good load balance between threads; define the
+           vertex weight (vwgt) to be 1 if the vertex is dynamic, zero
            otherwise.
            
            To discourage partitioning edges that may need to be
-           coarsened; define the edge weight to be 1 if one of it's
+           coarsened; define the edge weight to be 1 if one of its
            vertices is dynamic, zero otherwise.
         */
 #pragma omp single

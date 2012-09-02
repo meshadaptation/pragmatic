@@ -70,8 +70,6 @@ template<typename real_t, typename index_t> class Swapping2D{
   }
   
   void swap(real_t Q_min){
-    omp_set_num_threads(1);
-
     size_t NElements = _mesh->get_number_elements();
     std::vector<real_t> quality(NElements);
     
