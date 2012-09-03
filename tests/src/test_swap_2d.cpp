@@ -45,6 +45,8 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 
+#include "Coarsen.h"
+#include "Refine.h"
 #include "Swapping.h"
 #include "ticker.h"
 
@@ -73,28 +75,56 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
   
   size_t NNodes = mesh->get_number_nodes();
-  
+  double eta=0.0001;
+
   std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
-  
-  metric_field.add_field(&(psi[0]), 0.001);
+  for(size_t i=0;i<NNodes;i++){
+    double x = 2*mesh->get_coords(i)[0]-1;
+    double y = 2*mesh->get_coords(i)[1]-1;
+
+    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+  }
+
+  metric_field.add_field(&(psi[0]), eta, 1);
   metric_field.update_mesh();
   
   double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
+  double L_up = sqrt(2.0);
+  double L_low = L_up/2;
+
+  Coarsen2D<double, int> coarsen(*mesh, surface);
+  Refine2D<double, int> refine(*mesh, surface);
+
   if(verbose&&rank==0)
     std::cout<<"Initial quality:\n"
              <<"Quality mean:   "<<qmean<<std::endl
              <<"Quality min:    "<<qmin<<std::endl
              <<"Quality RMS:    "<<qrms<<std::endl;
   
+  coarsen.coarsen(L_low, L_up);
+
+  double L_max = mesh->maximal_edge_length();
+  double alpha = sqrt(2.0)/2;
+
+  for(size_t i=0;i<10;i++){
+    double L_ref = std::max(alpha*L_max, L_up);
+
+    refine.refine(L_ref);
+    coarsen.coarsen(L_low, L_ref);
+
+    L_max = mesh->maximal_edge_length();
+
+    if((L_max-L_up)<0.01)
+      break;
+  }
+
   Swapping2D<double, int> swapping(*mesh, surface);
   
   double tic = get_wtime();
-  for(int i=0;i<100;i++)
+  //for(int i=0;i<100;i++)
     swapping.swap(0.95);
   double toc = get_wtime();
 

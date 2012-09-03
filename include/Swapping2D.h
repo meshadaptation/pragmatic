@@ -76,6 +76,7 @@ template<typename real_t, typename index_t> class Swapping2D{
     typename std::vector< std::vector<char> > marked_edges;
     typename std::vector< std::vector<index_t> > NEList;
     int n_marked_edges = 0;
+    int iteration = 0;
     
 #pragma omp parallel
     {
@@ -158,7 +159,12 @@ template<typename real_t, typename index_t> class Swapping2D{
       }
 
       // -
-      while(n_marked_edges > 0){        
+      while(n_marked_edges > 0){
+#pragma omp single
+        {
+          ++iteration;
+        }
+
 #pragma omp for schedule(dynamic)
         for(size_t i=0;i<NNodes;i++){
           if(_mesh->is_halo_node(i)){
@@ -179,20 +185,8 @@ template<typename real_t, typename index_t> class Swapping2D{
             
             // Find the two elements sharing this edge
             index_t neigh_elements[2], neigh_elements_cnt=0;
-            for(size_t k=0; k<NEList[i].size()/2; ++k){
-              if(NEList[i][k] == -1)
-                continue;
-              
-              for(size_t l=0; l<NEList[opposite].size()/2; ++l){
-                if(NEList[i][k] == NEList[opposite][l]){
-                  neigh_elements[neigh_elements_cnt++] = NEList[i][k];
-                  break;
-                }
-              }
-
-              if(neigh_elements_cnt==2)
-                break;
-            }
+            neigh_elements_cnt = _mesh->intersectionOf(NEList[i], NEList[opposite],
+                NEList[i].size()/2, NEList[opposite].size()/2, 2, neigh_elements);
             
             if(neigh_elements_cnt!=2){
               marked_edges[i][it] = 0;
@@ -554,7 +548,7 @@ template<typename real_t, typename index_t> class Swapping2D{
         std::copy(NEList[i].begin(), NEList[i].end(), std::inserter(_mesh->NEList[i], _mesh->NEList[i].begin()));
       }
     }
-
+    std::cout << iteration << "rounds" << std::endl;
     return;
   }
 
