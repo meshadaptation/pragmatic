@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0001;
+  double eta=0.00001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -208,7 +208,7 @@ int main(int argc, char **argv){
   }
   
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 200);
+  //smooth.smooth("optimisation Linf", 200);
   time_smooth += get_wtime()-tic;
   
   time_adapt = get_wtime()-time_adapt;

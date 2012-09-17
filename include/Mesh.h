@@ -144,13 +144,13 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
 
   /*! Defragment mesh. This compresses the storage of internal data
-    structures. This is useful if the mesh has been significently
+    structures. This is useful if the mesh has been significantly
     coarsened. */
   void defragment(std::vector<index_t> *active_vertex_map=NULL){
     size_t NNodes = get_number_nodes();
     size_t NElements = get_number_elements();
     
-    // Discover which verticies and elements are active.
+    // Discover which vertices and elements are active.
     bool local_active_vertex_map=(active_vertex_map==NULL);
     if(local_active_vertex_map){
       active_vertex_map = new std::vector<index_t>();

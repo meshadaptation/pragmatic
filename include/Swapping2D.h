@@ -548,7 +548,7 @@ template<typename real_t, typename index_t> class Swapping2D{
         std::copy(NEList[i].begin(), NEList[i].end(), std::inserter(_mesh->NEList[i], _mesh->NEList[i].begin()));
       }
     }
-    std::cout << iteration << "rounds" << std::endl;
+    //std::cout << iteration << " rounds" << std::endl;
     return;
   }
 

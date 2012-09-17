@@ -366,8 +366,7 @@ template<typename real_t, typename index_t>
     }
   }
 
-  void refine(std::vector< std::vector<index_t> > &refined_edges,
-      std::vector< std::vector<index_t> > &NNList, const index_t *lnn2gnn){
+  void refine(std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges){
     unsigned int nthreads;
     
 #ifdef _OPENMP
@@ -382,27 +381,41 @@ template<typename real_t, typename index_t>
     std::vector< std::vector<int> > private_coplanar_ids(nthreads);
     std::vector< std::vector<real_t> > private_normals(nthreads);
     std::vector<unsigned int> threadIdx(nthreads), splitCnt(nthreads);
-    
-    int lNSElements = get_number_facets();
+    std::vector< DirectedEdge<index_t> > refined_edges;
     
 #pragma omp parallel
     {
       const int tid = omp_get_thread_num();
       splitCnt[tid] = 0;
 
-#pragma omp for schedule(dynamic)
-      for(int i=0;i<lNSElements;i++){
-        // Check if this element has been erased - if so continue to next element.
-        int *n=&(SENList[i*snloc]);
-        if(n[0]<0)
+      // Serialise surfaceEdges
+      threadIdx[tid] = 0;
+      for(int id=0; id<tid; ++id)
+        threadIdx[tid] += surfaceEdges[id].size();
+
+#pragma omp barrier
+#pragma omp single
+      {
+        refined_edges.resize(threadIdx[nthreads-1] + surfaceEdges[nthreads-1].size());
+      }
+
+      memcpy(&refined_edges[threadIdx[tid]], &surfaceEdges[tid][0], surfaceEdges[tid].size()*sizeof(DirectedEdge<index_t>));
+
+#pragma omp for schedule(static)
+      for(int i=0;i<refined_edges.size();++i){
+        index_t v1 = refined_edges[i].edge.first;
+        index_t v2 = refined_edges[i].edge.second;
+
+        std::set<index_t> intersection;
+        set_intersection(SNEList[v1].begin(), SNEList[v1].end(), SNEList[v2].begin(),
+            SNEList[v2].end(), inserter(intersection, intersection.begin()));
+        // If the edge is opposite a corner
+        if(intersection.size() != 1)
           continue;
 
-        // Check if this edge has been refined.
-        index_t newVertex = _mesh->get_new_vertex(n[0], n[1], refined_edges, NNList, lnn2gnn);
-
-        // If it's not refined then just jump onto the next one.
-        if(newVertex < 0)
-          continue;
+        index_t seid = *intersection.begin();
+        int *n=&(SENList[seid*snloc]);
+        index_t newVertex = refined_edges[i].id;
 
         // Renumber existing facet and add the new one.
         index_t cache_n1 = n[1];

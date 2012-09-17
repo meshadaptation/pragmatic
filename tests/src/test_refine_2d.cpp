@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0000001;
+  double eta=0.0001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -96,6 +96,14 @@ int main(int argc, char **argv){
   for(int i=0;i<5;i++)
     adapt.refine(sqrt(2.0));
   double toc = get_wtime();
+
+
+  if(verbose)
+    mesh->verify();
+
+  std::vector<int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
   VTKTools<double, int>::export_vtu("../data/test_refine_2d", mesh);
   VTKTools<double, int>::export_vtu("../data/test_refine_2d_surface", &surface);

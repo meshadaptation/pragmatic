@@ -232,16 +232,21 @@ template<typename real_t, typename index_t> class Coarsen2D{
               // Evaluate local edge collapse's.
               if(dynamic_vertex[target_vertex]>=0)
                 phase_2 = true;
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[target_vertex].begin();jt!=_mesh->NNList[target_vertex].end();++jt){
-                if(dynamic_vertex[*jt]>=0)
-                  phase_2 = true;
-              }
+              else
+                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[target_vertex].begin();jt!=_mesh->NNList[target_vertex].end();++jt){
+                  if(dynamic_vertex[*jt]>=0){
+                    phase_2 = true;
+                    break;
+                  }
+                }
             }
           }
         } while(phase_2);
       }
     }
     
+    delete[] tpartition;
+
     // Phase 3 (halo)
 #ifdef HAVE_MPI
     if(nprocs>1){
@@ -493,7 +498,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     boost::unordered_map<int, int> gnn2lnn;
 #else
-    std::map<int, int> gnn2lnn;
+    std::map<index_t, index_t> gnn2lnn;
 #endif
     for(int i=0;i<NNodes;i++){
       assert(gnn2lnn.find(lnn2gnn[i])==gnn2lnn.end());

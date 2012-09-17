@@ -123,6 +123,12 @@ template<typename index_t> class DirectedEdge{
     edge.second = nid1;
   }
   
+  DirectedEdge(index_t nid0, index_t nid1, index_t nid){
+    edge.first = nid0;
+    edge.second = nid1;
+    id = nid;
+  }
+
   /*! Copy constructor
    * @param in DirectedEdge object.
    */
