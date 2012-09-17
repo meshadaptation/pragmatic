@@ -430,7 +430,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   /// Add a new element
-  index_t append_element(const int *n){
+  index_t append_element(const index_t *n){
     for(size_t i=0;i<nloc;i++)
       _ENList.push_back(n[i]);
     
@@ -441,6 +441,12 @@ template<typename real_t, typename index_t> class Mesh{
   void erase_element(const index_t eid){
     _ENList[eid*nloc] = -1;
     // Something for NEList?
+  }
+
+  /// Replace old element with new one
+  void replace_element(const index_t eid, const index_t *n){
+    for(size_t i=0;i<nloc;i++)
+      _ENList[eid*nloc+i]=n[i];
   }
 
   /// Return the number of nodes in the mesh.

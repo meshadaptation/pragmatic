@@ -167,7 +167,7 @@ template<typename real_t, typename index_t>
     calculate_coplanar_ids();
   }
 
-  /// True if node nid is a corner vertex OR if more than ndims boundary lables are incident on the vertex.
+  /// True if node nid is a corner vertex OR if more than ndims boundary labels are incident on the vertex.
   bool is_corner_vertex(index_t nid) const{
     typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid);
     if(iSNEList==SNEList.end())
@@ -257,11 +257,11 @@ template<typename real_t, typename index_t>
         }
       }
       
-      // Add element to target node-elemement adjancy list.
+      // Add element to target node-element adjancy list.
       SNEList[nid_target].insert(*ee);
     }
     
-    // Remove deleted facets node-elemement adjancy list.
+    // Remove deleted facets node-element adjancy list.
     for(typename std::set<index_t>::const_iterator de=deleted_facets.begin(); de!=deleted_facets.end();++de)
       SNEList[nid_target].erase(*de);
   }
@@ -402,7 +402,7 @@ template<typename real_t, typename index_t>
       memcpy(&refined_edges[threadIdx[tid]], &surfaceEdges[tid][0], surfaceEdges[tid].size()*sizeof(DirectedEdge<index_t>));
 
 #pragma omp for schedule(static)
-      for(int i=0;i<refined_edges.size();++i){
+      for(index_t i=0;i < (index_t)refined_edges.size();++i){
         index_t v1 = refined_edges[i].edge.first;
         index_t v2 = refined_edges[i].edge.second;
 

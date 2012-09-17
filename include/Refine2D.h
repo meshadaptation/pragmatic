@@ -290,7 +290,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Fix IDs of new vertices
 #pragma omp for schedule(static)
-      for(index_t idx=0; idx<3*NElements; ++idx){
+      for(index_t idx=0; idx < (index_t) NElements*3; ++idx){
         if(split_edges_per_element[idx].newVertex != -1)
           split_edges_per_element[idx].newVertex +=
               threadIdx[split_edges_per_element[idx].thread];
@@ -324,7 +324,7 @@ template<typename real_t, typename index_t> class Refine2D{
                 ++refine_cnt;
 
             if(refine_cnt > 0)
-              splitCnt[tid] += refine_cnt+1;
+              splitCnt[tid] += refine_cnt;
           }
         }
 
@@ -343,12 +343,8 @@ template<typename real_t, typename index_t> class Refine2D{
 
           int refine_cnt = refine_element(*it, newEID, tid);
 
-          if(refine_cnt > 0){
+          if(refine_cnt > 0)
             newEID += refine_cnt;
-
-            // Remove parent element.
-            _mesh->erase_element(*it);
-          }
         }
 
         delete tdynamic_element;
@@ -370,12 +366,8 @@ template<typename real_t, typename index_t> class Refine2D{
 
           int refine_cnt = refine_element(eid, newEID, nthreads-1);
 
-          if(refine_cnt > 0){
+          if(refine_cnt > 0)
             newEID += refine_cnt;
-
-            // Remove parent element.
-            _mesh->erase_element(eid);
-          }
         }
 
         if(nthreads > 1)
@@ -427,7 +419,9 @@ template<typename real_t, typename index_t> class Refine2D{
           }
 
           typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
-          for(size_t i=origNElements;i<NElements;i++){
+          // The following loop used to run from origNElements to NElements,
+          // but now that we recycle element IDs it has to traverse all elements.
+          for(size_t i=0;i<NElements;i++){
             const int *n=_mesh->get_element(i);
             if(n[0]<0)
               continue;
@@ -598,14 +592,10 @@ template<typename real_t, typename index_t> class Refine2D{
         }
       assert(vertexID!=-1);
 
-      const int ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
-      const int ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
+      const index_t ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
+      const index_t ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
 
-      index_t ele0ID = newEID;
-      index_t ele1ID = newEID+1;
-
-      append_element(ele0, tid);
-      append_element(ele1, tid);
+      index_t ele1ID = newEID;
 
       // If the edge hosting the new vertex has not been processed before as part of the
       // adjacent element, connect the new vertex to rotated_ele[1] and rotated_ele[2].
@@ -626,24 +616,21 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NNList[vertexID].push_back(rotated_ele[0]);
       _mesh->NNList[rotated_ele[0]].push_back(vertexID);
 
-      // Put ele0 and ele1 in rotated_ele[0]'s NEList and remove eid
-      _mesh->NEList[rotated_ele[0]].erase(eid);
-      _mesh->NEList[rotated_ele[0]].insert(ele0ID);
+      // Put ele1 in rotated_ele[0]'s NEList
       _mesh->NEList[rotated_ele[0]].insert(ele1ID);
 
-      // Put ele0 and ele1 in vertexID's NEList
-      _mesh->NEList[vertexID].insert(ele0ID);
+      // Put eid and ele1 in vertexID's NEList
+      _mesh->NEList[vertexID].insert(eid);
       _mesh->NEList[vertexID].insert(ele1ID);
-
-      // Replace eid with ele0 in rotated_ele[1]'s NEList
-      _mesh->NEList[rotated_ele[1]].erase(eid);
-      _mesh->NEList[rotated_ele[1]].insert(ele0ID);
 
       // Replace eid with ele1 in rotated_ele[2]'s NEList
       _mesh->NEList[rotated_ele[2]].erase(eid);
       _mesh->NEList[rotated_ele[2]].insert(ele1ID);
 
-      return 2;
+      _mesh->replace_element(eid, ele0);
+      append_element(ele1, tid);
+
+      return 1;
     }else if(refine_cnt==2){
       int rotated_ele[3] = {-1, -1, -1};
       index_t vertexID[2];
@@ -665,17 +652,12 @@ template<typename real_t, typename index_t> class Refine2D{
 
       const int offset = ldiag0 < ldiag1 ? 0 : 1;
 
-      const int ele0[] = {rotated_ele[0], vertexID[1], vertexID[0]};
-      const int ele1[] = {vertexID[offset], rotated_ele[1], rotated_ele[2]};
-      const int ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
+      const index_t ele0[] = {rotated_ele[0], vertexID[1], vertexID[0]};
+      const index_t ele1[] = {vertexID[offset], rotated_ele[1], rotated_ele[2]};
+      const index_t ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
 
       index_t ele0ID = newEID;
-      index_t ele1ID = newEID+1;
-      index_t ele2ID = newEID+2;
-
-      append_element(ele0, tid);
-      append_element(ele1, tid);
-      append_element(ele2, tid);
+      index_t ele2ID = newEID+1;
 
       // If the edge hosting vertexID[0] has not been processed before as part of the
       // adjacent element, connect vertexID[0] to rotated_ele[0] and rotated_ele[2].
@@ -717,23 +699,16 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NNList[rotated_ele[offset+1]].push_back(vertexID[offset]);
 
       // rotated_ele[offset+1] is the old vertex which is on the diagonal
-      // Replace eid with ele1 and ele2 in rotated_ele[offset+1]'s NEList
-      _mesh->NEList[rotated_ele[offset+1]].erase(eid);
-      _mesh->NEList[rotated_ele[offset+1]].insert(ele1ID);
+      // Add ele2 in rotated_ele[offset+1]'s NEList
       _mesh->NEList[rotated_ele[offset+1]].insert(ele2ID);
-
-      // rotated_ele[(offset+1)%2+1] is the old vertex which is not on the diagonal
-      // Replace eid with ele1 in rotated_ele[(offset+1)%2+1]'s NEList
-      _mesh->NEList[rotated_ele[(offset+1)%2+1]].erase(eid);
-      _mesh->NEList[rotated_ele[(offset+1)%2+1]].insert(ele1ID);
 
       // Replace eid with ele0 in NEList[rotated_ele[0]]
       _mesh->NEList[rotated_ele[0]].erase(eid);
       _mesh->NEList[rotated_ele[0]].insert(ele0ID);
 
       // Put ele0, ele1 and ele2 in vertexID[offset]'s NEList
+      _mesh->NEList[vertexID[offset]].insert(eid);
       _mesh->NEList[vertexID[offset]].insert(ele0ID);
-      _mesh->NEList[vertexID[offset]].insert(ele1ID);
       _mesh->NEList[vertexID[offset]].insert(ele2ID);
 
       // vertexID[(offset+1)%2] is the new vertex which is not on the diagonal
@@ -741,22 +716,20 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele0ID);
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele2ID);
 
-      return 3;
-    }else{ // refine_cnt==3
-      const int ele0[] = {n[0], newVertex[2], newVertex[1]};
-      const int ele1[] = {n[1], newVertex[0], newVertex[2]};
-      const int ele2[] = {n[2], newVertex[1], newVertex[0]};
-      const int ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
-
-      index_t ele0ID = newEID;
-      index_t ele1ID = newEID+1;
-      index_t ele2ID = newEID+2;
-      index_t ele3ID = newEID+3;
-
+      _mesh->replace_element(eid, ele1);
       append_element(ele0, tid);
-      append_element(ele1, tid);
       append_element(ele2, tid);
-      append_element(ele3, tid);
+
+      return 2;
+    }else{ // refine_cnt==3
+      const index_t ele0[] = {n[0], newVertex[2], newVertex[1]};
+      const index_t ele1[] = {n[1], newVertex[0], newVertex[2]};
+      const index_t ele2[] = {n[2], newVertex[1], newVertex[0]};
+      const index_t ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
+
+      index_t ele1ID = newEID;
+      index_t ele2ID = newEID+1;
+      index_t ele3ID = newEID+2;
 
       // Update NNList
 
@@ -806,8 +779,6 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NNList[newVertex[2]].push_back(newVertex[1]);
 
       // Update NEList
-      _mesh->NEList[n[0]].erase(eid);
-      _mesh->NEList[n[0]].insert(ele0ID);
       _mesh->NEList[n[1]].erase(eid);
       _mesh->NEList[n[1]].insert(ele1ID);
       _mesh->NEList[n[2]].erase(eid);
@@ -817,15 +788,20 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[newVertex[0]].insert(ele2ID);
       _mesh->NEList[newVertex[0]].insert(ele3ID);
 
-      _mesh->NEList[newVertex[1]].insert(ele0ID);
+      _mesh->NEList[newVertex[1]].insert(eid);
       _mesh->NEList[newVertex[1]].insert(ele2ID);
       _mesh->NEList[newVertex[1]].insert(ele3ID);
 
-      _mesh->NEList[newVertex[2]].insert(ele0ID);
+      _mesh->NEList[newVertex[2]].insert(eid);
       _mesh->NEList[newVertex[2]].insert(ele1ID);
       _mesh->NEList[newVertex[2]].insert(ele3ID);
 
-      return 4;
+      _mesh->replace_element(eid, ele0);
+      append_element(ele1, tid);
+      append_element(ele2, tid);
+      append_element(ele3, tid);
+
+      return 3;
     }
   }
 
