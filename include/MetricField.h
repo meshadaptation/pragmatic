@@ -179,12 +179,12 @@ template<typename real_t, typename index_t>
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
     index_t pNElements = (index_t) predict_nelements();
     _mesh->_ENList.reserve(pNElements*3);
-    _mesh->_coords.reserve(pNElements*2);
-    _mesh->NNList.reserve(pNElements);
-    _mesh->NEList.reserve(pNElements);
+    _mesh->_coords.reserve(pNElements);
+    _mesh->NNList.reserve(pNElements/2);
+    _mesh->NEList.reserve(pNElements/2);
 
     _mesh->metric.clear();
-    _mesh->metric.reserve(pNElements*3);
+    _mesh->metric.reserve(pNElements*1.5);
     _mesh->metric.resize(_NNodes*3);
     
     // Enforce first-touch policy

@@ -106,7 +106,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
   /// Default destructor.
   ~Refine2D(){
-    if(lnn2gnn==NULL)
+    if(lnn2gnn!=NULL)
       delete [] lnn2gnn;
 
     delete property;
@@ -179,7 +179,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
 #pragma omp parallel
     {
-      int tid = omp_get_thread_num();
+      int tid = get_tid();
 
       /*
        * Average vertex degree is ~6, so there
