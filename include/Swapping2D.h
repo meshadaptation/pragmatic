@@ -78,6 +78,7 @@ template<typename real_t, typename index_t> class Swapping2D{
   }
   
   void swap(real_t Q_min){
+    min_Q = Q_min;
     size_t NNodes = _mesh->get_number_nodes();
     size_t NElements = _mesh->get_number_elements();
 
@@ -88,14 +89,14 @@ template<typename real_t, typename index_t> class Swapping2D{
     marked_edges.resize(NNodes);
     
     tpartition = new int[NNodes];
-    dynamic_vertex = new index_t[NNodes];
+    dynamic_vertex = new int[NNodes];
 
 #pragma omp parallel
     {
       int tid = get_tid();
 
       // Cache the element quality's.
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static, 32)
       for(size_t i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
@@ -114,23 +115,18 @@ template<typename real_t, typename index_t> class Swapping2D{
       }
       
       // Initialise list of dynamic edges.
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static, 32)
       for(size_t i=0;i<NNodes;i++){
         for(size_t it=0; it<_mesh->NNList[i].size(); ++it){
-          if(i < (size_t) _mesh->NNList[i][it]){
+          if(i < (size_t) _mesh->NNList[i][it])
             marked_edges[i].push_back(_mesh->NNList[i][it]);
-          }
         }
-      }
-
-#pragma omp for schedule(static)
-      for(size_t i=0; i<NNodes;i++){
         dynamic_vertex[i] = marked_edges[i].size();
       }
 
       // Phase 1
       if(nthreads>1){
-#pragma omp single nowait
+#pragma omp single
         {
           pragmatic::partition_fast(_mesh->NNList, dynamic_vertex, nthreads, tpartition);
         }
@@ -147,45 +143,12 @@ template<typename real_t, typename index_t> class Swapping2D{
             if(tpartition[opp]!=tid)
               continue;
 
-            Edge<index_t> edge(i,opp);
-            if(edge_eligible(edge, tid))
-              tdynamic_edge->push_back(edge);
+            tdynamic_edge->push_back(Edge<index_t>(i, opp));
           }
         }
 
         // Now, each thread starts processing its dynamic list
-        while(!tdynamic_edge->empty()){
-          Edge<index_t> oldEdge = *tdynamic_edge->begin();
-          Edge<index_t> newEdge = swap_kernel(oldEdge);
-
-          tdynamic_edge->pop_front();
-          typename std::list<index_t>::iterator it;
-          it = std::find(marked_edges[oldEdge.edge.first].begin(),
-              marked_edges[oldEdge.edge.first].end(), oldEdge.edge.second);
-          marked_edges[oldEdge.edge.first].erase(it);
-
-          // If the edge was swapped, propagate the operation
-          if(newEdge.edge.first >= 0){
-            Edge<index_t> lateralEdges[] = {
-                Edge<index_t>(oldEdge.edge.first, newEdge.edge.first),
-                Edge<index_t>(oldEdge.edge.first, newEdge.edge.second),
-                Edge<index_t>(oldEdge.edge.second, newEdge.edge.first),
-                Edge<index_t>(oldEdge.edge.second, newEdge.edge.second)};
-
-            for(size_t i=0; i<4; ++i){
-              it = std::find(marked_edges[lateralEdges[i].edge.first].begin(),
-                  marked_edges[lateralEdges[i].edge.first].end(), lateralEdges[i].edge.second);
-
-              // If the edge is already marked, then continue
-              if(it != marked_edges[lateralEdges[i].edge.first].end())
-                continue;
-
-              marked_edges[lateralEdges[i].edge.first].push_back(lateralEdges[i].edge.second);
-              if(edge_eligible(lateralEdges[i], tid))
-                tdynamic_edge->push_back(lateralEdges[i]);
-            }
-          }
-        }
+        process_list(tdynamic_edge, tid);
 
         delete tdynamic_edge;
       }
@@ -194,52 +157,20 @@ template<typename real_t, typename index_t> class Swapping2D{
     // Phase 2
     std::deque< Edge<index_t> > *tdynamic_edge = new std::deque< Edge<index_t> >;
 
-    for(index_t i=0; i<NNodes; ++i){
+    for(index_t i=0; i<(index_t)NNodes; ++i){
+      tpartition[i] = 0;
       for(typename std::list<index_t>::const_iterator it=marked_edges[i].begin(); it!=marked_edges[i].end(); ++it){
-        Edge<index_t> edge(i,*it);
-
-        if(edge_eligible(edge))
-          tdynamic_edge->push_back(edge);
+        tdynamic_edge->push_back(Edge<index_t>(i,*it));
       }
     }
 
-    while(!tdynamic_edge->empty()){
-      Edge<index_t> oldEdge = *tdynamic_edge->begin();
-      Edge<index_t> newEdge = swap_kernel(oldEdge);
-
-      tdynamic_edge->pop_front();
-      typename std::list<index_t>::iterator it;
-      it = std::find(marked_edges[oldEdge.edge.first].begin(),
-          marked_edges[oldEdge.edge.first].end(), oldEdge.edge.second);
-      marked_edges[oldEdge.edge.first].erase(it);
-
-      // If the edge was swapped, propagate the operation
-      if(newEdge.edge.first >= 0){
-        Edge<index_t> lateralEdges[] = {
-            Edge<index_t>(oldEdge.edge.first, newEdge.edge.first),
-            Edge<index_t>(oldEdge.edge.first, newEdge.edge.second),
-            Edge<index_t>(oldEdge.edge.second, newEdge.edge.first),
-            Edge<index_t>(oldEdge.edge.second, newEdge.edge.second)};
-
-        for(size_t i=0; i<4; ++i){
-          it = std::find(marked_edges[lateralEdges[i].edge.first].begin(),
-              marked_edges[lateralEdges[i].edge.first].end(), lateralEdges[i].edge.second);
-
-          // If the edge is already marked, then continue
-          if(it != marked_edges[lateralEdges[i].edge.first].end())
-            continue;
-
-          marked_edges[lateralEdges[i].edge.first].push_back(lateralEdges[i].edge.second);
-          if(edge_eligible(lateralEdges[i]))
-            tdynamic_edge->push_back(lateralEdges[i]);
-        }
-      }
-    }
+    process_list(tdynamic_edge, 0);
 
     delete tdynamic_edge;
 
     // Phase 3
     // Future work
+    // At this point, all edges in marked_edges are halo edges.
 
     delete[] tpartition;
     delete[] dynamic_vertex;
@@ -249,53 +180,33 @@ template<typename real_t, typename index_t> class Swapping2D{
 
  private:
 
-  Edge<index_t> swap_kernel(Edge<index_t> &edge){
-    index_t i = edge.edge.first;
-    index_t j = edge.edge.second;
+  struct Rhombus{
+    Rhombus(Edge<index_t> edge) : middleEdge(edge) {};
+    Edge<index_t> middleEdge;
+    index_t eid0;
+    index_t eid1;
+    size_t n_off;
+    size_t m_off;
+  };
 
-    // Find the two elements sharing this edge
-    std::set<index_t> intersection;
-    set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-        _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
-        inserter(intersection, intersection.begin()));
+  void swap_kernel(Rhombus &rhombus){
+    int eid0 = rhombus.eid0;
+    int eid1 = rhombus.eid1;
 
-    // If this is a surface edge, un-mark it
-    if(intersection.size()!=2){
-      typename std::list<index_t>::iterator it;
-      it = std::find(marked_edges[i].begin(), marked_edges[i].end(), j);
-      marked_edges[i].erase(it);
-      return Edge<index_t>(-1, -1);
-    }
-
-    int eid0 = *intersection.begin();
-    int eid1 = *intersection.rbegin();
-
+    real_t worst_q = std::min(quality[eid0], quality[eid1]);
     /*
-    if(std::min(quality[eid0], quality[eid1])>Q_min)
-      return Edge<index_t>(-1, -1);
+    if(worst_q>min_Q)
+      return;
     */
+
+    index_t i = rhombus.middleEdge.edge.first;
+    index_t j = rhombus.middleEdge.edge.second;
+
+    int n_off = rhombus.n_off;
+    int m_off = rhombus.m_off;
 
     const index_t *n = _mesh->get_element(eid0);
     const index_t *m = _mesh->get_element(eid1);
-
-    int n_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((n[k]!=(index_t)i) && (n[k]!=(index_t)j)){
-        n_off = k;
-        break;
-      }
-    }
-
-    int m_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((m[k]!=(index_t)i) && (m[k]!=(index_t)j)){
-        m_off = k;
-        break;
-      }
-    }
-
-    assert(n_off>=0 && m_off>=0);
-    assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
 
     index_t k = n[n_off];
     index_t l = m[m_off];
@@ -303,7 +214,6 @@ template<typename real_t, typename index_t> class Swapping2D{
     int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
     int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};       // new eid1
 
-    real_t worst_q = std::min(quality[eid0], quality[eid1]);
     real_t q0 = property->lipnikov(_mesh->get_coords(n_swap[0]),
                                    _mesh->get_coords(n_swap[1]),
                                    _mesh->get_coords(n_swap[2]),
@@ -344,22 +254,19 @@ template<typename real_t, typename index_t> class Swapping2D{
         _mesh->_ENList[eid1*nloc+k] = m_swap[k];
       }
 
-      return Edge<index_t>(k, l);
+      rhombus.middleEdge = Edge<index_t>(n[n_off], m[m_off]);
     }
-    else
-      return Edge<index_t>(-1, -1);
   }
 
-  bool edge_eligible(Edge<index_t> &edge, size_t tid) const{
-    index_t i = edge.edge.first;
-    index_t j = edge.edge.second;
+  bool is_eligible(Rhombus &rhombus, size_t tid){
+    index_t i = rhombus.middleEdge.edge.first;
+    index_t j = rhombus.middleEdge.edge.second;
 
     /*
-     * For safe MPI execution, it is not allowed at phases 1 and 2 to delete
-     * edges or create new edges which cross MPI partitions. An edge
-     * crosses an MPI partition if its two nodes have different owners.
+     * For safe MPI execution, it is not allowed at phases 1 and 2 to
+     * delete edges or create new edges on the halo of an MPI partition.
      */
-    if(_mesh->is_owned_node(i) ^ _mesh->is_owned_node(j))
+    if(_mesh->is_halo_node(i) && _mesh->is_halo_node(j))
       return false;
 
     // Find the two elements sharing this edge
@@ -368,8 +275,13 @@ template<typename real_t, typename index_t> class Swapping2D{
         _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
         inserter(intersection, intersection.begin()));
 
-    if(intersection.size()!=2)
+    // If this is a surface edge, it cannot be swapped, so un-mark it.
+    if(intersection.size()!=2){
+      typename std::list<index_t>::iterator it;
+      it = std::find(marked_edges[i].begin(), marked_edges[i].end(), j);
+      marked_edges[i].erase(it);
       return false;
+    }
 
     index_t eid0 = *intersection.begin();
     index_t eid1 = *intersection.rbegin();
@@ -399,62 +311,58 @@ template<typename real_t, typename index_t> class Swapping2D{
     assert(n_off>=0 && m_off>=0);
     assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
 
-    if(_mesh->is_halo_node(n[n_off]) ^ _mesh->is_halo_node(m[m_off]))
+    if(_mesh->is_halo_node(n[n_off]) && _mesh->is_halo_node(m[m_off]))
       return false;
+
+    rhombus.eid0 = eid0;
+    rhombus.eid1 = eid1;
+    rhombus.n_off = n_off;
+    rhombus.m_off = m_off;
 
     return true;
   }
 
-  bool edge_eligible(Edge<index_t> &edge) const{
-    index_t i = edge.edge.first;
-    index_t j = edge.edge.second;
+  void process_list(std::deque< Edge<index_t> > *tdynamic_edge, size_t tid){
+    while(!tdynamic_edge->empty()){
+      Edge<index_t> oldEdge = *tdynamic_edge->begin();
+      tdynamic_edge->pop_front();
 
-    /*
-     * For safe MPI execution, it is not allowed at phases 1 and 2 to delete
-     * edges or create new edges which cross MPI partitions. An edge
-     * crosses an MPI partition if its two nodes have different owners.
-     */
-    if(_mesh->is_owned_node(i) ^ _mesh->is_owned_node(j))
-      return false;
+      Rhombus rhombus(oldEdge);
+      if(!is_eligible(rhombus, tid))
+        continue;
 
-    // Find the two elements sharing this edge
-    std::set<index_t> intersection;
-    set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-        _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
-        inserter(intersection, intersection.begin()));
+      // Process the edge and update the rhombus with
+      // the new middle edge if swapping occurs.
+      swap_kernel(rhombus);
 
-    if(intersection.size()!=2)
-      return false;
+      // Mark the edge as processed
+      typename std::list<index_t>::iterator it;
+      it = std::find(marked_edges[oldEdge.edge.first].begin(),
+          marked_edges[oldEdge.edge.first].end(), oldEdge.edge.second);
+      marked_edges[oldEdge.edge.first].erase(it);
 
-    index_t eid0 = *intersection.begin();
-    index_t eid1 = *intersection.rbegin();
+      // If the edge was swapped, propagate the operation
+      Edge<index_t> newEdge = rhombus.middleEdge;
+      if(newEdge != oldEdge){
+        Edge<index_t> lateralEdges[] = {
+            Edge<index_t>(oldEdge.edge.first, newEdge.edge.first),
+            Edge<index_t>(oldEdge.edge.first, newEdge.edge.second),
+            Edge<index_t>(oldEdge.edge.second, newEdge.edge.first),
+            Edge<index_t>(oldEdge.edge.second, newEdge.edge.second)};
 
-    const index_t *n = _mesh->get_element(eid0);
-    const index_t *m = _mesh->get_element(eid1);
+        for(size_t i=0; i<4; ++i){
+          it = std::find(marked_edges[lateralEdges[i].edge.first].begin(),
+              marked_edges[lateralEdges[i].edge.first].end(), lateralEdges[i].edge.second);
 
-    int n_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((n[k]!=i) && (n[k]!=j)){
-        n_off = k;
-        break;
+          // If the edge is already marked, then continue
+          if(it != marked_edges[lateralEdges[i].edge.first].end())
+            continue;
+
+          marked_edges[lateralEdges[i].edge.first].push_back(lateralEdges[i].edge.second);
+          tdynamic_edge->push_back(lateralEdges[i]);
+        }
       }
     }
-
-    int m_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((m[k]!=i) && (m[k]!=j)){
-        m_off = k;
-        break;
-      }
-    }
-
-    assert(n_off>=0 && m_off>=0);
-    assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
-
-    if(_mesh->is_halo_node(n[n_off]) ^ _mesh->is_halo_node(m[m_off]))
-      return false;
-
-    return true;
   }
 
   Mesh<real_t, index_t> *_mesh;
@@ -465,8 +373,8 @@ template<typename real_t, typename index_t> class Swapping2D{
   int nthreads;
   std::vector< std::list<index_t> > marked_edges;
   std::vector<real_t> quality;
-  int *tpartition;
-  index_t *dynamic_vertex;
+  int *tpartition, *dynamic_vertex;
+  real_t min_Q;
 };
 
 #endif

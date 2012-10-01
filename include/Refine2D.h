@@ -124,7 +124,7 @@ template<typename real_t, typename index_t> class Refine2D{
     size_t origNNodes = NNodes;
 
     size_t NElements = _mesh->get_number_elements();
-    size_t origNElements = NElements;
+    //size_t origNElements = NElements;
 
     // Establish global node numbering.
     int gnn_offset=0;
