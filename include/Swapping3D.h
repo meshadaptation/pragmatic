@@ -38,6 +38,16 @@
 #ifndef SWAPPING3D_H
 #define SWAPPING3D_H
 
+#include <algorithm>
+#include <limits>
+#include <list>
+#include <set>
+#include <vector>
+
+#include "ElementProperty.h"
+#include "Mesh.h"
+#include "Colour.h"
+
 template<typename real_t, typename index_t> class Swapping3D{
  public:
   /// Default constructor.

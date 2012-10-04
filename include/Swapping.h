@@ -38,15 +38,6 @@
 #ifndef SWAPPING_H
 #define SWAPPING_H
 
-#include <algorithm>
-#include <set>
-#include <vector>
-#include <limits>
-
-#include "ElementProperty.h"
-#include "Mesh.h"
-#include "Colour.h"
-
 #include "Swapping2D.h"
 #include "Swapping3D.h"
 

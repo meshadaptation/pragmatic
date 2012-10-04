@@ -102,6 +102,7 @@ template<typename real_t, typename index_t> class Refine2D{
     newElements.resize(nthreads);
     newCoords.resize(nthreads);
     newMetric.resize(nthreads);
+    replacedElements.resize(nthreads);
   }
 
   /// Default destructor.
@@ -124,7 +125,7 @@ template<typename real_t, typename index_t> class Refine2D{
     size_t origNNodes = NNodes;
 
     size_t NElements = _mesh->get_number_elements();
-    //size_t origNElements = NElements;
+    size_t origNElements = NElements;
 
     // Establish global node numbering.
     int gnn_offset=0;
@@ -175,7 +176,7 @@ template<typename real_t, typename index_t> class Refine2D{
     index_t *dynamic_vertex = new index_t[NNodes];
     memset(dynamic_vertex, 0, NNodes*sizeof(index_t));
 
-    std::vector<char> phase2Elements(NElements, 1);
+    std::vector<char> n_marked_edges_per_element(NElements, 0);
 
 #pragma omp parallel
     {
@@ -216,12 +217,11 @@ template<typename real_t, typename index_t> class Refine2D{
                                  decide to refine it. */
 
               std::set<index_t> intersection;
-              set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-                  _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
-                  inserter(intersection, intersection.begin()));
+              set_intersection( _mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+                  _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(), inserter(intersection, intersection.begin()));
 
-              for(typename std::set<index_t>::const_iterator it=intersection.begin(); it!=intersection.end();++it){
-                index_t eid = *it;
+              for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element){
+                index_t eid = *element;
                 size_t edgeOffset = edgeNumber(eid, i, otherVertex);
                 split_edges_per_element[3*eid+edgeOffset].newVertex = splitCnt[tid];
                 split_edges_per_element[3*eid+edgeOffset].thread = tid;
@@ -290,16 +290,20 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Fix IDs of new vertices
 #pragma omp for schedule(static)
-      for(index_t idx=0; idx < (index_t) NElements*3; ++idx){
-        if(split_edges_per_element[idx].newVertex != -1)
-          split_edges_per_element[idx].newVertex +=
-              threadIdx[split_edges_per_element[idx].thread];
+      for(size_t eid=0; eid<NElements; ++eid){
+        for(size_t j=0; j<3; ++j)
+          if(split_edges_per_element[3*eid+j].newVertex != -1){
+            split_edges_per_element[3*eid+j].newVertex += threadIdx[split_edges_per_element[3*eid+j].thread];
+            ++n_marked_edges_per_element[eid];
+        }
       }
 
       // Perform element refinement.
       splitCnt[tid] = 0;
       newElements[tid].clear();
       newElements[tid].reserve(4*NElements/nthreads);
+      replacedElements[tid].clear();
+      replacedElements[tid].reserve(NElements/nthreads);
 
       // Phase 1
       if(nthreads>1){
@@ -316,15 +320,10 @@ template<typename real_t, typename index_t> class Refine2D{
             continue;
 
           if((tpartition[n[0]]==tid)&&(tpartition[n[1]]==tid)&&(tpartition[n[2]]==tid)){
-            tdynamic_element->push_back(eid);
-
-            size_t refine_cnt = 0;
-            for(int j=0;j<3;j++)
-              if(split_edges_per_element[3*eid+j].newVertex >= 0)
-                ++refine_cnt;
-
-            if(refine_cnt > 0)
-              splitCnt[tid] += refine_cnt;
+            if(n_marked_edges_per_element[eid]>0){
+              tdynamic_element->push_back(eid);
+              splitCnt[tid] += n_marked_edges_per_element[eid];
+            }
           }
         }
 
@@ -338,13 +337,10 @@ template<typename real_t, typename index_t> class Refine2D{
 
         index_t newEID = threadIdx[tid];
         for(typename std::vector<index_t>::const_iterator it=tdynamic_element->begin(); it!=tdynamic_element->end(); ++it){
+          newEID += refine_element(*it, newEID, n_marked_edges_per_element[*it], tid);
+
           // Mark eid as processed
-          phase2Elements[*it] = 0;
-
-          int refine_cnt = refine_element(*it, newEID, tid);
-
-          if(refine_cnt > 0)
-            newEID += refine_cnt;
+          n_marked_edges_per_element[*it] = 0;
         }
 
         delete tdynamic_element;
@@ -361,13 +357,9 @@ template<typename real_t, typename index_t> class Refine2D{
           newEID = NElements;
 
         for(index_t eid=0;eid<(index_t)NElements;eid++){
-          if(phase2Elements[eid] != 1)
-            continue;
-
-          int refine_cnt = refine_element(eid, newEID, nthreads-1);
-
-          if(refine_cnt > 0)
-            newEID += refine_cnt;
+          if(n_marked_edges_per_element[eid]>0){
+            newEID += refine_element(eid, newEID, n_marked_edges_per_element[eid], nthreads-1);
+          }
         }
 
         if(nthreads > 1)
@@ -419,9 +411,8 @@ template<typename real_t, typename index_t> class Refine2D{
           }
 
           typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
-          // The following loop used to run from origNElements to NElements,
-          // but now that we recycle element IDs it has to traverse all elements.
-          for(size_t i=0;i<NElements;i++){
+          // Something needs to be done for those elements which have a recycled ID.
+          for(size_t i=origNElements;i<NElements;i++){
             const int *n=_mesh->get_element(i);
             if(n[0]<0)
               continue;
@@ -555,11 +546,9 @@ template<typename real_t, typename index_t> class Refine2D{
     }
   }
 
-  int refine_element(index_t eid, index_t newEID, size_t tid){
+  int refine_element(index_t eid, index_t newEID, char refine_cnt, size_t tid){
     // Check if this element has been erased - if so continue to next element.
     const int *n=_mesh->get_element(eid);
-    if(n[0]<0)
-      return -1;
 
     // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
     index_t newVertex[3] = {-1, -1, -1};
@@ -567,15 +556,7 @@ template<typename real_t, typename index_t> class Refine2D{
     newVertex[1] = split_edges_per_element[3*eid+1].newVertex;
     newVertex[2] = split_edges_per_element[3*eid+2].newVertex;
 
-    int refine_cnt=0;
-    for(int j=0;j<3;j++)
-      if(newVertex[j] >= 0)
-        refine_cnt++;
-
-    if(refine_cnt==0){
-      // No refinement - continue to next element.
-      return 0;
-    }else if(refine_cnt==1){
+    if(refine_cnt==1){
       // Single edge split.
       int rotated_ele[3] = {-1, -1, -1};
       index_t vertexID=-1;
@@ -627,7 +608,7 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[rotated_ele[2]].erase(eid);
       _mesh->NEList[rotated_ele[2]].insert(ele1ID);
 
-      _mesh->replace_element(eid, ele0);
+      replace_element(eid, ele0, tid);
       append_element(ele1, tid);
 
       return 1;
@@ -716,7 +697,7 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele0ID);
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele2ID);
 
-      _mesh->replace_element(eid, ele1);
+      replace_element(eid, ele1, tid);
       append_element(ele0, tid);
       append_element(ele2, tid);
 
@@ -796,7 +777,7 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[newVertex[2]].insert(ele1ID);
       _mesh->NEList[newVertex[2]].insert(ele3ID);
 
-      _mesh->replace_element(eid, ele0);
+      replace_element(eid, ele0, tid);
       append_element(ele1, tid);
       append_element(ele2, tid);
       append_element(ele3, tid);
@@ -808,6 +789,13 @@ template<typename real_t, typename index_t> class Refine2D{
   inline void append_element(const index_t *elem, size_t tid){
     for(size_t i=0; i<nloc; ++i)
       newElements[tid].push_back(elem[i]);
+  }
+
+  inline void replace_element(const index_t eid, const index_t *n, size_t tid){
+    for(size_t i=0;i<nloc;i++)
+      _mesh->_ENList[eid*nloc+i]=n[i];
+
+    replacedElements[tid].push_back(eid);
   }
 
   inline size_t edgeNumber(index_t eid, index_t v1, index_t v2) const{
@@ -837,6 +825,7 @@ template<typename real_t, typename index_t> class Refine2D{
   std::vector< std::vector<real_t> > newCoords;
   std::vector< std::vector<float> > newMetric;
   std::vector< std::vector<index_t> > newElements;
+  std::vector< std::vector<index_t> > replacedElements;
 
   Mesh<real_t, index_t> *_mesh;
   Surface2D<real_t, index_t> *_surface;

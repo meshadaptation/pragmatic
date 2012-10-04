@@ -443,12 +443,6 @@ template<typename real_t, typename index_t> class Mesh{
     // Something for NEList?
   }
 
-  /// Replace old element with new one
-  void replace_element(const index_t eid, const index_t *n){
-    for(size_t i=0;i<nloc;i++)
-      _ENList[eid*nloc+i]=n[i];
-  }
-
   /// Return the number of nodes in the mesh.
   int get_number_nodes() const{
     return _coords.size()/ndims;

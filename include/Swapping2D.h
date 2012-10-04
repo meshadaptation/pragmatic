@@ -38,7 +38,15 @@
 #ifndef SWAPPING2D_H
 #define SWAPPING2D_H
 
+#include <algorithm>
+#include <limits>
 #include <list>
+#include <set>
+#include <vector>
+
+#include "ElementProperty.h"
+#include "Mesh.h"
+#include "Colour.h"
 
 /*! \brief Performs edge/face swapping.
  *
