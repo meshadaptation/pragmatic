@@ -40,6 +40,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <map>
 #include <vector>
@@ -116,13 +117,11 @@ namespace pragmatic{
     int NNodes = NNList.size();
     
     if(nparts==1){
-      for(int i=0;i<NNodes;i++){
-        part[i] = 0;
-      }
+    	memset(part, 0, NNodes*sizeof(int));
       return;
     }
     
-    // Graph partition by first breath
+    // Graph partitioning using breadth-first traversal
     int active_cnt=0;
     for(int i=0;i<NNodes;i++){
       part[i] = -1;
@@ -142,32 +141,20 @@ namespace pragmatic{
 
       part[j] = p;
       int cnt = 1;
-      std::vector<int> front;
-      for(std::vector<int>::const_iterator it=NNList[j].begin();it!=NNList[j].end();++it){
-        if((part[*it]<0)&&(active_vertex[*it]>=0)){
-          front.push_back(*it);
-          part[*it] = p;
-          cnt++;
-        }
-      }
-      while(!front.empty()){
-        std::vector<int> new_front;
-        for(std::vector<int>::const_iterator jt=front.begin();jt!=front.end();++jt){
-          for(std::vector<int>::const_iterator it=NNList[*jt].begin();it!=NNList[*jt].end();++it){
-            if((part[*it]<0)&&(active_vertex[*it]>=0)){
-              new_front.push_back(*it);
-              part[*it] = p;
-              cnt++;
-            }
-            if(cnt>=target)
-              break;
-          }
-          if(cnt>=target)
-            break;
-        }
-        if(cnt>=target)
-          break;
-        new_front.swap(front);
+      std::deque<int> front;
+      front.push_back(j);
+
+      while(!front.empty() && cnt<target){
+      	int v = *front.begin();
+      	front.pop_front();
+
+				for(std::vector<int>::const_iterator it=NNList[v].begin();it!=NNList[v].end();++it){
+					if((part[*it]<0)&&(active_vertex[*it]>=0)){
+						front.push_back(*it);
+						part[*it] = p;
+						cnt++;
+					}
+				}
       }
     }
   }

@@ -592,7 +592,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       for(std::vector<int>::const_iterator it=_mesh->recv[p].begin();it!=_mesh->recv[p].end();++it)
         known_nodes[p].insert(*it);
     }
-            
+
     // Communicate collapses.
     // Stuff in list of vertices that have to be communicated.
     std::vector< std::vector<int> > send_edges(nprocs);

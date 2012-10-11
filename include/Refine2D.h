@@ -102,7 +102,6 @@ template<typename real_t, typename index_t> class Refine2D{
     newElements.resize(nthreads);
     newCoords.resize(nthreads);
     newMetric.resize(nthreads);
-    replacedElements.resize(nthreads);
   }
 
   /// Default destructor.
@@ -168,6 +167,8 @@ template<typename real_t, typename index_t> class Refine2D{
     const split_edge initial = {-1, -1};
     split_edges_per_element.clear();
     split_edges_per_element.resize(3*NElements, initial);
+    dirtyElements.clear();
+    dirtyElements.resize(NElements, 0);
 
     std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
     std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges(nthreads);
@@ -266,7 +267,6 @@ template<typename real_t, typename index_t> class Refine2D{
         _mesh->NEList.resize(NNodes);
         _mesh->_coords.resize(ndims*NNodes);
         _mesh->metric.resize(msize*NNodes);
-        node_owner.resize(NNodes, -1);
       }
 
       // Append new coords and metric to the mesh.
@@ -302,8 +302,6 @@ template<typename real_t, typename index_t> class Refine2D{
       splitCnt[tid] = 0;
       newElements[tid].clear();
       newElements[tid].reserve(4*NElements/nthreads);
-      replacedElements[tid].clear();
-      replacedElements[tid].reserve(NElements/nthreads);
 
       // Phase 1
       if(nthreads>1){
@@ -322,6 +320,7 @@ template<typename real_t, typename index_t> class Refine2D{
           if((tpartition[n[0]]==tid)&&(tpartition[n[1]]==tid)&&(tpartition[n[2]]==tid)){
             if(n_marked_edges_per_element[eid]>0){
               tdynamic_element->push_back(eid);
+              assert(n_marked_edges_per_element[eid] >=0 && n_marked_edges_per_element[eid] <=3);
               splitCnt[tid] += n_marked_edges_per_element[eid];
             }
           }
@@ -394,7 +393,7 @@ template<typename real_t, typename index_t> class Refine2D{
 #pragma omp master
         {
           // Time to amend halo.
-          assert(node_owner.size()==NNodes);
+        	node_owner.resize(NNodes, -1);
 
           std::map<index_t, DirectedEdge<index_t> > lut_newVertices;
           for(int i=0;i<nthreads;i++){
@@ -410,9 +409,13 @@ template<typename real_t, typename index_t> class Refine2D{
             }
           }
 
+          dirtyElements.resize(NElements, 1);
           typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
           // Something needs to be done for those elements which have a recycled ID.
-          for(size_t i=origNElements;i<NElements;i++){
+          for(size_t i=0;i<NElements;i++){
+          	if(dirtyElements[i]==0)
+          		continue;
+
             const int *n=_mesh->get_element(i);
             if(n[0]<0)
               continue;
@@ -795,7 +798,7 @@ template<typename real_t, typename index_t> class Refine2D{
     for(size_t i=0;i<nloc;i++)
       _mesh->_ENList[eid*nloc+i]=n[i];
 
-    replacedElements[tid].push_back(eid);
+    dirtyElements[eid]=1;
   }
 
   inline size_t edgeNumber(index_t eid, index_t v1, index_t v2) const{
@@ -825,7 +828,7 @@ template<typename real_t, typename index_t> class Refine2D{
   std::vector< std::vector<real_t> > newCoords;
   std::vector< std::vector<float> > newMetric;
   std::vector< std::vector<index_t> > newElements;
-  std::vector< std::vector<index_t> > replacedElements;
+  std::vector<char> dirtyElements;
 
   Mesh<real_t, index_t> *_mesh;
   Surface2D<real_t, index_t> *_surface;

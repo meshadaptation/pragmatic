@@ -262,7 +262,7 @@ template<typename real_t, typename index_t> class Swapping2D{
         _mesh->_ENList[eid1*nloc+k] = m_swap[k];
       }
 
-      rhombus.middleEdge = Edge<index_t>(n[n_off], m[m_off]);
+      rhombus.middleEdge = Edge<index_t>(k, l);
     }
   }
 
@@ -302,6 +302,7 @@ template<typename real_t, typename index_t> class Swapping2D{
         break;
       }
     }
+    assert(n[n_off]>=0);
     if(tpartition[n[n_off]]!=tid)
       return false;
 
@@ -313,10 +314,10 @@ template<typename real_t, typename index_t> class Swapping2D{
         break;
       }
     }
+    assert(m[m_off]>=0);
     if(tpartition[m[m_off]]!=tid)
       return false;
 
-    assert(n_off>=0 && m_off>=0);
     assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
 
     if(_mesh->is_halo_node(n[n_off]) && _mesh->is_halo_node(m[m_off]))
