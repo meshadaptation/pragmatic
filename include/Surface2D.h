@@ -338,16 +338,6 @@ template<typename real_t, typename index_t>
                        jSNEList->second.begin(), jSNEList->second.end(),
                        inserter(Intersection,Intersection.begin()));
 
-      typename std::map<int, std::set<index_t> >::const_iterator kSNEList = SNEList.find(element[(i+2)%nloc]);
-      if(kSNEList==SNEList.end())
-        continue;
-
-      std::set<index_t> tmp_intersection;
-      set_intersection(Intersection.begin(), Intersection.end(),
-                       kSNEList->second.begin(), kSNEList->second.end(),
-                       inserter(tmp_intersection,tmp_intersection.begin()));
-      Intersection.swap(tmp_intersection);
-
       if(Intersection.size()){
 #ifndef NDEBUG
         if(Intersection.size()>1){

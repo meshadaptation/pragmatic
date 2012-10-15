@@ -749,7 +749,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
             index_t *new_dynamic_vertex = new index_t[nnodes_reserve];
             for(size_t k=0;k<nnodes_new-1;k++)
               new_dynamic_vertex[k] = dynamic_vertex[k];
-            std::swap(dynamic_vertex, dynamic_vertex);
+            std::swap(new_dynamic_vertex, dynamic_vertex);
             delete [] new_dynamic_vertex;
           }
           dynamic_vertex[nnodes_new-1] = -2;
