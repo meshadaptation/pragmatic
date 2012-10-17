@@ -291,6 +291,11 @@ template<typename real_t, typename index_t> class Refine2D{
       // Fix IDs of new vertices
 #pragma omp for schedule(static)
       for(size_t eid=0; eid<NElements; ++eid){
+      	//If the element has been deleted, continue.
+      	const index_t *n = _mesh->get_element(eid);
+      	if(n[0] < 0)
+      		continue;
+
         for(size_t j=0; j<3; ++j)
           if(split_edges_per_element[3*eid+j].newVertex != -1){
             split_edges_per_element[3*eid+j].newVertex += threadIdx[split_edges_per_element[3*eid+j].thread];
@@ -312,15 +317,14 @@ template<typename real_t, typename index_t> class Refine2D{
          */
         std::vector<index_t> *tdynamic_element = new std::vector<index_t>;
         tdynamic_element->reserve(NElements/nthreads);
-        for(size_t eid=0;eid<NElements;eid++){
-          const index_t *n = _mesh->get_element(eid);
-          if(n[0] < 0)
-            continue;
 
-          if((tpartition[n[0]]==tid)&&(tpartition[n[1]]==tid)&&(tpartition[n[2]]==tid)){
-            if(n_marked_edges_per_element[eid]>0){
+        for(size_t eid=0;eid<NElements;eid++){
+          if(n_marked_edges_per_element[eid]>0){
+          	const index_t *n = _mesh->get_element(eid);
+
+          	if((tpartition[n[0]]==tid)&&(tpartition[n[1]]==tid)&&(tpartition[n[2]]==tid)){
               tdynamic_element->push_back(eid);
-              assert(n_marked_edges_per_element[eid] >=0 && n_marked_edges_per_element[eid] <=3);
+              assert(n_marked_edges_per_element[eid] >= 0 && n_marked_edges_per_element[eid] <= 3);
               splitCnt[tid] += n_marked_edges_per_element[eid];
             }
           }
@@ -411,7 +415,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
           dirtyElements.resize(NElements, 1);
           typename std::vector< std::set< DirectedEdge<index_t> > > send_additional(nprocs), recv_additional(nprocs);
-          // Something needs to be done for those elements which have a recycled ID.
+
           for(size_t i=0;i<NElements;i++){
           	if(dirtyElements[i]==0)
           		continue;
@@ -611,6 +615,9 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[rotated_ele[2]].erase(eid);
       _mesh->NEList[rotated_ele[2]].insert(ele1ID);
 
+      assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
+      assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
+
       replace_element(eid, ele0, tid);
       append_element(ele1, tid);
 
@@ -700,6 +707,10 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele0ID);
       _mesh->NEList[vertexID[(offset+1)%2]].insert(ele2ID);
 
+      assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
+      assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
+      assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
+
       replace_element(eid, ele1, tid);
       append_element(ele0, tid);
       append_element(ele2, tid);
@@ -779,6 +790,11 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->NEList[newVertex[2]].insert(eid);
       _mesh->NEList[newVertex[2]].insert(ele1ID);
       _mesh->NEList[newVertex[2]].insert(ele3ID);
+
+      assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
+      assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
+      assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
+      assert(ele3[0]>=0 && ele3[1]>=0 && ele3[2]>=0);
 
       replace_element(eid, ele0, tid);
       append_element(ele1, tid);
