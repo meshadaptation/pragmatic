@@ -337,9 +337,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
       // Assume the best.
       reject_collapse=false;
-      
-      /* Check the properties of new elements. If the new properties
-         are not acceptable when continue. */
+
+      /* Check the properties of new elements. If the
+         new properties are not acceptable then continue. */
 
       // Find the elements what will be collapsed.
       std::set<index_t> collapsed_elements;
@@ -505,7 +505,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       gnn2lnn[lnn2gnn[i]] = i;
     }
     assert(gnn2lnn.size()==lnn2gnn.size());
-              
+
     // Use a bitmap to indicate the maximal independent set.
     assert(NNodes>=NPNodes);
     maximal_independent_set.resize(NNodes);

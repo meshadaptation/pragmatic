@@ -126,7 +126,7 @@ int main(int argc, char **argv){
   double L_max = mesh->maximal_edge_length();
   
   double alpha = sqrt(2.0)/2;  
-  for(size_t i=0;i<10;i++){
+  for(size_t i=0;i<15;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     tic = get_wtime();
@@ -208,7 +208,7 @@ int main(int argc, char **argv){
   }
   
   tic = get_wtime();
-  //smooth.smooth("optimisation Linf", 200);
+  smooth.smooth("optimisation Linf", 200);
   time_smooth += get_wtime()-tic;
   
   time_adapt = get_wtime()-time_adapt;

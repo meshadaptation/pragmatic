@@ -257,9 +257,9 @@ template<typename real_t, typename index_t> class Swapping2D{
       _mesh->NEList[n_swap[1]].insert(eid0);
 
       // Update element-node list for this element.
-      for(size_t k=0;k<nloc;k++){
-        _mesh->_ENList[eid0*nloc+k] = n_swap[k];
-        _mesh->_ENList[eid1*nloc+k] = m_swap[k];
+      for(size_t cnt=0;cnt<nloc;cnt++){
+        _mesh->_ENList[eid0*nloc+cnt] = n_swap[cnt];
+        _mesh->_ENList[eid1*nloc+cnt] = m_swap[cnt];
       }
 
       rhombus.middleEdge = Edge<index_t>(k, l);
