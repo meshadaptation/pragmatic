@@ -126,7 +126,7 @@ int main(int argc, char **argv){
   double L_max = mesh->maximal_edge_length();
   
   double alpha = sqrt(2.0)/2;  
-  for(size_t i=0;i<15;i++){
+  for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     
     tic = get_wtime();
@@ -194,7 +194,7 @@ int main(int argc, char **argv){
     if((L_max-L_up)<0.01)
       break;
   }
-  
+/*
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -234,7 +234,7 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-  
+*/
   delete mesh;
 
   if(rank==0){

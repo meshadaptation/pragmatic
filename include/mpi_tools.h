@@ -1,4 +1,4 @@
-/*  Copyright (C) 2010 Imperial College London and others.
+/*  Copyright (C) 2012 Imperial College London and others.
  *
  *  Please see the AUTHORS file in the main source directory for a
  *  full list of copyright holders.
@@ -33,25 +33,31 @@
  *  SUCH DAMAGE.
  */
 
-#ifndef DEFS_H
-#define DEFS_H
+#ifndef MPI_TOOLS_H
+#define MPI_TOOLS_H
 
-#include <cuda.h>
+#include <mpi.h>
 
-extern "C" {
+// Template MPI data types.
+// Method by Justin Holewinski: http://jholewinski.org/blog/the-beauty-of-c-templates/
 
-#define true 1
-#define false 0
-#define bool unsigned int
+template <typename TYPE>
+struct mpi_type_wrapper {
+	const MPI_Datatype mpi_type;
+	mpi_type_wrapper();
+};
 
-typedef double real_t;
-typedef int index_t;
-
-__device__ bool isnormal(real_t value)
-{
-	return !(value == 0.0 || isinf(value) || isnan(value));
-}
-
-}
+// Explicit instantiation for `float'
+template <> mpi_type_wrapper<float>::mpi_type_wrapper() : mpi_type(MPI_FLOAT) {}
+// Explicit instantiation for `double'
+template <> mpi_type_wrapper<double>::mpi_type_wrapper() : mpi_type(MPI_DOUBLE) {}
+// Explicit instantiation for `short'
+template <> mpi_type_wrapper<short>::mpi_type_wrapper() : mpi_type(MPI_SHORT) {}
+// Explicit instantiation for `int'
+template <> mpi_type_wrapper<int>::mpi_type_wrapper() : mpi_type(MPI_INT) {}
+// Explicit instantiation for `long'
+template <> mpi_type_wrapper<long>::mpi_type_wrapper() : mpi_type(MPI_LONG) {}
+// Explicit instantiation for `long long'
+template <> mpi_type_wrapper<long long>::mpi_type_wrapper() : mpi_type(MPI_LONG_LONG) {}
 
 #endif

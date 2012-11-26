@@ -36,6 +36,7 @@
 #ifndef CUDASMOOTH_H
 #define CUDASMOOTH_H
 
+#include "defs.cuh"
 #include "ElementProperty.cuh"
 #include "SVD.cuh"
 

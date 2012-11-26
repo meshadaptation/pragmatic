@@ -82,9 +82,9 @@ template<typename real_t, typename index_t>
   void append_facet(const int *facet, int boundary_id, int coplanar_id, bool check_duplicates=false){
     if(check_duplicates){
       std::set<index_t> Intersection;
-      set_intersection(SNEList[facet[0]].begin(), SNEList[facet[0]].end(),
+      std::set_intersection(SNEList[facet[0]].begin(), SNEList[facet[0]].end(),
                        SNEList[facet[1]].begin(), SNEList[facet[1]].end(),
-                       inserter(Intersection,Intersection.begin()));
+                       std::inserter(Intersection,Intersection.begin()));
       if(Intersection.size())
         return;
     }
@@ -234,9 +234,9 @@ template<typename real_t, typename index_t>
 
     // Find deleted facets.
     std::set<index_t> deleted_facets;
-    set_intersection(SNEList[nid_free].begin(), SNEList[nid_free].end(),
+    std::set_intersection(SNEList[nid_free].begin(), SNEList[nid_free].end(),
                      SNEList[nid_target].begin(), SNEList[nid_target].end(),
-                     inserter(deleted_facets, deleted_facets.begin()));
+                     std::inserter(deleted_facets, deleted_facets.begin()));
 
     // Renumber nodes in elements adjacent to rm_vertex, deleted
     // elements being collapsed, and make these elements adjacent to
@@ -334,9 +334,9 @@ template<typename real_t, typename index_t>
       if(jSNEList==SNEList.end())
         continue;
 
-      set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
+      std::set_intersection(iSNEList->second.begin(), iSNEList->second.end(),
                        jSNEList->second.begin(), jSNEList->second.end(),
-                       inserter(Intersection,Intersection.begin()));
+                       std::inserter(Intersection,Intersection.begin()));
 
       if(Intersection.size()){
 #ifndef NDEBUG
@@ -397,8 +397,8 @@ template<typename real_t, typename index_t>
         index_t v2 = refined_edges[i].edge.second;
 
         std::set<index_t> intersection;
-        set_intersection(SNEList[v1].begin(), SNEList[v1].end(), SNEList[v2].begin(),
-            SNEList[v2].end(), inserter(intersection, intersection.begin()));
+        std::set_intersection(SNEList[v1].begin(), SNEList[v1].end(), SNEList[v2].begin(),
+            SNEList[v2].end(), std::inserter(intersection, intersection.begin()));
         // If the edge is opposite a corner
         if(intersection.size() != 1)
           continue;

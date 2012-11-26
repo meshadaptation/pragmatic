@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0001;
+  double eta=0.00001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
 
   metric_field.add_field(&(psi[0]), eta, 1);
   metric_field.update_mesh();
-  
+
   VTKTools<double, int>::export_vtu("../data/test_refine_2d-initial", mesh);
 
   Refine2D<double, int> adapt(*mesh, surface);

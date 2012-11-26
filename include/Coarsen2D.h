@@ -280,6 +280,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
             }
           }
         }
+        _mesh->trim_halo();
         
         MPI_Allreduce(MPI_IN_PLACE, &coarsen_cnt, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
 
@@ -343,9 +344,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
       // Find the elements what will be collapsed.
       std::set<index_t> collapsed_elements;
-      set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+      std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                        _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
-                       inserter(collapsed_elements,collapsed_elements.begin()));
+                       std::inserter(collapsed_elements,collapsed_elements.begin()));
       
       // Check volume/area of new elements.
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
@@ -408,9 +409,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
    */
   void coarsen_kernel(index_t rm_vertex, index_t target_vertex){
     std::set<index_t> deleted_elements;
-    set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+    std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
-                     inserter(deleted_elements, deleted_elements.begin()));
+                     std::inserter(deleted_elements, deleted_elements.begin()));
     
     // Perform coarsening on surface if necessary.
     if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
@@ -418,18 +419,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
 
     // Remove deleted elements from node-element adjacency list.
-    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
-      const int *n=_mesh->get_element(*de);
-      
-      // Delete element adjacency from NEList.
-      for(size_t i=0;i<nloc;i++){
-        typename std::set<index_t>::iterator ele = _mesh->NEList[n[i]].find(*de);
-        if(ele!=_mesh->NEList[n[i]].end())
-          _mesh->NEList[n[i]].erase(ele);
-      }
-      
+    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de)
       _mesh->erase_element(*de);
-    }
 
     // Renumber nodes in elements adjacent to rm_vertex.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
@@ -485,14 +476,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
   }
 
   void select_max_independent_set(std::vector<bool> &maximal_independent_set){
-    std::vector<int> lnn2gnn;
-    std::vector<size_t> owner;      
-    
     int NNodes = _mesh->get_number_nodes();
-    int NPNodes = NNodes;
-
-    // Create the global node numbering.
-    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
+    int NPNodes = NNodes - _mesh->recv_halo.size();
 
     // Create a reverse lookup to map received gnn's back to lnn's.
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
@@ -501,10 +486,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
     std::map<index_t, index_t> gnn2lnn;
 #endif
     for(int i=0;i<NNodes;i++){
-      assert(gnn2lnn.find(lnn2gnn[i])==gnn2lnn.end());
-      gnn2lnn[lnn2gnn[i]] = i;
+      assert(gnn2lnn.find(_mesh->lnn2gnn[i])==gnn2lnn.end());
+      gnn2lnn[_mesh->lnn2gnn[i]] = i;
     }
-    assert(gnn2lnn.size()==lnn2gnn.size());
+    assert(gnn2lnn.size()==_mesh->lnn2gnn.size());
 
     // Use a bitmap to indicate the maximal independent set.
     assert(NNodes>=NPNodes);
@@ -537,8 +522,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
     graph.nedges = &(nedges[0]);
     graph.csr_edges = &(csr_edges[0]);
         
-    graph.gid = &(lnn2gnn[0]);
-    graph.owner = &(owner[0]);
+    graph.gid = &(_mesh->lnn2gnn[0]);
+    graph.owner = &(_mesh->node_owner[0]);
         
     graph.colour = &(colour[0]);
         
@@ -606,8 +591,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
         // Yes. Discover where we have to send this edge.
         for(int p=0;p<nprocs;p++){
           if(known_nodes[p].count(i)){
-            send_edges[p].push_back(lnn2gnn[i]);
-            send_edges[p].push_back(lnn2gnn[dynamic_vertex[i]]);
+            send_edges[p].push_back(_mesh->lnn2gnn[i]);
+            send_edges[p].push_back(_mesh->lnn2gnn[dynamic_vertex[i]]);
                     
             send_elements[p].insert(_mesh->NEList[i].begin(), _mesh->NEList[i].end());
           }
@@ -625,7 +610,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
           if(known_nodes[p].count(n[i])==0){
             send_nodes[p].insert(n[i]);
           }
-          if(owner[n[i]]==(size_t)p)
+          if(_mesh->node_owner[n[i]]==(size_t)p)
             cnt++;
         }
         if(cnt){
@@ -644,8 +629,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
       // Push on the nodes that need to be communicated.
       send_buffer[p].push_back(send_nodes[p].size());
       for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
-        send_buffer[p].push_back(lnn2gnn[*it]);
-        send_buffer[p].push_back(owner[*it]);
+        send_buffer[p].push_back(_mesh->lnn2gnn[*it]);
+        send_buffer[p].push_back(_mesh->node_owner[*it]);
                 
         // Stuff in coordinates and metric via int's.
         std::vector<int> ivertex(node_package_int_size);
@@ -667,7 +652,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();++it){
         const int *n=_mesh->get_element(*it);
         for(size_t j=0;j<nloc;j++)
-          send_buffer[p].push_back(lnn2gnn[n[j]]);
+          send_buffer[p].push_back(_mesh->lnn2gnn[n[j]]);
                 
         std::vector<int> lfacets;
         _surface->find_facets(n, lfacets);
@@ -679,7 +664,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       for(std::set<int>::iterator it=send_facets.begin();it!=send_facets.end();++it){
         const int *n=_surface->get_facet(*it);
         for(size_t i=0;i<snloc;i++)
-          send_buffer[p].push_back(lnn2gnn[n[i]]);
+          send_buffer[p].push_back(_mesh->lnn2gnn[n[i]]);
         send_buffer[p].push_back(_surface->get_boundary_id(*it));
         send_buffer[p].push_back(_surface->get_coplanar_id(*it));
       }
@@ -741,9 +726,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
         if(gnn2lnn.find(gnn)==gnn2lnn.end()){
           index_t lnn = _mesh->append_vertex(coords, metric);
                   
-          lnn2gnn.push_back(gnn);
-          owner.push_back(lowner);
-          size_t nnodes_new = owner.size();
+          _mesh->lnn2gnn.push_back(gnn);
+          _mesh->node_owner.push_back(lowner);
+          size_t nnodes_new = _mesh->node_owner.size();
           if(nnodes_reserve<nnodes_new){
             nnodes_reserve*=1.5;
             index_t *new_dynamic_vertex = new index_t[nnodes_reserve];
@@ -779,14 +764,14 @@ template<typename real_t, typename index_t> class Coarsen2D{
                 
         // See if this is a new element.
         std::set<index_t> common_element01;
-        set_intersection(_mesh->NEList[element[0]].begin(), _mesh->NEList[element[0]].end(),
+        std::set_intersection(_mesh->NEList[element[0]].begin(), _mesh->NEList[element[0]].end(),
                          _mesh->NEList[element[1]].begin(), _mesh->NEList[element[1]].end(),
-                         inserter(common_element01, common_element01.begin()));
+                         std::inserter(common_element01, common_element01.begin()));
                 
         std::set<index_t> common_element012;
-        set_intersection(common_element01.begin(), common_element01.end(),
+        std::set_intersection(common_element01.begin(), common_element01.end(),
                          _mesh->NEList[element[2]].begin(), _mesh->NEList[element[2]].end(),
-                         inserter(common_element012, common_element012.begin()));
+                         std::inserter(common_element012, common_element012.begin()));
         
         if(common_element012.empty()){
           // Add element
@@ -829,7 +814,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       }
     }
             
-    assert(gnn2lnn.size()==lnn2gnn.size());
+    assert(gnn2lnn.size()==_mesh->lnn2gnn.size());
             
     // Update halo.
     for(int p=0;p<nprocs;p++){

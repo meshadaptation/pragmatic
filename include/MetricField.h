@@ -177,11 +177,18 @@ template<typename real_t, typename index_t>
     assert(_metric!=NULL);
     
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
-    index_t pNElements = (index_t) predict_nelements();
+    size_t pNElements = (size_t) predict_nelements();
     _mesh->_ENList.reserve(pNElements*3);
     _mesh->_coords.reserve(pNElements);
     _mesh->NNList.reserve(pNElements/2);
     _mesh->NEList.reserve(pNElements/2);
+    _mesh->node_owner.reserve(pNElements/2);
+    _mesh->lnn2gnn.reserve(pNElements/2);
+
+#ifdef HAVE_MPI
+    // At this point we can establish a new, gappy global numbering system
+    _mesh->create_gappy_global_numbering(pNElements);
+#endif
 
     _mesh->metric.clear();
     _mesh->metric.reserve(pNElements*1.5);
@@ -357,7 +364,7 @@ template<typename real_t, typename index_t>
     }
   }
 
-  /*! Predict the number of elements when mesh satisifies metric tensor field.
+  /*! Predict the number of elements when mesh satisfies metric tensor field.
    */
   real_t predict_nelements(){
     float predicted=0;

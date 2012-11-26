@@ -58,6 +58,9 @@ template<typename real_t, typename index_t> class Swapping2D{
     _mesh = &mesh;
     _surface = &surface;
     
+    dynamic_vertex = NULL;
+    tpartition = NULL;
+
     size_t NElements = _mesh->get_number_elements();
     
     // Set the orientation of elements.
@@ -279,9 +282,9 @@ template<typename real_t, typename index_t> class Swapping2D{
 
     // Find the two elements sharing this edge
     std::set<index_t> intersection;
-    set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
         _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
-        inserter(intersection, intersection.begin()));
+        std::inserter(intersection, intersection.begin()));
 
     // If this is a surface edge, it cannot be swapped, so un-mark it.
     if(intersection.size()!=2){
