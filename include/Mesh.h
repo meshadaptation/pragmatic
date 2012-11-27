@@ -995,6 +995,42 @@ template<typename real_t, typename index_t> class Mesh{
     return state;
   }
 
+  // TODO - This function is here for compatibility with 3D
+  void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
+    int NNodes = get_number_nodes();
+
+    NPNodes.resize(num_processes);
+    if(num_processes>1){
+      NPNodes[rank] = NNodes - recv_halo.size();
+
+      // Allgather NPNodes
+      MPI_Allgather(&(NPNodes[rank]), 1, MPI_INT, &(NPNodes[0]), 1, MPI_INT, get_mpi_comm());
+
+      // Calculate the global numbering offset for this partition.
+      int gnn_offset=0;
+      for(int i=0;i<rank;i++)
+        gnn_offset+=NPNodes[i];
+
+      // Write global node numbering.
+      lnn2gnn.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        if(recv_halo.count(i)){
+          lnn2gnn[i] = 0;
+        }else{
+          lnn2gnn[i] = gnn_offset++;
+        }
+      }
+
+      // Update GNN's for the halo nodes.
+      halo_update(&(lnn2gnn[0]), 1);
+    }else{
+      NPNodes[0] = NNodes;
+      lnn2gnn.resize(NNodes);
+      for(int i=0;i<NNodes;i++){
+        lnn2gnn[i] = i;
+      }
+    }
+  }
 
  private:
   template<typename _real_t, typename _index_t> friend class MetricField2D;
@@ -1129,6 +1165,7 @@ template<typename real_t, typename index_t> class Mesh{
     _ENList.resize(NElements*nloc);
     _coords.resize(NNodes*ndims);
 
+    // TODO I don't know whether this method makes sense anymore.
     // Enforce first-touch policy
 #pragma omp parallel
     {
@@ -1459,7 +1496,7 @@ template<typename real_t, typename index_t> class Mesh{
     if(num_processes>1){
       // Calculate the global numbering offset for this partition.
       int gnn_offset;
-    	int NPNodes = NNodes - recv_halo.size();
+      int NPNodes = NNodes - recv_halo.size();
       MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());
       gnn_offset-=NPNodes;
 

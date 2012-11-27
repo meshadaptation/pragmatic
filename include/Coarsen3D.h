@@ -273,7 +273,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
           }
         }
 
-        _mesh->create_adjancy();
+        _mesh->create_adjacency();
       }
     }
     return;
@@ -480,11 +480,8 @@ template<typename real_t, typename index_t> class Coarsen3D{
 #endif
     
     int NNodes = _mesh->get_number_nodes();
-    int NPNodes = NNodes;
+    int NPNodes = NNodes = NNodes - _mesh->recv_halo.size();
 
-    // Create the global node numbering.
-    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
-        
     // Create a reverse lookup to map received gnn's back to lnn's.     
     for(int i=0;i<NNodes;i++){
       assert(gnn2lnn.find(lnn2gnn[i])==gnn2lnn.end());

@@ -709,7 +709,7 @@ template<typename real_t, typename index_t> class Swapping3D{
 
     // recalculate adjacency
 #pragma omp parallel
-    _mesh->create_adjancy();
+    _mesh->create_adjacency();
     
     return;
   }

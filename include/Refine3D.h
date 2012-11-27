@@ -683,7 +683,7 @@ template<typename real_t, typename index_t> class Refine3D{
       }
 
       // Recreate adjancy information.
-      _mesh->create_adjancy();
+      _mesh->create_adjacency();
     }
 
     return;

@@ -611,12 +611,10 @@ template<typename real_t, typename index_t>
     
     int NNodes = _mesh->get_number_nodes();
     assert(NNodes==(int)_mesh->NNList.size());
+    _mesh->create_global_node_numbering();
     graph.nnodes = NNodes;
     
-    int NPNodes;
-    std::vector<index_t> lnn2gnn;
-    std::vector<size_t> owner;
-    _mesh->create_global_node_numbering(NPNodes, lnn2gnn, owner);
+    int NPNodes = NNodes - _mesh->recv_halo.size();
     graph.npnodes = NPNodes;
     
     std::vector<size_t> nedges(NNodes);
@@ -637,8 +635,8 @@ template<typename real_t, typename index_t>
     }
     graph.csr_edges = &(csr_edges[0]);
 
-    graph.gid = &(lnn2gnn[0]);
-    graph.owner = &(owner[0]);
+    graph.gid = &(_mesh->lnn2gnn[0]);
+    graph.owner = &(_mesh->node_owner[0]);
 
     std::vector<int> colour(NNodes);
     graph.colour = &(colour[0]);
