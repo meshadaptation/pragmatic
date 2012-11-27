@@ -342,16 +342,16 @@ template<typename real_t, typename index_t> class Refine2D{
       	_mesh->lnn2gnn.resize(NNodes, -1);
       }
 
-			if(nprocs==1){
+      if(nprocs==1){
 #pragma omp for schedule(static)
-				for(size_t i=origNNodes; i<NNodes; ++i){
-					_mesh->node_owner[i] = 0;
-					_mesh->lnn2gnn[i] = i;
-				}
-			}else{
+        for(size_t i=origNNodes; i<NNodes; ++i){
+          _mesh->node_owner[i] = 0;
+          _mesh->lnn2gnn[i] = i;
+        }
+      }else{
 #ifdef HAVE_MPI
 #pragma omp single
-				{
+        {
           for(int i=0;i<nthreads;i++){
             for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
               /*
@@ -373,36 +373,36 @@ template<typename real_t, typename index_t> class Refine2D{
           for(int i=0;i<nthreads;i++){
             for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
               if(_mesh->node_owner[vert->id] != (size_t) rank){
-              	// Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-              	// Only update them if the vertex is actually seen by *this* MPI process,
-              	// i.e. if at least one of its neighbours is owned by *this* process.
-              	bool visible = false;
-              	for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
-              		if(_mesh->is_owned_node(*neigh)){
-              			visible = true;
-                  	DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                  	recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
-                  	break;
-              		}
-              	}
-              	if(!visible)
-              		invisible_vertices.push_back(vert->id);
+                // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
+                // Only update them if the vertex is actually seen by *this* MPI process,
+                // i.e. if at least one of its neighbours is owned by *this* process.
+                bool visible = false;
+                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
+                  if(_mesh->is_owned_node(*neigh)){
+                    visible = true;
+                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                    recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
+                    break;
+                  }
+                }
+                if(!visible)
+                  invisible_vertices.push_back(vert->id);
               }else{
-              	// Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
-              	// The latter is true only if both vertices of the original edge were halo vertices.
-              	if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
-              		// Find which processes see this vertex
-          				std::set<int> processes;
-          				for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
-          					processes.insert(_mesh->node_owner[*neigh]);
+                // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
+                // The latter is true only if both vertices of the original edge were halo vertices.
+                if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
+                  // Find which processes see this vertex
+                  std::set<int> processes;
+                  for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
+                    processes.insert(_mesh->node_owner[*neigh]);
 
-          				processes.erase(rank);
+                  processes.erase(rank);
 
-          				for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
-          					DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-          					send_additional[*proc].insert(gnn_edge);
-          				}
-              	}
+                  for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
+                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                    send_additional[*proc].insert(gnn_edge);
+                  }
+                }
               }
             }
           }
@@ -412,29 +412,29 @@ template<typename real_t, typename index_t> class Refine2D{
           std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
 
           for(int i=0;i<nprocs;++i){
-          	recv_cnt[i] = recv_additional[i].size();
-          	for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-          		_mesh->recv[i].push_back(it->id);
-          		_mesh->recv_halo.insert(it->id);
-          	}
+            recv_cnt[i] = recv_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+              _mesh->recv[i].push_back(it->id);
+              _mesh->recv_halo.insert(it->id);
+            }
 
-          	send_cnt[i] = send_additional[i].size();
-          	for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-          		_mesh->send[i].push_back(it->id);
-          		_mesh->send_halo.insert(it->id);
-          	}
+            send_cnt[i] = send_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+              _mesh->send[i].push_back(it->id);
+              _mesh->send_halo.insert(it->id);
+            }
           }
 
           // Update global numbering
           for(size_t i=origNNodes; i<NNodes; ++i)
-          	if(_mesh->node_owner[i] == (size_t) rank)
-          		_mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
+            if(_mesh->node_owner[i] == (size_t) rank)
+              _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
 
           _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
 
           _mesh->clear_invisible(invisible_vertices);
           _mesh->trim_halo();
-      	}
+        }
 #endif
       }
 
@@ -442,8 +442,8 @@ template<typename real_t, typename index_t> class Refine2D{
       // Fix orientations of new elements.
 #pragma omp for schedule(dynamic, 100)
       for(size_t i=0;i<NElements;i++){
-      	if(_mesh->_ENList[i*nloc] < 0)
-      		continue;
+        if(_mesh->_ENList[i*nloc] < 0)
+          continue;
 
         index_t n0 = _mesh->_ENList[i*nloc];
         index_t n1 = _mesh->_ENList[i*nloc + 1];

@@ -170,8 +170,8 @@ template<typename real_t, typename index_t> class Mesh{
   void erase_vertex(const index_t nid){
     NNList[nid].clear();
     NEList[nid].clear();
-		node_owner[nid] = rank;
-		lnn2gnn[nid] = -1;
+    node_owner[nid] = rank;
+    lnn2gnn[nid] = -1;
   }
 
   /// Add a new element
@@ -184,10 +184,10 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Erase an element
   void erase_element(const index_t eid){
-  	const index_t *n = get_element(eid);
+    const index_t *n = get_element(eid);
 
-  	for(size_t i=0; i<nloc; ++i)
-  		NEList[n[i]].erase(eid);
+    for(size_t i=0; i<nloc; ++i)
+  	  NEList[n[i]].erase(eid);
 
     _ENList[eid*nloc] = -1;
   }
@@ -1050,10 +1050,10 @@ template<typename real_t, typename index_t> class Mesh{
 
     // From the globalENList, create the halo and a local ENList if num_processes>1.
     const index_t *ENList;
-#ifndef HAVE_BOOST_UNORDERED_MAP_HPP
-	    boost::unordered_map<index_t, index_t> gnn2lnn;
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+    boost::unordered_map<index_t, index_t> gnn2lnn;
 #else
-	    std::map<index_t, index_t> gnn2lnn;
+    std::map<index_t, index_t> gnn2lnn;
 #endif
     if(num_processes==1){
       ENList = globalENList;
@@ -1226,9 +1226,9 @@ template<typename real_t, typename index_t> class Mesh{
     size_t NNodes = get_number_nodes();
 
 #pragma omp single nowait
-      NNList.resize(NNodes);
+    NNList.resize(NNodes);
 #pragma omp single
-      NEList.resize(NNodes);
+    NEList.resize(NNodes);
 
 #pragma omp for schedule(static)
     for(int i=0;i<(int)NNodes;i++){
@@ -1326,139 +1326,131 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   void trim_halo(){
-  	std::set<index_t> recv_halo_temp, send_halo_temp;
+    std::set<index_t> recv_halo_temp, send_halo_temp;
 
-  	// Traverse all vertices V in all recv[i] vectors. Vertices in send[i] belong by definition to *this* MPI process,
-  	// so all elements adjacent to them either belong exclusively to *this* process or cross partitions.
-  	for(int i=0;i<num_processes;i++){
-  		if(recv[i].size()==0)
-  			continue;
+    // Traverse all vertices V in all recv[i] vectors. Vertices in send[i] belong by definition to *this* MPI process,
+    // so all elements adjacent to them either belong exclusively to *this* process or cross partitions.
+    for(int i=0;i<num_processes;i++){
+      if(recv[i].size()==0)
+        continue;
 
-  		std::vector<index_t> recv_temp;
+      std::vector<index_t> recv_temp;
 
-  		for(typename std::vector<index_t>::const_iterator vit = recv[i].begin(); vit != recv[i].end(); ++vit){
-    		// For each vertex, traverse a copy of the vertex's NEList.
-    		// We need a copy because erase_element modifies the original NEList.
-    		std::set<index_t> NEList_copy = NEList[*vit];
-    		for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
-    	  	// Check whether all vertices comprising the element belong to another MPI process.
-    			std::vector<index_t> n(nloc);
-    			get_element(*eit, &n[0]);
-    			if(n[0] < 0)
-    				continue;
+      for(typename std::vector<index_t>::const_iterator vit = recv[i].begin(); vit != recv[i].end(); ++vit){
+        // For each vertex, traverse a copy of the vertex's NEList.
+        // We need a copy because erase_element modifies the original NEList.
+        std::set<index_t> NEList_copy = NEList[*vit];
+        for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
+          // Check whether all vertices comprising the element belong to another MPI process.
+          std::vector<index_t> n(nloc);
+          get_element(*eit, &n[0]);
+          if(n[0] < 0)
+            continue;
 
-    			// If one of the vertices belongs to *this* partition, the element should be retained.
-    			bool to_be_deleted = true;
-    			for(size_t j=0; j<nloc; ++j)
-    				if(is_owned_node(n[j])){
-    					to_be_deleted = false;
-    					break;
-    				}
+          // If one of the vertices belongs to *this* partition, the element should be retained.
+          bool to_be_deleted = true;
+          for(size_t j=0; j<nloc; ++j)
+            if(is_owned_node(n[j])){
+              to_be_deleted = false;
+              break;
+            }
 
-    			if(to_be_deleted){
-    				erase_element(*eit);
+          if(to_be_deleted){
+            erase_element(*eit);
 
-    				// Now check whether one of the edges must be deleted
-    				for(size_t j=0; j<nloc; ++j){
-    					for(size_t k=j+1; k<nloc; ++k){
-    						std::set<index_t> intersection;
-    						std::set_intersection(NEList[n[j]].begin(), NEList[n[j]].end(), NEList[n[k]].begin(), NEList[n[k]].end(),
-    								std::inserter(intersection, intersection.begin()));
+            // Now check whether one of the edges must be deleted
+            for(size_t j=0; j<nloc; ++j){
+              for(size_t k=j+1; k<nloc; ++k){
+                std::set<index_t> intersection;
+                std::set_intersection(NEList[n[j]].begin(), NEList[n[j]].end(), NEList[n[k]].begin(), NEList[n[k]].end(),
+                    std::inserter(intersection, intersection.begin()));
 
-    						// If these two vertices have no element in common anymore,
-    						// then the corresponding edge does not exist, so update NNList.
-    						if(intersection.empty()){
+                // If these two vertices have no element in common anymore,
+                // then the corresponding edge does not exist, so update NNList.
+                if(intersection.empty()){
                   typename std::vector<index_t>::iterator it;
                   it = std::find(NNList[n[j]].begin(), NNList[n[j]].end(), n[k]);
                   NNList[n[j]].erase(it);
                   it = std::find(NNList[n[k]].begin(), NNList[n[k]].end(), n[j]);
                   NNList[n[k]].erase(it);
-    						}
-    					}
-    				}
-    			}
-    		}
+                }
+              }
+            }
+          }
+        }
 
-    		// Also, examine all neighbours of the vertex. If all of them belong to other MPI processes, then
-    		// this vertex is behind the frontline of the other process's partition boundary, so it should be removed.
-    		bool to_be_deleted = true;
-    		for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it)
-    			if(is_owned_node(*neigh_it)){
-    				to_be_deleted = false;
-    				break;
-    			}
-
-    		if(to_be_deleted){
-    			// Update NNList of all neighbours
-    			for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it){
+        // If this vertex is no longer part of any element, then it is safe to be removed.
+        if(NEList[*vit].empty()){
+          // Update NNList of all neighbours
+          for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it){
             typename std::vector<index_t>::iterator it = std::find(NNList[*neigh_it].begin(), NNList[*neigh_it].end(), *vit);
             NNList[*neigh_it].erase(it);
-    			}
+          }
 
-    			erase_vertex(*vit);
+          erase_vertex(*vit);
 
-    		}else{
-    			// We will keep this vertex, so put it into recv_halo_temp.
-    			recv_temp.push_back(*vit);
-    			recv_halo_temp.insert(*vit);
-    		}
-    	}
+        }else{
+          // We will keep this vertex, so put it into recv_halo_temp.
+          recv_temp.push_back(*vit);
+          recv_halo_temp.insert(*vit);
+        }
+      }
 
-    	recv[i].swap(recv_temp);
-  	}
+      recv[i].swap(recv_temp);
+    }
 
-  	// Once all recv[i] have been traversed, update recv_halo.
-  	recv_halo.swap(recv_halo_temp);
+    // Once all recv[i] have been traversed, update recv_halo.
+    recv_halo.swap(recv_halo_temp);
 
-  	// Traverse all vertices V in all send[i] vectors.
-  	// If none of V's neighbours are owned by the i-th MPI process, it means that the i-th process
-  	// has removed V from its recv_halo, so remove the vertex from send[i].
-  	for(int i=0;i<num_processes;i++){
-  		if(send[i].size()==0)
-  			continue;
+    // Traverse all vertices V in all send[i] vectors.
+    // If none of V's neighbours are owned by the i-th MPI process, it means that the i-th process
+    // has removed V from its recv_halo, so remove the vertex from send[i].
+    for(int i=0;i<num_processes;i++){
+      if(send[i].size()==0)
+        continue;
 
-  		std::vector<index_t> send_temp;
+      std::vector<index_t> send_temp;
 
-    	for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
-    		bool to_be_deleted = true;
-    		for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it)
-    			if(node_owner[*neigh_it] == (size_t) i){
-    				to_be_deleted = false;
-    				break;
-    			}
+      for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
+        bool to_be_deleted = true;
+        for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it)
+          if(node_owner[*neigh_it] == (size_t) i){
+            to_be_deleted = false;
+            break;
+          }
 
-    		if(!to_be_deleted){
-    			send_temp.push_back(*vit);
-    			send_halo_temp.insert(*vit);
-    		}
-    	}
+        if(!to_be_deleted){
+          send_temp.push_back(*vit);
+          send_halo_temp.insert(*vit);
+        }
+      }
 
-    	send[i].swap(send_temp);
-  	}
+      send[i].swap(send_temp);
+    }
 
-  	// Once all send[i] have been traversed, update send_halo.
-  	send_halo.swap(send_halo_temp);
+    // Once all send[i] have been traversed, update send_halo.
+    send_halo.swap(send_halo_temp);
   }
 
   void clear_invisible(std::vector<index_t>& invisible_vertices){
-  	for(size_t i=0; i<invisible_vertices.size(); ++i){
-  		index_t v = invisible_vertices[i];
+    for(size_t i=0; i<invisible_vertices.size(); ++i){
+      index_t v = invisible_vertices[i];
 
-  		// Traverse a copy of the vertex's NEList.
-  		// We need a copy because erase_element modifies the original NEList.
-  		std::set<index_t> NEList_copy = NEList[v];
-  		for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
-  			// If the vertex is invisible, then all elements adjacent to it are also invisible - remove them immediately.
-  			erase_element(*eit);
-  		}
+      // Traverse a copy of the vertex's NEList.
+      // We need a copy because erase_element modifies the original NEList.
+      std::set<index_t> NEList_copy = NEList[v];
+      for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
+        // If the vertex is invisible, then all elements adjacent to it are also invisible - remove them immediately.
+        erase_element(*eit);
+      }
 
-   		// This vertex is by definition invisible, so remove it immediately. Update NNList of all neighbours.
-			for(typename std::vector<index_t>::const_iterator neigh_it = NNList[v].begin(); neigh_it != NNList[v].end(); ++neigh_it){
-				typename std::vector<index_t>::iterator it = std::find(NNList[*neigh_it].begin(), NNList[*neigh_it].end(), v);
-				NNList[*neigh_it].erase(it);
-			}
-			erase_vertex(v);
-  	}
+      // This vertex is by definition invisible, so remove it immediately. Update NNList of all neighbours.
+      for(typename std::vector<index_t>::const_iterator neigh_it = NNList[v].begin(); neigh_it != NNList[v].end(); ++neigh_it){
+        typename std::vector<index_t>::iterator it = std::find(NNList[*neigh_it].begin(), NNList[*neigh_it].end(), v);
+        NNList[*neigh_it].erase(it);
+      }
+      erase_vertex(v);
+    }
   }
 
   void create_global_node_numbering(){
@@ -1503,16 +1495,16 @@ template<typename real_t, typename index_t> class Mesh{
 
   void create_gappy_global_numbering(size_t pNElements){
     // We expect to have NElements_predict/2 nodes in the partition,
-  	// so let's reserve 10 times more space for global node numbers.
+    // so let's reserve 10 times more space for global node numbers.
     index_t gnn_reserve = 5*pNElements;
     MPI_Scan(&gnn_reserve, &gnn_offset, 1, MPI_INDEX_T, MPI_SUM, _mpi_comm);
     gnn_offset -= gnn_reserve;
 
     for(size_t i=0; i<get_number_nodes(); ++i){
-    	if(node_owner[i] == (size_t) rank)
-    		lnn2gnn[i] = gnn_offset+i;
-    	else
-    		lnn2gnn[i] = -1;
+      if(node_owner[i] == (size_t) rank)
+        lnn2gnn[i] = gnn_offset+i;
+      else
+        lnn2gnn[i] = -1;
     }
 
     halo_update(&lnn2gnn[0], 1);
@@ -1541,7 +1533,7 @@ template<typename real_t, typename index_t> class Mesh{
         request[num_processes+i] = MPI_REQUEST_NULL;
       }else{
         for(typename std::vector<index_t>::const_iterator it=send[i].end()-send_cnt[i];it!=send[i].end();++it)
-        	send_buff[i].push_back(lnn2gnn[*it]);
+          send_buff[i].push_back(lnn2gnn[*it]);
 
         MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), MPI_INDEX_T, i, 0, _mpi_comm, &(request[num_processes+i]));
       }
@@ -1554,7 +1546,7 @@ template<typename real_t, typename index_t> class Mesh{
     for(int i=0;i<num_processes;i++){
       int k=0;
       for(typename std::vector<index_t>::const_iterator it=recv[i].end()-recv_cnt[i];it!=recv[i].end();++it, ++k)
-      	lnn2gnn[*it] = recv_buff[i][k];
+        lnn2gnn[*it] = recv_buff[i][k];
     }
 #endif
   }

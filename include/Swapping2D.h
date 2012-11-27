@@ -200,6 +200,7 @@ template<typename real_t, typename index_t> class Swapping2D{
     size_t m_off;
   };
 
+#pragma GCC diagnostic ignored "-Wuninitialized"
   void swap_kernel(Rhombus &rhombus){
     int eid0 = rhombus.eid0;
     int eid1 = rhombus.eid1;
@@ -269,7 +270,7 @@ template<typename real_t, typename index_t> class Swapping2D{
     }
   }
 
-  bool is_eligible(Rhombus &rhombus, size_t tid){
+  bool is_eligible(Rhombus &rhombus, int tid){
     index_t i = rhombus.middleEdge.edge.first;
     index_t j = rhombus.middleEdge.edge.second;
 
@@ -334,7 +335,7 @@ template<typename real_t, typename index_t> class Swapping2D{
     return true;
   }
 
-  void process_list(std::deque< Edge<index_t> > *tdynamic_edge, size_t tid){
+  void process_list(std::deque< Edge<index_t> > *tdynamic_edge, int tid){
     while(!tdynamic_edge->empty()){
       Edge<index_t> oldEdge = *tdynamic_edge->begin();
       tdynamic_edge->pop_front();
