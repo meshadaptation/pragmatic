@@ -68,7 +68,7 @@ int main(int argc, char **argv){
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
 
   char filename[256];
@@ -80,7 +80,7 @@ int main(int argc, char **argv){
     size_t NNodes = mesh->get_number_nodes();
     
     MetricField2D<double, int> metric_field(*mesh, surface);        
-    vector<double> psi(NNodes);
+    std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
@@ -100,10 +100,10 @@ int main(int argc, char **argv){
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
     
-    Coarsen<double, int> coarsen(*mesh, surface);  
-    Smooth<double, int> smooth(*mesh, surface);
-    Refine<double, int> refine(*mesh, surface);
-    Swapping<double, int> swapping(*mesh, surface);
+    Coarsen2D<double, int> coarsen(*mesh, surface);
+    Smooth2D<double, int> smooth(*mesh, surface);
+    Refine2D<double, int> refine(*mesh, surface);
+    Swapping2D<double, int> swapping(*mesh, surface);
   
     double tic = get_wtime();
     coarsen.coarsen(L_low, L_up);
@@ -123,7 +123,7 @@ int main(int argc, char **argv){
       if(t>0) time_refine += (toc-tic);
 
       tic = get_wtime();
-      coarsen.coarsen(L_low, L_up, 1);
+      coarsen.coarsen(L_low, L_up);
       toc = get_wtime();
       if(t>0) time_coarsen += (toc-tic);
 
