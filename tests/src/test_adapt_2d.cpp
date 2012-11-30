@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.00001;
+  double eta=0.001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -194,7 +194,7 @@ int main(int argc, char **argv){
     if((L_max-L_up)<0.01)
       break;
   }
-/*
+
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -234,7 +234,7 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-*/
+
   delete mesh;
 
   if(rank==0){

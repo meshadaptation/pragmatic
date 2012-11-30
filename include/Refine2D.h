@@ -191,11 +191,9 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Perform prefix sum to find (for each OMP thread) the starting position
       // in mesh._coords and mesh.metric at which new coords and metric should be appended.
-      threadIdx[tid] = 0;
+      threadIdx[tid] = NNodes;
       for(int id=0; id<tid; ++id)
         threadIdx[tid] += splitCnt[id];
-
-      threadIdx[tid] += NNodes;
 
       // Resize mesh containers. The above must have completed first, thus the barrier.
 #pragma omp barrier
@@ -233,7 +231,7 @@ template<typename real_t, typename index_t> class Refine2D{
       }
 
       // Fix IDs of new vertices
-#pragma omp for schedule(static)
+#pragma omp for schedule(static, 32)
       for(size_t eid=0; eid<NElements; ++eid){
       	//If the element has been deleted, continue.
       	const index_t *n = _mesh->get_element(eid);
@@ -317,11 +315,9 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Perform prefix sum to find (for each OMP thread) the starting position
       // in mesh._ENList at which new elements should be appended.
-      threadIdx[tid] = 0;
+      threadIdx[tid] = NElements;
       for(int id=0; id<tid; ++id)
        threadIdx[tid] += splitCnt[id];
-
-      threadIdx[tid] += NElements;
 
 #pragma omp barrier
 

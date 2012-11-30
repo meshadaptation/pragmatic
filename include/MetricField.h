@@ -178,6 +178,7 @@ template<typename real_t, typename index_t>
     
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
     size_t pNElements = (size_t) predict_nelements();
+    pNElements *= 1.5; // Let's leave a safety margin
     _mesh->_ENList.reserve(pNElements*3);
     _mesh->_coords.reserve(pNElements);
     _mesh->NNList.reserve(pNElements/2);

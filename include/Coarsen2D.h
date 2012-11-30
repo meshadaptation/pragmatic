@@ -208,9 +208,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
         } while(cnt);
         
         delete tdynamic_vertex;
-        
-#pragma omp barrier
       }
+
+#pragma omp barrier
       
       /* Phase 2 - local process coarsening with single thread. This
          will finish off any collapses previously constrained by the
