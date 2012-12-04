@@ -185,6 +185,8 @@ template<typename real_t, typename index_t>
     _mesh->NEList.reserve(pNElements/2);
     _mesh->node_owner.reserve(pNElements/2);
     _mesh->lnn2gnn.reserve(pNElements/2);
+    _mesh->node_colour.reserve(pNElements);
+    _mesh->node_hash.reserve(pNElements);
 
 #ifdef HAVE_MPI
     // At this point we can establish a new, gappy global numbering system

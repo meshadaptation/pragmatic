@@ -1255,6 +1255,7 @@ template<typename real_t, typename index_t> class Mesh{
       create_adjacency();
     }
 
+    create_colouring();
     create_global_node_numbering();
   }
 
@@ -1313,6 +1314,70 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
   
+  // Jones-Plassmann-style colouring using Park & Miller hash generation
+  void create_colouring(){
+    size_t NNodes = get_number_nodes();
+
+    // Colour -2 means the node hasn't been coloured yet.
+    // Colour -1 means the node has been erased.
+    node_colour.clear();
+    node_colour.resize(NNodes, (char) -2);
+
+    node_hash.clear();
+    node_hash.resize(NNodes);
+
+    // Count how many vertices were coloured in a round
+    // and how many vertices has been coloured so far.
+    size_t ncoloured, total_coloured = 0;
+    size_t round = 0;
+
+    // Create vertex hashes
+#pragma omp parallel for schedule(static)
+    for(size_t i=0; i<NNodes; ++i)
+      node_hash[i] = hash(i, NNodes);
+
+    do{
+      ncoloured = 0;
+
+#pragma omp parallel for schedule(static, 32) reduction(+:ncoloured)
+      for(size_t i=0; i<NNodes; ++i){
+        if(node_colour[i] != -2)
+          continue;
+
+        // A vertex is eligible to be coloured in this round only if
+        // it's got the highest hash among all uncoloured neighbours.
+        bool eligible = true;
+
+        for(size_t j=0; j<NNList[i].size(); ++j)
+          if(node_hash[i] < node_hash[NNList[i][j]])
+            if(node_colour[NNList[i][j]] == -2){
+              eligible = false;
+              break;
+            }
+
+        if(eligible){
+          node_colour[i] = round;
+          ++ncoloured;
+        }
+      }
+
+      total_coloured += ncoloured;
+      ++round;
+    } while(total_coloured < NNodes);
+
+    nColours = round;
+  }
+
+  /*
+   * Park & Miller (aka Lehmer) pseudo-random number generation. Possible bug if
+   * index_t is a datatype longer than 32 bits. However, in the context of a single
+   * MPI node, it is highly unlikely that index_t will ever need to be longer.
+   * A 64-bit datatype makes sense only for global node numbers, not local.
+   */
+  inline uint32_t hash(const uint32_t id, const uint32_t maxHash) const{
+    return ((uint64_t)id * 0x27253271UL) % maxHash;
+  }
+
   template <typename DATATYPE>
   void halo_update(DATATYPE *vec, int block){
 #ifdef HAVE_MPI
@@ -1627,6 +1692,10 @@ template<typename real_t, typename index_t> class Mesh{
   std::set<index_t> send_halo, recv_halo;
   std::vector<size_t> node_owner;
   std::vector<index_t> lnn2gnn;
+  // Auxiliary data for colouring
+  std::vector<char> node_colour;
+  std::vector<uint32_t> node_hash;
+  size_t nColours;
 
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
