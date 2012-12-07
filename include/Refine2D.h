@@ -121,10 +121,6 @@ template<typename real_t, typename index_t> class Refine2D{
     std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
     std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges(nthreads);
 
-    int *tpartition = new int[NNodes];
-    index_t *dynamic_vertex = new index_t[NNodes];
-    memset(dynamic_vertex, 0, NNodes*sizeof(index_t));
-
     std::vector<char> n_marked_edges_per_element(NElements, 0);
 
 #pragma omp parallel
@@ -179,11 +175,6 @@ template<typename real_t, typename index_t> class Refine2D{
               ++splitCnt[tid];
 
               refine_edge(i, otherVertex, tid);
-
-              // dynamic_vertex[otherVertex] might be accessed by many threads at a time.
-              // This is not a problem, since all threads will write the same value.
-              dynamic_vertex[i] = 1;
-              dynamic_vertex[otherVertex] = 1;
             }
           }
         }
@@ -197,20 +188,20 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Resize mesh containers. The above must have completed first, thus the barrier.
 #pragma omp barrier
+
 #pragma omp single
       {
         NNodes = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
       }
 #pragma omp single nowait
       {
-        if(nthreads>1)
-          pragmatic::partition_fast(_mesh->NNList, dynamic_vertex, nthreads, tpartition);
-
-        _mesh->NNList.resize(NNodes);
+        _mesh->NEList.resize(NNodes);
       }
 #pragma omp single
       {
-        _mesh->NEList.resize(NNodes);
+        _mesh->NNList.resize(NNodes);
+        _mesh->node_hash.resize(NNodes);
+        _mesh->node_colour.resize(NNodes, -2); // -2 designates an uncoloured vertex
         _mesh->_coords.resize(ndims*NNodes);
         _mesh->metric.resize(msize*NNodes);
       }
@@ -223,9 +214,24 @@ template<typename real_t, typename index_t> class Refine2D{
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
 
+        /*
+         * Update NNList for newly created vertices. This has to be done here, it cannot be
+         * done during element refinement, because a split edge is shared between two elements
+         * and we run the risk that these updates will happen twice, one for each element.
+         */
+        index_t vid = newVertices[tid][i].id;
+        index_t firstid = newVertices[tid][i].edge.first;
+        index_t secondid = newVertices[tid][i].edge.second;
+
+        _mesh->NNList[vid].push_back(firstid);
+        _mesh->NNList[vid].push_back(secondid);
+
+        _mesh->deferred_repNN(firstid, secondid, vid, tid);
+        _mesh->deferred_repNN(secondid, firstid, vid, tid);
+
         // Check if surface edge
-        if(_surface->contains_node(newVertices[tid][i].edge.first) &&
-            _surface->contains_node(newVertices[tid][i].edge.second)){
+        if(_surface->contains_node(firstid) &&
+            _surface->contains_node(secondid)){
           surfaceEdges[tid].push_back(newVertices[tid][i]);
         }
       }
@@ -250,87 +256,53 @@ template<typename real_t, typename index_t> class Refine2D{
       newElements[tid].clear();
       newElements[tid].reserve(4*NElements/nthreads);
 
-      // Phase 1
-      if(nthreads>1){
-        /*
-         * Each thread creates a list of elements it is responsible
-         * for refining. It also pre-calculates the number of new
-         * elements - we need this to assign correct element IDs.
-         */
-        std::vector<index_t> *tdynamic_element = new std::vector<index_t>;
-        tdynamic_element->reserve(NElements/nthreads);
-
-        for(size_t eid=0;eid<NElements;eid++){
-          if(n_marked_edges_per_element[eid]>0){
-          	const index_t *n = _mesh->get_element(eid);
-
-          	if((tpartition[n[0]]==tid)&&(tpartition[n[1]]==tid)&&(tpartition[n[2]]==tid)){
-              tdynamic_element->push_back(eid);
-              assert(n_marked_edges_per_element[eid] >= 0 && n_marked_edges_per_element[eid] <= 3);
-              splitCnt[tid] += n_marked_edges_per_element[eid];
-            }
-          }
+#pragma omp for schedule(dynamic, 32)
+      for(size_t eid=0; eid<NElements; ++eid){
+        if(n_marked_edges_per_element[eid]>0){
+          const index_t *n = _mesh->get_element(eid);
+          assert(n_marked_edges_per_element[eid] >= 0 && n_marked_edges_per_element[eid] <= 3);
+          splitCnt[tid] += n_marked_edges_per_element[eid];
         }
-
-#pragma omp barrier
-
-        threadIdx[tid] = 0;
-        for(int id=0; id<tid; ++id)
-         threadIdx[tid] += splitCnt[id];
-
-        threadIdx[tid] += NElements;
-
-        index_t newEID = threadIdx[tid];
-        for(typename std::vector<index_t>::const_iterator it=tdynamic_element->begin(); it!=tdynamic_element->end(); ++it){
-          newEID += refine_element(*it, newEID, n_marked_edges_per_element[*it], tid);
-
-          // Mark eid as processed
-          n_marked_edges_per_element[*it] = 0;
-        }
-
-        delete tdynamic_element;
-      }
-
-      // Phase 2
-#pragma omp barrier
-#pragma omp single
-      {
-        index_t newEID;
-        if(nthreads > 1)
-          newEID = threadIdx[nthreads-1] + splitCnt[nthreads-1];
-        else
-          newEID = NElements;
-
-        for(index_t eid=0;eid<(index_t)NElements;eid++){
-          if(n_marked_edges_per_element[eid]>0){
-            newEID += refine_element(eid, newEID, n_marked_edges_per_element[eid], nthreads-1);
-          }
-        }
-
-        if(nthreads > 1)
-          splitCnt[nthreads-1] += newEID - (threadIdx[nthreads-1] + splitCnt[nthreads-1]);
-        else
-          splitCnt[nthreads-1] += newEID - NElements;
       }
 
       // Perform prefix sum to find (for each OMP thread) the starting position
       // in mesh._ENList at which new elements should be appended.
-      threadIdx[tid] = NElements;
+      threadIdx[tid] = 0;
       for(int id=0; id<tid; ++id)
-       threadIdx[tid] += splitCnt[id];
+        threadIdx[tid] += splitCnt[id];
 
-#pragma omp barrier
+      threadIdx[tid] += NElements;
+
+      // Perform element refinement.
+      index_t newEID = threadIdx[tid];
+#pragma omp for schedule(dynamic, 32)
+      for(size_t eid=0; eid<NElements; ++eid){
+        newEID += refine_element(eid, newEID, n_marked_edges_per_element[eid], tid);
+      }
 
       // Resize mesh containers
 #pragma omp single
       {
         NElements = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
-
         _mesh->_ENList.resize(nloc*NElements);
       }
 
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
+
+      // Calculate hash and colour for all new vertices
+#pragma omp for schedule(static)
+      for(size_t i = origNNodes; i < NNodes; ++i){
+        _mesh->node_hash[i] = _mesh->hash(i);
+      }
+
+#pragma omp for schedule(dynamic, 32)
+      for(size_t i = origNNodes; i < NNodes; ++i){
+        _mesh->update_colour(i);
+      }
+
+      // Commit deferred operations
+      _mesh->commit_deferred(tid);
 
 #pragma omp single
       {
@@ -466,9 +438,6 @@ template<typename real_t, typename index_t> class Refine2D{
     // Refine surface
     _surface->refine(surfaceEdges);
 
-    delete[] dynamic_vertex;
-    delete[] tpartition;
-
     return;
   }
 
@@ -545,35 +514,21 @@ template<typename real_t, typename index_t> class Refine2D{
 
       index_t ele1ID = newEID;
 
-      // If the edge hosting the new vertex has not been processed before as part of the
-      // adjacent element, connect the new vertex to rotated_ele[1] and rotated_ele[2].
-      if(_mesh->NNList[vertexID].empty()){
-        _mesh->NNList[vertexID].push_back(rotated_ele[1]);
-        _mesh->NNList[vertexID].push_back(rotated_ele[2]);
-
-        // Replace rotated_ele[1]'s adjacency to rotated_ele[2] with the new vertex.
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[rotated_ele[1]].begin(),
-            _mesh->NNList[rotated_ele[1]].end(), rotated_ele[2]);
-        *it = vertexID;
-        it = std::find(_mesh->NNList[rotated_ele[2]].begin(),
-            _mesh->NNList[rotated_ele[2]].end(), rotated_ele[1]);
-        *it = vertexID;
-      }
-
-      _mesh->NNList[vertexID].push_back(rotated_ele[0]);
-      _mesh->NNList[rotated_ele[0]].push_back(vertexID);
+      // Add rotated_ele[0] to vertexID's NNList
+      _mesh->deferred_addNN(vertexID, rotated_ele[0], tid);
+      // Add vertexID to rotated_ele[0]'s NNList
+      _mesh->deferred_addNN(rotated_ele[0], vertexID, tid);
 
       // Put ele1 in rotated_ele[0]'s NEList
-      _mesh->NEList[rotated_ele[0]].insert(ele1ID);
+      _mesh->deferred_addNE(rotated_ele[0], ele1ID, tid);
 
       // Put eid and ele1 in vertexID's NEList
-      _mesh->NEList[vertexID].insert(eid);
-      _mesh->NEList[vertexID].insert(ele1ID);
+      _mesh->deferred_addNE(vertexID, eid, tid);
+      _mesh->deferred_addNE(vertexID, ele1ID, tid);
 
       // Replace eid with ele1 in rotated_ele[2]'s NEList
-      _mesh->NEList[rotated_ele[2]].erase(eid);
-      _mesh->NEList[rotated_ele[2]].insert(ele1ID);
+      _mesh->deferred_remNE(rotated_ele[2], eid);
+      _mesh->deferred_addNE(rotated_ele[2], ele1ID);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);

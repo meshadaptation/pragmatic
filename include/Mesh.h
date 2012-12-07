@@ -1048,6 +1048,15 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class VTKTools;
   template<typename _real_t, typename _index_t> friend class CUDATools;
 
+  struct DeferredOperations{
+    std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
+    std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
+    std::vector<index_t> repNN; // repNN -> [i, m, n] : In NNList[i] replace node m with node n.
+    std::vector<index_t> addNE; // addNE -> [i, n] : Add element n in NEList[i].
+    std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
+    std::vector<index_t> recolour; // List of vertices to be recoloured.
+  };
+
   void _init(int NNodes, int NElements, const index_t *globalENList,
              const real_t *x, const real_t *y, const real_t *z,
              const index_t *lnn2gnn, const index_t *owner_range){
@@ -1064,14 +1073,16 @@ template<typename real_t, typename index_t> class Mesh{
     }
 #endif
 
-    num_threads = 1;
 #ifdef _OPENMP
     num_threads = omp_get_max_threads();
+#else
+    num_threads = 1;
 #endif
 
-    num_uma = num_threads; // Assume the worst
 #ifdef HAVE_LIBNUMA
     num_uma = numa_max_node()+1;
+#else
+    num_uma = num_threads; // Assume the worst
 #endif
 
     if(z==NULL){
@@ -1164,6 +1175,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     _ENList.resize(NElements*nloc);
     _coords.resize(NNodes*ndims);
+    deferred_operations.resize(num_threads);
 
     // TODO I don't know whether this method makes sense anymore.
     // Enforce first-touch policy
@@ -1189,6 +1201,10 @@ template<typename real_t, typename index_t> class Mesh{
           _coords[i*3+2] = z[i];
         }
       }
+
+      // Each thread allocates num_threads DeferredOperations
+      // structs, one for each OMP thread.
+      deferred_operations[get_tid()].resize(num_threads);
 
 #pragma omp single nowait
       {
@@ -1334,7 +1350,7 @@ template<typename real_t, typename index_t> class Mesh{
     // Create vertex hashes
 #pragma omp parallel for schedule(static)
     for(size_t i=0; i<NNodes; ++i)
-      node_hash[i] = hash(i, NNodes);
+      node_hash[i] = hash(i);
 
     do{
       ncoloured = 0;
@@ -1368,14 +1384,67 @@ template<typename real_t, typename index_t> class Mesh{
     nColours = round;
   }
 
+  void update_colour(const index_t vid){
+    size_t colour = 0;
+    bool eligible;
+
+    do{
+      eligible = true;
+
+      for(size_t i=0; i<NNList[vid].size(); ++i)
+        if(node_hash[vid] < node_hash[NNList[vid][i]])
+          if(node_colour[NNList[vid][i]] == -2){
+            eligible = false;
+            break;
+          }
+
+      if(eligible){
+        node_colour[vid] = colour;
+        return;
+      }
+
+      ++colour;
+    } while(!eligible);
+  }
+
   /*
    * Park & Miller (aka Lehmer) pseudo-random number generation. Possible bug if
    * index_t is a datatype longer than 32 bits. However, in the context of a single
    * MPI node, it is highly unlikely that index_t will ever need to be longer.
    * A 64-bit datatype makes sense only for global node numbers, not local.
    */
-  inline uint32_t hash(const uint32_t id, const uint32_t maxHash) const{
-    return ((uint64_t)id * 0x27253271UL) % maxHash;
+  inline uint32_t hash(const uint32_t id) const{
+    return ((uint64_t)id * 279470273UL) % 4294967291UL;
+  }
+
+  void deferred_addNN(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].addNN.push_back(i);
+    deferred_operations[tid][i % num_threads].addNN.push_back(n);
+  }
+
+  void deferred_remNN(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].remNN.push_back(i);
+    deferred_operations[tid][i % num_threads].remNN.push_back(n);
+  }
+
+  void deferred_repNN(index_t i, index_t m, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].repNN.push_back(i);
+    deferred_operations[tid][i % num_threads].repNN.push_back(m);
+    deferred_operations[tid][i % num_threads].repNN.push_back(n);
+  }
+
+  void deferred_addNE(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].addNE.push_back(i);
+    deferred_operations[tid][i % num_threads].addNE.push_back(n);
+  }
+
+  void deferred_remNE(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].remNE.push_back(i);
+    deferred_operations[tid][i % num_threads].remNE.push_back(n);
+  }
+
+  void commit_deferred(size_t tid){
+
   }
 
   template <typename DATATYPE>
@@ -1696,6 +1765,8 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<char> node_colour;
   std::vector<uint32_t> node_hash;
   size_t nColours;
+  //Deferred operations
+  std::vector< std::vector<DeferredOperations> > deferred_operations;
 
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
