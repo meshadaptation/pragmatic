@@ -109,19 +109,16 @@ template<typename real_t, typename index_t> class Refine2D{
    * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
    */
   void refine(real_t L_max){
-    size_t NNodes = _mesh->get_number_nodes();
-    size_t origNNodes = NNodes;
-
-    size_t NElements = _mesh->get_number_elements();
-
-    const split_edge initial = {-1, -1};
-    split_edges_per_element.clear();
-    split_edges_per_element.resize(3*NElements, initial);
+    size_t origNNodes = _mesh->get_number_nodes();
+    size_t origNElements = _mesh->get_number_elements();
 
     std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
-    std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges(nthreads);
+    std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges(nthreads);
+    std::vector<char> n_marked_edges_per_element(origNElements, 0);
+    DirectedEdge<index_t> *allNewVertices = new DirectedEdge<index_t>[3*origNElements];
 
-    std::vector<char> n_marked_edges_per_element(NElements, 0);
+    new_vertices_per_element.clear();
+    new_vertices_per_element.resize(3*origNElements, -1);
 
 #pragma omp parallel
     {
@@ -131,7 +128,7 @@ template<typename real_t, typename index_t> class Refine2D{
        * Average vertex degree is ~6, so there
        * are approx. (6/2)*NNodes edges in the mesh.
        */
-      size_t reserve_size = 3*NNodes/nthreads;
+      size_t reserve_size = 3*origNNodes/nthreads;
       newVertices[tid].clear();
       newVertices[tid].reserve(reserve_size);
       newCoords[tid].clear();
@@ -141,235 +138,202 @@ template<typename real_t, typename index_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(dynamic,100)
-      for(size_t i=0;i<NNodes;++i){
+#pragma omp for schedule(dynamic,32) nowait
+      for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
           assert(otherVertex>=0);
 
-          /* Conditional statement ensures that the edge length is
-             only calculated once.
-
-             By ordering the vertices according to their gnn, we
-             ensure that all processes calculate the same edge
-             length when they fall on the halo. */
+          /* Conditional statement ensures that the edge length is only calculated once.
+           * By ordering the vertices according to their gnn, we ensure that all processes
+           * calculate the same edge length when they fall on the halo.
+           */
           if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]){
             double length = _mesh->calc_edge_length(i, otherVertex);
-            if(length>L_max){ /* Here is why length must be calculated
-                                 exactly the same way across all
-                                 processes - need to ensure all
-                                 processes that have this edge will
-                                 decide to refine it. */
-
-              std::set<index_t> intersection;
-              std::set_intersection( _mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-                  _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(), std::inserter(intersection, intersection.begin()));
-
-              for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element){
-                index_t eid = *element;
-                size_t edgeOffset = edgeNumber(eid, i, otherVertex);
-                split_edges_per_element[3*eid+edgeOffset].newVertex = splitCnt[tid];
-                split_edges_per_element[3*eid+edgeOffset].thread = tid;
-              }
-
+            if(length>L_max){
               ++splitCnt[tid];
-
               refine_edge(i, otherVertex, tid);
             }
           }
         }
       }
 
-      // Perform prefix sum to find (for each OMP thread) the starting position
-      // in mesh._coords and mesh.metric at which new coords and metric should be appended.
-      threadIdx[tid] = NNodes;
-      for(int id=0; id<tid; ++id)
-        threadIdx[tid] += splitCnt[id];
-
-      // Resize mesh containers. The above must have completed first, thus the barrier.
-#pragma omp barrier
-
-#pragma omp single
+#pragma omp atomic capture
       {
-        NNodes = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
-      }
-#pragma omp single nowait
-      {
-        _mesh->NEList.resize(NNodes);
-      }
-#pragma omp single
-      {
-        _mesh->NNList.resize(NNodes);
-        _mesh->node_hash.resize(NNodes);
-        _mesh->node_colour.resize(NNodes, -2); // -2 designates an uncoloured vertex
-        _mesh->_coords.resize(ndims*NNodes);
-        _mesh->metric.resize(msize*NNodes);
+        threadIdx[tid] = _mesh->NNodes;
+        _mesh->NNodes += splitCnt[tid];
       }
 
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(float));
 
+      // Fix IDs of new vertices, mark each element with its new vertices,
+      // update NNList for all split edges and mark surface edges.
       assert(newVertices[tid].size()==splitCnt[tid]);
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
+      }
+
+      // Accumulate all newVertices in a contiguous array
+      memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
+
+#pragma omp barrier
+#pragma omp for schedule(dynamic, 32)
+      for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
+        index_t vid = allNewVertices[i].id;
+        index_t firstid = allNewVertices[i].edge.first;
+        index_t secondid = allNewVertices[i].edge.second;
+
+        // Find which elements share this edge and mark them with their new vertices.
+        std::set<index_t> intersection;
+        std::set_intersection( _mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
+            _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(), std::inserter(intersection, intersection.begin()));
+
+        for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element){
+          index_t eid = *element;
+          size_t edgeOffset = edgeNumber(eid, firstid, secondid);
+          new_vertices_per_element[3*eid+edgeOffset] = vid;
+        }
 
         /*
          * Update NNList for newly created vertices. This has to be done here, it cannot be
          * done during element refinement, because a split edge is shared between two elements
          * and we run the risk that these updates will happen twice, one for each element.
          */
-        index_t vid = newVertices[tid][i].id;
-        index_t firstid = newVertices[tid][i].edge.first;
-        index_t secondid = newVertices[tid][i].edge.second;
-
         _mesh->NNList[vid].push_back(firstid);
         _mesh->NNList[vid].push_back(secondid);
 
-        _mesh->deferred_repNN(firstid, secondid, vid, tid);
-        _mesh->deferred_repNN(secondid, firstid, vid, tid);
+        typename std::vector<index_t>::iterator it;
+        it = std::find(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end(), secondid);
+        *it = vid;
+        it = std::find(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end(), firstid);
+        *it = vid;
 
         // Check if surface edge
         if(_surface->contains_node(firstid) &&
             _surface->contains_node(secondid)){
-          surfaceEdges[tid].push_back(newVertices[tid][i]);
+          surfaceEdges[tid].push_back(allNewVertices[i]);
         }
+
+        _mesh->node_owner[vid] = 0;
+        _mesh->lnn2gnn[vid] = vid;
+
+        // Finally, calculate the hash for the new vertex
+        _mesh->node_hash[vid] = _mesh->hash(vid);
       }
 
-      // Fix IDs of new vertices
-#pragma omp for schedule(static, 32)
-      for(size_t eid=0; eid<NElements; ++eid){
+      // Start element refinement. Fix IDs of new vertices in split_edges_per_element
+      // and count how many new elements are created by each thread. We need this so
+      // that the correct element IDs are used when updating NEList.
+      splitCnt[tid] = 0;
+      newElements[tid].clear();
+      newElements[tid].reserve(4*origNElements/nthreads);
+
+      std::vector<size_t> worklist;
+      worklist.reserve(origNElements/nthreads);
+
+#pragma omp for schedule(dynamic, 32) nowait
+      for(size_t eid=0; eid<origNElements; ++eid){
       	//If the element has been deleted, continue.
       	const index_t *n = _mesh->get_element(eid);
       	if(n[0] < 0)
       		continue;
 
         for(size_t j=0; j<3; ++j)
-          if(split_edges_per_element[3*eid+j].newVertex != -1){
-            split_edges_per_element[3*eid+j].newVertex += threadIdx[split_edges_per_element[3*eid+j].thread];
+          if(new_vertices_per_element[3*eid+j] != -1){
             ++n_marked_edges_per_element[eid];
-        }
-      }
+          }
 
-      // Perform element refinement.
-      splitCnt[tid] = 0;
-      newElements[tid].clear();
-      newElements[tid].reserve(4*NElements/nthreads);
-
-#pragma omp for schedule(dynamic, 32)
-      for(size_t eid=0; eid<NElements; ++eid){
         if(n_marked_edges_per_element[eid]>0){
-          const index_t *n = _mesh->get_element(eid);
-          assert(n_marked_edges_per_element[eid] >= 0 && n_marked_edges_per_element[eid] <= 3);
+          worklist.push_back(eid);
           splitCnt[tid] += n_marked_edges_per_element[eid];
         }
       }
 
-      // Perform prefix sum to find (for each OMP thread) the starting position
-      // in mesh._ENList at which new elements should be appended.
-      threadIdx[tid] = 0;
-      for(int id=0; id<tid; ++id)
-        threadIdx[tid] += splitCnt[id];
-
-      threadIdx[tid] += NElements;
+#pragma omp atomic capture
+      {
+        threadIdx[tid] = _mesh->NElements;
+        _mesh->NElements += splitCnt[tid];
+      }
 
       // Perform element refinement.
       index_t newEID = threadIdx[tid];
-#pragma omp for schedule(dynamic, 32)
-      for(size_t eid=0; eid<NElements; ++eid){
+      for(size_t i=0; i<worklist.size(); ++i){
+        size_t eid = worklist[i];
         newEID += refine_element(eid, newEID, n_marked_edges_per_element[eid], tid);
-      }
-
-      // Resize mesh containers
-#pragma omp single
-      {
-        NElements = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
-        _mesh->_ENList.resize(nloc*NElements);
       }
 
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
 
-      // Calculate hash and colour for all new vertices
-#pragma omp for schedule(static)
-      for(size_t i = origNNodes; i < NNodes; ++i){
-        _mesh->node_hash[i] = _mesh->hash(i);
-      }
-
-#pragma omp for schedule(dynamic, 32)
-      for(size_t i = origNNodes; i < NNodes; ++i){
-        _mesh->update_colour(i);
-      }
-
-      // Commit deferred operations
+#pragma omp barrier
+      // Commit deferred operations. Every thread must have finished refinement, thus the barrier.
       _mesh->commit_deferred(tid);
 
-#pragma omp single
-      {
-      	_mesh->node_owner.resize(NNodes, -1);
-      	_mesh->lnn2gnn.resize(NNodes, -1);
-      }
-
       if(nprocs==1){
+/*
 #pragma omp for schedule(static)
-        for(size_t i=origNNodes; i<NNodes; ++i){
+        for(size_t i=origNNodes; i<_mesh->NNodes; ++i){
           _mesh->node_owner[i] = 0;
           _mesh->lnn2gnn[i] = i;
         }
+*/
       }else{
 #ifdef HAVE_MPI
+#pragma omp for schedule(static)
+        for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
+          DirectedEdge<index_t> *vert = &allNewVertices[i];
+          /*
+           * Perhaps we should introduce a system of alternating min/max assignments,
+           * i.e. one time the node is assigned to the min rank, one time to the max
+           * rank and so on, so as to avoid having the min rank accumulate the majority
+           * of newly created vertices and disturbing load balance among MPI processes.
+           */
+          int owner0 = _mesh->node_owner[vert->edge.first];
+          int owner1 = _mesh->node_owner[vert->edge.second];
+          int owner = std::min(owner0, owner1);
+          _mesh->node_owner[vert->id] = owner;
+        }
+
 #pragma omp single
         {
-          for(int i=0;i<nthreads;i++){
-            for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
-              /*
-               * Perhaps we should introduce a system of alternating min/max assignments,
-               * i.e. one time the node is assigned to the min rank, one time to the max
-               * rank and so on, so as to avoid having the min rank accumulate the majority
-               * of newly created vertices and disturbing load balance among MPI processes.
-               */
-              int owner0 = _mesh->node_owner[vert->edge.first];
-              int owner1 = _mesh->node_owner[vert->edge.second];
-              int owner = std::min(owner0, owner1);
-              _mesh->node_owner[vert->id] = owner;
-            }
-          }
-
           // Once the owner for all new nodes has been set, it's time to amend the halo.
           std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
           std::vector<index_t> invisible_vertices;
-          for(int i=0;i<nthreads;i++){
-            for(typename std::vector< DirectedEdge<index_t> >::const_iterator vert=newVertices[i].begin();vert!=newVertices[i].end();++vert){
-              if(_mesh->node_owner[vert->id] != (size_t) rank){
-                // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-                // Only update them if the vertex is actually seen by *this* MPI process,
-                // i.e. if at least one of its neighbours is owned by *this* process.
-                bool visible = false;
-                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
-                  if(_mesh->is_owned_node(*neigh)){
-                    visible = true;
-                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                    recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
-                    break;
-                  }
+
+          for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
+            DirectedEdge<index_t> *vert = &allNewVertices[i];
+
+            if(_mesh->node_owner[vert->id] != (size_t) rank){
+              // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
+              // Only update them if the vertex is actually seen by *this* MPI process,
+              // i.e. if at least one of its neighbours is owned by *this* process.
+              bool visible = false;
+              for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
+                if(_mesh->is_owned_node(*neigh)){
+                  visible = true;
+                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                  recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
+                  break;
                 }
-                if(!visible)
-                  invisible_vertices.push_back(vert->id);
-              }else{
-                // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
-                // The latter is true only if both vertices of the original edge were halo vertices.
-                if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
-                  // Find which processes see this vertex
-                  std::set<int> processes;
-                  for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
-                    processes.insert(_mesh->node_owner[*neigh]);
+              }
+              if(!visible)
+                invisible_vertices.push_back(vert->id);
+            }else{
+              // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
+              // The latter is true only if both vertices of the original edge were halo vertices.
+              if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
+                // Find which processes see this vertex
+                std::set<int> processes;
+                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
+                  processes.insert(_mesh->node_owner[*neigh]);
 
-                  processes.erase(rank);
+                processes.erase(rank);
 
-                  for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
-                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                    send_additional[*proc].insert(gnn_edge);
-                  }
+                for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
+                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                  send_additional[*proc].insert(gnn_edge);
                 }
               }
             }
@@ -394,7 +358,7 @@ template<typename real_t, typename index_t> class Refine2D{
           }
 
           // Update global numbering
-          for(size_t i=origNNodes; i<NNodes; ++i)
+          for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
             if(_mesh->node_owner[i] == (size_t) rank)
               _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
 
@@ -409,7 +373,7 @@ template<typename real_t, typename index_t> class Refine2D{
 #ifndef NDEBUG
       // Fix orientations of new elements.
 #pragma omp for schedule(dynamic, 100)
-      for(size_t i=0;i<NElements;i++){
+      for(size_t i=0;i<_mesh->NElements;i++){
         if(_mesh->_ENList[i*nloc] < 0)
           continue;
 
@@ -427,13 +391,18 @@ template<typename real_t, typename index_t> class Refine2D{
 /*
         if(av<0){
           // Flip element
-        	_mesh->_ENList[i*nloc] = n1;
-        	_mesh->_ENList[i*nloc+1] = n0;
+          _mesh->_ENList[i*nloc] = n1;
+          _mesh->_ENList[i*nloc+1] = n0;
         }
 */
       }
 #endif
     }
+
+    delete[] allNewVertices;
+
+    // Update colouring
+    _mesh->update_colour(origNNodes, _mesh->NNodes);
 
     // Refine surface
     _surface->refine(surfaceEdges);
@@ -488,9 +457,9 @@ template<typename real_t, typename index_t> class Refine2D{
 
     // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
     index_t newVertex[3] = {-1, -1, -1};
-    newVertex[0] = split_edges_per_element[3*eid].newVertex;
-    newVertex[1] = split_edges_per_element[3*eid+1].newVertex;
-    newVertex[2] = split_edges_per_element[3*eid+2].newVertex;
+    newVertex[0] = new_vertices_per_element[3*eid];
+    newVertex[1] = new_vertices_per_element[3*eid+1];
+    newVertex[2] = new_vertices_per_element[3*eid+2];
 
     if(refine_cnt==1){
       // Single edge split.
@@ -512,7 +481,7 @@ template<typename real_t, typename index_t> class Refine2D{
       const index_t ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
       const index_t ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
 
-      index_t ele1ID = newEID;
+      const index_t ele1ID = newEID;
 
       // Add rotated_ele[0] to vertexID's NNList
       _mesh->deferred_addNN(vertexID, rotated_ele[0], tid);
@@ -527,8 +496,8 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->deferred_addNE(vertexID, ele1ID, tid);
 
       // Replace eid with ele1 in rotated_ele[2]'s NEList
-      _mesh->deferred_remNE(rotated_ele[2], eid);
-      _mesh->deferred_addNE(rotated_ele[2], ele1ID);
+      _mesh->deferred_remNE(rotated_ele[2], eid, tid);
+      _mesh->deferred_addNE(rotated_ele[2], ele1ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -565,62 +534,31 @@ template<typename real_t, typename index_t> class Refine2D{
       index_t ele0ID = newEID;
       index_t ele2ID = newEID+1;
 
-      // If the edge hosting vertexID[0] has not been processed before as part of the
-      // adjacent element, connect vertexID[0] to rotated_ele[0] and rotated_ele[2].
-      if(_mesh->NNList[vertexID[0]].empty()){
-        _mesh->NNList[vertexID[0]].push_back(rotated_ele[0]);
-        _mesh->NNList[vertexID[0]].push_back(rotated_ele[2]);
-
-        // Replace rotated_ele[0]'s adjacency to rotated_ele[2] with vertexID[0].
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[rotated_ele[0]].begin(),
-            _mesh->NNList[rotated_ele[0]].end(), rotated_ele[2]);
-        *it = vertexID[0];
-        it = std::find(_mesh->NNList[rotated_ele[2]].begin(),
-            _mesh->NNList[rotated_ele[2]].end(), rotated_ele[0]);
-        *it = (vertexID[0]);
-      }
-
-      // Similarly for the edge hosting vertexID[1].
-      if(_mesh->NNList[vertexID[1]].empty()){
-        _mesh->NNList[vertexID[1]].push_back(rotated_ele[0]);
-        _mesh->NNList[vertexID[1]].push_back(rotated_ele[1]);
-
-        // Replace rotated_ele[0]'s adjacency to rotated_ele[1] with vertexID[1].
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[rotated_ele[0]].begin(),
-            _mesh->NNList[rotated_ele[0]].end(), rotated_ele[1]);
-        *it = (vertexID[1]);
-        it = std::find(_mesh->NNList[rotated_ele[1]].begin(),
-            _mesh->NNList[rotated_ele[1]].end(), rotated_ele[0]);
-        *it = (vertexID[1]);
-      }
-
       // NNList: Connect vertexID[0] and vertexID[1] with each other
-      _mesh->NNList[vertexID[0]].push_back(vertexID[1]);
-      _mesh->NNList[vertexID[1]].push_back(vertexID[0]);
+      _mesh->deferred_addNN(vertexID[0], vertexID[1], tid);
+      _mesh->deferred_addNN(vertexID[1], vertexID[0], tid);
 
       // vertexID[offset] and rotated_ele[offset+1] are the vertices on the diagonal
-      _mesh->NNList[vertexID[offset]].push_back(rotated_ele[offset+1]);
-      _mesh->NNList[rotated_ele[offset+1]].push_back(vertexID[offset]);
+      _mesh->deferred_addNN(vertexID[offset], rotated_ele[offset+1], tid);
+      _mesh->deferred_addNN(rotated_ele[offset+1], vertexID[offset], tid);
 
       // rotated_ele[offset+1] is the old vertex which is on the diagonal
       // Add ele2 in rotated_ele[offset+1]'s NEList
-      _mesh->NEList[rotated_ele[offset+1]].insert(ele2ID);
+      _mesh->deferred_addNE(rotated_ele[offset+1], ele2ID, tid);
 
       // Replace eid with ele0 in NEList[rotated_ele[0]]
-      _mesh->NEList[rotated_ele[0]].erase(eid);
-      _mesh->NEList[rotated_ele[0]].insert(ele0ID);
+      _mesh->deferred_remNE(rotated_ele[0], eid, tid);
+      _mesh->deferred_addNE(rotated_ele[0], ele0ID, tid);
 
       // Put ele0, ele1 and ele2 in vertexID[offset]'s NEList
-      _mesh->NEList[vertexID[offset]].insert(eid);
-      _mesh->NEList[vertexID[offset]].insert(ele0ID);
-      _mesh->NEList[vertexID[offset]].insert(ele2ID);
+      _mesh->deferred_addNE(vertexID[offset], eid, tid);
+      _mesh->deferred_addNE(vertexID[offset], ele0ID, tid);
+      _mesh->deferred_addNE(vertexID[offset], ele2ID, tid);
 
       // vertexID[(offset+1)%2] is the new vertex which is not on the diagonal
       // Put ele0 and ele2 in vertexID[(offset+1)%2]'s NEList
-      _mesh->NEList[vertexID[(offset+1)%2]].insert(ele0ID);
-      _mesh->NEList[vertexID[(offset+1)%2]].insert(ele2ID);
+      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele0ID, tid);
+      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele2ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -642,69 +580,30 @@ template<typename real_t, typename index_t> class Refine2D{
       index_t ele3ID = newEID+2;
 
       // Update NNList
-
-      // If the edge hosting newVertex[0] has not been processed before as
-      // part of the adjacent element, connect newVertex[0] to n[1] and n[2].
-      if(_mesh->NNList[newVertex[0]].empty()){
-        _mesh->NNList[newVertex[0]].push_back(n[1]);
-        _mesh->NNList[newVertex[0]].push_back(n[2]);
-
-        // Replace n[1]'s adjacency to n[2] with newVertex[0].
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[n[1]].begin(), _mesh->NNList[n[1]].end(), n[2]);
-        *it = newVertex[0];
-        it = std::find(_mesh->NNList[n[2]].begin(), _mesh->NNList[n[2]].end(), n[1]);
-        *it = newVertex[0];
-      }
-
-      // Similarly for the edge hosting newVertex[1].
-      if(_mesh->NNList[newVertex[1]].empty()){
-        _mesh->NNList[newVertex[1]].push_back(n[0]);
-        _mesh->NNList[newVertex[1]].push_back(n[2]);
-
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[n[0]].begin(), _mesh->NNList[n[0]].end(), n[2]);
-        *it = newVertex[1];
-        it = std::find(_mesh->NNList[n[2]].begin(), _mesh->NNList[n[2]].end(), n[0]);
-        *it = newVertex[1];
-      }
-
-      // Similarly for the edge hosting newVertex[2].
-      if(_mesh->NNList[newVertex[2]].empty()){
-        _mesh->NNList[newVertex[2]].push_back(n[0]);
-        _mesh->NNList[newVertex[2]].push_back(n[1]);
-
-        typename std::vector<index_t>::iterator it;
-        it = std::find(_mesh->NNList[n[0]].begin(), _mesh->NNList[n[0]].end(), n[1]);
-        *it = newVertex[2];
-        it = std::find(_mesh->NNList[n[1]].begin(), _mesh->NNList[n[1]].end(), n[0]);
-        *it = newVertex[2];
-      }
-
-      _mesh->NNList[newVertex[0]].push_back(newVertex[1]);
-      _mesh->NNList[newVertex[0]].push_back(newVertex[2]);
-      _mesh->NNList[newVertex[1]].push_back(newVertex[0]);
-      _mesh->NNList[newVertex[1]].push_back(newVertex[2]);
-      _mesh->NNList[newVertex[2]].push_back(newVertex[0]);
-      _mesh->NNList[newVertex[2]].push_back(newVertex[1]);
+      _mesh->deferred_addNN(newVertex[0], newVertex[1], tid);
+      _mesh->deferred_addNN(newVertex[0], newVertex[2], tid);
+      _mesh->deferred_addNN(newVertex[1], newVertex[0], tid);
+      _mesh->deferred_addNN(newVertex[1], newVertex[2], tid);
+      _mesh->deferred_addNN(newVertex[2], newVertex[0], tid);
+      _mesh->deferred_addNN(newVertex[2], newVertex[1], tid);
 
       // Update NEList
-      _mesh->NEList[n[1]].erase(eid);
-      _mesh->NEList[n[1]].insert(ele1ID);
-      _mesh->NEList[n[2]].erase(eid);
-      _mesh->NEList[n[2]].insert(ele2ID);
+      _mesh->deferred_remNE(n[1], eid, tid);
+      _mesh->deferred_addNE(n[1], ele1ID, tid);
+      _mesh->deferred_remNE(n[2], eid, tid);
+      _mesh->deferred_addNE(n[2], ele2ID, tid);
 
-      _mesh->NEList[newVertex[0]].insert(ele1ID);
-      _mesh->NEList[newVertex[0]].insert(ele2ID);
-      _mesh->NEList[newVertex[0]].insert(ele3ID);
+      _mesh->deferred_addNE(newVertex[0], ele1ID, tid);
+      _mesh->deferred_addNE(newVertex[0], ele2ID, tid);
+      _mesh->deferred_addNE(newVertex[0], ele3ID, tid);
 
-      _mesh->NEList[newVertex[1]].insert(eid);
-      _mesh->NEList[newVertex[1]].insert(ele2ID);
-      _mesh->NEList[newVertex[1]].insert(ele3ID);
+      _mesh->deferred_addNE(newVertex[1], eid, tid);
+      _mesh->deferred_addNE(newVertex[1], ele2ID, tid);
+      _mesh->deferred_addNE(newVertex[1], ele3ID, tid);
 
-      _mesh->NEList[newVertex[2]].insert(eid);
-      _mesh->NEList[newVertex[2]].insert(ele1ID);
-      _mesh->NEList[newVertex[2]].insert(ele3ID);
+      _mesh->deferred_addNE(newVertex[2], eid, tid);
+      _mesh->deferred_addNE(newVertex[2], ele1ID, tid);
+      _mesh->deferred_addNE(newVertex[2], ele3ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -747,16 +646,11 @@ template<typename real_t, typename index_t> class Refine2D{
       return 1;
   }
 
-  struct split_edge{
-    index_t newVertex;
-    index_t thread;
-  };
-
-  std::vector<split_edge> split_edges_per_element;
   std::vector< std::vector< DirectedEdge<index_t> > > newVertices;
   std::vector< std::vector<real_t> > newCoords;
   std::vector< std::vector<float> > newMetric;
   std::vector< std::vector<index_t> > newElements;
+  std::vector<index_t> new_vertices_per_element;
 
   Mesh<real_t, index_t> *_mesh;
   Surface2D<real_t, index_t> *_surface;

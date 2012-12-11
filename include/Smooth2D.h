@@ -610,7 +610,6 @@ template<typename real_t, typename index_t>
     graph.rank = rank; 
     
     int NNodes = _mesh->get_number_nodes();
-    assert(NNodes==(int)_mesh->NNList.size());
     _mesh->create_global_node_numbering();
     graph.nnodes = NNodes;
     

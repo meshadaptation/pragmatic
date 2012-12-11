@@ -139,7 +139,7 @@ template<typename real_t, typename index_t> class Swapping2D{
       if(nthreads>1){
 #pragma omp single
         {
-          pragmatic::partition_fast(_mesh->NNList, dynamic_vertex, nthreads, tpartition);
+          pragmatic::partition_fast(_mesh->NNList, NNodes, dynamic_vertex, nthreads, tpartition);
         }
 
         // Each thread creates a list of edges it is responsible for processing

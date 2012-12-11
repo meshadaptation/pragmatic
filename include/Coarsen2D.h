@@ -168,7 +168,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         */
 #pragma omp single
         {
-          pragmatic::partition_fast(_mesh->NNList, dynamic_vertex, nthreads, tpartition);
+          pragmatic::partition_fast(_mesh->NNList, NNodes, dynamic_vertex, nthreads, tpartition);
         }
         
         /* Each thread creates a list of vertices it is responsible
@@ -724,6 +724,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
                 
         // Add vertex+metric if we have not already received this data.
         if(gnn2lnn.find(gnn)==gnn2lnn.end()){
+          // TODO: _mesh->append_vertex has been modified
           index_t lnn = _mesh->append_vertex(coords, metric);
                   
           _mesh->lnn2gnn.push_back(gnn);
@@ -775,6 +776,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         
         if(common_element012.empty()){
           // Add element
+          // TODO: _mesh->append_element has been modified
           int eid = _mesh->append_element(element);
                   
           // Update NEList

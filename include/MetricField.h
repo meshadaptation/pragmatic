@@ -176,27 +176,36 @@ template<typename real_t, typename index_t>
   void update_mesh(){
     assert(_metric!=NULL);
     
+    size_t pNElements = (size_t) predict_nelements_part();
+
+    if(pNElements > _mesh->NElements){
+      // Let's leave a safety margin.
+      pNElements *= 3;
+    }else{
+      /* The mesh can contain more elements than the predicted number, however
+       * some elements may still need to be refined, therefore until the mesh
+       * is coarsened and defraged we need extra space for the new vertices and
+       * elements that will be created during refinement.
+       */
+      pNElements = _mesh->NElements * 3;
+    }
+
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
-    size_t pNElements = (size_t) predict_nelements();
-    pNElements *= 1.5; // Let's leave a safety margin
-    _mesh->_ENList.reserve(pNElements*3);
-    _mesh->_coords.reserve(pNElements);
-    _mesh->NNList.reserve(pNElements/2);
-    _mesh->NEList.reserve(pNElements/2);
-    _mesh->node_owner.reserve(pNElements/2);
-    _mesh->lnn2gnn.reserve(pNElements/2);
-    _mesh->node_colour.reserve(pNElements);
-    _mesh->node_hash.reserve(pNElements);
+    _mesh->_ENList.resize(pNElements*3);
+    _mesh->_coords.resize(pNElements);
+    _mesh->metric.resize(pNElements*1.5);
+    _mesh->NNList.resize(pNElements/2);
+    _mesh->NEList.resize(pNElements/2);
+    _mesh->node_owner.resize(pNElements/2, -1);
+    _mesh->lnn2gnn.resize(pNElements/2, -1);
+    _mesh->node_colour.resize(pNElements/2, -2);
+    _mesh->node_hash.resize(pNElements/2);
 
 #ifdef HAVE_MPI
     // At this point we can establish a new, gappy global numbering system
     _mesh->create_gappy_global_numbering(pNElements);
 #endif
 
-    _mesh->metric.clear();
-    _mesh->metric.reserve(pNElements*1.5);
-    _mesh->metric.resize(_NNodes*3);
-    
     // Enforce first-touch policy
 #pragma omp parallel
     {
@@ -367,9 +376,9 @@ template<typename real_t, typename index_t>
     }
   }
 
-  /*! Predict the number of elements when mesh satisfies metric tensor field.
+  /*! Predict the number of elements in this partition when mesh satisfies metric tensor field.
    */
-  real_t predict_nelements(){
+  real_t predict_nelements_part(){
     float predicted=0;
     float inv3=1.0/3.0;
 
@@ -378,33 +387,41 @@ template<typename real_t, typename index_t>
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
       ElementProperty<real_t> property(refx0, refx1, refx2);
-      
+
       real_t total_area_metric = 0.0;
       for(int i=0;i<_NElements;i++){
         const index_t *n=_mesh->get_element(i);
-        
+
         const real_t *x0 = _mesh->get_coords(n[0]);
         const real_t *x1 = _mesh->get_coords(n[1]);
         const real_t *x2 = _mesh->get_coords(n[2]);
         real_t area = property.area(x0, x1, x2);
-        
+
         const float *m0=_metric[n[0]].get_metric();
         const float *m1=_metric[n[1]].get_metric();
         const float *m2=_metric[n[2]].get_metric();
-        
+
         real_t m00 = (m0[0]+m1[0]+m2[0])*inv3;
         real_t m01 = (m0[1]+m1[1]+m2[1])*inv3;
         real_t m11 = (m0[2]+m1[2]+m2[2])*inv3;
-        
+
         real_t det = m00*m11-m01*m01;
         total_area_metric += area*sqrt(det);
       }
-      
+
       // Ideal area of triangle in metric space.
       double ideal_area = sqrt(3.0)/4.0;
-      
+
       predicted = total_area_metric/ideal_area;
     }
+
+    return predicted;
+  }
+
+  /*! Predict the number of elements when mesh satisfies metric tensor field.
+   */
+  real_t predict_nelements(){
+    float predicted=predict_nelements_part();
 
 #ifdef HAVE_MPI
     if(nprocs>1){

@@ -62,7 +62,7 @@ namespace pragmatic{
   
   void partition_fine(std::vector< std::vector<int> > &NNList, int *active_vertex, int nparts, int *part){
     int NNodes = NNList.size();
-    
+
     if(nparts==1){
       for(int i=0;i<NNodes;i++){
         part[i] = 0;
@@ -113,9 +113,7 @@ namespace pragmatic{
     }
   }
   
-  void partition_fast(std::vector< std::vector<int> > &NNList, int *active_vertex, int nparts, int *part){
-    int NNodes = NNList.size();
-    
+  void partition_fast(std::vector< std::vector<int> > &NNList, size_t NNodes, int *active_vertex, int nparts, int *part){
     if(nparts==1){
     	memset(part, 0, NNodes*sizeof(int));
       return;
