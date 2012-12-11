@@ -138,7 +138,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(dynamic,32) nowait
+#pragma omp for schedule(dynamic,16) nowait
       for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
@@ -168,8 +168,7 @@ template<typename real_t, typename index_t> class Refine2D{
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(float));
 
-      // Fix IDs of new vertices, mark each element with its new vertices,
-      // update NNList for all split edges and mark surface edges.
+      // Fix IDs of new vertices
       assert(newVertices[tid].size()==splitCnt[tid]);
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
@@ -178,8 +177,10 @@ template<typename real_t, typename index_t> class Refine2D{
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
 
+      // Mark each element with its new vertices, update NNList
+      // for all split edges and mark surface edges.
 #pragma omp barrier
-#pragma omp for schedule(dynamic, 32)
+#pragma omp for schedule(dynamic,16)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
@@ -216,6 +217,11 @@ template<typename real_t, typename index_t> class Refine2D{
           surfaceEdges[tid].push_back(allNewVertices[i]);
         }
 
+        /* If we have MPI, it makes no sense to update node_owner and lnn2gnn now because
+         * these values are most probably wrong. However, when we have no MPI, updating the
+         * values here saves us from an OMP parallel loop which kills performance (due to a
+         * necessary thread synchronisation right after element refinement).
+         */
         _mesh->node_owner[vid] = 0;
         _mesh->lnn2gnn[vid] = vid;
 
@@ -233,7 +239,7 @@ template<typename real_t, typename index_t> class Refine2D{
       std::vector<size_t> worklist;
       worklist.reserve(origNElements/nthreads);
 
-#pragma omp for schedule(dynamic, 32) nowait
+#pragma omp for schedule(dynamic,32) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
       	//If the element has been deleted, continue.
       	const index_t *n = _mesh->get_element(eid);
@@ -272,13 +278,7 @@ template<typename real_t, typename index_t> class Refine2D{
       _mesh->commit_deferred(tid);
 
       if(nprocs==1){
-/*
-#pragma omp for schedule(static)
-        for(size_t i=origNNodes; i<_mesh->NNodes; ++i){
-          _mesh->node_owner[i] = 0;
-          _mesh->lnn2gnn[i] = i;
-        }
-*/
+        // If we update lnn2gnn and node_owner here, OMP performance suffers.
       }else{
 #ifdef HAVE_MPI
 #pragma omp for schedule(static)
