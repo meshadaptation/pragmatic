@@ -146,13 +146,13 @@ namespace pragmatic{
       	int v = *front.begin();
       	front.pop_front();
 
-				for(std::vector<int>::const_iterator it=NNList[v].begin();it!=NNList[v].end();++it){
-					if((part[*it]<0)&&(active_vertex[*it]>=0)){
-						front.push_back(*it);
-						part[*it] = p;
-						cnt++;
-					}
-				}
+      	for(std::vector<int>::const_iterator it=NNList[v].begin();it!=NNList[v].end();++it){
+      	  if((part[*it]<0)&&(active_vertex[*it]>=0)){
+      	    front.push_back(*it);
+      	    part[*it] = p;
+      	    cnt++;
+      	  }
+      	}
       }
     }
   }

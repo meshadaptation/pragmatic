@@ -229,32 +229,23 @@ template<typename real_t, typename index_t> class Refine2D{
         _mesh->node_hash[vid] = _mesh->hash(vid);
       }
 
-      // Start element refinement. Fix IDs of new vertices in split_edges_per_element
-      // and count how many new elements are created by each thread. We need this so
-      // that the correct element IDs are used when updating NEList.
+      // Start element refinement.
       splitCnt[tid] = 0;
       newElements[tid].clear();
       newElements[tid].reserve(4*origNElements/nthreads);
 
-      std::vector<size_t> worklist;
-      worklist.reserve(origNElements/nthreads);
-
-#pragma omp for schedule(dynamic,32) nowait
+#pragma omp for schedule(dynamic,16) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
-      	//If the element has been deleted, continue.
-      	const index_t *n = _mesh->get_element(eid);
-      	if(n[0] < 0)
-      		continue;
+        //If the element has been deleted, continue.
+        const index_t *n = _mesh->get_element(eid);
+        if(n[0] < 0)
+            continue;
 
         for(size_t j=0; j<3; ++j)
           if(new_vertices_per_element[3*eid+j] != -1){
-            ++n_marked_edges_per_element[eid];
+            splitCnt[tid] += refine_element(eid, splitCnt[tid], tid);
+            break;
           }
-
-        if(n_marked_edges_per_element[eid]>0){
-          worklist.push_back(eid);
-          splitCnt[tid] += n_marked_edges_per_element[eid];
-        }
       }
 
 #pragma omp atomic capture
@@ -263,19 +254,12 @@ template<typename real_t, typename index_t> class Refine2D{
         _mesh->NElements += splitCnt[tid];
       }
 
-      // Perform element refinement.
-      index_t newEID = threadIdx[tid];
-      for(size_t i=0; i<worklist.size(); ++i){
-        size_t eid = worklist[i];
-        newEID += refine_element(eid, newEID, n_marked_edges_per_element[eid], tid);
-      }
-
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
 
 #pragma omp barrier
       // Commit deferred operations. Every thread must have finished refinement, thus the barrier.
-      _mesh->commit_deferred(tid);
+      _mesh->commit_deferred(tid, threadIdx);
 
       if(nprocs==1){
         // If we update lnn2gnn and node_owner here, OMP performance suffers.
@@ -296,6 +280,7 @@ template<typename real_t, typename index_t> class Refine2D{
           _mesh->node_owner[vert->id] = owner;
         }
 
+        // TODO: This single section can be parallelised
 #pragma omp single
         {
           // Once the owner for all new nodes has been set, it's time to amend the halo.
@@ -451,7 +436,7 @@ template<typename real_t, typename index_t> class Refine2D{
     }
   }
 
-  int refine_element(index_t eid, index_t newEID, char refine_cnt, size_t tid){
+  int refine_element(index_t eid, index_t newEID, size_t tid){
     // Check if this element has been erased - if so continue to next element.
     const int *n=_mesh->get_element(eid);
 
@@ -460,6 +445,11 @@ template<typename real_t, typename index_t> class Refine2D{
     newVertex[0] = new_vertices_per_element[3*eid];
     newVertex[1] = new_vertices_per_element[3*eid+1];
     newVertex[2] = new_vertices_per_element[3*eid+2];
+
+    size_t refine_cnt = 0;
+    for(size_t i=0; i<3; ++i)
+      if(newVertex[i]!=-1)
+        ++refine_cnt;
 
     if(refine_cnt==1){
       // Single edge split.
@@ -488,16 +478,19 @@ template<typename real_t, typename index_t> class Refine2D{
       // Add vertexID to rotated_ele[0]'s NNList
       _mesh->deferred_addNN(rotated_ele[0], vertexID, tid);
 
+      // ele1ID is a new ID which isn't correct yet, it has to be
+      // updated once each thread has calculated how many new elements
+      // it created, so put ele1ID into addNE_fix instead of addNE.
       // Put ele1 in rotated_ele[0]'s NEList
-      _mesh->deferred_addNE(rotated_ele[0], ele1ID, tid);
+      _mesh->deferred_addNE_fix(rotated_ele[0], ele1ID, tid);
 
       // Put eid and ele1 in vertexID's NEList
       _mesh->deferred_addNE(vertexID, eid, tid);
-      _mesh->deferred_addNE(vertexID, ele1ID, tid);
+      _mesh->deferred_addNE_fix(vertexID, ele1ID, tid);
 
       // Replace eid with ele1 in rotated_ele[2]'s NEList
       _mesh->deferred_remNE(rotated_ele[2], eid, tid);
-      _mesh->deferred_addNE(rotated_ele[2], ele1ID, tid);
+      _mesh->deferred_addNE_fix(rotated_ele[2], ele1ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -544,21 +537,21 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // rotated_ele[offset+1] is the old vertex which is on the diagonal
       // Add ele2 in rotated_ele[offset+1]'s NEList
-      _mesh->deferred_addNE(rotated_ele[offset+1], ele2ID, tid);
+      _mesh->deferred_addNE_fix(rotated_ele[offset+1], ele2ID, tid);
 
       // Replace eid with ele0 in NEList[rotated_ele[0]]
       _mesh->deferred_remNE(rotated_ele[0], eid, tid);
-      _mesh->deferred_addNE(rotated_ele[0], ele0ID, tid);
+      _mesh->deferred_addNE_fix(rotated_ele[0], ele0ID, tid);
 
       // Put ele0, ele1 and ele2 in vertexID[offset]'s NEList
       _mesh->deferred_addNE(vertexID[offset], eid, tid);
-      _mesh->deferred_addNE(vertexID[offset], ele0ID, tid);
-      _mesh->deferred_addNE(vertexID[offset], ele2ID, tid);
+      _mesh->deferred_addNE_fix(vertexID[offset], ele0ID, tid);
+      _mesh->deferred_addNE_fix(vertexID[offset], ele2ID, tid);
 
       // vertexID[(offset+1)%2] is the new vertex which is not on the diagonal
       // Put ele0 and ele2 in vertexID[(offset+1)%2]'s NEList
-      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele0ID, tid);
-      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele2ID, tid);
+      _mesh->deferred_addNE_fix(vertexID[(offset+1)%2], ele0ID, tid);
+      _mesh->deferred_addNE_fix(vertexID[(offset+1)%2], ele2ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -589,21 +582,21 @@ template<typename real_t, typename index_t> class Refine2D{
 
       // Update NEList
       _mesh->deferred_remNE(n[1], eid, tid);
-      _mesh->deferred_addNE(n[1], ele1ID, tid);
+      _mesh->deferred_addNE_fix(n[1], ele1ID, tid);
       _mesh->deferred_remNE(n[2], eid, tid);
-      _mesh->deferred_addNE(n[2], ele2ID, tid);
+      _mesh->deferred_addNE_fix(n[2], ele2ID, tid);
 
-      _mesh->deferred_addNE(newVertex[0], ele1ID, tid);
-      _mesh->deferred_addNE(newVertex[0], ele2ID, tid);
-      _mesh->deferred_addNE(newVertex[0], ele3ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[0], ele1ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[0], ele2ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[0], ele3ID, tid);
 
       _mesh->deferred_addNE(newVertex[1], eid, tid);
-      _mesh->deferred_addNE(newVertex[1], ele2ID, tid);
-      _mesh->deferred_addNE(newVertex[1], ele3ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[1], ele2ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[1], ele3ID, tid);
 
       _mesh->deferred_addNE(newVertex[2], eid, tid);
-      _mesh->deferred_addNE(newVertex[2], ele1ID, tid);
-      _mesh->deferred_addNE(newVertex[2], ele3ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[2], ele1ID, tid);
+      _mesh->deferred_addNE_fix(newVertex[2], ele3ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);

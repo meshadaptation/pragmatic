@@ -1040,7 +1040,9 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
     std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
     std::vector<index_t> repNN; // repNN -> [i, m, n] : In NNList[i] replace node m with node n.
-    std::vector<index_t> addNE; // addNE -> [i, n] : Add element n in NEList[i].
+    std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
+    std::vector<index_t> addNE_fix; // addNE_fix -> [i, n] : Fix ID of element n according to
+                                    // threadIdx[thread_which_created_n] and add it to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
     std::vector<index_t> recolour; // List of vertices to be recoloured.
   };
@@ -1442,12 +1444,17 @@ template<typename real_t, typename index_t> class Mesh{
     deferred_operations[tid][i % num_threads].addNE.push_back(n);
   }
 
+  inline void deferred_addNE_fix(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][i % num_threads].addNE_fix.push_back(i);
+    deferred_operations[tid][i % num_threads].addNE_fix.push_back(n);
+  }
+
   inline void deferred_remNE(index_t i, index_t n, size_t tid){
     deferred_operations[tid][i % num_threads].remNE.push_back(i);
     deferred_operations[tid][i % num_threads].remNE.push_back(n);
   }
 
-  void commit_deferred(size_t tid){
+  void commit_deferred(size_t tid, std::vector<size_t>& threadIdx){
     for(size_t i=0; i<num_threads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
@@ -1487,6 +1494,15 @@ template<typename real_t, typename index_t> class Mesh{
         NEList[*it].insert(*(it+1));
       }
       pending.addNE.clear();
+
+      // Fix element IDs and commit additions to NEList
+      for(typename std::vector<index_t>::const_iterator it=pending.addNE_fix.begin(); it!=pending.addNE_fix.end(); it+=2){
+        assert(*it % num_threads == tid);
+        // Element was created by thread i
+        index_t fixedId = *(it+1) + threadIdx[i];
+        NEList[*it].insert(fixedId);
+      }
+      pending.addNE_fix.clear();
     }
   }
 
