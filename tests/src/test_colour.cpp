@@ -40,7 +40,7 @@
 #include <map>
 
 #include <mpi.h>
-#include "zoltan_colour.h"
+#include "zoltan_tools.h"
 
 using namespace std;
 
@@ -52,7 +52,7 @@ int main(int argc, char **argv){
      2: 1, 3
      3: 2, 0
   */
-  zoltan_colour_graph_t graph;
+  zoltan_graph_t graph;
 
   graph.rank = 0;
 

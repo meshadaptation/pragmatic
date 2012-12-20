@@ -53,7 +53,7 @@
 #include <vtkXMLUnstructuredGridReader.h>
 #include <vtkCell.h>
 
-#include "zoltan_colour.h"
+#include "zoltan_tools.h"
 
 using namespace std;
 
@@ -98,7 +98,7 @@ int main(int argc, char **argv){
   }
 
   // Colour.
-  zoltan_colour_graph_t graph;
+  zoltan_graph_t graph;
 
   std::vector<int> colour(NNodes);
   graph.colour = &(colour[0]);
