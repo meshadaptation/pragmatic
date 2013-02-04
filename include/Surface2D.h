@@ -65,6 +65,7 @@ template<typename real_t, typename index_t>
   /// Default constructor.
   Surface2D(Mesh<real_t, index_t> &mesh){
     _mesh = &mesh;
+    num_threads = _mesh->num_threads;
 
     size_t NNodes = _mesh->get_number_nodes();
     surface_nodes.resize(NNodes);
@@ -72,6 +73,10 @@ template<typename real_t, typename index_t>
 
     // Default coplanar tolerance.
     set_coplanar_tolerance(0.9999999);
+
+    deferred_operations.resize(_mesh->num_threads);
+    for(size_t i=0; i<(size_t) num_threads; ++i)
+      deferred_operations[i].resize(num_threads);
   }
 
   /// Default destructor.
@@ -99,8 +104,8 @@ template<typename real_t, typename index_t>
 
       // This is required because additional vertices may have been added.
       while(surface_nodes.size()<=(size_t)nid)
-        surface_nodes.push_back(false);
-      surface_nodes[nid] = true;
+        surface_nodes.push_back((char) 0);
+      surface_nodes[nid] = (char) 1;
 
       SENList.push_back(nid);
     }
@@ -119,7 +124,7 @@ template<typename real_t, typename index_t>
       return false;
     }
 
-    return surface_nodes[nid];
+    return surface_nodes[nid] == (char) 0 ? false : true;
   }
 
   /// Detects the surface nodes of the domain.
@@ -161,7 +166,7 @@ template<typename real_t, typename index_t>
     for(typename std::map<std::set<index_t>, std::vector<int> >::const_iterator it=facets.begin(); it!=facets.end(); ++it){
       SENList.insert(SENList.end(), it->second.begin(), it->second.end());
       for(typename std::set<index_t>::const_iterator jt=it->first.begin();jt!=it->first.end();++jt)
-        surface_nodes[*jt] = true;
+        surface_nodes[*jt] = (char) 1;
     }
 
     calculate_coplanar_ids();
@@ -188,13 +193,13 @@ template<typename real_t, typename index_t>
     }
 
     // If nid_free is not on the surface then it's unconstrained.
-    if(!surface_nodes[nid_free]){
+    if(surface_nodes[nid_free] == (char) 0){
       return true;
     }
 
     // However, is nid_free is on the surface then nid_target must
     // also lie on a surface for it to be considered for collapse.
-    if(!surface_nodes[nid_target]){
+    if(surface_nodes[nid_target] == (char) 0){
       return false;
     }
 
@@ -216,54 +221,13 @@ template<typename real_t, typename index_t>
     for(typename std::set<index_t>::const_iterator it=jSNEList->second.begin();it!=jSNEList->second.end();++it)
       incident_plane_target.insert(coplanar_ids[*it]);
 
-    // The final case is that the vertex is on a plane and can be
-    // collapsed to any other vertex on that plane.
+    // The final case is that the vertex is on a plane and
+    // can collapse to any other vertex on that plane.
     assert(incident_plane_free.size()==1);
 
     bool on_plane = incident_plane_target.count(*incident_plane_free.begin())>0;
 
     return on_plane;
-  }
-
-  void collapse(index_t nid_free, index_t nid_target){
-    assert(SNEList.count(nid_free));
-    assert(SNEList.count(nid_target));
-    assert(is_collapsible(nid_free, nid_target));
-
-    surface_nodes[nid_free] = false;
-
-    // Find deleted facets.
-    std::set<index_t> deleted_facets;
-    std::set_intersection(SNEList[nid_free].begin(), SNEList[nid_free].end(),
-                     SNEList[nid_target].begin(), SNEList[nid_target].end(),
-                     std::inserter(deleted_facets, deleted_facets.begin()));
-
-    // Renumber nodes in elements adjacent to rm_vertex, deleted
-    // elements being collapsed, and make these elements adjacent to
-    // target_vertex.
-    for(typename std::set<index_t>::const_iterator ee=SNEList[nid_free].begin();ee!=SNEList[nid_free].end();++ee){
-      // Delete if element is to be collapsed.
-      if(deleted_facets.count(*ee)){
-        SENList[snloc*(*ee)]=-1;
-
-        continue;
-      }
-
-      // Renumber
-      for(size_t i=0;i<snloc;i++){
-        if(SENList[snloc*(*ee)+i]==nid_free){
-          SENList[snloc*(*ee)+i]=nid_target;
-          break;
-        }
-      }
-
-      // Add element to target node-element adjancy list.
-      SNEList[nid_target].insert(*ee);
-    }
-
-    // Remove deleted facets node-element adjancy list.
-    for(typename std::set<index_t>::const_iterator de=deleted_facets.begin(); de!=deleted_facets.end();++de)
-      SNEList[nid_target].erase(*de);
   }
 
   /*! Defragment surface mesh. This compresses the storage of internal data
@@ -272,7 +236,7 @@ template<typename real_t, typename index_t>
     size_t NNodes = _mesh->get_number_nodes();
     surface_nodes.resize(NNodes);
     for(size_t i=0;i<NNodes;i++)
-      surface_nodes[i] = false;
+      surface_nodes[i] = (char) 0;
 
     std::vector<index_t> defrag_SENList;
     std::vector<int> defrag_boundary_ids, defrag_coplanar_ids;
@@ -299,7 +263,7 @@ template<typename real_t, typename index_t>
       for(size_t j=0;j<snloc;j++){
         int nid = (*active_vertex_map)[n[j]];
         defrag_SENList.push_back(nid);
-        surface_nodes[nid] = true;
+        surface_nodes[nid] = (char) 1;
       }
       defrag_boundary_ids.push_back(boundary_ids[i]);
       defrag_coplanar_ids.push_back(coplanar_ids[i]);
@@ -311,7 +275,7 @@ template<typename real_t, typename index_t>
     defrag_coplanar_ids.swap(coplanar_ids);
     defrag_normals.swap(normals);
 
-    // Finally, fix the Node-Element adjancy list.
+    // Finally, fix the Node-Element adjacency list.
     SNEList.clear();
     NSElements = get_number_facets();
     for(size_t i=0;i<NSElements;i++){
@@ -356,6 +320,96 @@ template<typename real_t, typename index_t>
     }
   }
 
+  struct DeferredOperations{
+    std::vector<index_t> addSNE; // addSNE -> [i, e] : Add facet e to SNEList[i].
+    std::vector<index_t> remSNE; // remNN -> [i, e] : Remove facet e from SNEList[i].
+    std::vector<index_t> addNode; // addNE -> [n] : Add node n to SNEList.
+    std::vector<index_t> remNode; // remNE -> [n] : Remove node n from SNEList.
+  };
+
+  inline void deferred_addSNE(index_t i, index_t e, size_t tid){
+    deferred_operations[tid][i % num_threads].addSNE.push_back(i);
+    deferred_operations[tid][i % num_threads].addSNE.push_back(e);
+  }
+
+  inline void deferred_remSNE(index_t i, index_t e, size_t tid){
+    deferred_operations[tid][i % num_threads].remSNE.push_back(i);
+    deferred_operations[tid][i % num_threads].remSNE.push_back(e);
+  }
+
+  // SNEList is a map. Adding/removing items is not thread safe,
+  // so only one thread will perform these operations. Let's say thread 0.
+  inline void deferred_addNode(index_t n, size_t tid){
+    deferred_operations[tid][0].addNode.push_back(n);
+  }
+
+  inline void deferred_remNode(index_t n, size_t tid){
+    deferred_operations[tid][0].remNode.push_back(n);
+  }
+
+  void commit_deferred(size_t tid){
+    for(int i=0; i<num_threads; ++i){
+      DeferredOperations& pending = deferred_operations[i][tid];
+
+      // Commit element removals from SNEList sets.
+      for(typename std::vector<index_t>::const_iterator it=pending.remSNE.begin(); it!=pending.remSNE.end(); it+=2){
+        assert(*it % num_threads == (int) tid);
+        SNEList[*it].erase(*(it+1));
+      }
+      pending.remSNE.clear();
+
+      // Commit element additions to SNEList sets.
+      for(typename std::vector<index_t>::const_iterator it=pending.addSNE.begin(); it!=pending.addSNE.end(); it+=2){
+        assert(*it % num_threads == (int) tid);
+        SNEList[*it].insert(*(it+1));
+      }
+      pending.addSNE.clear();
+
+      // Commit vertex removals from SNEList
+
+      // Commit vertex additions to SNEList
+    }
+  }
+
+  void collapse(index_t nid_free, index_t nid_target, size_t tid){
+    assert(SNEList.count(nid_free));
+    assert(SNEList.count(nid_target));
+    assert(is_collapsible(nid_free, nid_target));
+
+    surface_nodes[nid_free] = (char) 0;
+
+    // Find the facet which is about to be deleted.
+    std::set<index_t> deleted_facets;
+    std::set_intersection(SNEList[nid_free].begin(), SNEList[nid_free].end(),
+                     SNEList[nid_target].begin(), SNEList[nid_target].end(),
+                     std::inserter(deleted_facets, deleted_facets.begin()));
+
+    // Delete collapsing facet and remove it from target_vertex's adjacency list.
+    assert(deleted_facets.size()==1);
+    index_t de = *deleted_facets.begin();
+    SENList[snloc*de]=-1;
+    deferred_remSNE(nid_target, de, tid);
+
+    // Renumber nodes in the other facet adjacent to rm_vertex
+    // and make this facet adjacent to target_vertex.
+    SNEList[nid_free].erase(de);
+    assert(SNEList[nid_free].size()==1);
+    index_t ele = *SNEList[nid_free].begin();
+
+    for(size_t i=0;i<snloc;i++){
+      if(SENList[snloc*ele+i]==nid_free){
+        SENList[snloc*ele+i]=nid_target;
+        break;
+      }
+    }
+
+    // Add facet to target node-element adjacency list.
+    deferred_addSNE(nid_target, ele, tid);
+
+    SNEList[nid_free].clear();
+    //SNEList.erase(nid_free);
+  }
+
   void refine(std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges){
     unsigned int nthreads;
 
@@ -391,15 +445,22 @@ template<typename real_t, typename index_t>
 
       memcpy(&refined_edges[threadIdx[tid]], &surfaceEdges[tid][0], surfaceEdges[tid].size()*sizeof(DirectedEdge<index_t>));
 
+#pragma omp barrier
 #pragma omp for schedule(static)
       for(index_t i=0;i < (index_t)refined_edges.size();++i){
         index_t v1 = refined_edges[i].edge.first;
         index_t v2 = refined_edges[i].edge.second;
 
+        /* Check whether the split edge is not on the surface, despite the fact
+         * that both vertices are on the surface. This is the case of an edge
+         * opposite a mesh corner. We can detect such edges from the fact that
+         * the intersection of SNEList[v1] and SNEList[v2] is empty. If v1 and
+         * v2 are on the same plane, then they have one facet in common.
+         */
         std::set<index_t> intersection;
         std::set_intersection(SNEList[v1].begin(), SNEList[v1].end(), SNEList[v2].begin(),
             SNEList[v2].end(), std::inserter(intersection, intersection.begin()));
-        // If the edge is opposite a corner
+
         if(intersection.size() != 1)
           continue;
 
@@ -456,7 +517,7 @@ template<typename real_t, typename index_t>
 
     SNEList.clear();
     surface_nodes.resize(NNodes);
-    std::fill(surface_nodes.begin(), surface_nodes.end(), false);
+    std::fill(surface_nodes.begin(), surface_nodes.end(), (char) 0);
 
     for(size_t i=0;i<NSElements;i++){
       const int *n=get_facet(i);
@@ -522,7 +583,7 @@ template<typename real_t, typename index_t>
     coplanar_ids.resize(NSElements);
     SENList.resize(NSElements*snloc);
     surface_nodes.resize(_mesh->get_number_nodes());
-    std::fill(surface_nodes.begin(), surface_nodes.end(), false);
+    std::fill(surface_nodes.begin(), surface_nodes.end(), (char) 0);
     SNEList.clear();
     for(int i=0;i<NSElements;i++){
       boundary_ids[i] = boundary_ids_[i];
@@ -530,7 +591,7 @@ template<typename real_t, typename index_t>
       const int *n = senlist+i*snloc;
       for(size_t j=0;j<snloc;j++){
         SNEList[n[j]].insert(i);
-        surface_nodes[n[j]] = true;
+        surface_nodes[n[j]] = (char) 1;
 
         SENList[i*snloc+j] = n[j];
       }
@@ -686,14 +747,17 @@ template<typename real_t, typename index_t>
   const static size_t snloc=2;
 
   std::map<int, std::set<index_t> > SNEList;
-  std::vector<bool> surface_nodes;
+  std::vector<char> surface_nodes;
   std::vector<index_t> SENList;
   std::vector<int> boundary_ids, coplanar_ids;
   std::vector<real_t> normals;
   real_t COPLANAR_MAGIC_NUMBER;
   bool use_bbox;
 
+  std::vector< std::vector<DeferredOperations> > deferred_operations;
+
   Mesh<real_t, index_t> *_mesh;
+  int num_threads;
 };
 
 #endif

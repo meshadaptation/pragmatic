@@ -39,7 +39,6 @@
 #define SWAPPING2D_H
 
 #include <algorithm>
-#include <limits>
 #include <list>
 #include <set>
 #include <vector>

@@ -341,7 +341,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel reduction(+:sum, nele)
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<NElements;i++){
+      for(size_t i=0;i<NElements;i++){
         const index_t *n=get_element(i);
         if(n[0]<0)
           continue;
@@ -493,7 +493,7 @@ template<typename real_t, typename index_t> class Mesh{
   real_t maximal_edge_length(){
     double L_max = 0;
 
-    for(index_t i=0;i<NNodes;i++){
+    for(index_t i=0;i<(index_t) NNodes;i++){
       if(is_owned_node(i) && (NNList[i].size()>0))
         for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           if(i<*it){ // Ensure that every edge length is only calculated once. 
@@ -1039,12 +1039,10 @@ template<typename real_t, typename index_t> class Mesh{
   struct DeferredOperations{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
     std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
-    std::vector<index_t> repNN; // repNN -> [i, m, n] : In NNList[i] replace node m with node n.
     std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
     std::vector<index_t> addNE_fix; // addNE_fix -> [i, n] : Fix ID of element n according to
                                     // threadIdx[thread_which_created_n] and add it to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
-    std::vector<index_t> recolour; // List of vertices to be recoloured.
   };
 
   void _init(int _NNodes, int _NElements, const index_t *globalENList,
@@ -1174,7 +1172,6 @@ template<typename real_t, typename index_t> class Mesh{
     NEList.resize(NNodes);
     node_owner.resize(NNodes);
     this->lnn2gnn.resize(NNodes);
-    node_colour.resize(NNodes);
     node_hash.resize(NNodes);
     deferred_operations.resize(num_threads);
 
@@ -1272,7 +1269,7 @@ template<typename real_t, typename index_t> class Mesh{
       create_adjacency();
     }
 
-    create_colouring();
+    calculate_hashes();
     create_global_node_numbering();
   }
 
@@ -1323,94 +1320,12 @@ template<typename real_t, typename index_t> class Mesh{
     }
   }
   
-  // Jones-Plassmann-style colouring using Park & Miller hash generation
-  void create_colouring(){
+  void calculate_hashes(){
     size_t NNodes = get_number_nodes();
 
-    // Colour -2 means the node hasn't been coloured yet.
-    std::fill(node_colour.begin(), node_colour.begin() + NNodes, (char) -2);
-    std::fill(node_hash.begin(), node_hash.begin() + NNodes, 0);
-
-    // Create vertex hashes
 #pragma omp parallel for schedule(static)
     for(size_t i=0; i<NNodes; ++i)
       node_hash[i] = hash(i);
-
-    update_colour(0, NNodes);
-  }
-
-  // Update colours for a range of vertices
-  void update_colour(const size_t begin, const size_t end){
-    size_t total_vertices = end - begin;
-
-    // Count how many vertices were coloured in a round
-    // and how many vertices has been coloured so far.
-    size_t ncoloured = 0, total_coloured = 0;
-    size_t round = 0;
-
-    do{
-#pragma omp parallel
-      {
-        std::vector<index_t> to_be_coloured;
-        to_be_coloured.reserve(total_vertices);
-
-#pragma omp for schedule(static, 32) reduction(+:ncoloured)
-        for(size_t i=begin; i<end; ++i){
-          if(node_colour[i] != -2)
-            continue;
-
-          // A vertex is eligible to be coloured in this round only if
-          // it's got the highest hash among all uncoloured neighbours.
-          bool eligible = true;
-
-          for(size_t j=0; j<NNList[i].size(); ++j)
-            if(node_hash[i] < node_hash[NNList[i][j]])
-              if(node_colour[NNList[i][j]] == -2){
-                eligible = false;
-                break;
-              }
-
-          if(eligible){
-            to_be_coloured.push_back(i);
-            ++ncoloured;
-          }
-        }
-
-        for(size_t i=0; i<to_be_coloured.size(); ++i)
-          node_colour[to_be_coloured[i]] = round;
-      }
-
-      total_coloured += ncoloured;
-      ncoloured = 0;
-      ++round;
-    } while(total_coloured < total_vertices);
-
-    nColours = round;
-  }
-
-  // TODO: Not working yet
-  // Update colour of a single vertex
-  void update_colour(const index_t vid){
-    size_t colour = 0;
-    bool eligible;
-
-    do{
-      eligible = true;
-
-      for(size_t i=0; i<NNList[vid].size(); ++i)
-        if(node_hash[vid] < node_hash[NNList[vid][i]])
-          if(node_colour[NNList[vid][i]] == -2){
-            eligible = false;
-            break;
-          }
-
-      if(eligible){
-        node_colour[vid] = colour;
-        return;
-      }
-
-      ++colour;
-    } while(!eligible);
   }
 
   /*
@@ -1433,12 +1348,6 @@ template<typename real_t, typename index_t> class Mesh{
     deferred_operations[tid][i % num_threads].remNN.push_back(n);
   }
 
-  inline void deferred_repNN(index_t i, index_t m, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].repNN.push_back(i);
-    deferred_operations[tid][i % num_threads].repNN.push_back(m);
-    deferred_operations[tid][i % num_threads].repNN.push_back(n);
-  }
-
   inline void deferred_addNE(index_t i, index_t n, size_t tid){
     deferred_operations[tid][i % num_threads].addNE.push_back(i);
     deferred_operations[tid][i % num_threads].addNE.push_back(n);
@@ -1454,55 +1363,55 @@ template<typename real_t, typename index_t> class Mesh{
     deferred_operations[tid][i % num_threads].remNE.push_back(n);
   }
 
-  void commit_deferred(size_t tid, std::vector<size_t>& threadIdx){
-    for(size_t i=0; i<num_threads; ++i){
+  void commit_deferred(size_t tid){
+    commit_deferred(tid, NULL);
+  }
+
+  void commit_deferred(size_t tid, std::vector<size_t> *threadIdx){
+    for(int i=0; i<num_threads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       // Commit removals from NNList
       for(typename std::vector<index_t>::const_iterator it=pending.remNN.begin(); it!=pending.remNN.end(); it+=2){
+        assert(*it % num_threads == (int) tid);
         typename std::vector<index_t>::iterator position;
         position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
+        assert(position != NNList[*it].end());
         NNList[*it].erase(position);
       }
       pending.remNN.clear();
 
       // Commit additions to NNList
       for(typename std::vector<index_t>::const_iterator it=pending.addNN.begin(); it!=pending.addNN.end(); it+=2){
-        assert(*it % num_threads == tid);
+        assert(*it % num_threads == (int) tid);
         NNList[*it].push_back(*(it+1));
       }
       pending.addNN.clear();
 
-      // Commit replacements to NNList
-      for(typename std::vector<index_t>::const_iterator it=pending.repNN.begin(); it!=pending.repNN.end(); it+=3){
-        typename std::vector<index_t>::iterator position;
-        position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
-        *position = *(it+2);
-      }
-      pending.repNN.clear();
-
       // Commit removals from NEList
       for(typename std::vector<index_t>::const_iterator it=pending.remNE.begin(); it!=pending.remNE.end(); it+=2){
-        assert(*it % num_threads == tid);
+        assert(*it % num_threads == (int) tid);
         NEList[*it].erase(*(it+1));
       }
       pending.remNE.clear();
 
       // Commit additions to NEList
       for(typename std::vector<index_t>::const_iterator it=pending.addNE.begin(); it!=pending.addNE.end(); it+=2){
-        assert(*it % num_threads == tid);
+        assert(*it % num_threads == (int) tid);
         NEList[*it].insert(*(it+1));
       }
       pending.addNE.clear();
 
       // Fix element IDs and commit additions to NEList
-      for(typename std::vector<index_t>::const_iterator it=pending.addNE_fix.begin(); it!=pending.addNE_fix.end(); it+=2){
-        assert(*it % num_threads == tid);
-        // Element was created by thread i
-        index_t fixedId = *(it+1) + threadIdx[i];
-        NEList[*it].insert(fixedId);
+      if(threadIdx!=NULL){
+        for(typename std::vector<index_t>::const_iterator it=pending.addNE_fix.begin(); it!=pending.addNE_fix.end(); it+=2){
+          assert(*it % num_threads == (int) tid);
+          // Element was created by thread i
+          index_t fixedId = *(it+1) + (*threadIdx)[i];
+          NEList[*it].insert(fixedId);
+        }
+        pending.addNE_fix.clear();
       }
-      pending.addNE_fix.clear();
     }
   }
 
@@ -1692,7 +1601,7 @@ template<typename real_t, typename index_t> class Mesh{
       gnn_offset-=NPNodes;
 
       // Write global node numbering and ownership for nodes assigned to local process.
-      for(int i=0;i<NNodes;i++){
+      for(index_t i=0; i < (index_t) NNodes; i++){
         if(recv_halo.count(i)){
           lnn2gnn[i] = 0;
         }else{
@@ -1712,7 +1621,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
     }else{
       memset(&node_owner[0], 0, NNodes*sizeof(int));
-      for(int i=0;i<NNodes;i++)
+      for(index_t i=0; i < (index_t) NNodes; i++)
         lnn2gnn[i] = i;
     }
   }
@@ -1817,9 +1726,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<size_t> node_owner;
   std::vector<index_t> lnn2gnn;
   // Auxiliary data for colouring
-  std::vector<char> node_colour;
   std::vector<uint32_t> node_hash;
-  size_t nColours;
   //Deferred operations
   std::vector< std::vector<DeferredOperations> > deferred_operations;
 

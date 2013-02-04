@@ -200,7 +200,7 @@ template<typename real_t, typename index_t> class Refine2D{
         /*
          * Update NNList for newly created vertices. This has to be done here, it cannot be
          * done during element refinement, because a split edge is shared between two elements
-         * and we run the risk that these updates will happen twice, one for each element.
+         * and we run the risk that these updates will happen twice, once for each element.
          */
         _mesh->NNList[vid].push_back(firstid);
         _mesh->NNList[vid].push_back(secondid);
@@ -212,8 +212,7 @@ template<typename real_t, typename index_t> class Refine2D{
         *it = vid;
 
         // Check if surface edge
-        if(_surface->contains_node(firstid) &&
-            _surface->contains_node(secondid)){
+        if(_surface->contains_node(firstid) && _surface->contains_node(secondid)){
           surfaceEdges[tid].push_back(allNewVertices[i]);
         }
 
@@ -259,7 +258,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
 #pragma omp barrier
       // Commit deferred operations. Every thread must have finished refinement, thus the barrier.
-      _mesh->commit_deferred(tid, threadIdx);
+      _mesh->commit_deferred(tid, &threadIdx);
 
       if(nprocs==1){
         // If we update lnn2gnn and node_owner here, OMP performance suffers.
@@ -385,9 +384,6 @@ template<typename real_t, typename index_t> class Refine2D{
     }
 
     delete[] allNewVertices;
-
-    // Update colouring
-    _mesh->update_colour(origNNodes, _mesh->NNodes);
 
     // Refine surface
     _surface->refine(surfaceEdges);

@@ -198,7 +198,6 @@ template<typename real_t, typename index_t>
     _mesh->NEList.resize(pNElements/2);
     _mesh->node_owner.resize(pNElements/2, -1);
     _mesh->lnn2gnn.resize(pNElements/2, -1);
-    _mesh->node_colour.resize(pNElements/2, -2);
     _mesh->node_hash.resize(pNElements/2);
 
 #ifdef HAVE_MPI

@@ -114,8 +114,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
     
     size_t NNodes= _mesh->get_number_nodes();
     
-    int *tpartition = new int[NNodes];
-
     if(nnodes_reserve<NNodes){
       nnodes_reserve = 1.5*NNodes;
       
@@ -125,127 +123,321 @@ template<typename real_t, typename index_t> class Coarsen2D{
       dynamic_vertex = new index_t[nnodes_reserve];
     }
     
+    /* dynamic_vertex[i] >= 0 :: target to collapse node i
+       dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
+       dynamic_vertex[i] = -2 :: recalculate collapse - this is how propagation is implemented
+    */
+
+    // Total number of active vertices. Used to break the infinite loop.
+    size_t total_active;
+
+    // Set of all dynamic vertices. We pre-allocate the maximum capacity
+    // that may be needed. Accessed using active sub-mesh vertex IDs.
+    index_t *GlobalActiveSet = new index_t[NNodes];
+    size_t GlobalActiveSet_size;
+
+    // NNList of the active sub-mesh. Accessed using active sub-mesh vertex IDs.
+    // Each vector contains regular vertex IDs.
+    std::vector<index_t> **subNNList = new std::vector<index_t>* [NNodes];
+
+    // Accessed using regular vertex IDs.
+    char *node_colour = new char[NNodes];
+
+    // Variables used in colouring - declared here because they need to be shared among OMP threads.
+    size_t ncoloured_high, ncoloured_low, total_coloured;
+
+    /* It's highly unlikely that more than a dozen colours will be needed, let's
+     * allocate 32 just in case. They are just pointers, so there is no memory
+     * footprint. The array for each independent set will be allocated on demand.
+     * Independent sets contain regular vertex IDs.
+     */
+    index_t **independent_sets = new index_t* [32];
+    std::vector<size_t> ind_set_size(32);
+
 #pragma omp parallel
     {
       const int tid = omp_get_thread_num();
-      
-      // Initialise arrays - applying first-touch.
+
+      // Mark all vertices for evaluation.
 #pragma omp for schedule(static)
-      for(size_t i=0;i<NNodes;i++){
-        /* dynamic_vertex[i] >= 0 :: target to collapse node i
-           dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
-           dynamic_vertex[i] = -2 :: recalculate collapse
-        */
-        if(_mesh->NNList[i].empty()){
-          dynamic_vertex[i] = -1;
-        }else{
-          dynamic_vertex[i] = -2;
+      for(size_t i=0;i<NNodes;i++)
+        dynamic_vertex[i] = -2;
+
+      do{
+        /* Create the active sub-mesh. This is the mesh consisting of all dynamic
+         * vertices and all edges connecting two dynamic vertices, i.e. sub_NNList[i]
+         * of active sub-mesh contains all vertices of _mesh->NNList[i] which are
+         * dynamic. The goal is to prevent two adjacent vertices from collapsing at the
+         * same time, therefore avoiding structural hazards. A nice side-effect is that
+         * we also enforce the "every other vertex" rule. Safe parallel updating of _mesh
+         * adjacency lists can be achieved later using the deferred updates mechanism.
+         */
+
+        // Start by finding which vertices comprise the active sub-mesh.
+        std::vector<index_t> active_set;
+
+#pragma omp single nowait
+        {
+          GlobalActiveSet_size = 0;
         }
-      }
-      
-      /* Initialise list of vertices to be coarsened. A dynamic
-         schedule is used as previous coarsening may have introduced
-         significant gaps in the node list. This could lead to
-         significant load imbalance if a static schedule was used. */
-#pragma omp for schedule(dynamic) 
-      for(size_t i=0;i<NNodes;i++){
-        if(dynamic_vertex[i]==-2){
-          dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
-        }
-      }
-      
-      if(nthreads>1){
-        /* Phase 1: Local process coarsening with all threads. Must
-           partition process domain into thread blocks.
-           
-           To achieve good load balance between threads; define the
-           vertex weight (vwgt) to be 1 if the vertex is dynamic, zero
-           otherwise.
-           
-           To discourage partitioning edges that may need to be
-           coarsened; define the edge weight to be 1 if one of its
-           vertices is dynamic, zero otherwise.
-        */
+
 #pragma omp single
         {
-          pragmatic::partition_fast(_mesh->NNList, NNodes, dynamic_vertex, nthreads, tpartition);
+          total_active = 0;
         }
-        
-        /* Each thread creates a list of vertices it is responsible
-           for collapsing.
-        */
-        std::vector<int> *tdynamic_vertex = new std::vector<int>;
-        tdynamic_vertex->reserve(NNodes/nthreads);
+
+        /* Initialise list of vertices to be coarsened. A dynamic
+           schedule is used as previous coarsening may have introduced
+           significant gaps in the node list. This could lead to
+           significant load imbalance if a static schedule was used. */
+#pragma omp for schedule(dynamic,8) reduction(+:total_active)
         for(size_t i=0;i<NNodes;i++){
-          if((tid==tpartition[i])&&(dynamic_vertex[i]>=0)&&(!_mesh->is_halo_node(i))){
-            bool is_thread_halo=false;
-            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
-              if(tpartition[*it]!=tid){
-                is_thread_halo = true;
-                break;
-              }
-            }
-            if(!is_thread_halo)
-              tdynamic_vertex->push_back(i);
+          if(dynamic_vertex[i] == -2)
+            dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+
+          if(dynamic_vertex[i]>=0){
+            active_set.push_back(i);
+            ++total_active;
           }
         }
 
-        /* Coarsen vertices.
-         */
-        int cnt;
-        do{
-          cnt = 0;
-          
-          for(std::vector<int>::const_iterator it=tdynamic_vertex->begin();it!=tdynamic_vertex->end();++it){
-            int remove_vertex = *it;
-            int target_vertex = dynamic_vertex[*it];
-            if(target_vertex<0)
-              continue;
-            
-            coarsen_kernel(remove_vertex, target_vertex);
-            cnt++;
-          }
-        } while(cnt);
-        
-        delete tdynamic_vertex;
-      }
+        if(total_active == 0)
+          break;
+
+        size_t pos;
+#pragma omp atomic capture
+        {
+          pos = GlobalActiveSet_size;
+          GlobalActiveSet_size += active_set.size();
+        }
+
+        memcpy(&GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
 
 #pragma omp barrier
-      
-      /* Phase 2 - local process coarsening with single thread. This
-         will finish off any collapses previously constrained by the
-         tpartition. */
+        assert(GlobalActiveSet_size == total_active);
+
+#pragma omp for schedule(dynamic)
+        for(size_t i=0; i<GlobalActiveSet_size; ++i){
+          index_t vid = GlobalActiveSet[i];
+          std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
+
+          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
+            if(dynamic_vertex[*it]>=0){
+              dynamic_NNList->push_back(*it);
+            }
+
+          subNNList[i] = dynamic_NNList;
+          node_colour[vid] = -1; // Reset colour
+        }
+
+        /**********************************************
+         * Active sub-mesh is ready, let's colour it. *
+         **********************************************/
 #pragma omp single
-      {
-        bool phase_2;
+        {
+          total_coloured = 0;
+          ncoloured_high = 0;
+          ncoloured_low = 0;
+        }
+
+        std::vector<index_t> to_be_coloured_high, to_be_coloured_low;
+        to_be_coloured_high.reserve(GlobalActiveSet_size/nthreads);
+        to_be_coloured_low.reserve(GlobalActiveSet_size/nthreads);
+
+        // At the end of colouring, this variable will be equal to the total number of colours used.
+        size_t colour = 0;
+
         do{
-          phase_2 = false;
-          
-          for(size_t i=0;i<NNodes;i++){
-            if((dynamic_vertex[i]>=0)&&(!_mesh->is_halo_node(i))){
-              
-              int remove_vertex = i;
-              int target_vertex = dynamic_vertex[i];
-              
-              coarsen_kernel(remove_vertex, target_vertex);
-            
-              // Evaluate local edge collapse's.
-              if(dynamic_vertex[target_vertex]>=0)
-                phase_2 = true;
-              else
-                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[target_vertex].begin();jt!=_mesh->NNList[target_vertex].end();++jt){
-                  if(dynamic_vertex[*jt]>=0){
-                    phase_2 = true;
-                    break;
-                  }
+          to_be_coloured_high.clear();
+          to_be_coloured_low.clear();
+
+#pragma omp for schedule(dynamic, 16) reduction(+:ncoloured_high,ncoloured_low)
+          for(size_t i=0; i<GlobalActiveSet_size; ++i){ // TODO: Use worklists
+            index_t vid = GlobalActiveSet[i];
+
+            // If this node has been coloured already, skip it.
+            if(node_colour[vid] != -1)
+              continue;
+
+            // A vertex is eligible to be coloured in this round only if it's got
+            // the highest or the lowest hash among all uncoloured neighbours.
+
+            // Check whether this is the highest hash.
+            bool eligible = true;
+
+            for(size_t j=0; j<subNNList[i]->size(); ++j){
+              index_t neigh = subNNList[i]->at(j);
+              assert(dynamic_vertex[neigh] >= 0);
+              if(_mesh->node_hash[vid] < _mesh->node_hash[neigh])
+                if(node_colour[neigh] == -1){
+                  eligible = false;
+                  break;
                 }
             }
+
+            if(eligible){
+              to_be_coloured_high.push_back(vid);
+              ++ncoloured_high;
+              continue;
+            }
+
+            // Check whether this is the lowest hash.
+            eligible = true;
+
+            for(size_t j=0; j<subNNList[i]->size(); ++j){
+              index_t neigh = subNNList[i]->at(j);
+              assert(dynamic_vertex[neigh] >= 0);
+              if(_mesh->node_hash[vid] > _mesh->node_hash[neigh])
+                if(node_colour[neigh] == -1){
+                  eligible = false;
+                  break;
+                }
+            }
+
+            if(eligible){
+              to_be_coloured_low.push_back(vid);
+              ++ncoloured_low;
+            }
           }
-        } while(phase_2);
-      }
+
+#pragma omp single
+          {
+            independent_sets[colour] = new index_t[ncoloured_high];
+            independent_sets[colour+1] = new index_t[ncoloured_low];
+            ind_set_size[colour] = 0;
+            ind_set_size[colour+1] = 0;
+            total_coloured += ncoloured_high + ncoloured_low;
+            ncoloured_high = 0;
+            ncoloured_low = 0;
+          }
+
+          // Commit colouring. Also, update MPI halo.
+
+          // Commit the high colour
+          for(size_t i=0; i<to_be_coloured_high.size(); ++i)
+            node_colour[to_be_coloured_high[i]] = (char) colour;
+
+#pragma omp atomic capture
+          {
+            pos = ind_set_size[colour];
+            ind_set_size[colour] += to_be_coloured_high.size();
+          }
+
+          memcpy(&independent_sets[colour][pos], &to_be_coloured_high[0], to_be_coloured_high.size() * sizeof(index_t));
+
+          ++colour;
+
+          // Commit the low colour
+          for(size_t i=0; i<to_be_coloured_low.size(); ++i)
+            node_colour[to_be_coloured_low[i]] = (char) colour;
+
+#pragma omp atomic capture
+          {
+            pos = ind_set_size[colour];
+            ind_set_size[colour] += to_be_coloured_low.size();
+          }
+
+          memcpy(&independent_sets[colour][pos], &to_be_coloured_low[0], to_be_coloured_low.size() * sizeof(index_t));
+
+          ++colour;
+
+#pragma omp barrier
+        } while(total_coloured < GlobalActiveSet_size);
+
+        // Total number of independent sets = colour
+        size_t nsets = colour;
+        /********************
+         * End of colouring *
+         ********************/
+
+        // TODO: Sort independent sets by size.
+
+        /*
+         * Start processing independent sets. After processing each set, colouring
+         * might be invalid. More precisely, it's the target vertices whose colours
+         * might clash with their neighbours' colours. To avoid hazards, we just
+         * un-colour these vertices if their colour clashes with the colours of
+         * their new neighbours. Being a neighbour of a removed vertex, the target
+         * vertex will be marked for re-evaluation during coarsening of rm_vertex,
+         * i.e. dynamic_vertex[target_target] == -2, so it will get a chance to be
+         * processed at the next iteration of the do...while loop, when a new
+         * colouring of the active sub-mesh will have been established. This is an
+         * optimised approach compared to only processing the maximal independent
+         * set and then discarding the other colours and looping all over again -
+         * at least we make use of the existing colouring as much as possible.
+         */
+        for(unsigned char set_no=0; set_no<nsets; ++set_no){
+#pragma omp for schedule(dynamic,16)
+          for(size_t i=0; i<ind_set_size[set_no]; ++i){
+            index_t rm_vertex = independent_sets[set_no][i];
+            assert((size_t) rm_vertex < NNodes);
+
+            // If the node has been un-coloured, skip it.
+            if(node_colour[rm_vertex] < 0)
+              continue;
+
+            assert(node_colour[rm_vertex] == set_no);
+
+            /* If this rm_vertex is marked for re-evaluation, it means that the
+             * local neighbourhood has changed since coarsen_identify_kernel was
+             * called for this vertex. Call coarsen_identify_kernel again.
+             * Obviously, this check is redundant for set_no=0.
+             */
+            if(dynamic_vertex[rm_vertex] == -2)
+              dynamic_vertex[rm_vertex] = coarsen_identify_kernel(rm_vertex, L_low, L_max);
+
+            if(dynamic_vertex[rm_vertex] < 0)
+              continue;
+
+            index_t target_vertex = dynamic_vertex[rm_vertex];
+
+            // Mark neighbours for re-evaluation.
+            // Two threads might be marking the same vertex at the same time.
+            // This is a race condition which doesn't cause any trouble.
+            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+              if(_mesh->is_owned_node(*jt))
+                dynamic_vertex[*jt] = -2;
+            }
+
+            // Mark rm_vertex as non-active.
+            dynamic_vertex[rm_vertex] = -1;
+
+            // Un-colour target_vertex if its colour clashes with any of its new neighbours.
+            // There is race condition here, but it doesn't do any harm.
+            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+              if(_mesh->is_owned_node(*jt)) // TODO: What happens across MPI processes?
+                if(node_colour[*jt] == node_colour[target_vertex])
+                  if(*jt != target_vertex){
+                    node_colour[target_vertex] = -1;
+                    break;
+                  }
+            }
+
+            // Coarsen the edge.
+            coarsen_kernel(rm_vertex, target_vertex, tid);
+          }
+
+          _mesh->commit_deferred(tid);
+          _surface->commit_deferred(tid);
+#pragma omp barrier
+        }
+
+#pragma omp for schedule(static) nowait
+        for(size_t set_no=0; set_no<nsets; ++set_no){
+          delete[] independent_sets[set_no];
+        }
+
+#pragma omp for schedule(static) nowait
+        for(size_t i=0; i<GlobalActiveSet_size; ++i)
+          delete subNNList[i];
+
+      }while(true);
     }
-    
-    delete[] tpartition;
+
+    delete[] GlobalActiveSet;
+    delete[] subNNList;
+    delete[] node_colour;
+    delete[] independent_sets;
 
     // Phase 3 (halo)
 #ifdef HAVE_MPI
@@ -271,11 +463,11 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(!maximal_independent_set[rm_vertex])
                 continue;
               
-              coarsen_kernel(rm_vertex, target_vertex);
+              coarsen_kernel(rm_vertex, target_vertex, 0);
               coarsen_cnt++;
             }else{
               // If it's not in the halo, then it's free to be coarsened.
-              coarsen_kernel(rm_vertex, target_vertex);
+              coarsen_kernel(rm_vertex, target_vertex, 0);
               coarsen_cnt++;
             }
           }
@@ -396,7 +588,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         break;
     }
     
-    // If we're checked all edges and none are collapsible then return.
+    // If we're checked all edges and none is collapsible then return.
     if(reject_collapse)
       return -2;
     
@@ -407,24 +599,42 @@ template<typename real_t, typename index_t> class Coarsen2D{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex is collapsed onto, negative if the operation is not performed.
    */
-  void coarsen_kernel(index_t rm_vertex, index_t target_vertex){
+  void coarsen_kernel(index_t rm_vertex, index_t target_vertex, size_t tid){
     std::set<index_t> deleted_elements;
     std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                      std::inserter(deleted_elements, deleted_elements.begin()));
-    
-    // Perform coarsening on surface if necessary.
-    if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
-      _surface->collapse(rm_vertex, target_vertex);
+
+    // This is the set of vertices which are common neighbours between rm_vertex and target_vertex.
+    std::set<index_t> common_patch;
+
+    // Remove deleted elements from node-element adjacency list and from element-node list.
+    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
+      index_t eid = *de;
+
+      // Remove element from NEList[rm_vertex].
+      _mesh->NEList[rm_vertex].erase(eid);
+
+      // Remove element from NEList of the other two vertices.
+      for(size_t i=0; i<nloc; ++i){
+        index_t vid = _mesh->_ENList[eid*nloc+i];
+        if(vid != rm_vertex){
+          _mesh->deferred_remNE(vid, eid, tid);
+
+          // If this vertex is neither rm_vertex nor target_vertex, it is one of the 2 common neighbours.
+          if(vid != target_vertex)
+            common_patch.insert(vid);
+        }
+      }
+
+      // Remove element from mesh.
+      _mesh->_ENList[eid*nloc] = -1;
     }
 
-    // Remove deleted elements from node-element adjacency list.
-    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de)
-      _mesh->erase_element(*de);
+    assert(common_patch.size() == deleted_elements.size());
 
-    // Renumber nodes in elements adjacent to rm_vertex.
+    // For all adjacent elements, replace rm_vertex with target_vertex in ENList.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-      // Renumber.
       for(size_t i=0;i<nloc;i++){
         if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
           _mesh->_ENList[nloc*(*ee)+i]=target_vertex;
@@ -432,47 +642,39 @@ template<typename real_t, typename index_t> class Coarsen2D{
         }
       }
       
-      // Add element to target node-element adjacency list.
-      _mesh->NEList[target_vertex].insert(*ee);
+      // Add element to target_vertex' NEList.
+      _mesh->deferred_addNE(target_vertex, *ee, tid);
     }
     
     // Update surrounding NNList.
-    {
-      std::set<index_t> new_patch = _mesh->get_node_patch(target_vertex);
-      for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-        if(*nn==target_vertex)
-          continue;
-        
-        // Find all entries pointing back to rm_vertex and update them to target_vertex.
+    std::set<index_t> additional_patch;
+    for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+      if(*nn==target_vertex)
+        continue;
+
+      // Find all entries pointing back to rm_vertex and update them to target_vertex.
+      if(common_patch.count(*nn))
+        _mesh->deferred_remNN(*nn, rm_vertex, tid);
+      else{
         typename std::vector<index_t>::iterator back_reference = std::find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
         assert(back_reference!=_mesh->NNList[*nn].end());
-        if(new_patch.count(*nn))
-          _mesh->NNList[*nn].erase(back_reference);
-        else
-          *back_reference = target_vertex;
+        *back_reference = target_vertex;
+        additional_patch.insert(*nn);
+      }
+    }
 
-        new_patch.insert(*nn);
-      }
-      
-      // Write new NNList for target_vertex
-      _mesh->NNList[target_vertex].clear();
-      for(typename std::set<index_t>::const_iterator it=new_patch.begin();it!=new_patch.end();++it){
-        if(*it!=rm_vertex){
-          _mesh->NNList[target_vertex].push_back(*it);
-        }
-      }
+    // Update NNList for target_vertex
+    _mesh->deferred_remNN(target_vertex, rm_vertex, tid);
+    for(typename std::set<index_t>::const_iterator it=additional_patch.begin();it!=additional_patch.end();++it){
+      _mesh->deferred_addNN(target_vertex, *it, tid);
     }
     
+    // Perform coarsening on surface if necessary.
+    if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
+      _surface->collapse(rm_vertex, target_vertex, tid);
+    }
+
     _mesh->erase_vertex(rm_vertex);
-    dynamic_vertex[rm_vertex] = -1;
-    
-    // Re-evaluate local edge collapse's.
-    if(_mesh->is_owned_node(target_vertex))
-      dynamic_vertex[target_vertex] = coarsen_identify_kernel(target_vertex, _L_low, _L_max);
-    for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[target_vertex].begin();jt!=_mesh->NNList[target_vertex].end();++jt){
-      if(_mesh->is_owned_node(*jt))
-        dynamic_vertex[*jt] = coarsen_identify_kernel(*jt, _L_low, _L_max);
-    }
   }
 
   void select_max_independent_set(std::vector<bool> &maximal_independent_set){

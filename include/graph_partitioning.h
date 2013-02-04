@@ -113,7 +113,7 @@ namespace pragmatic{
     }
   }
   
-  void partition_fast(std::vector< std::vector<int> > &NNList, size_t NNodes, int *active_vertex, int nparts, int *part){
+  void partition_fast_active(std::vector< std::vector<int> > &NNList, size_t NNodes, int *active_vertex, int nparts, int *part){
     if(nparts==1){
     	memset(part, 0, NNodes*sizeof(int));
       return;
@@ -121,7 +121,7 @@ namespace pragmatic{
     
     // Graph partitioning using breadth-first traversal
     int active_cnt=0;
-    for(int i=0;i<NNodes;i++){
+    for(int i=0;i<(int)NNodes;i++){
       part[i] = -1;
       if(active_vertex[i]>=0)
         active_cnt++;
@@ -130,11 +130,11 @@ namespace pragmatic{
     const int target = active_cnt/nparts;
     int j=0;
     for(int p=0;p<nparts;p++){
-      for(;j<NNodes;j++){
+      for(;j<(int)NNodes;j++){
         if((part[j]<0)&&(active_vertex[j]>=0))
           break;
       }
-      if(j==NNodes)
+      if(j==(int)NNodes)
         break;
 
       part[j] = p;
@@ -154,6 +154,57 @@ namespace pragmatic{
       	  }
       	}
       }
+    }
+  }
+
+  void partition_fast(std::vector< std::vector<int> > &NNList, size_t NNodes, int *active_vertex, int nparts, int *part){
+    if(nparts==1){
+        memset(part, 0, NNodes*sizeof(int));
+      return;
+    }
+
+    // Graph partitioning using breadth-first traversal
+    int active_cnt=0;
+    for(int i=0;i<(int)NNodes;i++){
+      part[i] = -1;
+      if(active_vertex[i]>=0)
+        active_cnt++;
+    }
+
+    const int target = active_cnt/nparts;
+    int j=0;
+    for(int p=0;p<nparts;){
+      for(;j<(int)NNodes;j++){
+        if(part[j]<0)
+          break;
+      }
+      if(j==(int)NNodes)
+        break;
+
+      part[j] = p;
+      int cnt=0;
+      if(active_vertex[j]>=0)
+        ++cnt;
+
+      std::deque<int> front;
+      front.push_back(j);
+
+      while(!front.empty() && cnt<target){
+        int v = *front.begin();
+        front.pop_front();
+
+        for(std::vector<int>::const_iterator it=NNList[v].begin();it!=NNList[v].end();++it){
+          if(part[*it]<0){
+            front.push_back(*it);
+            part[*it] = p;
+            if(active_vertex[*it]>=0)
+              ++cnt;
+          }
+        }
+      }
+
+      if(cnt > target)
+        ++p;
     }
   }
 }

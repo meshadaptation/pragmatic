@@ -96,7 +96,7 @@ int main(int argc, char **argv){
                                     <<"Quality mean:  "<<qmean<<std::endl
                                     <<"Quality min:   "<<qmin<<std::endl
                                     <<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
+  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -195,9 +195,9 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  //std::vector<int> active_vertex_map;
+  //mesh->defragment(&active_vertex_map);
+  //surface.defragment(&active_vertex_map);
 
   if(verbose){
     if(rank==0)
@@ -228,8 +228,8 @@ int main(int argc, char **argv){
     psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
+  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
