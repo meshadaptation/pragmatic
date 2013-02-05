@@ -136,23 +136,36 @@ template<typename real_t, typename index_t> class Coarsen2D{
     index_t *GlobalActiveSet = new index_t[NNodes];
     size_t GlobalActiveSet_size;
 
+    // Subset of GlobalActiveSet: it contains the vertices which the colouring
+    // algorithm will try to colour in one round. UncolouredActiveSet[i] stores
+    // the active sub-mesh ID of an uncoloured vertex, i.e. the vertex at
+    // UncolouredActiveSet[i] has neighbours=subNNList[UncolouredActiveSet[i]]
+    // and its regular ID is vid = GlobalActiveSet[UncolouredActiveSet[i]].
+    index_t *UncolouredActiveSet = new index_t[NNodes];
+    size_t UncolouredActiveSet_size;
+
+    // Subset of UncolouredActiveSet: it contains the vertices which couldn't be
+    // coloured in that round and are left for the next round. Like UncolouredActiveSet,
+    // it stores active sub-mesh IDs. At the end of each colouring round,
+    // the pointers to UncolouredActiveSet and NextRoundActive set are swapped.
+    index_t *NextRoundActiveSet = new index_t[NNodes];
+    size_t NextRoundActiveSet_size;
+
     // NNList of the active sub-mesh. Accessed using active sub-mesh vertex IDs.
     // Each vector contains regular vertex IDs.
     std::vector<index_t> **subNNList = new std::vector<index_t>* [NNodes];
 
     // Accessed using regular vertex IDs.
     char *node_colour = new char[NNodes];
-
-    // Variables used in colouring - declared here because they need to be shared among OMP threads.
-    size_t ncoloured_high, ncoloured_low, total_coloured;
+    size_t *node_hash = new size_t[NNodes];
 
     /* It's highly unlikely that more than a dozen colours will be needed, let's
      * allocate 32 just in case. They are just pointers, so there is no memory
      * footprint. The array for each independent set will be allocated on demand.
      * Independent sets contain regular vertex IDs.
      */
-    index_t **independent_sets = new index_t* [32];
-    std::vector<size_t> ind_set_size(32);
+    index_t **independent_sets = new index_t* [max_colours];
+    std::vector<size_t> ind_set_size(max_colours, 0);
 
 #pragma omp parallel
     {
@@ -176,13 +189,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
         // Start by finding which vertices comprise the active sub-mesh.
         std::vector<index_t> active_set;
 
-#pragma omp single nowait
-        {
-          GlobalActiveSet_size = 0;
-        }
-
 #pragma omp single
         {
+          GlobalActiveSet_size = 0;
           total_active = 0;
         }
 
@@ -190,7 +199,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
            schedule is used as previous coarsening may have introduced
            significant gaps in the node list. This could lead to
            significant load imbalance if a static schedule was used. */
-#pragma omp for schedule(dynamic,8) reduction(+:total_active)
+#pragma omp for schedule(dynamic,32) reduction(+:total_active)
         for(size_t i=0;i<NNodes;i++){
           if(dynamic_vertex[i] == -2)
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
@@ -216,7 +225,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #pragma omp barrier
         assert(GlobalActiveSet_size == total_active);
 
-#pragma omp for schedule(dynamic)
+        // Construct the node adjacency list for the active sub-mesh.
+#pragma omp for schedule(dynamic) nowait
         for(size_t i=0; i<GlobalActiveSet_size; ++i){
           index_t vid = GlobalActiveSet[i];
           std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
@@ -233,31 +243,49 @@ template<typename real_t, typename index_t> class Coarsen2D{
         /**********************************************
          * Active sub-mesh is ready, let's colour it. *
          **********************************************/
+
+        // Initialise the uncoloured active set: it contains all vertices of the
+        // GlobalActiveSet. The first thread to reach this point will do the copy.
 #pragma omp single
         {
-          total_coloured = 0;
-          ncoloured_high = 0;
-          ncoloured_low = 0;
+          UncolouredActiveSet_size = GlobalActiveSet_size;
+          NextRoundActiveSet_size = 0;
         }
 
-        std::vector<index_t> to_be_coloured_high, to_be_coloured_low;
-        to_be_coloured_high.reserve(GlobalActiveSet_size/nthreads);
-        to_be_coloured_low.reserve(GlobalActiveSet_size/nthreads);
+        // Reset vertex hashes, starting with global IDs - this is important for MPI!
+        // Also, initialise UncolouredActiveSet.
+#pragma omp for schedule(static)
+        for(size_t i=0; i<GlobalActiveSet_size; ++i){
+          index_t vid = GlobalActiveSet[i];
+          node_hash[vid] = _mesh->lnn2gnn[vid];
+          UncolouredActiveSet[i] = i;
+        }
 
         // At the end of colouring, this variable will be equal to the total number of colours used.
         size_t colour = 0;
 
-        do{
-          to_be_coloured_high.clear();
-          to_be_coloured_low.clear();
+        // Local independent sets.
+        std::vector< std::vector<index_t> > local_ind_sets(max_colours);
+        // idx[i] stores the index in independent_sets[i] at which this thread
+        // will copy the contents of its local independent set local_ind_sets[i].
+        std::vector<size_t> idx(max_colours);
 
-#pragma omp for schedule(dynamic, 16) reduction(+:ncoloured_high,ncoloured_low)
-          for(size_t i=0; i<GlobalActiveSet_size; ++i){ // TODO: Use worklists
+        // Local list of vertices which are left for the next round.
+        std::vector<index_t> uncoloured;
+        uncoloured.reserve(GlobalActiveSet_size/nthreads);
+
+        while(UncolouredActiveSet_size > 0){
+          // Calculate the n-th order vertex hashes (n being the iteration count of this while loop).
+#pragma omp for schedule(static)
+          for(size_t i=0; i<GlobalActiveSet_size; ++i){
             index_t vid = GlobalActiveSet[i];
+            node_hash[vid] = _mesh->hash(node_hash[vid]);
+          }
 
-            // If this node has been coloured already, skip it.
-            if(node_colour[vid] != -1)
-              continue;
+#pragma omp for schedule(dynamic,16) nowait
+          for(size_t i=0; i<UncolouredActiveSet_size; ++i){
+            index_t vid = GlobalActiveSet[UncolouredActiveSet[i]];
+            assert(node_colour[vid] == -1);
 
             // A vertex is eligible to be coloured in this round only if it's got
             // the highest or the lowest hash among all uncoloured neighbours.
@@ -265,87 +293,102 @@ template<typename real_t, typename index_t> class Coarsen2D{
             // Check whether this is the highest hash.
             bool eligible = true;
 
-            for(size_t j=0; j<subNNList[i]->size(); ++j){
-              index_t neigh = subNNList[i]->at(j);
+            for(size_t j=0; j<subNNList[UncolouredActiveSet[i]]->size(); ++j){
+              index_t neigh = subNNList[UncolouredActiveSet[i]]->at(j);
               assert(dynamic_vertex[neigh] >= 0);
-              if(_mesh->node_hash[vid] < _mesh->node_hash[neigh])
-                if(node_colour[neigh] == -1){
-                  eligible = false;
-                  break;
-                }
+              if(node_hash[vid] < node_hash[neigh]){
+                eligible = false;
+                break;
+              }
             }
 
             if(eligible){
-              to_be_coloured_high.push_back(vid);
-              ++ncoloured_high;
+              node_colour[vid] = colour;
+              local_ind_sets[colour].push_back(vid);
               continue;
             }
 
             // Check whether this is the lowest hash.
             eligible = true;
 
-            for(size_t j=0; j<subNNList[i]->size(); ++j){
-              index_t neigh = subNNList[i]->at(j);
+            for(size_t j=0; j<subNNList[UncolouredActiveSet[i]]->size(); ++j){
+              index_t neigh = subNNList[UncolouredActiveSet[i]]->at(j);
               assert(dynamic_vertex[neigh] >= 0);
-              if(_mesh->node_hash[vid] > _mesh->node_hash[neigh])
-                if(node_colour[neigh] == -1){
-                  eligible = false;
-                  break;
-                }
+              if(node_hash[vid] > node_hash[neigh]){
+                eligible = false;
+                break;
+              }
             }
 
             if(eligible){
-              to_be_coloured_low.push_back(vid);
-              ++ncoloured_low;
+              node_colour[vid] = colour+1;
+              local_ind_sets[colour+1].push_back(vid);
+              continue;
             }
+
+            // If the vertex was not eligible for colouring
+            // in this round, advance it to the next round.
+            uncoloured.push_back(UncolouredActiveSet[i]);
           }
 
+          // Copy uncoloured vertices into NextRoundActiveSet
+          // (which will become the next round's UncolouredActiveSet).
+          size_t pos;
+#pragma omp atomic capture
+          {
+            pos = NextRoundActiveSet_size;
+            NextRoundActiveSet_size += uncoloured.size();
+          }
+
+          memcpy(&NextRoundActiveSet[pos], &uncoloured[0], uncoloured.size() * sizeof(index_t));
+          uncoloured.clear();
+
+          // Capture and increment the index in independent_sets[colour] and independent_sets[colour+1]
+          // at which the two local independent sets will be copied later, after memory for the global
+          // independent sets will have been allocated.
+#pragma omp atomic capture
+          {
+            idx[colour] = ind_set_size[colour];
+            ind_set_size[colour] += local_ind_sets[colour].size();
+          }
+
+#pragma omp atomic capture
+          {
+            idx[colour+1] = ind_set_size[colour+1];
+            ind_set_size[colour+1] += local_ind_sets[colour+1].size();
+          }
+
+          colour += 2;
+
+          // Swap UncolouredActiveSet and NextRoundActiveSet
+#pragma omp barrier
 #pragma omp single
           {
-            independent_sets[colour] = new index_t[ncoloured_high];
-            independent_sets[colour+1] = new index_t[ncoloured_low];
-            ind_set_size[colour] = 0;
-            ind_set_size[colour+1] = 0;
-            total_coloured += ncoloured_high + ncoloured_low;
-            ncoloured_high = 0;
-            ncoloured_low = 0;
+            index_t *swap = NextRoundActiveSet;
+            NextRoundActiveSet = UncolouredActiveSet;
+            UncolouredActiveSet = swap;
+            UncolouredActiveSet_size = NextRoundActiveSet_size;
+            NextRoundActiveSet_size = 0;
           }
-
-          // Commit colouring. Also, update MPI halo.
-
-          // Commit the high colour
-          for(size_t i=0; i<to_be_coloured_high.size(); ++i)
-            node_colour[to_be_coloured_high[i]] = (char) colour;
-
-#pragma omp atomic capture
-          {
-            pos = ind_set_size[colour];
-            ind_set_size[colour] += to_be_coloured_high.size();
-          }
-
-          memcpy(&independent_sets[colour][pos], &to_be_coloured_high[0], to_be_coloured_high.size() * sizeof(index_t));
-
-          ++colour;
-
-          // Commit the low colour
-          for(size_t i=0; i<to_be_coloured_low.size(); ++i)
-            node_colour[to_be_coloured_low[i]] = (char) colour;
-
-#pragma omp atomic capture
-          {
-            pos = ind_set_size[colour];
-            ind_set_size[colour] += to_be_coloured_low.size();
-          }
-
-          memcpy(&independent_sets[colour][pos], &to_be_coloured_low[0], to_be_coloured_low.size() * sizeof(index_t));
-
-          ++colour;
-
-#pragma omp barrier
-        } while(total_coloured < GlobalActiveSet_size);
+        }
 
         // Total number of independent sets = colour
         size_t nsets = colour;
+        assert(nsets <= max_colours);
+
+        // Allocate memory for the global independent sets.
+        // TODO: What happens if another MPI process has used more colours?
+#pragma omp for schedule(dynamic)
+        for(unsigned char set_no=0; set_no<nsets; ++set_no)
+          independent_sets[set_no] = new index_t[ind_set_size[set_no]];
+
+        // Copy local independent sets into the global structure.
+        for(unsigned char set_no=0; set_no<nsets; ++set_no)
+          memcpy(&independent_sets[set_no][idx[set_no]], &local_ind_sets[set_no][0],
+              local_ind_sets[set_no].size() * sizeof(index_t));
+
+        // Update MPI halo
+#pragma omp barrier
         /********************
          * End of colouring *
          ********************/
@@ -367,7 +410,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
          * at least we make use of the existing colouring as much as possible.
          */
         for(unsigned char set_no=0; set_no<nsets; ++set_no){
-#pragma omp for schedule(dynamic,16)
+#pragma omp for schedule(dynamic,32)
           for(size_t i=0; i<ind_set_size[set_no]; ++i){
             index_t rm_vertex = independent_sets[set_no][i];
             assert((size_t) rm_vertex < NNodes);
@@ -425,9 +468,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #pragma omp for schedule(static) nowait
         for(size_t set_no=0; set_no<nsets; ++set_no){
           delete[] independent_sets[set_no];
+          ind_set_size[set_no] = 0;
         }
 
-#pragma omp for schedule(static) nowait
+#pragma omp for schedule(static)
         for(size_t i=0; i<GlobalActiveSet_size; ++i)
           delete subNNList[i];
 
@@ -435,8 +479,11 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
 
     delete[] GlobalActiveSet;
+    delete[] UncolouredActiveSet;
+    delete[] NextRoundActiveSet;
     delete[] subNNList;
     delete[] node_colour;
+    delete[] node_hash;
     delete[] independent_sets;
 
     // Phase 3 (halo)
@@ -1086,6 +1133,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
   const static size_t nloc=3;
   const static size_t snloc=2;
   const static size_t msize=3;
+
+  const static size_t max_colours = 32;
 
   int nprocs, rank, nthreads;
 };
