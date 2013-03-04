@@ -55,7 +55,7 @@ __device__ real_t lipnikov2d(const real_t * x0, const real_t * x1, const real_t 
   // Metric tensor averaged over the element
   real_t m00 = (m0[0] + m1[0] + m2[0])/3;
   real_t m01 = (m0[1] + m1[1] + m2[1])/3;
-  real_t m11 = (m0[3] + m1[3] + m2[3])/3;
+  real_t m11 = (m0[2] + m1[2] + m2[2])/3;
 
   // l is the length of the perimeter, measured in metric space
   real_t l =

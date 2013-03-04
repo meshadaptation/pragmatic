@@ -1002,7 +1002,7 @@ template<typename real_t, typename index_t> class Mesh{
         gnn_offset+=NPNodes[i];
 
       // Write global node numbering.
-      for(int i=0;i<NNodes;i++){
+      for(index_t i=0;i<(index_t)NNodes;i++){
         if(recv_halo.count(i)){
           lnn2gnn[i] = 0;
         }else{
@@ -1014,7 +1014,7 @@ template<typename real_t, typename index_t> class Mesh{
       halo_update(&(lnn2gnn[0]), 1);
     }else{
       NPNodes[0] = NNodes;
-      for(int i=0;i<NNodes;i++){
+      for(index_t i=0;i<(index_t)NNodes;i++){
         lnn2gnn[i] = i;
       }
     }
@@ -1103,7 +1103,7 @@ template<typename real_t, typename index_t> class Mesh{
         gnn2lnn[lnn2gnn[i]] = i;
       }
 
-      std::vector< std::set<int> > recv_set(num_processes);
+      std::vector< std::set<index_t> > recv_set(num_processes);
       index_t *localENList = new index_t[NElements*nloc];
       for(size_t i=0;i<(size_t)NElements*nloc;i++){
         index_t gnn = globalENList[i];
@@ -1130,13 +1130,14 @@ template<typename real_t, typename index_t> class Mesh{
 
       // Setup non-blocking receives
       send.resize(num_processes);
+      send_map.resize(num_processes);
       std::vector<MPI_Request> request(num_processes*2);
       for(int i=0;i<num_processes;i++){
         if((i==rank)||(send_size[i]==0)){
           request[i] =  MPI_REQUEST_NULL;
         }else{
           send[i].resize(send_size[i]);
-          MPI_Irecv(&(send[i][0]), send_size[i], MPI_INT, i, 0, _mpi_comm, &(request[i]));
+          MPI_Irecv(&(send[i][0]), send_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[i]));
         }
       }
 
@@ -1145,7 +1146,7 @@ template<typename real_t, typename index_t> class Mesh{
         if((i==rank)||(recv_size[i]==0)){
           request[num_processes+i] =  MPI_REQUEST_NULL;
         }else{
-          MPI_Isend(&(recv[i][0]), recv_size[i], MPI_INT, i, 0, _mpi_comm, &(request[num_processes+i]));
+          MPI_Isend(&(recv[i][0]), recv_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[num_processes+i]));
         }
       }
 
@@ -1157,8 +1158,11 @@ template<typename real_t, typename index_t> class Mesh{
         for(int k=0;k<recv_size[j];k++)
           recv[j][k] = gnn2lnn[recv[j][k]];
 
-        for(int k=0;k<send_size[j];k++)
-          send[j][k] = gnn2lnn[send[j][k]];
+        for(int k=0;k<send_size[j];k++){
+          index_t vid= gnn2lnn[send[j][k]];
+          send[j][k] = vid;
+          send_map[j][vid] = k;
+        }
       }
 
       ENList = localENList;
@@ -1172,7 +1176,6 @@ template<typename real_t, typename index_t> class Mesh{
     NEList.resize(NNodes);
     node_owner.resize(NNodes);
     this->lnn2gnn.resize(NNodes);
-    node_hash.resize(NNodes);
     deferred_operations.resize(num_threads);
 
     // TODO I don't know whether this method makes sense anymore.
@@ -1269,7 +1272,6 @@ template<typename real_t, typename index_t> class Mesh{
       create_adjacency();
     }
 
-    calculate_hashes();
     create_global_node_numbering();
   }
 
@@ -1318,14 +1320,6 @@ template<typename real_t, typename index_t> class Mesh{
       NNList[i].swap(*nnset);
       delete nnset;
     }
-  }
-  
-  void calculate_hashes(){
-    size_t NNodes = get_number_nodes();
-
-#pragma omp parallel for schedule(static)
-    for(size_t i=0; i<NNodes; ++i)
-      node_hash[i] = hash(i);
   }
 
   /*
@@ -1549,6 +1543,11 @@ template<typename real_t, typename index_t> class Mesh{
         continue;
 
       std::vector<index_t> send_temp;
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+      boost::unordered_map<index_t, size_t> send_set_temp;
+#else
+      std::map<index_t, size_t> send_set_temp;
+#endif
 
       for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
         bool to_be_deleted = true;
@@ -1560,11 +1559,13 @@ template<typename real_t, typename index_t> class Mesh{
 
         if(!to_be_deleted){
           send_temp.push_back(*vit);
+          send_set_temp[*vit] = send_temp.size()-1;
           send_halo_temp.insert(*vit);
         }
       }
 
       send[i].swap(send_temp);
+      send_map[i].swap(send_set_temp);
     }
 
     // Once all send[i] have been traversed, update send_halo.
@@ -1722,11 +1723,14 @@ template<typename real_t, typename index_t> class Mesh{
   // Parallel support.
   int rank, num_processes, num_uma, num_threads;
   std::vector< std::vector<index_t> > send, recv;
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+  std::vector< boost::unordered_map<index_t, size_t> > send_map;
+#else
+  std::vector< std::map<index_t, size_t> > send_map;
+#endif
   std::set<index_t> send_halo, recv_halo;
   std::vector<size_t> node_owner;
   std::vector<index_t> lnn2gnn;
-  // Auxiliary data for colouring
-  std::vector<uint32_t> node_hash;
   //Deferred operations
   std::vector< std::vector<DeferredOperations> > deferred_operations;
 

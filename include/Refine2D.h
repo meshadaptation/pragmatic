@@ -223,9 +223,6 @@ template<typename real_t, typename index_t> class Refine2D{
          */
         _mesh->node_owner[vid] = 0;
         _mesh->lnn2gnn[vid] = vid;
-
-        // Finally, calculate the hash for the new vertex
-        _mesh->node_hash[vid] = _mesh->hash(vid);
       }
 
       // Start element refinement.
@@ -291,7 +288,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
             if(_mesh->node_owner[vert->id] != (size_t) rank){
               // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-              // Only update them if the vertex is actually seen by *this* MPI process,
+              // Only update them if the vertex is actually visible by *this* MPI process,
               // i.e. if at least one of its neighbours is owned by *this* process.
               bool visible = false;
               for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
@@ -337,6 +334,7 @@ template<typename real_t, typename index_t> class Refine2D{
             send_cnt[i] = send_additional[i].size();
             for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
               _mesh->send[i].push_back(it->id);
+              _mesh->send_map[i][it->id] = _mesh->send[i].size()-1;
               _mesh->send_halo.insert(it->id);
             }
           }
