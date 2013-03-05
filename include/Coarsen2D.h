@@ -175,8 +175,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
     // Receive and send buffers for all MPI processes.
     int **send_buffer = new int* [nprocs];
     int **recv_buffer = new int* [nprocs];
-    std::vector<int> send_buffer_size(nprocs, 0);
-    std::vector<int> recv_buffer_size(nprocs, 0);
+    std::vector<size_t> send_buffer_size(nprocs, 0);
+    std::vector<size_t> recv_buffer_size(nprocs, 0);
     std::vector<MPI_Request> request(2*nprocs);
     std::vector<MPI_Status> status(2*nprocs);
 #endif
@@ -486,6 +486,27 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(dynamic_vertex[rm_vertex] < 0)
                 continue;
 
+              index_t target_vertex = dynamic_vertex[rm_vertex];
+
+              // Mark neighbours for re-evaluation.
+              // Two threads might be marking the same vertex at the same time.
+              // This is a race condition which doesn't cause any trouble.
+              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
+                dynamic_vertex[*jt] = -2;
+
+              // Mark rm_vertex as non-active.
+              dynamic_vertex[rm_vertex] = -1;
+
+              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
+              // There is race condition here, but it doesn't do any harm.
+              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+                if(node_colour[*jt] == node_colour[target_vertex])
+                  if(*jt != target_vertex){
+                    node_colour[target_vertex] = -1;
+                    break;
+                  }
+              }
+
               // Separate interior vertices from halo vertices.
               if(_mesh->is_halo_node(rm_vertex)){
                 // If rm_vertex is a halo vertex, then marshal necessary data.
@@ -597,28 +618,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #pragma omp for schedule(dynamic,32) nowait
             for(size_t i=0; i<global_interior_size; ++i){
               index_t rm_vertex = global_interior[i];
-              assert((size_t) rm_vertex < NNodes);
-
               index_t target_vertex = dynamic_vertex[rm_vertex];
-
-              // Mark neighbours for re-evaluation.
-              // Two threads might be marking the same vertex at the same time.
-              // This is a race condition which doesn't cause any trouble.
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                dynamic_vertex[*jt] = -2;
-
-              // Mark rm_vertex as non-active.
-              dynamic_vertex[rm_vertex] = -1;
-
-              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                if(node_colour[*jt] == node_colour[target_vertex])
-                  if(*jt != target_vertex){
-                    node_colour[target_vertex] = -1;
-                    break;
-                  }
-              }
 
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
@@ -628,9 +628,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #pragma omp single
             {
               MPI_Waitall(2*nprocs, &request[0], &status[0]);
+
+              unmarshal_data(recv_buffer, recv_buffer_size, global_halo, &global_halo_size);
             }
-
-
 
 #pragma omp for schedule(static,1)
             for(int i=0; i<nprocs; ++i){
@@ -651,25 +651,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
             for(size_t i=0; i<global_halo_size; ++i){
               index_t rm_vertex = global_halo[i];
               index_t target_vertex = dynamic_vertex[rm_vertex];
-
-              // Mark neighbours for re-evaluation.
-              // Two threads might be marking the same vertex at the same time.
-              // This is a race condition which doesn't cause any trouble.
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                dynamic_vertex[*jt] = -2;
-
-              // Mark rm_vertex as non-active.
-              dynamic_vertex[rm_vertex] = -1;
-
-              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                if(node_colour[*jt] == node_colour[target_vertex])
-                  if(*jt != target_vertex){
-                    node_colour[target_vertex] = -1;
-                    break;
-                  }
-              }
 
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
@@ -763,7 +744,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
     delete[] recv_buffer;
 #endif
 
-    // TODO:
+    // TODO: Perhaps trimming the halo in coarsening is redundant
     _mesh->trim_halo();
 
     return;
@@ -772,10 +753,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
  private:
   
   struct msg_block{
-    // MPI process this message will be sent to.
-    int send_to;
-
-    // Index of vertex id in _mesh->send[receiver]/_mesh->recv[sender]
+    // Index of rm_vertex in _mesh->send[receiver]/_mesh->recv[sender]
     size_t pos;
 
     /* List of vertices (gnn) adjacent to rm_vertex but not visible by the
@@ -787,6 +765,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
     std::vector<real_t> coords;
     std::vector<float> metric;
 
+    // Target vertex onto which rm_vertex will collapse.
+    // We send target's gnn if target is invisible, position in _mesh->send[] otherwise.
+    index_t target;
+
     /* Each element eid={v0, v1, v2} is sent in the following form:
      * For vertices which are not visible to the other MPI process, we send their
      * global IDs. Vertices which are visible are stored using their position in
@@ -795,9 +777,11 @@ template<typename real_t, typename index_t> class Coarsen2D{
      */
     std::vector<index_t> elements;
 
-    // If rm_vertex is a surface vertex, then facet_vertex is set to the gnn of
-    // the other vertex of the non-visible facet. Otherwise, it is set to -1.
-    index_t facet_vertex;
+    // Same as elements: If any of the element's edges are on the surface,
+    // send the facet to the neighbour.
+    std::vector<index_t> facets;
+    std::vector<int> boundary_ids;
+    std::vector<int> coplanar_ids;
   };
 
   /*! Kernel for identifying what if any vertex rm_vertex should collapse onto.
@@ -988,73 +972,238 @@ template<typename real_t, typename index_t> class Coarsen2D{
   }
 
   void marshal_data(index_t rm_vertex, std::vector< std::vector<int> >& local_buffers){
-      std::set<int> seen_by;
+    std::set<int> seen_by;
 
-      // Find who sees rm_vertex
-      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin(); it!=_mesh->NNList[rm_vertex].end(); ++it)
-        seen_by.insert(_mesh->node_owner[*it]);
+    // Find who sees rm_vertex
+    for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin(); it!=_mesh->NNList[rm_vertex].end(); ++it)
+      seen_by.insert(_mesh->node_owner[*it]);
 
-      for(typename std::set<int>::const_iterator proc=seen_by.begin(); proc!=seen_by.end(); ++proc){
-        msg_block msg;
-        msg.id = rm_vertex;
+    seen_by.erase(rank);
 
-        // Find the position in _mesh->send[*proc] of rm_vertex. Using this position,
-        // the receiver can find immediately in his _mesh->recv[i] which vertex we
-        // are talking about. This saves us from having to maintain a gnn2lnn map.
-        assert(_mesh->send_map[*proc].count(rm_vertex)>0);
-        msg.pos = _mesh->send_map[*proc][rm_vertex];
+    for(typename std::set<int>::const_iterator proc=seen_by.begin(); proc!=seen_by.end(); ++proc){
+      msg_block msg;
 
-        // Find which neighbours are invisible to MPI process *it, so that we arrange to send them.
-        for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[rm_vertex].begin();
-            neigh!=_mesh->NNList[rm_vertex].end(); ++neigh){
-          // If this neighbour is not in _mesh->send[*proc], then *proc doesn't see it.
-          if(_mesh->send_map[*proc].count(*neigh) == 0){
-            msg.gnn.push_back(_mesh->lnn2gnn[*neigh]);
-            msg.owner.push_back(rank);
+      // Find the position in _mesh->send[*proc] of rm_vertex. Using this position,
+      // the receiver can find immediately in his _mesh->recv[i] which vertex we
+      // are talking about. This saves us from having to maintain a gnn2lnn map.
+      assert(_mesh->send_map[*proc].count(rm_vertex)>0);
+      msg.pos = _mesh->send_map[*proc][rm_vertex];
 
-            const real_t *x = _mesh->get_coords(*neigh);
-            msg.coords.push_back(x[0]);
-            msg.coords.push_back(x[1]);
+      // Find which neighbouring vertices are invisible to MPI process *it, so that we arrange to send them.
+      for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[rm_vertex].begin();
+          neigh!=_mesh->NNList[rm_vertex].end(); ++neigh){
+        // If this neighbour is not in _mesh->send[*proc], then *proc doesn't see it.
+        if(_mesh->send_map[*proc].count(*neigh) == 0){
+          msg.gnn.push_back(_mesh->lnn2gnn[*neigh]);
+          msg.owner.push_back(rank);
 
-            const float *m = _mesh->get_metric(*neigh);
-            msg.metric.push_back(m[0]);
-            msg.metric.push_back(m[1]);
-            msg.metric.push_back(m[2]);
-          }
+          const real_t *x = _mesh->get_coords(*neigh);
+          msg.coords.push_back(x[0]);
+          msg.coords.push_back(x[1]);
+
+          const float *m = _mesh->get_metric(*neigh);
+          msg.metric.push_back(m[0]);
+          msg.metric.push_back(m[1]);
+          msg.metric.push_back(m[2]);
         }
-
-        // Find which adjacent elements are invisible to MPI process *it.
-        for(typename std::set<index_t>::const_iterator ele=_mesh->NEList[rm_vertex].begin();
-            ele!=_mesh->NEList[rm_vertex].end(); ++ele){
-          const index_t *n = _mesh->get_element(*ele);
-
-          bool element_visible = true;
-          index_t element_copy = {-1, -1, -1};
-          for(size_t i=0; i<nloc; ++i){
-            // If n[i] is not visible, we will send its global ID.
-            if(_mesh->send_map[*proc].count(n[i]) == 0){
-              element_copy[i] = _mesh->lnn2gnn[n[i]];
-              element_visible = false;
-            }else{ // Otherwise, we will send the negated index of n[i] in _mesh->send[rank].
-              index_t pos = _mesh->send_map[*proc][n[i]];
-              element_copy[i] = -pos;
-            }
-          }
-
-          if(!element_visible){
-            // Push back to element
-            for(size_t i=0; i<nloc; ++i)
-              msg.elements.push_back(element_copy[i]);
-
-            // And also check whether one of its edges are on the surface
-            std::vector<int> lfacets;
-            _surface->find_facets(n, lfacets);
-            msg.facets.push_back(lfacets.begin(), lfacets.end());
-          }
-        }
-
-        // TODO: Something for the surface.
       }
+
+      // Target vertex
+      if(_mesh->send_map[*proc].count(dynamic_vertex[rm_vertex]) == 0)
+        msg.target = _mesh->lnn2gnn[dynamic_vertex[rm_vertex]];
+      else
+        msg.target = - _mesh->send_map[*proc][dynamic_vertex[rm_vertex]];
+
+      // Find which adjacent elements are invisible to MPI process *it.
+      for(typename std::set<index_t>::const_iterator ele=_mesh->NEList[rm_vertex].begin();
+          ele!=_mesh->NEList[rm_vertex].end(); ++ele){
+        const index_t *n = _mesh->get_element(*ele);
+
+        bool element_visible = true;
+        index_t element_copy[] = {-1, -1, -1};
+        for(size_t i=0; i<nloc; ++i){
+          // If n[i] is not visible, we will send its global ID.
+          if(_mesh->send_map[*proc].count(n[i]) == 0){
+            element_copy[i] = _mesh->lnn2gnn[n[i]];
+            element_visible = false;
+          }else{ // Otherwise, we will send the negated index of n[i] in _mesh->send[rank].
+            index_t pos = _mesh->send_map[*proc][n[i]];
+            element_copy[i] = -pos;
+          }
+        }
+
+        if(!element_visible){
+          // Push back to element
+          for(size_t i=0; i<nloc; ++i)
+            msg.elements.push_back(element_copy[i]);
+
+          // And also check whether any of its edges are on the surface
+          std::vector<int> lfacets;
+          _surface->find_facets(n, lfacets);
+
+          if(lfacets.size()>0){
+            assert(lfacets.size()==1);
+
+            const int *n=_surface->get_facet(lfacets[0]);
+            for(size_t i=0;i<snloc;i++){
+              // Same as elements: Push gnn of vertex if it is invisible by
+              // the other process or the negated index in _mesh->send[rank].
+              if(_mesh->send_map[*proc].count(n[i]) == 0){
+                msg.facets.push_back(_mesh->lnn2gnn[n[i]]);
+              }else{
+                index_t pos = _mesh->send_map[*proc][n[i]];
+                msg.facets.push_back(-pos);
+              }
+            }
+
+            msg.boundary_ids.push_back(_surface->get_boundary_id(lfacets[0]));
+            msg.coplanar_ids.push_back(_surface->get_coplanar_id(lfacets[0]));
+          }
+        }
+      }
+
+      // Serialise message and append it to local_buffer[*proc]
+
+      // Append the position of rm_vertex in _mesh->send[*proc]
+      local_buffers[*proc].push_back(msg.pos);
+      // Append the number of invisible neighbours.
+      local_buffers[*proc].push_back(msg.gnn.size());
+      // Append gnn, owner, coords, metric for each invisible neighbour via int's
+      for(size_t i=0; i<msg.gnn.size(); ++i){
+        std::vector<int> ivertex(node_package_int_size);
+
+        index_t *rgnn = (index_t *) &ivertex[0];
+        size_t *rowner = (size_t *) &ivertex[idx_owner];
+        real_t *rcoords = (real_t *) &ivertex[idx_coords];
+        float *rmetric = (float *) &ivertex[idx_metric];
+
+        *rgnn = msg.gnn[i];
+        *rowner = msg.owner[i];
+
+        rcoords[0] = msg.coords[2*i];
+        rcoords[1] = msg.coords[2*i+1];
+
+        rmetric[0] = msg.metric[3*i];
+        rmetric[1] = msg.metric[3*i+1];
+        rmetric[2] = msg.metric[3*i+2];
+
+        local_buffers[*proc].insert(local_buffers[*proc].end(), ivertex.begin(), ivertex.end());
+      }
+
+      // Append target vertex
+      local_buffers[*proc].push_back(msg.target);
+
+      // Append elements
+      local_buffers[*proc].push_back(msg.elements.size());
+      local_buffers[*proc].insert(local_buffers[*proc].end(), msg.elements.begin(), msg.elements.end());
+
+      // Append facets
+      local_buffers[*proc].push_back(msg.boundary_ids.size());
+      for(size_t i=0; i<msg.boundary_ids.size(); ++i){
+        local_buffers[*proc].push_back(msg.facets[2*i]);
+        local_buffers[*proc].push_back(msg.facets[2*i+1]);
+        local_buffers[*proc].push_back(msg.boundary_ids[i]);
+        local_buffers[*proc].push_back(msg.coplanar_ids[i]);
+      }
+    }
+  }
+
+  void unmarshal_data(int **recv_buffer, std::vector<size_t> &buffer_size, index_t *halo, size_t *halo_size){
+    // Create a reverse lookup to map received gnn's back to lnn's.
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+    boost::unordered_map<int, int> gnn2lnn;
+#else
+    std::map<index_t, index_t> gnn2lnn;
+#endif
+
+    for(int proc=0;proc<nprocs;proc++){
+      if(buffer_size[proc]==0)
+        continue;
+
+      int *buffer = recv_buffer[proc];
+      size_t loc=0;
+
+      while(loc<buffer_size[proc]){
+        // Find which vertex we are talking about
+        index_t pos = buffer[loc++];
+        index_t rm_vertex = _mesh->recv[proc][pos];
+
+        // Add rm_vertex to the global halo worklist
+        halo[(*halo_size)++] = rm_vertex;
+
+        // Unpack new vertices
+        size_t nInvisible = buffer[loc++];
+
+        for(size_t i=0; i<nInvisible; ++i){
+          // Only append this vertex to the mesh if we haven't received it before
+          if(gnn2lnn.count(buffer[loc]) == 0){
+            real_t *rcoords = (real_t *) &buffer[loc+idx_coords];
+            float *rmetric = (float *) &buffer[loc+idx_metric];
+
+            index_t new_lnn = _mesh->append_vertex(rcoords, rmetric);
+
+            gnn2lnn[buffer[loc]] = new_lnn;
+            _mesh->lnn2gnn[new_lnn] = buffer[loc];
+            _mesh->node_owner[new_lnn] = buffer[loc+idx_owner];
+          }
+
+          loc += node_package_int_size;
+        }
+
+        // Find target vertex
+        index_t target_vertex = buffer[loc++];
+        if(target_vertex<0) // This is an old vertex
+          target_vertex = _mesh->recv[proc][-target_vertex];
+        else // This is a new vertex, so look it up in gnn2lnn
+          target_vertex = gnn2lnn[target_vertex];
+
+        dynamic_vertex[rm_vertex] = target_vertex;
+
+        // Unpack new elements
+        // An element can only be sent once, so there is no need to check for duplicates
+        size_t nElements = buffer[loc++];
+
+        for(size_t i=0; i<nElements; ++i){
+          const index_t *n = &buffer[loc];
+          index_t ele[] = {-1, -1, -1};
+
+          for(size_t j=0; j<nloc; ++j){
+            if(n[j]<0) // This is an old vertex
+              ele[j] = _mesh->recv[proc][-n[j]];
+            else
+              ele[j] = gnn2lnn[n[j]];
+          }
+
+          _mesh->append_element(ele);
+
+          // Update NNList and NEList
+
+          loc += nloc;
+        }
+
+        // Unpack new facets
+        size_t nFacets = buffer[loc++];
+
+        for(size_t i=0; i<nFacets; ++i){
+          const index_t *sn = &buffer[loc];
+          index_t facet[] = {-1, -1};
+
+          for(size_t j=0; j<snloc; ++j){
+            if(sn[j]<0) // This is an old vertex
+              facet[j] = _mesh->recv[proc][-sn[j]];
+            else
+              facet[j] = gnn2lnn[sn[j]];
+          }
+
+          loc += snloc;
+
+          int boundary_id = buffer[loc++];
+          int coplanar_id = buffer[loc++];
+
+          _surface->append_facet(facet, boundary_id, coplanar_id, true);
+        }
+      }
+    }
   }
 
   void select_max_independent_set(std::vector<bool> &maximal_independent_set){
@@ -1393,6 +1542,13 @@ template<typename real_t, typename index_t> class Coarsen2D{
   const static size_t msize=3;
 
   const static size_t max_colours = 256;
+  const static size_t node_package_int_size = (sizeof(index_t) +
+                                               sizeof(size_t) +
+                                               ndims*sizeof(real_t) +
+                                               msize*sizeof(float)) / sizeof(int);
+  const static size_t idx_owner = sizeof(index_t) / sizeof(int);
+  const static size_t idx_coords = idx_owner + sizeof(size_t) / sizeof(int);
+  const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);
 
   int nprocs, rank, nthreads;
 };
