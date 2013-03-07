@@ -1118,6 +1118,7 @@ template<typename real_t, typename index_t> class Mesh{
       }
       std::vector<int> recv_size(num_processes);
       recv.resize(num_processes);
+      recv_map.resize(num_processes);
       for(int j=0;j<num_processes;j++){
         for(typename std::set<int>::const_iterator it=recv_set[j].begin();it!=recv_set[j].end();++it){
           recv[j].push_back(*it);
@@ -1155,8 +1156,11 @@ template<typename real_t, typename index_t> class Mesh{
       MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
 
       for(int j=0;j<num_processes;j++){
-        for(int k=0;k<recv_size[j];k++)
-          recv[j][k] = gnn2lnn[recv[j][k]];
+        for(int k=0;k<recv_size[j];k++){
+          index_t vid = gnn2lnn[recv[j][k]];
+          recv[j][k] = vid;
+          recv_map[j][vid] = k;
+        }
 
         for(int k=0;k<send_size[j];k++){
           index_t vid= gnn2lnn[send[j][k]];
@@ -1468,6 +1472,11 @@ template<typename real_t, typename index_t> class Mesh{
         continue;
 
       std::vector<index_t> recv_temp;
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+      boost::unordered_map<index_t, size_t> recv_map_temp;
+#else
+      std::map<index_t, size_t> recv_map_temp;
+#endif
 
       for(typename std::vector<index_t>::const_iterator vit = recv[i].begin(); vit != recv[i].end(); ++vit){
         // For each vertex, traverse a copy of the vertex's NEList.
@@ -1525,11 +1534,13 @@ template<typename real_t, typename index_t> class Mesh{
         }else{
           // We will keep this vertex, so put it into recv_halo_temp.
           recv_temp.push_back(*vit);
+          recv_map_temp[*vit] = recv_temp.size() - 1;
           recv_halo_temp.insert(*vit);
         }
       }
 
       recv[i].swap(recv_temp);
+      recv_map[i].swap(recv_map_temp);
     }
 
     // Once all recv[i] have been traversed, update recv_halo.
@@ -1544,9 +1555,9 @@ template<typename real_t, typename index_t> class Mesh{
 
       std::vector<index_t> send_temp;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-      boost::unordered_map<index_t, size_t> send_set_temp;
+      boost::unordered_map<index_t, size_t> send_map_temp;
 #else
-      std::map<index_t, size_t> send_set_temp;
+      std::map<index_t, size_t> send_map_temp;
 #endif
 
       for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
@@ -1559,13 +1570,13 @@ template<typename real_t, typename index_t> class Mesh{
 
         if(!to_be_deleted){
           send_temp.push_back(*vit);
-          send_set_temp[*vit] = send_temp.size()-1;
+          send_map_temp[*vit] = send_temp.size()-1;
           send_halo_temp.insert(*vit);
         }
       }
 
       send[i].swap(send_temp);
-      send_map[i].swap(send_set_temp);
+      send_map[i].swap(send_map_temp);
     }
 
     // Once all send[i] have been traversed, update send_halo.
@@ -1724,9 +1735,9 @@ template<typename real_t, typename index_t> class Mesh{
   int rank, num_processes, num_uma, num_threads;
   std::vector< std::vector<index_t> > send, recv;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-  std::vector< boost::unordered_map<index_t, size_t> > send_map;
+  std::vector< boost::unordered_map<index_t, size_t> > send_map, recv_map;
 #else
-  std::vector< std::map<index_t, size_t> > send_map;
+  std::vector< std::map<index_t, size_t> > send_map, recv_map;
 #endif
   std::set<index_t> send_halo, recv_halo;
   std::vector<size_t> node_owner;

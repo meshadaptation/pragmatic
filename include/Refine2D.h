@@ -328,6 +328,7 @@ template<typename real_t, typename index_t> class Refine2D{
             recv_cnt[i] = recv_additional[i].size();
             for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
               _mesh->recv[i].push_back(it->id);
+              _mesh->recv_map[i][it->id] = _mesh->recv[i].size() - 1;
               _mesh->recv_halo.insert(it->id);
             }
 

@@ -39,6 +39,7 @@
 #define COARSEN2D_H
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -130,7 +131,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
     // Set of all dynamic vertices. We pre-allocate the maximum capacity
     // that may be needed. Accessed using active sub-mesh vertex IDs.
-    index_t *GlobalActiveSet = new index_t[NNodes];
+    index_t *GlobalActiveSet = new index_t[nnodes_reserve];
     size_t GlobalActiveSet_size;
 
     // Subset of GlobalActiveSet: it contains the vertices which the colouring
@@ -138,19 +139,19 @@ template<typename real_t, typename index_t> class Coarsen2D{
     // the active sub-mesh ID of an uncoloured vertex, i.e. the vertex at
     // UncolouredActiveSet[i] has neighbours=subNNList[UncolouredActiveSet[i]]
     // and its regular ID is vid = GlobalActiveSet[UncolouredActiveSet[i]].
-    index_t *UncolouredActiveSet = new index_t[NNodes];
+    index_t *UncolouredActiveSet = new index_t[nnodes_reserve];
     size_t UncolouredActiveSet_size;
 
     // Subset of UncolouredActiveSet: it contains the vertices which couldn't be
     // coloured in that round and are left for the next round. Like UncolouredActiveSet,
     // it stores active sub-mesh IDs. At the end of each colouring round,
     // the pointers to UncolouredActiveSet and NextRoundActive set are swapped.
-    index_t *NextRoundActiveSet = new index_t[NNodes];
+    index_t *NextRoundActiveSet = new index_t[nnodes_reserve];
     size_t NextRoundActiveSet_size;
 
     // NNList of the active sub-mesh. Accessed using active sub-mesh vertex IDs.
     // Each vector contains regular vertex IDs.
-    std::vector<index_t> **subNNList = new std::vector<index_t>* [NNodes];
+    std::vector<index_t> **subNNList = new std::vector<index_t>* [nnodes_reserve];
 
     // Accessed using regular vertex IDs.
     char *node_colour = new char[NNodes];
@@ -165,20 +166,39 @@ template<typename real_t, typename index_t> class Coarsen2D{
     std::vector<size_t> ind_set_size(max_colours, 0);
 
 #ifdef HAVE_MPI
-    // Global arrays used to separate all vertices of an independent set into
-    // interior vertices and halo vertices.
-    index_t *global_interior = new index_t[NNodes];
-    index_t *global_halo = new index_t[NNodes];
+    // Global arrays used to separate all vertices of an
+    // independent set into interior vertices and halo vertices.
+    index_t *global_interior = new index_t[nnodes_reserve];
+    index_t *global_halo = new index_t[nnodes_reserve];
     size_t global_interior_size = 0;
     size_t global_halo_size = 0;
 
     // Receive and send buffers for all MPI processes.
-    int **send_buffer = new int* [nprocs];
-    int **recv_buffer = new int* [nprocs];
+    std::vector< std::vector<int> > send_buffer(nprocs);
+    std::vector< std::vector<int> > recv_buffer(nprocs);
     std::vector<size_t> send_buffer_size(nprocs, 0);
     std::vector<size_t> recv_buffer_size(nprocs, 0);
     std::vector<MPI_Request> request(2*nprocs);
     std::vector<MPI_Status> status(2*nprocs);
+
+    /* For each process P_i, we create a map(gnn, lnn) containing all owned
+     * vertices this MPI process will send to the other process. Vertices will
+     * be sorted by their gnn's, so they will be added later to _mesh->send[]
+     * in the same order as they will be added to _mesh->recv[] on P_i. The
+     * vector version of this map is there so that OpenMP threads can concatenate
+     * their local lists into a global one, so that a thread can set up the map.
+     */
+    std::vector< std::map<index_t, index_t> > sent_vertices(nprocs);
+
+    std::vector< std::vector<index_t> > sent_vertices_vec(nprocs);
+    std::vector<size_t> sent_vertices_vec_size(nprocs);
+
+    /* We also need to have a set (per process) in order to keep track of which
+     * non-owned vertices were sent to other processes. The owner will need to
+     * be notified about it, so this information will be appended at the end of
+     * the corresponding message.
+     */
+    std::vector< std::set<index_t> > sent_vertices_non_owned(nprocs);
 #endif
 
 #pragma omp parallel
@@ -252,18 +272,17 @@ template<typename real_t, typename index_t> class Coarsen2D{
            * so marking non-owned vertices as dynamic does not do any harm, as they
            * will not be put into any independent set, therefore they won't be processed.
            */
-  #pragma omp single
+#pragma omp single nowait
           {
             for(typename std::set<index_t>::const_iterator it=_mesh->recv_halo.begin(); it!=_mesh->recv_halo.end(); ++it)
               // Assign an arbitrary value.
               dynamic_vertex[*it] = 0;
-          } // Implicit OMP barrier here.
+          }
         }
-#else
-#pragma omp barrier // Explicit OMP barrier
 #endif
 
         // Construct the node adjacency list for the active sub-mesh.
+#pragma omp barrier
 #pragma omp for schedule(dynamic) nowait
         for(size_t i=0; i<GlobalActiveSet_size; ++i){
           index_t vid = GlobalActiveSet[i];
@@ -464,6 +483,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
             // Local (per OpenMP thread) vectors for data marshalling.
             std::vector< std::vector<int> > local_buffers(nprocs);
 
+            // Local vectors storing IDs of vertices which will be sent to other processes.
+            std::vector< std::vector<index_t> > local_sent(nprocs);
+
 #pragma omp for schedule(dynamic,32) nowait
             for(size_t i=0; i<ind_set_size[set_no]; ++i){
               index_t rm_vertex = independent_sets[set_no][i];
@@ -511,7 +533,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(_mesh->is_halo_node(rm_vertex)){
                 // If rm_vertex is a halo vertex, then marshal necessary data.
                 halo_vertices.push_back(rm_vertex);
-                marshal_data(rm_vertex, local_buffers);
+                marshal_data(rm_vertex, local_buffers, local_sent);
               }
               else
                 interior_vertices.push_back(rm_vertex);
@@ -519,6 +541,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
             size_t int_pos, halo_pos;
             size_t *send_pos = new size_t[nprocs];
+            size_t *sent_vert_pos = new size_t[nprocs];
 
 #pragma omp atomic capture
             {
@@ -544,22 +567,85 @@ template<typename real_t, typename index_t> class Coarsen2D{
                 send_pos[i] = send_buffer_size[i];
                 send_buffer_size[i] += local_buffers[i].size();
               }
+
+#pragma omp atomic capture
+              {
+                sent_vert_pos[i] = sent_vertices_vec_size[i];
+                sent_vertices_vec_size[i] += local_sent[i].size();
+              }
             }
 
-            // Wait for all threads to increment send_buffer_size[i]
-            // and then allocate memory for each send_buffer[i].
+            // Wait for all threads to increment send_buffer_size[i] and then allocate
+            // memory for each send_buffer[i]. Same for sent_vertices_vec.
 #pragma omp barrier
 #pragma omp for schedule(static,1)
             for(int i=0; i<nprocs; ++i)
-              if(send_buffer_size[i]>0)
-                send_buffer[i] = new int[send_buffer_size[i]];
+              if(send_buffer_size[i]>0){
+                send_buffer[i].resize(send_buffer_size[i]);
+                sent_vertices_vec[i].resize(sent_vertices_vec_size[i]);
+              }
 
             for(int i=0; i<nprocs; ++i){
-              if(local_buffers[i].size() != 0)
+              if(local_buffers[i].size() != 0){
                 memcpy(&send_buffer[i][send_pos[i]], &local_buffers[i][0], local_buffers[i].size() * sizeof(int));
+                memcpy(&sent_vertices_vec[sent_vert_pos[i]], &local_sent[i][0], local_sent[i].size() * sizeof(index_t));
+              }
             }
 
+            delete[] send_pos;
+            delete[] sent_vert_pos;
+
 #pragma omp barrier
+
+            // Set up sent_vertices and sent_vertices_non_owned. Also, append
+            // appropriate data to the end of send buffers. Separate the
+            // original message from this extension using some magic number.
+
+            // So far, every sent_vertices_vec[i] contains all vertices sent to
+            // process i, no matter whether they are owned by us or not.
+#pragma omp single
+            {
+              std::vector< std::vector<int> > message_extensions;
+
+              for(int i=0; i<nprocs; ++i){
+                for(typename std::vector<index_t>::const_iterator it = sent_vertices_vec[i].begin();
+                    it != sent_vertices_vec[i].end(); ++it){
+                  int owner = _mesh->node_owner[*it];
+                  index_t gnn = _mesh->lnn2gnn[*it];
+
+                  if(owner==rank)
+                    sent_vertices[i][gnn] = *it;
+                  else{
+                    // Send message (idx, proc): Tell the owner that we have sent
+                    // the vertex stored at _mesh->recv[owner][idx] to process proc.
+                    int idx = _mesh->recv_map[owner][*it];
+                    message_extensions[owner].push_back(idx);
+                    message_extensions[owner].push_back(i);
+                  }
+                }
+              }
+
+              for(int i=0; i<nprocs; ++i){
+                // Append a magic number to the end of the message that
+                // will be sent to i and then append the extension.
+                if(message_extensions[i].size()>0){
+                  send_buffer[i].push_back(MAGIC);
+                  send_buffer[i].push_back(MAGIC);
+                  send_buffer[i].insert(send_buffer[i].end(),
+                      message_extensions[i].begin(), message_extensions[i].end());
+                  send_buffer_size[i] = send_buffer[i].size();
+                }
+
+                // Also, append owned sent vertices to _mesh->send[i].
+                // The recipient will fix his _mesh->recv[] list in unmarashal_data.
+                for(typename std::map<index_t, index_t>::const_iterator it=sent_vertices[i].begin();
+                    it!=sent_vertices[i].end(); ++it){
+                  _mesh->send[i].push_back(it->second);
+                  _mesh->send_map[i][it->second] = _mesh->send[i].size() - 1;
+                  _mesh->send_halo.insert(it->second);
+                }
+              }
+            }
 
             /* Set up asynchronous communication. First we need to communicate
              * message sizes using MPI_Alltoall. Unfortunately, MPI does not
@@ -585,23 +671,20 @@ template<typename real_t, typename index_t> class Coarsen2D{
               }
             }
 
-            // Some useful stuff in between.
-
             // Wait for comms to finish.
 #pragma omp single
             {
               MPI_Waitall(2*nprocs, &request[0], &status[0]);
             }
 
-            // Now that we know the size of all messages we are going to receive
-            // from other MPI processes, we can set up asynchronous communication
-            // for the exchange of the actual send_buffers. Also, allocate memory
-            // for the receive buffers.
+            // Now that we know the size of all messages we are going to receive from
+            // other MPI processes, we can set up asynchronous communication for the
+            // exchange of the actual send_buffers. Also, allocate memory for the receive buffers.
 #pragma omp single
             {
               for(int i=0;i<nprocs;i++){
                 if(recv_buffer_size[i]>0){
-                  recv_buffer[i] = new int[recv_buffer_size[i]];
+                  recv_buffer[i].resize(recv_buffer_size[i]);
                   MPI_Irecv(&recv_buffer[i], recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &request[i]);
                 }
                 else
@@ -629,25 +712,17 @@ template<typename real_t, typename index_t> class Coarsen2D{
             {
               MPI_Waitall(2*nprocs, &request[0], &status[0]);
 
-              unmarshal_data(recv_buffer, recv_buffer_size, global_halo, &global_halo_size);
+              unmarshal_data(recv_buffer, global_halo, &global_halo_size);
             }
 
 #pragma omp for schedule(static,1)
             for(int i=0; i<nprocs; ++i){
-              if(send_buffer_size[i]>0){
-                delete[] send_buffer[i];
-                send_buffer_size[i] = 0;
-              }
-
-              if(recv_buffer_size[i]>0){
-                delete[] recv_buffer[i];
-                recv_buffer_size[i] = 0;
-              }
+              send_buffer[i].clear();
+              recv_buffer[i].clear();
             }
 
-
             // Perform coarsening on the halo.
-#pragma omp for schedule(dynamic,32)
+#pragma omp for schedule(dynamic)
             for(size_t i=0; i<global_halo_size; ++i){
               index_t rm_vertex = global_halo[i];
               index_t target_vertex = dynamic_vertex[rm_vertex];
@@ -660,6 +735,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
             {
               global_interior_size = 0;
               global_halo_size = 0;
+
             }
 #endif
           }else{
@@ -714,6 +790,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
           _mesh->commit_deferred(tid);
           _surface->commit_deferred(tid);
+#pragma omp barrier
         }
 
 #pragma omp for schedule(static) nowait
@@ -740,12 +817,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #ifdef HAVE_MPI
     delete[] global_interior;
     delete[] global_halo;
-    delete[] send_buffer;
-    delete[] recv_buffer;
-#endif
 
-    // TODO: Perhaps trimming the halo in coarsening is redundant
-    _mesh->trim_halo();
+    if(nprocs>1)
+      _mesh->trim_halo();
+#endif
 
     return;
   }
@@ -971,7 +1046,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
     _mesh->erase_vertex(rm_vertex);
   }
 
-  void marshal_data(index_t rm_vertex, std::vector< std::vector<int> >& local_buffers){
+  void marshal_data(index_t rm_vertex, std::vector< std::vector<int> >& local_buffers,
+      std::vector< std::vector<index_t> >& sent){
     std::set<int> seen_by;
 
     // Find who sees rm_vertex
@@ -1005,6 +1081,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
           msg.metric.push_back(m[0]);
           msg.metric.push_back(m[1]);
           msg.metric.push_back(m[2]);
+
+          // Append this vertex to the local (per OpenMP thread) list of sent vertices
+          sent[*proc].push_back(*neigh);
         }
       }
 
@@ -1108,7 +1187,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
   }
 
-  void unmarshal_data(int **recv_buffer, std::vector<size_t> &buffer_size, index_t *halo, size_t *halo_size){
+  void unmarshal_data(std::vector< std::vector<int> >& recv_buffer, index_t *halo, size_t *halo_size){
     // Create a reverse lookup to map received gnn's back to lnn's.
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     boost::unordered_map<int, int> gnn2lnn;
@@ -1117,13 +1196,14 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #endif
 
     for(int proc=0;proc<nprocs;proc++){
-      if(buffer_size[proc]==0)
+      if(recv_buffer[proc].size()==0)
         continue;
 
       int *buffer = recv_buffer[proc];
       size_t loc=0;
 
-      while(loc<buffer_size[proc]){
+      // Part 1: append new vertices, elements and facets to the mesh.
+      while(recv_buffer[proc][loc] != MAGIC && recv_buffer[proc][loc+1] != MAGIC){
         // Find which vertex we are talking about
         index_t pos = buffer[loc++];
         index_t rm_vertex = _mesh->recv[proc][pos];
@@ -1174,9 +1254,26 @@ template<typename real_t, typename index_t> class Coarsen2D{
               ele[j] = gnn2lnn[n[j]];
           }
 
-          _mesh->append_element(ele);
-
           // Update NNList and NEList
+          index_t eid = _mesh->append_element(ele);
+
+          /* Update NNList and NEList. Updates are thread-safe, because they pertain
+           * to recv_halo vertices only, which are not touched by the rest of the
+           * OpenMP threads processing the interior.
+           */
+          for(size_t j=0; j<nloc; ++j){
+            _mesh->NEList[ele[j]].insert(eid);
+
+            for(size_t k=j+1; k<nloc; ++k){
+              typename std::vector<index_t>::iterator it;
+              it = std::find(_mesh->NNList[ele[j]].begin(), _mesh->NNList[ele[j]].end(), ele[k]);
+
+              if(it == _mesh->NNList[ele[j]].end()){
+                _mesh->NNList[ele[j]].push_back(ele[k]);
+                _mesh->NNList[ele[k]].push_back(ele[j]);
+              }
+            }
+          }
 
           loc += nloc;
         }
@@ -1200,9 +1297,14 @@ template<typename real_t, typename index_t> class Coarsen2D{
           int boundary_id = buffer[loc++];
           int coplanar_id = buffer[loc++];
 
+          // Updates to surface are thread-safe for the
+          // same reason as updates to adjacency lists.
+
           _surface->append_facet(facet, boundary_id, coplanar_id, true);
         }
       }
+
+      // Part 2: Look at the extensions
     }
   }
 
@@ -1481,11 +1583,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
       send_buffer[p].clear();
       for(typename std::set<index_t>::const_iterator ht=extra_halo_receives[p].begin();ht!=extra_halo_receives[p].end();++ht)
         send_buffer[p].push_back(*ht);
-              
     }
 
     MPI_Alltoall(&(send_buffer_size[0]), 1, MPI_INT, &(recv_buffer_size[0]), 1, MPI_INT, _mesh->get_mpi_comm());
-            
+
     // Setup non-blocking receives
     for(int i=0;i<nprocs;i++){
       recv_buffer[i].clear();
@@ -1496,7 +1597,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         MPI_Irecv(&(recv_buffer[i][0]), recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[i]));
       }
     }
-            
+
     // Non-blocking sends.
     for(int i=0;i<nprocs;i++){
       if(send_buffer_size[i]==0){
@@ -1505,11 +1606,11 @@ template<typename real_t, typename index_t> class Coarsen2D{
         MPI_Isend(&(send_buffer[i][0]), send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &(request[nprocs+i]));
       }
     }
-            
+
     // Wait for comms to finish.
     MPI_Waitall(nprocs, &(request[0]), &(status[0]));
     MPI_Waitall(nprocs, &(request[nprocs]), &(status[nprocs]));
-            
+
     // Use this data to update the halo information.
     for(int i=0;i<nprocs;i++){
       for(std::vector<int>::const_iterator it=recv_buffer[i].begin();it!=recv_buffer[i].end();++it){
@@ -1549,6 +1650,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
   const static size_t idx_owner = sizeof(index_t) / sizeof(int);
   const static size_t idx_coords = idx_owner + sizeof(size_t) / sizeof(int);
   const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);
+
+  const static int MAGIC = std::numeric_limits<index_t>::max();
 
   int nprocs, rank, nthreads;
 };
