@@ -286,7 +286,7 @@ template<typename real_t, typename index_t> class Refine2D{
           for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
             DirectedEdge<index_t> *vert = &allNewVertices[i];
 
-            if(_mesh->node_owner[vert->id] != (size_t) rank){
+            if(_mesh->node_owner[vert->id] != rank){
               // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
               // Only update them if the vertex is actually visible by *this* MPI process,
               // i.e. if at least one of its neighbours is owned by *this* process.
@@ -342,7 +342,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
           // Update global numbering
           for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-            if(_mesh->node_owner[i] == (size_t) rank)
+            if(_mesh->node_owner[i] == rank)
               _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
 
           _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);

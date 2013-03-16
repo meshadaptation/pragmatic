@@ -262,12 +262,12 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Returns true if the node is in any of the partitioned elements.
   bool is_halo_node(index_t nid) const{
-    return (node_owner[nid]!= (size_t) rank || send_halo.count(nid)>0);
+    return (node_owner[nid]!= rank || send_halo.count(nid)>0);
   }
 
   /// Returns true if the node is assigned to the local partition.
   bool is_owned_node(index_t nid) const{
-    return node_owner[nid] == (size_t) rank;
+    return node_owner[nid] == rank;
   }
 
   /// Get the mean edge length metric space.
@@ -1563,7 +1563,7 @@ template<typename real_t, typename index_t> class Mesh{
       for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
         bool to_be_deleted = true;
         for(typename std::vector<index_t>::const_iterator neigh_it = NNList[*vit].begin(); neigh_it != NNList[*vit].end(); ++neigh_it)
-          if(node_owner[*neigh_it] == (size_t) i){
+          if(node_owner[*neigh_it] == i){
             to_be_deleted = false;
             break;
           }
@@ -1646,7 +1646,7 @@ template<typename real_t, typename index_t> class Mesh{
     gnn_offset -= gnn_reserve;
 
     for(size_t i=0; i<NNodes; ++i){
-      if(node_owner[i] == (size_t) rank)
+      if(node_owner[i] == rank)
         lnn2gnn[i] = gnn_offset+i;
       else
         lnn2gnn[i] = -1;
@@ -1740,7 +1740,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector< std::map<index_t, size_t> > send_map, recv_map;
 #endif
   std::set<index_t> send_halo, recv_halo;
-  std::vector<size_t> node_owner;
+  std::vector<int> node_owner;
   std::vector<index_t> lnn2gnn;
   //Deferred operations
   std::vector< std::vector<DeferredOperations> > deferred_operations;
