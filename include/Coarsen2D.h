@@ -506,6 +506,20 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(dynamic_vertex[rm_vertex] < 0)
                 continue;
 
+              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
+              // There is race condition here, but it doesn't do any harm.
+              index_t target_vertex = dynamic_vertex[rm_vertex];
+              if(node_colour[target_vertex] >= 0){
+                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+                  if(*jt != target_vertex){
+                    if(node_colour[*jt] == node_colour[target_vertex]){
+                      node_colour[target_vertex] = -1;
+                      break;
+                    }
+                  }
+                }
+              }
+
               // Separate interior vertices from halo vertices.
               if(_mesh->is_halo_node(rm_vertex)){
                 // If rm_vertex is a halo vertex, then marshal necessary data.
@@ -655,7 +669,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
               // Wait for MPI transfers to complete and unmarshal data.
               MPI_Waitall(2*nprocs, &request[0], &status[0]);
 
-              unmarshal_data(recv_buffer, global_halo, global_halo_size, sent_vertices, recv_vertices);
+              unmarshal_data(recv_buffer, global_halo, global_halo_size, set_no, sent_vertices, recv_vertices);
 
               for(int i=0; i<nprocs; ++i){
                 send_buffer_size[i] = 0;
@@ -683,19 +697,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
               // Mark rm_vertex as non-active.
               dynamic_vertex[rm_vertex] = -1;
 
-              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
-              if(node_colour[target_vertex] >= 0){
-                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                  if(*jt != target_vertex){
-                    if(node_colour[*jt] == node_colour[target_vertex]){
-                      node_colour[target_vertex] = -1;
-                      break;
-                    }
-                  }
-                }
-              }
-
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
             }
@@ -705,6 +706,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #pragma omp for schedule(dynamic)
             for(size_t i=0; i<global_halo_size; ++i){
               index_t rm_vertex = global_halo[i];
+
+              if(node_colour[rm_vertex] < 0)
+                continue;
+
               index_t target_vertex = dynamic_vertex[rm_vertex];
 
               // No matter whether rm_vertex will be deleted or not, its colour must be reset.
@@ -718,19 +723,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
               // Mark rm_vertex as non-active.
               dynamic_vertex[rm_vertex] = -1;
-
-              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
-              if(node_colour[target_vertex] >= 0){
-                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                  if(*jt != target_vertex){
-                    if(node_colour[*jt] == node_colour[target_vertex]){
-                      node_colour[target_vertex] = -1;
-                      break;
-                    }
-                  }
-                }
-              }
 
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
@@ -1189,6 +1181,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
       // Append target vertex
       local_buffers[*proc].insert(local_buffers[*proc].end(), msg.target.begin(), msg.target.end());
+      // And its colour
+      local_buffers[*proc].push_back(node_colour[dynamic_vertex[rm_vertex]]);
 
       // Append elements
       local_buffers[*proc].push_back(inv_elements.size());
@@ -1284,7 +1278,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
   }
 
   void unmarshal_data(std::vector< std::vector<int> >& recv_buffer,
-      index_t *halo, size_t& halo_size,
+      index_t *halo, size_t& halo_size, int current_colour,
       std::vector< std::map<index_t, index_t> >& sent_vertices,
       std::vector< std::map<index_t, index_t> >& recv_vertices){
     // Create a reverse lookup to map received gnn's back to lnn's.
@@ -1304,9 +1298,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
       // Part 1: append new vertices, elements and facets to the mesh.
       while(loc < original_part_size){
-        // Find which vertex we are talking about
+        // Find which vertex we are talking about and colour it
         index_t pos = buffer[loc++];
         index_t rm_vertex = _mesh->recv[proc][pos];
+        node_colour[rm_vertex] = current_colour;
 
         // Add rm_vertex to the global halo worklist
         halo[halo_size++] = rm_vertex;
@@ -1344,6 +1339,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
         protocol_unpack(target_vertex, proc, buffer, loc, gnn2lnn);
         assert(target_vertex >= 0);
         dynamic_vertex[rm_vertex] = target_vertex;
+        // Have a look at its colour. If it is coloured and that colour clashes with
+        // the colour of any of our vertices, then we will un-colour those vertices of ours.
+        int target_colour = buffer[loc++];
+        if(target_colour >= 0){
+          for(typename std::vector<index_t>::const_iterator it = _mesh->NNList[target_vertex].begin();
+              it != _mesh->NNList[target_vertex].end(); ++it)
+            if(_mesh->node_owner[*it] == rank)
+              if(node_colour[*it] == target_colour)
+                node_colour[*it] = -1;
+        }
 
         // Unpack new elements
         // An element can only be sent once, so there is no need to check for duplicates
