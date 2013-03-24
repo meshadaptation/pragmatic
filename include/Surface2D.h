@@ -94,6 +94,10 @@ template<typename real_t, typename index_t>
         return;
     }
 
+    // This is required because additional vertices may have been added.
+    if(surface_nodes.size() < _mesh->NNodes)
+      surface_nodes.resize(_mesh->NNodes, 0);
+
     index_t eid = coplanar_ids.size();
 
     boundary_ids.push_back(boundary_id);
@@ -102,9 +106,6 @@ template<typename real_t, typename index_t>
       index_t nid = facet[i];
       SNEList[nid].insert(eid);
 
-      // This is required because additional vertices may have been added.
-      while(surface_nodes.size()<=(size_t)nid)
-        surface_nodes.push_back((char) 0);
       surface_nodes[nid] = (char) 1;
 
       SENList.push_back(nid);
@@ -186,10 +187,9 @@ template<typename real_t, typename index_t>
     return (incident_plane.size()>=ndims);
   }
 
-  bool is_collapsible(index_t nid_free, index_t nid_target) const{
+  bool is_collapsible(index_t nid_free, index_t nid_target){
     if((nid_free>=(index_t)surface_nodes.size())||(nid_target>=(index_t)surface_nodes.size())){
-      std::cerr<<"WARNING: have yet to migrate surface\n";
-      return true;
+      surface_nodes.resize(_mesh->NNodes, 0);
     }
 
     // If nid_free is not on the surface then it's unconstrained.

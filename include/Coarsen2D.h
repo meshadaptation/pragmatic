@@ -92,7 +92,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
     nnodes_reserve = 0;
     dynamic_vertex = NULL;
     node_colour = NULL;
-    node_hash = NULL;
   }
   
   /// Default destructor.
@@ -103,7 +102,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
     if(dynamic_vertex!=NULL){
       delete[] dynamic_vertex;
       delete[] node_colour;
-      delete[] node_hash;
     }
   }
 
@@ -122,12 +120,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
       if(dynamic_vertex!=NULL){
         delete [] dynamic_vertex;
         delete[] node_colour;
-        delete[] node_hash;
       }
       
       dynamic_vertex = new index_t[nnodes_reserve];
       node_colour = new int[nnodes_reserve];
-      node_hash = new size_t[nnodes_reserve];
     }
     
     /* dynamic_vertex[i] >= 0 :: target to collapse node i
@@ -137,6 +133,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
     // Total number of active vertices. Used to break the infinite loop.
     size_t total_active;
+
+    // Total number of independent sets for this MPI process and for the whole MPI_COMM_WORLD
+    int nsets = 0;
+    int global_nsets = 0;
 
     // Set of all dynamic vertices. We pre-allocate the maximum capacity
     // that may be needed. Accessed using active sub-mesh vertex IDs.
@@ -233,12 +233,13 @@ template<typename real_t, typename index_t> class Coarsen2D{
            significant load imbalance if a static schedule was used. */
 #pragma omp for schedule(dynamic,32) reduction(+:total_active)
         for(size_t i=0;i<_mesh->NNodes;i++){
-          if(dynamic_vertex[i] == -2)
+          if(dynamic_vertex[i] == -2){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
 
-          if(dynamic_vertex[i]>=0){
-            active_set.push_back(i);
-            ++total_active;
+            if(dynamic_vertex[i]>=0){
+              active_set.push_back(i);
+              ++total_active;
+            }
           }
         }
 
@@ -259,35 +260,21 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
         memcpy(&GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
 
-#ifdef HAVE_MPI
-        if(nprocs>1){
-          /* Each MPI process needs to know which vertices in recv_halo are marked
-           * as dynamic by their owner in order to colour its own vertices accordingly.
-           * We could do that by exchanging halo data in terms of dynamic_vertex,
-           * i.e. call _mesh->halo_update(dynamic_vertex, 1). Instead, in order
-           * to avoid one MPI communication, we can just assume that all vertices in
-           * recv_halo are dynamic. The GlobalActiveSet has already been constructed,
-           * so marking non-owned vertices as dynamic does not do any harm, as they
-           * will not be put into any independent set, therefore they won't be processed.
-           */
-#pragma omp single nowait
-          {
-            for(typename std::set<index_t>::const_iterator it=_mesh->recv_halo.begin(); it!=_mesh->recv_halo.end(); ++it)
-              // Assign an arbitrary value.
-              dynamic_vertex[*it] = 0;
-          }
-        }
-#endif
-
         // Construct the node adjacency list for the active sub-mesh.
 #pragma omp barrier
-#pragma omp for schedule(dynamic) nowait
+#pragma omp for schedule(dynamic)
         for(size_t i=0; i<GlobalActiveSet_size; ++i){
           index_t vid = GlobalActiveSet[i];
           std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
 
           for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
-            if(dynamic_vertex[*it]>=0){
+            /* Each MPI process needs to know which vertices in recv_halo are marked as
+             * dynamic by their owner in order to colour its own vertices accordingly. We
+             * could do that by exchanging halo data in terms of dynamic_vertex, i.e. call
+             * _mesh->halo_update(dynamic_vertex, 1). Instead, in order to avoid one MPI
+             * communication, we can just assume that all vertices in recv_halo are dynamic.
+             */
+            if(dynamic_vertex[*it]>=0 || _mesh->node_owner[*it]!=rank){
               dynamic_NNList->push_back(*it);
             }
 
@@ -299,59 +286,45 @@ template<typename real_t, typename index_t> class Coarsen2D{
          * Active sub-mesh is ready, let's colour it. *
          **********************************************/
 
-        // Initialise the uncoloured active set: it contains all vertices of the
-        // GlobalActiveSet. The first thread to reach this point will do the copy.
-#pragma omp single
-        {
-          UncolouredActiveSet_size = GlobalActiveSet_size;
-          NextRoundActiveSet_size = 0;
-        }
-
-        // Reset vertex hashes, starting with global IDs - this is important for MPI!
-        // Also, initialise UncolouredActiveSet.
-#pragma omp for schedule(static)
-        for(size_t i=0; i<GlobalActiveSet_size; ++i){
-          index_t vid = GlobalActiveSet[i];
-          node_hash[vid] = _mesh->lnn2gnn[vid];
-          UncolouredActiveSet[i] = i;
-        }
-
-        // At the end of colouring, this variable will be equal to the total number of colours used.
-        int colour = 0;
-
         // Local independent sets.
         std::vector< std::vector<index_t> > local_ind_sets(max_colours);
         // idx[i] stores the index in independent_sets[i] at which this thread
         // will copy the contents of its local independent set local_ind_sets[i].
         std::vector<size_t> idx(max_colours);
+        // Local max colour
+        int max_colour = 0;
 
-        // Local list of vertices which are left for the next round.
-        std::vector<index_t> uncoloured;
-        uncoloured.reserve(GlobalActiveSet_size/nthreads);
+        uint32_t vid_hash;
+        std::vector<uint32_t> hashes;
 
-        while(UncolouredActiveSet_size > 0){
-          // Calculate the n-th order vertex hashes (n being the iteration count of this while loop).
-#pragma omp for schedule(static)
-          for(size_t i=0; i<GlobalActiveSet_size; ++i){
-            index_t vid = GlobalActiveSet[i];
-            node_hash[vid] = _mesh->hash(node_hash[vid]);
+#pragma omp for schedule(dynamic) nowait
+        for(size_t i=0; i<GlobalActiveSet_size; ++i){
+          index_t vid = GlobalActiveSet[i];
+
+          // Initialise hashes with the global IDs - this is important for MPI!
+          vid_hash = (uint32_t) _mesh->lnn2gnn[vid];
+          hashes.clear();
+          for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+            hashes.push_back((uint32_t) _mesh->lnn2gnn[*it]);
           }
 
-#pragma omp for schedule(dynamic,16) nowait
-          for(size_t i=0; i<UncolouredActiveSet_size; ++i){
-            index_t vid = GlobalActiveSet[UncolouredActiveSet[i]];
-            assert(node_colour[vid] == -1);
+          int colour = 0;
 
-            // A vertex is eligible to be coloured in this round only if it's got
-            // the highest or the lowest hash among all uncoloured neighbours.
+          while(true){
+            // Calculate hashes for this round
+            vid_hash = _mesh->hash(vid_hash);
+            for(typename std::vector<uint32_t>::iterator it=hashes.begin(); it!=hashes.end(); ++it){
+              *it = _mesh->hash(*it);
+            }
+
+            // A vertex is eligible to be coloured only if it's got
+            // the highest or the lowest hash among all neighbours.
 
             // Check whether this is the highest hash.
             bool eligible = true;
 
-            for(size_t j=0; j<subNNList[UncolouredActiveSet[i]]->size(); ++j){
-              index_t neigh = subNNList[UncolouredActiveSet[i]]->at(j);
-              assert(dynamic_vertex[neigh] >= 0);
-              if(node_hash[vid] < node_hash[neigh]){
+            for(typename std::vector<uint32_t>::const_iterator it=hashes.begin(); it!=hashes.end(); ++it){
+              if(vid_hash < *it){
                 eligible = false;
                 break;
               }
@@ -360,78 +333,56 @@ template<typename real_t, typename index_t> class Coarsen2D{
             if(eligible){
               node_colour[vid] = colour;
               local_ind_sets[colour].push_back(vid);
-              continue;
-            }
+              break;
+            }else{
+              // Check whether this is the lowest hash.
+              eligible = true;
+              ++colour;
 
-            // Check whether this is the lowest hash.
-            eligible = true;
+              for(typename std::vector<uint32_t>::const_iterator it=hashes.begin(); it!=hashes.end(); ++it){
+                if(vid_hash > *it){
+                  eligible = false;
+                  break;
+                }
+              }
 
-            for(size_t j=0; j<subNNList[UncolouredActiveSet[i]]->size(); ++j){
-              index_t neigh = subNNList[UncolouredActiveSet[i]]->at(j);
-              assert(dynamic_vertex[neigh] >= 0);
-              if(node_hash[vid] > node_hash[neigh]){
-                eligible = false;
+              if(eligible){
+                node_colour[vid] = colour;
+                local_ind_sets[colour].push_back(vid);
                 break;
+              }else{
+                ++colour;
               }
             }
-
-            if(eligible){
-              node_colour[vid] = colour+1;
-              local_ind_sets[colour+1].push_back(vid);
-              continue;
-            }
-
-            // If the vertex was not eligible for colouring
-            // in this round, advance it to the next round.
-            uncoloured.push_back(UncolouredActiveSet[i]);
           }
 
-          // Copy uncoloured vertices into NextRoundActiveSet
-          // (which will become the next round's UncolouredActiveSet).
-          size_t pos;
-#pragma omp atomic capture
-          {
-            pos = NextRoundActiveSet_size;
-            NextRoundActiveSet_size += uncoloured.size();
-          }
+          if(colour > max_colour)
+            max_colour = colour;
+        }
 
-          memcpy(&NextRoundActiveSet[pos], &uncoloured[0], uncoloured.size() * sizeof(index_t));
-          uncoloured.clear();
+        ++max_colour;
 
-          // Capture and increment the index in independent_sets[colour] and independent_sets[colour+1]
-          // at which the two local independent sets will be copied later, after memory for the global
-          // independent sets will have been allocated.
+        // Capture and increment the index in independent_sets[colour] at which the local independent
+        // sets will be copied later, after memory for the global independent sets will have been allocated.
+        for(int colour=0; colour < max_colour; ++colour){
 #pragma omp atomic capture
           {
             idx[colour] = ind_set_size[colour];
             ind_set_size[colour] += local_ind_sets[colour].size();
           }
-
-#pragma omp atomic capture
-          {
-            idx[colour+1] = ind_set_size[colour+1];
-            ind_set_size[colour+1] += local_ind_sets[colour+1].size();
-          }
-
-          colour += 2;
-
-          // Swap UncolouredActiveSet and NextRoundActiveSet
-#pragma omp barrier
-#pragma omp single
-          {
-            index_t *swap = NextRoundActiveSet;
-            NextRoundActiveSet = UncolouredActiveSet;
-            UncolouredActiveSet = swap;
-            UncolouredActiveSet_size = NextRoundActiveSet_size;
-            NextRoundActiveSet_size = 0;
-          }
         }
 
-        // Total number of independent sets = colour
-        int nsets = colour;
-        assert(nsets <= max_colours);
+        // Total number of independent sets
+#pragma omp critical
+        {
+          if(nsets < max_colour)
+            nsets = max_colour;
+
+          assert(nsets <= max_colours);
+        }
 
         // Allocate memory for the global independent sets.
+#pragma omp barrier
 #pragma omp for schedule(dynamic)
         for(int set_no=0; set_no<nsets; ++set_no)
           independent_sets[set_no] = new index_t[ind_set_size[set_no]];
@@ -451,6 +402,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
          * End of colouring *
          ********************/
 
+#ifdef HAVE_MPI
+        if(nprocs>1){
+#pragma omp single
+          {
+            global_nsets = nsets;
+            MPI_Allreduce(MPI_IN_PLACE, &global_nsets, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+          }
+        }
+#endif
+
         /*
          * Start processing independent sets. After processing each set, colouring
          * might be invalid. More precisely, it's the target vertices whose colours
@@ -465,9 +426,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
          * set and then discarding the other colours and looping all over again -
          * at least we make use of the existing colouring as much as possible.
          */
-        for(int set_no=0; set_no<nsets; ++set_no){
-          if(nprocs>1){
+        if(nprocs>1){
 #ifdef HAVE_MPI
+          for(int set_no=0; set_no<global_nsets; ++set_no){
             /* See which vertices in the independent set are actually going to collapse and
              * communicate related data to other MPI processes. We separate vertices into
              * interior and halo groups. The idea is that we can set up asynchronous MPI
@@ -521,7 +482,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
               }
 
               // Separate interior vertices from halo vertices.
-              if(_mesh->is_halo_node(rm_vertex)){
+              assert(_mesh->recv_halo.count(rm_vertex)==0);
+              if(_mesh->send_halo.count(rm_vertex) > 0){
                 // If rm_vertex is a halo vertex, then marshal necessary data.
                 halo_vertices.push_back(rm_vertex);
                 marshal_data(rm_vertex, local_buffers, local_sent);
@@ -672,6 +634,9 @@ template<typename real_t, typename index_t> class Coarsen2D{
               unmarshal_data(recv_buffer, global_halo, global_halo_size, set_no, sent_vertices, recv_vertices);
 
               for(int i=0; i<nprocs; ++i){
+                send_buffer[i].clear();
+                recv_buffer[i].clear();
+                sent_vertices_vec[i].clear();
                 send_buffer_size[i] = 0;
                 recv_buffer_size[i] = 0;
                 sent_vertices_vec_size[i] = 0;
@@ -733,8 +698,14 @@ template<typename real_t, typename index_t> class Coarsen2D{
               global_interior_size = 0;
               global_halo_size = 0;
             }
+
+            _mesh->commit_deferred(tid);
+            _surface->commit_deferred(tid);
+#pragma omp barrier
+          }
 #endif
-          }else{
+        }else{
+          for(int set_no=0; set_no<nsets; ++set_no){
 #pragma omp for schedule(dynamic,32)
             for(size_t i=0; i<ind_set_size[set_no]; ++i){
               index_t rm_vertex = independent_sets[set_no][i];
@@ -788,11 +759,11 @@ template<typename real_t, typename index_t> class Coarsen2D{
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
             }
-          }
 
-          _mesh->commit_deferred(tid);
-          _surface->commit_deferred(tid);
+            _mesh->commit_deferred(tid);
+            _surface->commit_deferred(tid);
 #pragma omp barrier
+          }
         }
 
 #pragma omp for schedule(static) nowait
@@ -801,9 +772,14 @@ template<typename real_t, typename index_t> class Coarsen2D{
           ind_set_size[set_no] = 0;
         }
 
-#pragma omp for schedule(static)
+#pragma omp for schedule(static) nowait
         for(size_t i=0; i<GlobalActiveSet_size; ++i)
           delete subNNList[i];
+
+#pragma omp single
+        {
+          nsets = 0;
+        }
 
       }while(true);
     }
@@ -827,7 +803,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
  private:
   
-  /*! Kernel for identifying what if any vertex rm_vertex should collapse onto.
+  /*! Kernel for identifying what vertex (if any) rm_vertex should collapse onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should collapse onto, negative if no operation is to be performed.
    */
@@ -839,7 +815,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
     // If this is a corner-vertex then cannot collapse;
     if(_surface->is_corner_vertex(rm_vertex))
       return -1;
-    
+
     // If this is not owned then return -1.
     if(!_mesh->is_owned_node(rm_vertex))
       return -1;
@@ -1301,6 +1277,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         // Find which vertex we are talking about and colour it
         index_t pos = buffer[loc++];
         index_t rm_vertex = _mesh->recv[proc][pos];
+        assert(_mesh->node_owner[rm_vertex] == proc);
         node_colour[rm_vertex] = current_colour;
 
         // Add rm_vertex to the global halo worklist
@@ -1357,8 +1334,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
         for(int i=0; i<nElements; ++i){
           index_t ele[] = {-1, -1, -1};
 
-          for(size_t j=0; j<nloc; ++j)
+          for(size_t j=0; j<nloc; ++j){
             protocol_unpack(ele[j], proc, buffer, loc, gnn2lnn);
+            assert(ele[j] >= 0);
+          }
 
           index_t eid = _mesh->append_element(ele);
 
@@ -1387,8 +1366,10 @@ template<typename real_t, typename index_t> class Coarsen2D{
         for(int i=0; i<nFacets; ++i){
           index_t facet[] = {-1, -1};
 
-          for(size_t j=0; j<snloc; ++j)
+          for(size_t j=0; j<snloc; ++j){
             protocol_unpack(facet[j], proc, buffer, loc, gnn2lnn);
+            assert(facet[j] >= 0);
+          }
 
           int boundary_id = buffer[loc++];
           int coplanar_id = buffer[loc++];
@@ -1416,7 +1397,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
         sent_vertices[receiver][gnn] = vid;
       }
     }
-
+/*
+    if(rank==0){
+      std::cout << "Rank 0 send[1].size()=" << _mesh->send[1].size() << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(rank==1){
+      std::cout << "Rank 1 recv[0].size()=" << _mesh->recv[0].size() << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+*/
     // Update _mesh->send and _mesh->recv.
     for(int i=0; i<nprocs; ++i){
       for(typename std::map<index_t, index_t>::const_iterator it=sent_vertices[i].begin();
@@ -1433,6 +1423,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
         _mesh->recv_halo.insert(it->second);
       }
     }
+/*
+    if(rank==0){
+      std::cout << "Rank 0 send extra = " << sent_vertices[1].size() << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(rank==1){
+      std::cout << "Rank 1 recv extra = " << recv_vertices[0].size() << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+*/
   }
 
   Mesh<real_t, index_t> *_mesh;
@@ -1442,7 +1442,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
   size_t nnodes_reserve;
   index_t *dynamic_vertex;
   int *node_colour;
-  size_t *node_hash;
 
   real_t _L_low, _L_max;
 
