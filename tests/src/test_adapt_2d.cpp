@@ -54,10 +54,11 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
 
   bool verbose = false;
   if(argc>1){
@@ -67,9 +68,10 @@ int main(int argc, char **argv){
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
-  int rank = MPI::COMM_WORLD.Get_rank();
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
+  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
   Surface<double, int> surface(*mesh);
   surface.find_surface(true);
@@ -77,14 +79,14 @@ int main(int argc, char **argv){
   MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.002;
+  double eta=0.001;
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0]-1;
-    double y = 2*mesh->get_coords(i)[1]-1;
+    double x = 2*mesh->get_coords(i)[0];
+    double y = 2*mesh->get_coords(i)[1];
 
-    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+    psi[i] = sin(x*20)+sin(y*20);
   }
 
   metric_field.add_field(&(psi[0]), eta, 1);
@@ -98,7 +100,6 @@ int main(int argc, char **argv){
                                     <<"Quality mean:  "<<qmean<<std::endl
                                     <<"Quality min:   "<<qmin<<std::endl
                                     <<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -120,21 +121,21 @@ int main(int argc, char **argv){
       std::map<int, int> active_vertex_map;
       mesh->defragment(&active_vertex_map);
       surface.defragment(&active_vertex_map);
-      
+
       VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
       exit(-1);
     }
 
   double L_max = mesh->maximal_edge_length();
-  
+
   double alpha = sqrt(2.0)/2;  
   for(size_t i=0;i<10;i++){
     double L_ref = std::max(alpha*L_max, L_up);
-    
+
     tic = get_wtime();
     refine.refine(L_ref);
     time_refine += get_wtime() - tic;
-    
+
     if(verbose){
       if(rank==0)
         std::cout<<"INFO: Verify quality after refine.\n";
@@ -143,7 +144,7 @@ int main(int argc, char **argv){
         std::map<int, int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
-        
+
         VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
         exit(-1);
       }
@@ -156,19 +157,19 @@ int main(int argc, char **argv){
     if(verbose){
       if(rank==0)
         std::cout<<"INFO: Verify quality after coarsen.\n";
-      
+
       if(!mesh->verify()){
         std::map<int, int> active_vertex_map;
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
-        
+
         VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
         exit(-1);
       }
     }
 
     tic = get_wtime();
-    swapping.swap(0.95);
+    swapping.swap(0.7);
     time_swap += get_wtime() - tic;
 
     if(verbose){
@@ -190,7 +191,7 @@ int main(int argc, char **argv){
     if((L_max-L_up)<0.01)
       break;
   }
-  
+
   std::map<int, int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
@@ -204,7 +205,7 @@ int main(int argc, char **argv){
   }
   
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 200);
+  smooth.smooth("optimisation Linf", 50);
   time_smooth += get_wtime()-tic;
   
   time_adapt = get_wtime()-time_adapt;
@@ -218,10 +219,10 @@ int main(int argc, char **argv){
   NNodes = mesh->get_number_nodes();
   psi.resize(NNodes);
   for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0]-1;
-    double y = 2*mesh->get_coords(i)[1]-1;
-    
-    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+    double x = 2*mesh->get_coords(i)[0];
+    double y = 2*mesh->get_coords(i)[1];
+
+    psi[i] = sin(x*20)+sin(y*20);
   }
 
   VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
@@ -230,16 +231,17 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-  
+
   delete mesh;
 
   if(rank==0){
-    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";
+    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";
     std::cout<<"BENCHMARK: "
              <<std::setw(12)<<time_coarsen<<" "
              <<std::setw(11)<<time_refine<<" "
              <<std::setw(9)<<time_swap<<" "
-             <<std::setw(11)<<time_smooth<<"\n";
+             <<std::setw(11)<<time_smooth<<" "
+             <<std::setw(10)<<time_adapt<<"\n";
 
     if((qmean>0.8)&&(qmin>0.4))
       std::cout<<"pass"<<std::endl;
@@ -247,7 +249,7 @@ int main(int argc, char **argv){
       std::cout<<"fail"<<std::endl;
   }
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }
