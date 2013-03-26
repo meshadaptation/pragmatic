@@ -328,14 +328,12 @@ template<typename real_t, typename index_t> class Refine2D{
             recv_cnt[i] = recv_additional[i].size();
             for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
               _mesh->recv[i].push_back(it->id);
-              _mesh->recv_map[i][it->id] = _mesh->recv[i].size() - 1;
               _mesh->recv_halo.insert(it->id);
             }
 
             send_cnt[i] = send_additional[i].size();
             for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
               _mesh->send[i].push_back(it->id);
-              _mesh->send_map[i][it->id] = _mesh->send[i].size()-1;
               _mesh->send_halo.insert(it->id);
             }
           }
@@ -346,6 +344,15 @@ template<typename real_t, typename index_t> class Refine2D{
               _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
 
           _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+
+          // Now that global numbering has been updated, update send_map and recv_map.
+          for(int i=0;i<nprocs;++i){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          }
 
           _mesh->clear_invisible(invisible_vertices);
           _mesh->trim_halo();

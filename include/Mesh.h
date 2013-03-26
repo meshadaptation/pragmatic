@@ -177,8 +177,8 @@ template<typename real_t, typename index_t> class Mesh{
   void erase_vertex(const index_t nid){
     NNList[nid].clear();
     NEList[nid].clear();
-    //node_owner[nid] = rank;
-    //lnn2gnn[nid] = -1;
+    node_owner[nid] = rank;
+    lnn2gnn[nid] = -1;
   }
 
   /// Add a new element
@@ -1157,15 +1157,17 @@ template<typename real_t, typename index_t> class Mesh{
 
       for(int j=0;j<num_processes;j++){
         for(int k=0;k<recv_size[j];k++){
-          index_t vid = gnn2lnn[recv[j][k]];
-          recv[j][k] = vid;
-          recv_map[j][vid] = k;
+          index_t gnn = recv[j][k];
+          index_t lnn = gnn2lnn[gnn];
+          recv_map[j][gnn] = lnn;
+          recv[j][k] = lnn;
         }
 
         for(int k=0;k<send_size[j];k++){
-          index_t vid= gnn2lnn[send[j][k]];
-          send[j][k] = vid;
-          send_map[j][vid] = k;
+          index_t gnn = send[j][k];
+          index_t lnn = gnn2lnn[gnn];
+          send_map[j][gnn] = lnn;
+          send[j][k] = lnn;
         }
       }
 
@@ -1375,7 +1377,8 @@ template<typename real_t, typename index_t> class Mesh{
         typename std::vector<index_t>::iterator position;
         position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
         if(position == NNList[*it].end()){
-          std::cout << "vertex = " << *it << ", rm = " << *(it+1) << std::endl;
+          std::cout << "Rank " << rank << ", rm_vertex=" << *(it+1) << "(" << lnn2gnn[*(it+1)] <<
+              "), target_vertex=" << *it << "(" << lnn2gnn[*it] << ")" << std::endl;
         }
         assert(position != NNList[*it].end());
         NNList[*it].erase(position);
@@ -1474,33 +1477,11 @@ template<typename real_t, typename index_t> class Mesh{
       if(recv[i].size()==0)
         continue;
 
-      if(rank==1 && recv[0].size()==282){
-        std::set<int> insp;
-        insp.insert(3494);
-        insp.insert(3859);
-        insp.insert(1661);
-        insp.insert(1992);
-        insp.insert(2551);
-        insp.insert(9110);
-        insp.insert(9612);
-        insp.insert(9626);
-
-        for(std::vector<int>::const_iterator it=recv[0].begin();it!=recv[0].end();++it){
-          if(insp.count(lnn2gnn[*it]) > 0){
-            std::cout << "Vertex " << *it << "(" << lnn2gnn[*it] << "): ";
-            for(typename std::vector<index_t>::const_iterator nei=NNList[*it].begin(); nei!=NNList[*it].end(); ++nei){
-              std::cout << *nei << "(" << node_owner[*nei] << ", " << lnn2gnn[*nei] << "), ";
-            }
-            std::cout << std::endl;
-          }
-        }
-      }
-
       std::vector<index_t> recv_temp;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-      boost::unordered_map<index_t, size_t> recv_map_temp;
+      boost::unordered_map<index_t, index_t> recv_map_temp;
 #else
-      std::map<index_t, size_t> recv_map_temp;
+      std::map<index_t, index_t> recv_map_temp;
 #endif
 
       for(typename std::vector<index_t>::const_iterator vit = recv[i].begin(); vit != recv[i].end(); ++vit){
@@ -1558,7 +1539,7 @@ template<typename real_t, typename index_t> class Mesh{
         }else{
           // We will keep this vertex, so put it into recv_halo_temp.
           recv_temp.push_back(*vit);
-          recv_map_temp[*vit] = recv_temp.size() - 1;
+          recv_map_temp[lnn2gnn[*vit]] = *vit;
           recv_halo_temp.insert(*vit);
         }
       }
@@ -1569,7 +1550,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     // Once all recv[i] have been traversed, update recv_halo.
     recv_halo.swap(recv_halo_temp);
-MPI_Barrier(MPI_COMM_WORLD);
+
     // Traverse all vertices V in all send[i] vectors.
     // If none of V's neighbours are owned by the i-th MPI process, it means that the i-th process
     // has removed V from its recv_halo, so remove the vertex from send[i].
@@ -1577,31 +1558,11 @@ MPI_Barrier(MPI_COMM_WORLD);
       if(send[i].size()==0)
         continue;
 
-      if(rank==0 && send[1].size()==282){
-        std::set<int> insp;
-        insp.insert(3494);
-        insp.insert(3859);
-        insp.insert(1661);
-        insp.insert(1992);
-        insp.insert(2551);
-        insp.insert(9110);
-        insp.insert(9612);
-        insp.insert(9626);
-
-        for(std::set<int>::const_iterator it=insp.begin();it!=insp.end();++it){
-          std::cout << "Vertex " << *it << "(" << lnn2gnn[*it] << "): ";
-          for(typename std::vector<index_t>::const_iterator nei=NNList[*it].begin(); nei!=NNList[*it].end(); ++nei){
-            std::cout << *nei << "(" << node_owner[*nei] << ", " << lnn2gnn[*nei] << "), ";
-          }
-          std::cout << std::endl;
-        }
-      }
-
       std::vector<index_t> send_temp;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-      boost::unordered_map<index_t, size_t> send_map_temp;
+      boost::unordered_map<index_t, index_t> send_map_temp;
 #else
-      std::map<index_t, size_t> send_map_temp;
+      std::map<index_t, index_t> send_map_temp;
 #endif
 
       for(typename std::vector<index_t>::const_iterator vit = send[i].begin(); vit != send[i].end(); ++vit){
@@ -1614,7 +1575,7 @@ MPI_Barrier(MPI_COMM_WORLD);
 
         if(!to_be_deleted){
           send_temp.push_back(*vit);
-          send_map_temp[*vit] = send_temp.size()-1;
+          send_map_temp[lnn2gnn[*vit]] = *vit;
           send_halo_temp.insert(*vit);
         }
       }
@@ -1779,9 +1740,9 @@ MPI_Barrier(MPI_COMM_WORLD);
   int rank, num_processes, num_uma, num_threads;
   std::vector< std::vector<index_t> > send, recv;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-  std::vector< boost::unordered_map<index_t, size_t> > send_map, recv_map;
+  std::vector< boost::unordered_map<index_t, index_t> > send_map, recv_map;
 #else
-  std::vector< std::map<index_t, size_t> > send_map, recv_map;
+  std::vector< std::map<index_t, index_t> > send_map, recv_map;
 #endif
   std::set<index_t> send_halo, recv_halo;
   std::vector<int> node_owner;
