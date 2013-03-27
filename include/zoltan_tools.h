@@ -67,23 +67,23 @@ extern "C" {
     /* Total number of nodes on local process.
      */
     size_t nnodes;
-    
+
     /* Array storing the number of edges connected to each node.
      */
     size_t *nedges;
-    
+
     /* Array storing the edges in compressed row storage format.
      */
     size_t *csr_edges;
-    
+
     /* Mapping from local node numbers to global node numbers.
      */
     int *gid;
-    
+
     /* Process owner of each node.
      */
-    size_t *owner;
-    
+    int *owner;
+
     /* Graph colouring.
      */
     int *colour;

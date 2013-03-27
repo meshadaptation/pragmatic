@@ -472,13 +472,13 @@ template<typename real_t, typename index_t> class Coarsen3D{
 
   void select_max_independent_set_distributed(std::vector<bool> &maximal_independent_set){
     std::vector<int> lnn2gnn;
-    std::vector<size_t> owner;      
+    std::vector<int> owner;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     boost::unordered_map<int, int> gnn2lnn;
 #else
     std::map<int, int> gnn2lnn;
 #endif
-    
+
     int NNodes = _mesh->get_number_nodes();
     int NPNodes = NNodes = NNodes - _mesh->recv_halo.size();
 
@@ -488,12 +488,12 @@ template<typename real_t, typename index_t> class Coarsen3D{
       gnn2lnn[lnn2gnn[i]] = i;
     }
     assert(gnn2lnn.size()==lnn2gnn.size());
-              
+
     // Use a bitmap to indicate the maximal independent set.
     assert(NNodes>=NPNodes);
     maximal_independent_set.resize(NNodes);
     std::fill(maximal_independent_set.begin(), maximal_independent_set.end(), false);
-    
+
     // Find the size of the local graph and create a new lnn2gnn for the compressed graph.
     size_t graph_length=0;
     std::vector<size_t> nedges(NNodes), graph_owner(NNodes);
@@ -502,7 +502,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
         size_t cnt = _mesh->NNList[i].size();
         if(cnt){
           nedges[i] = cnt;
-              
+
           graph_length+=cnt;
         }
       }
@@ -616,7 +616,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
         }
       }
     }
-            
+
     // Finalise list of additional elements and nodes to be sent.
     for(int p=0;p<nprocs;p++){
       for(std::set<int>::iterator it=send_elements[p].begin();it!=send_elements[p].end();){
@@ -627,7 +627,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
           if(known_nodes[p].count(n[i])==0){
             send_nodes[p].insert(n[i]);
           }
-          if(owner[n[i]]==(size_t)p)
+          if(owner[n[i]]==p)
             cnt++;
         }
         if(cnt){
@@ -635,14 +635,14 @@ template<typename real_t, typename index_t> class Coarsen3D{
         }
       }
     }
-            
+
     // Push data to be sent onto the send_buffer.
     std::vector< std::vector<int> > send_buffer(nprocs);
     size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
     for(int p=0;p<nprocs;p++){
       if(send_edges[p].size()==0)
         continue;
-              
+
       // Push on the nodes that need to be communicated.
       send_buffer[p].push_back(send_nodes[p].size());
       for(std::set<int>::iterator it=send_nodes[p].begin();it!=send_nodes[p].end();++it){
