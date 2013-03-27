@@ -310,7 +310,7 @@ template<typename real_t, typename index_t> class Mesh{
 #pragma omp parallel reduction(+:rms,nedges)
     {
 #pragma omp for schedule(static)
-      for(int i=0;i<NNodes;i++){
+      for(int i=0;i<(int)NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once. 

@@ -659,13 +659,13 @@ template<typename real_t, typename index_t>
 
     if(use_bbox){
       for(size_t i=0;i<NSElements;i++){
-        if(normals[i*ndims]<-0.9){
+        if(normals[i*ndims]<-0.9999){
           coplanar_ids[i]=1;
-        }else if(normals[i*ndims]>0.9){
+        }else if(normals[i*ndims]>0.9999){
           coplanar_ids[i]=2;
-        }else if(normals[i*ndims+1]<-0.9){
+        }else if(normals[i*ndims+1]<-0.9999){
           coplanar_ids[i]=3;
-        }else if(normals[i*ndims+1]>0.9){
+        }else if(normals[i*ndims+1]>0.9999){
           coplanar_ids[i]=4;
         }
       }
