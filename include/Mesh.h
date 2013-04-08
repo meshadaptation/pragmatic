@@ -521,24 +521,15 @@ template<typename real_t, typename index_t> class Mesh{
     }
     (*active_vertex_map).resize(NNodes);
 #pragma omp parallel for schedule(static)
-    for(size_t i=0;i<NNodes;i++)
+    for(size_t i=0;i<NNodes;i++){
       (*active_vertex_map)[i] = -1;
-
-    // Create look-up tables for halos.
-    std::map<index_t, std::set<int> > send_set, recv_set;
-    if(num_processes>1){
-      for(int k=0;k<num_processes;k++){
-        for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt)
-          send_set[k].insert(*jt);
-        for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt)
-          recv_set[k].insert(*jt);
-      }
+      NNList[i].clear();
+      NEList[i].clear();
     }
 
-    // Identify active vertices and elements.
-    std::vector<index_t> active_vertex, active_element;
+    // Identify active elements.
+    std::vector<index_t> active_element;
 
-    active_vertex.reserve(NNodes);
     active_element.reserve(NElements);
 
     std::map<index_t, std::set<int> > new_send_set, new_recv_set;
@@ -572,7 +563,7 @@ template<typename real_t, typename index_t> class Mesh{
 
         if(halo_element){
           for(int k=0;k<num_processes;k++){
-            if(recv_set[k].count(nid)){
+            if(recv_map[k].count(lnn2gnn[nid])){
               new_recv_set[k].insert(nid);
               neigh.insert(k);
             }
@@ -582,7 +573,7 @@ template<typename real_t, typename index_t> class Mesh{
       for(size_t j=0;j<nloc;j++){
         nid = _ENList[e*nloc+j];
         for(std::set<int>::iterator kt=neigh.begin();kt!=neigh.end();++kt){
-          if(send_set[*kt].count(nid))
+          if(send_map[*kt].count(lnn2gnn[nid]))
             new_send_set[*kt].insert(nid);
         }
       }
@@ -595,10 +586,9 @@ template<typename real_t, typename index_t> class Mesh{
         continue;
 
       (*active_vertex_map)[i] = cnt++;
-      active_vertex.push_back(i);
     }
 
-    int metis_nnodes = active_vertex.size();
+    int metis_nnodes = cnt;
     int metis_nelements = active_element.size();
     std::vector< std::set<index_t> > graph(metis_nnodes);
     for(typename std::vector<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
@@ -630,19 +620,16 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<int> inorder(metis_nnodes);
     int numflag=0, options[] = {0};
 
-    METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
+    if(metis_nnodes != 0){
+      METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
 
-    std::vector<index_t> metis_vertex_renumber(metis_nnodes);
-    for(int i=0;i<metis_nnodes;i++){
-      metis_vertex_renumber[i] = inorder[i];
-    }
+      // Update active_vertex_map
+      for(size_t i=0;i<NNodes;i++){
+        if((*active_vertex_map)[i]<0)
+          continue;
 
-    // Update active_vertex_map
-    for(size_t i=0;i<NNodes;i++){
-      if((*active_vertex_map)[i]<0)
-        continue;
-
-      (*active_vertex_map)[i] = metis_vertex_renumber[(*active_vertex_map)[i]];
+        (*active_vertex_map)[i] = inorder[(*active_vertex_map)[i]];
+      }
     }
 
     // Renumber elements
@@ -673,7 +660,8 @@ template<typename real_t, typename index_t> class Mesh{
     // end of renumbering
 
     // Compress data structures.
-    NNodes = active_vertex.size();
+    assert(cnt == metis_nnodes);
+    NNodes = metis_nnodes;
     //NElements = active_element.size();
     NElements = metis_nelements;
 
@@ -729,21 +717,42 @@ template<typename real_t, typename index_t> class Mesh{
     memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
     memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(float));
 
-    // Renumber halo
+    // Renumber halo, fix lnn2gnn and node_owner.
     if(num_processes>1){
+      std::vector<index_t> defrag_lnn2gnn(NNodes);
+      std::vector<int> defrag_owner(NNodes);
+
+      for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
+        index_t new_id = (*active_vertex_map)[old_nid];
+        defrag_lnn2gnn[new_id] = lnn2gnn[old_nid];
+        defrag_owner[new_id] = node_owner[old_nid];
+      }
+
+      lnn2gnn.swap(defrag_lnn2gnn);
+      node_owner.swap(defrag_owner);
+
       for(int k=0;k<num_processes;k++){
         std::vector<int> new_halo;
+        send_map[k].clear();
         for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
-          if(new_send_set[k].count(*jt))
-            new_halo.push_back((*active_vertex_map)[*jt]);
+          if(new_send_set[k].count(*jt)){
+            index_t new_lnn = (*active_vertex_map)[*jt];
+            new_halo.push_back(new_lnn);
+            send_map[k][lnn2gnn[new_lnn]] = new_lnn;
+          }
         }
         send[k].swap(new_halo);
       }
+
       for(int k=0;k<num_processes;k++){
         std::vector<int> new_halo;
+        recv_map[k].clear();
         for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
-          if(new_recv_set[k].count(*jt))
-            new_halo.push_back((*active_vertex_map)[*jt]);
+          if(new_recv_set[k].count(*jt)){
+            index_t new_lnn = (*active_vertex_map)[*jt];
+            new_halo.push_back(new_lnn);
+            recv_map[k][lnn2gnn[new_lnn]] = new_lnn;
+          }
         }
         recv[k].swap(new_halo);
       }
@@ -756,6 +765,7 @@ template<typename real_t, typename index_t> class Mesh{
           }
         }
       }
+
       {
         recv_halo.clear();
         for(int k=0;k<num_processes;k++){
@@ -763,6 +773,11 @@ template<typename real_t, typename index_t> class Mesh{
             recv_halo.insert(*jt);
           }
         }
+      }
+    }else{
+      for(size_t i=0; i<NNodes; ++i){
+        lnn2gnn[i] = i;
+        node_owner[i] = 0;
       }
     }
 
@@ -1283,12 +1298,6 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Create required adjacency lists.
   void create_adjacency(){
-#pragma omp for schedule(static)
-    for(int i=0;i<(int)NNodes;i++){
-      NEList[i].clear();
-      NNList[i].clear();
-    }
-
     int tid = omp_get_thread_num();
     int nthreads = omp_get_max_threads();
 
@@ -1376,10 +1385,6 @@ template<typename real_t, typename index_t> class Mesh{
         assert(*it % num_threads == (int) tid);
         typename std::vector<index_t>::iterator position;
         position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
-        if(position == NNList[*it].end()){
-          std::cout << "Rank " << rank << ", rm_vertex=" << *(it+1) << "(" << lnn2gnn[*(it+1)] <<
-              "), target_vertex=" << *it << "(" << lnn2gnn[*it] << ")" << std::endl;
-        }
         assert(position != NNList[*it].end());
         NNList[*it].erase(position);
       }
@@ -1658,6 +1663,20 @@ template<typename real_t, typename index_t> class Mesh{
     }
 
     halo_update(&lnn2gnn[0], 1);
+
+    for(int i=0;i<num_processes;i++){
+      send_map[i].clear();
+      for(std::vector<int>::const_iterator it=send[i].begin();it!=send[i].end();++it){
+        assert(node_owner[*it]==rank);
+        send_map[i][lnn2gnn[*it]] = *it;
+      }
+
+      recv_map[i].clear();
+      for(std::vector<int>::const_iterator it=recv[i].begin();it!=recv[i].end();++it){
+        node_owner[*it] = i;
+        recv_map[i][lnn2gnn[*it]] = *it;
+      }
+    }
   }
 
   void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt){
