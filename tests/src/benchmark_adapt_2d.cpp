@@ -72,7 +72,7 @@ int main(int argc, char **argv){
   surface.find_surface(true);
 
   char filename[256];
-  double eta=0.001;
+  double eta=0.0001;
 
   if(rank==0)
     std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";  

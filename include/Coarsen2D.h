@@ -216,7 +216,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
            schedule is used as previous coarsening may have introduced
            significant gaps in the node list. This could lead to
            significant load imbalance if a static schedule was used. */
-#pragma omp for schedule(dynamic,32) reduction(+:total_active)
+#pragma omp for schedule(dynamic, 16) reduction(+:total_active)
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(dynamic_vertex[i] == -2){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
@@ -251,7 +251,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
         // Construct the node adjacency list for the active sub-mesh.
 #pragma omp barrier
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static)
         for(size_t i=0; i<GlobalActiveSet_size; ++i){
           index_t vid = GlobalActiveSet[i];
           std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
@@ -362,17 +362,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
         }
 
         // Total number of independent sets
-#pragma omp critical
+        int nsets_local;
+#pragma omp atomic capture
         {
-          if(nsets < max_colour)
-            nsets = max_colour;
-
-          assert(nsets <= max_colours);
+          nsets_local = nsets;
+          nsets += (nsets_local < max_colours ? max_colours - nsets_local : 0);
         }
 
         // Allocate memory for the global independent sets.
 #pragma omp barrier
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static)
         for(int set_no=0; set_no<nsets; ++set_no)
           independent_sets[set_no] = new index_t[ind_set_size[set_no]];
 
@@ -459,7 +458,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
               }
 
               // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
+              // There is a race condition here, but it doesn't do any harm.
               index_t target_vertex = dynamic_vertex[rm_vertex];
               if(node_colour[target_vertex] >= 0){
                 for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
@@ -689,7 +688,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 #endif
         }else{
           for(int set_no=0; set_no<nsets; ++set_no){
-#pragma omp for schedule(dynamic,32)
+#pragma omp for schedule(dynamic, 16)
             for(size_t i=0; i<ind_set_size[set_no]; ++i){
               index_t rm_vertex = independent_sets[set_no][i];
               assert((size_t) rm_vertex < NNodes);
@@ -721,7 +720,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
                   dynamic_vertex[*jt] = -2;
 
               // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is race condition here, but it doesn't do any harm.
+              // There is a race condition here, but it doesn't do any harm.
               if(node_colour[target_vertex] >= 0){
                 for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
                   if(*jt != target_vertex){

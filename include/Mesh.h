@@ -1348,28 +1348,28 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   inline void deferred_addNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].addNN.push_back(i);
-    deferred_operations[tid][i % num_threads].addNN.push_back(n);
+    deferred_operations[tid][hash(i) % num_threads].addNN.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].addNN.push_back(n);
   }
 
   inline void deferred_remNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].remNN.push_back(i);
-    deferred_operations[tid][i % num_threads].remNN.push_back(n);
+    deferred_operations[tid][hash(i) % num_threads].remNN.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].remNN.push_back(n);
   }
 
   inline void deferred_addNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].addNE.push_back(i);
-    deferred_operations[tid][i % num_threads].addNE.push_back(n);
+    deferred_operations[tid][hash(i) % num_threads].addNE.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].addNE.push_back(n);
   }
 
   inline void deferred_addNE_fix(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].addNE_fix.push_back(i);
-    deferred_operations[tid][i % num_threads].addNE_fix.push_back(n);
+    deferred_operations[tid][hash(i) % num_threads].addNE_fix.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].addNE_fix.push_back(n);
   }
 
   inline void deferred_remNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][i % num_threads].remNE.push_back(i);
-    deferred_operations[tid][i % num_threads].remNE.push_back(n);
+    deferred_operations[tid][hash(i) % num_threads].remNE.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].remNE.push_back(n);
   }
 
   void commit_deferred(size_t tid){
