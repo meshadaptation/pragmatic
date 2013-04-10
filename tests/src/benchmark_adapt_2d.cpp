@@ -91,8 +91,8 @@ int main(int argc, char **argv){
     metric_field.add_field(&(psi[0]), eta, 2);
     metric_field.update_mesh();
     
-    sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
-    VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+    //sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
+    //VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
     
     double T1 = get_wtime();
 
@@ -143,7 +143,7 @@ int main(int argc, char **argv){
     surface.defragment(&active_vertex_map);
     
     tic = get_wtime();
-    smooth.smooth("optimisation Linf", 10);
+    //smooth.smooth("optimisation Linf", 10);
     toc = get_wtime();
     if(t>0) time_smooth += (toc-tic);
 
@@ -167,8 +167,8 @@ int main(int argc, char **argv){
                <<std::setw(11)<<time_smooth/t<<" "
                <<std::setw(10)<<time_adapt/t<<"\n";
     
-    sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
-    VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+    //sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
+    //VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
   }
 
   delete mesh;

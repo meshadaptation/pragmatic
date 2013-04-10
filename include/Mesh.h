@@ -1050,6 +1050,7 @@ template<typename real_t, typename index_t> class Mesh{
   template<typename _real_t, typename _index_t> friend class Surface3D;
   template<typename _real_t, typename _index_t> friend class VTKTools;
   template<typename _real_t, typename _index_t> friend class CUDATools;
+  template<typename _real_t, typename _index_t> friend class Colouring;
 
   struct DeferredOperations{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
@@ -1382,7 +1383,6 @@ template<typename real_t, typename index_t> class Mesh{
 
       // Commit removals from NNList
       for(typename std::vector<index_t>::const_iterator it=pending.remNN.begin(); it!=pending.remNN.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
         typename std::vector<index_t>::iterator position;
         position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
         assert(position != NNList[*it].end());
@@ -1392,21 +1392,18 @@ template<typename real_t, typename index_t> class Mesh{
 
       // Commit additions to NNList
       for(typename std::vector<index_t>::const_iterator it=pending.addNN.begin(); it!=pending.addNN.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
         NNList[*it].push_back(*(it+1));
       }
       pending.addNN.clear();
 
       // Commit removals from NEList
       for(typename std::vector<index_t>::const_iterator it=pending.remNE.begin(); it!=pending.remNE.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
         NEList[*it].erase(*(it+1));
       }
       pending.remNE.clear();
 
       // Commit additions to NEList
       for(typename std::vector<index_t>::const_iterator it=pending.addNE.begin(); it!=pending.addNE.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
         NEList[*it].insert(*(it+1));
       }
       pending.addNE.clear();
@@ -1414,7 +1411,6 @@ template<typename real_t, typename index_t> class Mesh{
       // Fix element IDs and commit additions to NEList
       if(threadIdx!=NULL){
         for(typename std::vector<index_t>::const_iterator it=pending.addNE_fix.begin(); it!=pending.addNE_fix.end(); it+=2){
-          assert(*it % num_threads == (int) tid);
           // Element was created by thread i
           index_t fixedId = *(it+1) + (*threadIdx)[i];
           NEList[*it].insert(fixedId);
