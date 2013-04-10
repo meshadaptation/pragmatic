@@ -195,9 +195,9 @@ int main(int argc, char **argv){
       break;
   }
 
-  //std::vector<int> active_vertex_map;
-  //mesh->defragment(&active_vertex_map);
-  //surface.defragment(&active_vertex_map);
+  std::vector<int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
   if(verbose){
     if(rank==0)
@@ -208,7 +208,7 @@ int main(int argc, char **argv){
   }
   
   tic = get_wtime();
-  //smooth.smooth("optimisation Linf", 200);
+  smooth.smooth("optimisation Linf", 10);
   time_smooth += get_wtime()-tic;
   
   time_adapt = get_wtime()-time_adapt;

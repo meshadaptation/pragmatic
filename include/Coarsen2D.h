@@ -477,7 +477,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(_mesh->send_halo.count(rm_vertex) > 0){
                 // If rm_vertex is a halo vertex, then marshal necessary data.
                 halo_vertices.push_back(rm_vertex);
-                marshal_data(rm_vertex, local_buffers, local_sent);
+                marshal_data(rm_vertex, target_vertex, local_buffers, local_sent);
               }
               else
                 interior_vertices.push_back(rm_vertex);
@@ -699,6 +699,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
                 continue;
 
               assert(node_colour[rm_vertex] == set_no);
+              node_colour[rm_vertex] = -1;
 
               /* If this rm_vertex is marked for re-evaluation, it means that the
                * local neighbourhood has changed since coarsen_identify_kernel was
@@ -708,10 +709,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
               if(dynamic_vertex[rm_vertex] == -2)
                 dynamic_vertex[rm_vertex] = coarsen_identify_kernel(rm_vertex, L_low, L_max);
 
-              if(dynamic_vertex[rm_vertex] < 0){
-                node_colour[rm_vertex] = -1;
+              if(dynamic_vertex[rm_vertex] < 0)
                 continue;
-              }
 
               index_t target_vertex = dynamic_vertex[rm_vertex];
 
@@ -736,7 +735,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
               // Mark rm_vertex as non-active.
               dynamic_vertex[rm_vertex] = -1;
-              node_colour[rm_vertex] = -1;
 
               // Coarsen the edge.
               coarsen_kernel(rm_vertex, target_vertex, tid);
@@ -880,7 +878,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         break;
     }
     
-    // If we're checked all edges and none is collapsible then return.
+    // If we've checked all edges and none is collapsible then return.
     if(reject_collapse)
       return -2;
     
@@ -924,6 +922,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
 
     assert(common_patch.size() == deleted_elements.size());
+    assert(common_patch.size() == 2 || (common_patch.size()==1 && _surface->contains_node(rm_vertex)));
 
     // For all adjacent elements, replace rm_vertex with target_vertex in ENList.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
@@ -934,7 +933,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
         }
       }
       
-      // Add element to target_vertex' NEList.
+      // Add element to target_vertex's NEList.
       _mesh->deferred_addNE(target_vertex, *ee, tid);
     }
     
@@ -962,7 +961,8 @@ template<typename real_t, typename index_t> class Coarsen2D{
     }
     
     // Perform coarsening on surface if necessary.
-    if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
+    if(_surface->contains_node(rm_vertex)){
+      assert(_surface->contains_node(target_vertex));
       _surface->collapse(rm_vertex, target_vertex, tid);
     }
 
@@ -989,23 +989,23 @@ template<typename real_t, typename index_t> class Coarsen2D{
     std::vector<int> coplanar_ids;
   };
 
-  void marshal_data(index_t rm_vertex, std::vector< std::vector<int> >& local_buffers,
+  void marshal_data(index_t rm_vertex, index_t target_vertex, std::vector< std::vector<int> >& local_buffers,
       std::vector< std::vector<index_t> >& sent){
     std::set<int> seen_by;
 
     // Find who sees rm_vertex
-    for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin(); it!=_mesh->NNList[rm_vertex].end(); ++it)
-      seen_by.insert(_mesh->node_owner[*it]);
-
-    seen_by.erase(rank);
+    index_t rm_gnn = _mesh->lnn2gnn[rm_vertex];
+    for(int i=0; i<nprocs; ++i)
+      if(_mesh->send_map[i].count(rm_gnn) > 0)
+        seen_by.insert(i);
 
     for(typename std::set<int>::const_iterator proc=seen_by.begin(); proc!=seen_by.end(); ++proc){
       msg_block msg;
 
-      assert(_mesh->send_map[*proc].count(_mesh->lnn2gnn[rm_vertex])>0);
+      assert(_mesh->send_map[*proc].count(rm_gnn)>0);
       assert(_mesh->node_owner[rm_vertex] == rank);
 
-      // Set up a vertex set and and element set of all neighbours
+      // Set up a vertex set and an element set of all neighbours
       // of rm_vertex which are invisible to *proc.
       std::set<index_t> inv_vertices, inv_elements;
 
@@ -1056,6 +1056,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
 
         // Append this vertex to the local (per OpenMP thread) list of sent vertices
         sent[*proc].push_back(*v);
+        assert(_mesh->send_map[*proc].count(_mesh->lnn2gnn[*v])==0);
       }
 
       // Pack invisible elements.
@@ -1072,18 +1073,16 @@ template<typename real_t, typename index_t> class Coarsen2D{
         std::vector<int> lfacets;
         _surface->find_facets(n, lfacets);
 
-        if(lfacets.size()>0){
-          assert(lfacets.size()==1);
-
+        for(size_t i=0; i<lfacets.size(); ++i){
           // Push back surface vertices
-          const int *sn=_surface->get_facet(lfacets[0]);
-          for(size_t i=0;i<snloc;i++){
-            msg.facets.push_back(_mesh->lnn2gnn[sn[i]]);
-            msg.facets_owner.push_back(_mesh->node_owner[sn[i]]);
+          const int *sn=_surface->get_facet(lfacets[i]);
+          for(size_t j=0;j<snloc;j++){
+            msg.facets.push_back(_mesh->lnn2gnn[sn[j]]);
+            msg.facets_owner.push_back(_mesh->node_owner[sn[j]]);
           }
 
-          msg.boundary_ids.push_back(_surface->get_boundary_id(lfacets[0]));
-          msg.coplanar_ids.push_back(_surface->get_coplanar_id(lfacets[0]));
+          msg.boundary_ids.push_back(_surface->get_boundary_id(lfacets[i]));
+          msg.coplanar_ids.push_back(_surface->get_coplanar_id(lfacets[i]));
         }
       }
 
@@ -1116,7 +1115,6 @@ template<typename real_t, typename index_t> class Coarsen2D{
       }
 
       // Append target vertex, its owner and its colour.
-      index_t target_vertex = dynamic_vertex[rm_vertex];
       local_buffers[*proc].push_back(_mesh->lnn2gnn[target_vertex]);
       local_buffers[*proc].push_back(_mesh->node_owner[target_vertex]);
       local_buffers[*proc].push_back(node_colour[target_vertex]);
@@ -1157,6 +1155,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       while(loc < original_part_size){
         // Find which vertex we are talking about and colour it
         index_t rm_gnn = buffer[loc++];
+        assert(_mesh->recv_map[proc].count(rm_gnn) > 0);
         index_t rm_vertex = _mesh->recv_map[proc][rm_gnn];
         node_colour[rm_vertex] = current_colour;
 
@@ -1191,12 +1190,24 @@ template<typename real_t, typename index_t> class Coarsen2D{
         index_t target_gnn = buffer[loc++];
         int target_owner = buffer[loc++];
         index_t target_vertex = -1;
-        if(target_owner == rank)
+        if(target_owner == rank){
+          assert(_mesh->send_map[proc].count(target_gnn) > 0);
           target_vertex = _mesh->send_map[proc][target_gnn];
-        else
+        }else{
+          assert(_mesh->recv_map[target_owner].count(target_gnn) > 0);
           target_vertex = _mesh->recv_map[target_owner][target_gnn];
+        }
+        assert(_mesh->node_owner[target_vertex] == target_owner);
         assert(target_vertex >= 0);
         dynamic_vertex[rm_vertex] = target_vertex;
+
+        typename std::vector<index_t>::iterator it;
+        it = std::find(_mesh->NNList[rm_vertex].begin(), _mesh->NNList[rm_vertex].end(), target_vertex);
+
+        if(it == _mesh->NNList[rm_vertex].end()){
+          _mesh->NNList[rm_vertex].push_back(target_vertex);
+          _mesh->NNList[target_vertex].push_back(rm_vertex);
+        }
 
         /* Have a look at its colour. If the sender is not the owner of target_vertex,
          * then he considers it to be uncoloured, so we must do the same (un-colour
@@ -1225,27 +1236,26 @@ template<typename real_t, typename index_t> class Coarsen2D{
           for(size_t j=0; j<nloc; ++j){
             index_t gnn = buffer[loc++];
             int owner = buffer[loc++];
+            assert(_mesh->recv_map[owner].count(gnn)>0);
             ele[j] = _mesh->recv_map[owner][gnn];
             assert(ele[j] >= 0);
           }
 
-          /* Check whether this element is already visible. This case can occur
-           * if an element used to cross the halo and after a vertex collapse it
-           * was constrained exclusively to one partition. In this case, the sender
-           * believes that the element is invisible by us, because all its vertices
-           * belong to the sender.
+          /* Check whether this element is already visible. This case can occur if an
+           * element used to cross the halo and after a vertex collapse it was constrained
+           * exclusively to one partition. In this case, the sender believes that the
+           * element is invisible to us, because all its vertices belong to the sender.
            */
-          bool visible = false;
-          for(typename std::set<index_t>::const_iterator it=_mesh->NEList[rm_vertex].begin();
-              it!=_mesh->NEList[rm_vertex].end(); ++it){
-            const index_t *n = _mesh->get_element(*it);
-            if(n[0]==ele[0] && n[1]==ele[1] && n[2]==ele[2]){
-              visible = true;
-              break;
-            }
-          }
+          std::set<index_t> intersection;
+          std::set_intersection(_mesh->NEList[ele[0]].begin(), _mesh->NEList[ele[0]].end(),
+              _mesh->NEList[ele[1]].begin(), _mesh->NEList[ele[1]].end(),
+              std::inserter(intersection, intersection.begin()));
+          std::set<index_t> common_element;
+          std::set_intersection(_mesh->NEList[ele[2]].begin(), _mesh->NEList[ele[2]].end(),
+              intersection.begin(), intersection.end(),
+              std::inserter(common_element, common_element.begin()));
 
-          if(visible)
+          if(!common_element.empty())
             continue;
 
           index_t eid = _mesh->append_element(ele);
@@ -1278,6 +1288,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
           for(size_t j=0; j<snloc; ++j){
             index_t gnn = buffer[loc++];
             int owner = buffer[loc++];
+            assert(_mesh->recv_map[owner].count(gnn) > 0);
             facet[j] = _mesh->recv_map[owner][gnn];
             assert(facet[j] >= 0);
           }
@@ -1297,6 +1308,7 @@ template<typename real_t, typename index_t> class Coarsen2D{
       // The sender process proc sent to process receiver information about vertex gnn.
       while(loc < recv_buffer[proc].size()){
         index_t gnn = buffer[loc++];
+        assert(_mesh->send_map[proc].count(gnn) > 0);
         index_t vid = _mesh->send_map[proc][gnn];
 
         int receiver = buffer[loc++];

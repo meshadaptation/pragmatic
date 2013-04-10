@@ -201,7 +201,8 @@ template<typename real_t, typename index_t>
 
 #ifdef HAVE_MPI
     // At this point we can establish a new, gappy global numbering system
-    _mesh->create_gappy_global_numbering(pNElements);
+    if(nprocs>1)
+      _mesh->create_gappy_global_numbering(pNElements);
 #endif
 
     // Enforce first-touch policy
