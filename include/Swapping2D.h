@@ -216,7 +216,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
                     index_t k = edge.edge.first;
                     index_t l = edge.edge.second;
                     // Uncolour one of the lateral vertices if their colours clash.
-                    // There is a race condition here, but it doesn't do any harm.
                     if(colouring->node_colour[k] == colouring->node_colour[l])
                       _mesh->deferred_reset_colour(l, tid);
 

@@ -301,7 +301,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
                 for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
                   if(*jt != target_vertex){
                     if(colouring->node_colour[*jt] == colouring->node_colour[target_vertex]){
-                      colouring->node_colour[target_vertex] = -1;
+                      _mesh->deferred_reset_colour(target_vertex, tid);
                       break;
                     }
                   }
@@ -481,7 +481,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
               // Two threads might be marking the same vertex at the same time.
               // This is a race condition which doesn't cause any trouble.
               for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                dynamic_vertex[*jt] = -2;
+                _mesh->deferred_propagate_coarsening(*jt, tid);
 
               // Mark rm_vertex as non-active.
               dynamic_vertex[rm_vertex] = -1;
@@ -502,7 +502,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
               // Two threads might be marking the same vertex at the same time.
               // This is a race condition which doesn't cause any trouble.
               for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                dynamic_vertex[*jt] = -2;
+                _mesh->deferred_propagate_coarsening(*jt, tid);
 
               // Mark rm_vertex as non-active.
               dynamic_vertex[rm_vertex] = -1;
