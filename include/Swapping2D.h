@@ -198,21 +198,28 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
               assert(colouring->node_colour[i] == set_no);
 
-              bool swapped = false;
+              // Set of elements in this cavity which were modified since the last commit of deferred operations.
+              std::set<index_t> modified_elements;
+              std::set<index_t> marked_edges_copy = marked_edges[i];
 
-              while(!swapped){
-                if(marked_edges[i].size()>0){
-                  index_t j = *marked_edges[i].begin();
+              for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
+                  index_t j = *vid;
+
+                  // If vertex j is adjacent to one of the modified elements, then it's adjacency list is invalid.
+                  std::vector<index_t> intersection;
+                  std::set_intersection(modified_elements.begin(), modified_elements.end(),
+                      _mesh->NEList[j].begin(), _mesh->NEList[j].end(), std::inserter(intersection, intersection.begin()));
+                  if(intersection.size()>0)
+                    continue;
 
                   // Mark edge as processed, i.e. remove it from the set of marked edges
-                  marked_edges[i].erase(marked_edges[i].begin());
+                  marked_edges[i].erase(j);
 
                   Edge<index_t> edge(i, j);
-                  swap_kernel(edge, tid);
+                  swap_kernel(edge, modified_elements, tid);
 
                   // If edge was swapped
                   if(edge.edge.first != i){
-                    swapped = true;
                     index_t k = edge.edge.first;
                     index_t l = edge.edge.second;
                     // Uncolour one of the lateral vertices if their colours clash.
@@ -226,8 +233,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
                     for(size_t ee=0; ee<4; ++ee)
                       _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
                   }
-                }else
-                  break;
               }
 
               // If all marked edges adjacent to i have been processed, reset i's colour.
@@ -266,7 +271,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
  private:
 
-  void swap_kernel(Edge<index_t>& edge, size_t tid){
+  void swap_kernel(Edge<index_t>& edge, std::set<index_t>& modified_elements, size_t tid){
     index_t i = edge.edge.first;
     index_t j = edge.edge.second;
 
@@ -358,6 +363,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
       edge.edge.first = std::min(k, l);
       edge.edge.second = std::max(k, l);
+      modified_elements.insert(eid0);
+      modified_elements.insert(eid1);
     }
 
     return;
