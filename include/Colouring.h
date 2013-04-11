@@ -179,6 +179,8 @@ public:
 
       if(colour > max_colour)
         max_colour = colour;
+
+      assert(max_colour < max_colours);
     }
 
     ++max_colour;

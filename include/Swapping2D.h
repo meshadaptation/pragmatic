@@ -43,23 +43,21 @@
 #include <set>
 #include <vector>
 
+#include "AdaptiveAlgorithm.h"
+#include "Colouring.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
-#include "Colour.h"
 
 /*! \brief Performs edge/face swapping.
  *
  */
-template<typename real_t, typename index_t> class Swapping2D{
+template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAlgorithm<real_t, index_t>{
  public:
   /// Default constructor.
   Swapping2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
     
-    dynamic_vertex = NULL;
-    tpartition = NULL;
-
     size_t NElements = _mesh->get_number_elements();
     
     // Set the orientation of elements.
@@ -75,6 +73,9 @@ template<typename real_t, typename index_t> class Swapping2D{
       break;
     }
 
+    nnodes_reserve = 0;
+    colouring = NULL;
+
 #ifdef _OPENMP
     nthreads = omp_get_max_threads();
 #else
@@ -84,7 +85,11 @@ template<typename real_t, typename index_t> class Swapping2D{
   
   /// Default destructor.
   ~Swapping2D(){
-    delete property;
+    if(property!=NULL)
+      delete property;
+
+    if(colouring!=NULL)
+      delete colouring;
   }
   
   void swap(real_t Q_min){
@@ -92,15 +97,24 @@ template<typename real_t, typename index_t> class Swapping2D{
     size_t NNodes = _mesh->get_number_nodes();
     size_t NElements = _mesh->get_number_elements();
 
+    // Total number of active vertices. Used to break the infinite loop.
+    size_t total_active;
+
+    if(nnodes_reserve<NNodes){
+      nnodes_reserve = 1.5*NNodes;
+
+      if(colouring==NULL)
+        colouring = new Colouring<real_t, index_t>(_mesh, this, nnodes_reserve);
+      else
+        colouring->resize(nnodes_reserve);
+    }
+
     quality.clear();
     quality.resize(NElements);
     
     marked_edges.clear();
-    marked_edges.resize(NNodes);
+    marked_edges.resize(nnodes_reserve);
     
-    tpartition = new int[NNodes];
-    dynamic_vertex = new int[NNodes];
-
 #pragma omp parallel
     {
       int tid = get_tid();
@@ -127,97 +141,176 @@ template<typename real_t, typename index_t> class Swapping2D{
       // Initialise list of dynamic edges.
 #pragma omp for schedule(static, 32)
       for(size_t i=0;i<NNodes;i++){
+        colouring->node_colour[i] = -1;
+
         for(size_t it=0; it<_mesh->NNList[i].size(); ++it){
           if(i < (size_t) _mesh->NNList[i][it])
-            marked_edges[i].push_back(_mesh->NNList[i][it]);
+            marked_edges[i].insert(_mesh->NNList[i][it]);
         }
-        dynamic_vertex[i] = marked_edges[i].size();
       }
 
-      // Phase 1
-      if(nthreads>1){
+      do{
+        // Finding which vertices comprise the active sub-mesh.
+        std::vector<index_t> active_set;
+
 #pragma omp single
         {
-          pragmatic::partition_fast(_mesh->NNList, NNodes, dynamic_vertex, nthreads, tpartition);
+          total_active = 0;
         }
 
-        // Each thread creates a list of edges it is responsible for processing
-        std::deque< Edge<index_t> > *tdynamic_edge = new std::deque< Edge<index_t> >;
-
-        for(index_t i=0; i<(index_t)NNodes; ++i){
-          if(tpartition[i]!=tid)
-            continue;
-
-          for(typename std::list<index_t>::const_iterator it=marked_edges[i].begin(); it!=marked_edges[i].end(); ++it){
-            index_t opp = *it;
-            if(tpartition[opp]!=tid)
-              continue;
-
-            tdynamic_edge->push_back(Edge<index_t>(i, opp));
+#pragma omp for schedule(dynamic, 32) reduction(+:total_active)
+        for(size_t i=0;i<_mesh->NNodes;i++){
+          if(marked_edges[i].size()>0){
+            active_set.push_back(i);
+            ++total_active;
           }
         }
 
-        // Now, each thread starts processing its dynamic list
-        process_list(tdynamic_edge, tid);
+        if(total_active == 0)
+          break;
 
-        delete tdynamic_edge;
-      }
+        size_t pos;
+#pragma omp atomic capture
+        {
+          pos = colouring->GlobalActiveSet_size;
+          colouring->GlobalActiveSet_size += active_set.size();
+        }
+
+        memcpy(&colouring->GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
+
+#pragma omp barrier
+
+        colouring->multiHashJonesPlassmann();
+
+        // Start processing independent sets
+        for(int set_no=0; set_no<colouring->nsets; ++set_no){
+          do{
+            active_set.clear();
+
+#pragma omp for schedule(dynamic, 16) reduction(+:total_active)
+            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
+              index_t i = colouring->independent_sets[set_no][idx];
+              assert(i < NNodes);
+
+              // If the node has been un-coloured, skip it.
+              if(colouring->node_colour[i] < 0)
+                continue;
+
+              assert(colouring->node_colour[i] == set_no);
+
+              bool swapped = false;
+
+              while(!swapped){
+                if(marked_edges[i].size()>0){
+                  index_t j = *marked_edges[i].begin();
+
+                  // Mark edge as processed, i.e. remove it from the set of marked edges
+                  marked_edges[i].erase(marked_edges[i].begin());
+
+                  Edge<index_t> edge(i, j);
+                  swap_kernel(edge, tid);
+
+                  // If edge was swapped
+                  if(edge.edge.first != i){
+                    swapped = true;
+                    index_t k = edge.edge.first;
+                    index_t l = edge.edge.second;
+                    // Uncolour one of the lateral vertices if their colours clash.
+                    // There is a race condition here, but it doesn't do any harm.
+                    if(colouring->node_colour[k] == colouring->node_colour[l])
+                      _mesh->deferred_reset_colour(l, tid);
+
+                    Edge<index_t> lateralEdges[] = {
+                        Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+
+                    // Propagate the operation
+                    for(size_t ee=0; ee<4; ++ee)
+                      _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
+                  }
+                }else
+                  break;
+              }
+
+              // If all marked edges adjacent to i have been processed, reset i's colour.
+              if(marked_edges[i].empty())
+                colouring->node_colour[i] = -1;
+              else
+                active_set.push_back(i);
+            }
+
+#pragma omp single
+            {
+              colouring->ind_set_size[set_no] = 0;
+            }
+
+            _mesh->commit_deferred(tid);
+            _mesh->commit_swapping_propagation(marked_edges, tid);
+            _mesh->commit_colour_reset(colouring->node_colour, tid);
+
+#pragma omp atomic capture
+            {
+              pos = colouring->ind_set_size[set_no];
+              colouring->ind_set_size[set_no] += active_set.size();
+            }
+
+            memcpy(&colouring->independent_sets[set_no][pos], &active_set[0], active_set.size() * sizeof(index_t));
+#pragma omp barrier
+          } while(colouring->ind_set_size[set_no]>0);
+        }
+
+        colouring->destroy();
+      }while(true);
     }
-
-    // Phase 2
-    std::deque< Edge<index_t> > *tdynamic_edge = new std::deque< Edge<index_t> >;
-
-    for(index_t i=0; i<(index_t)NNodes; ++i){
-      tpartition[i] = 0;
-      for(typename std::list<index_t>::const_iterator it=marked_edges[i].begin(); it!=marked_edges[i].end(); ++it){
-        tdynamic_edge->push_back(Edge<index_t>(i,*it));
-      }
-    }
-
-    process_list(tdynamic_edge, 0);
-
-    delete tdynamic_edge;
-
-    // Phase 3
-    // Future work
-    // At this point, all edges in marked_edges are halo edges.
-
-    delete[] tpartition;
-    delete[] dynamic_vertex;
 
     return;
   }
 
  private:
 
-  struct Rhombus{
-    Rhombus(Edge<index_t> edge) : middleEdge(edge) {};
-    Edge<index_t> middleEdge;
-    index_t eid0;
-    index_t eid1;
-    size_t n_off;
-    size_t m_off;
-  };
+  void swap_kernel(Edge<index_t>& edge, size_t tid){
+    index_t i = edge.edge.first;
+    index_t j = edge.edge.second;
 
-#pragma GCC diagnostic ignored "-Wuninitialized"
-  void swap_kernel(Rhombus &rhombus){
-    int eid0 = rhombus.eid0;
-    int eid1 = rhombus.eid1;
+    // Find the two elements sharing this edge
+    std::set<index_t> intersection;
+    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+        _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
+        std::inserter(intersection, intersection.begin()));
+
+    // If this is a surface edge, it cannot be swapped, so un-mark it.
+    if(intersection.size()!=2)
+      return;
+
+    index_t eid0 = *intersection.begin();
+    index_t eid1 = *intersection.rbegin();
+
+    const index_t *n = _mesh->get_element(eid0);
+    int n_off=-1;
+    for(size_t k=0;k<3;k++){
+      if((n[k]!=i) && (n[k]!=j)){
+        n_off = k;
+        break;
+      }
+    }
+    assert(n[n_off]>=0);
+
+    const index_t *m = _mesh->get_element(eid1);
+    int m_off=-1;
+    for(size_t k=0;k<3;k++){
+      if((m[k]!=i) && (m[k]!=j)){
+        m_off = k;
+        break;
+      }
+    }
+    assert(m[m_off]>=0);
+
+    assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
 
     real_t worst_q = std::min(quality[eid0], quality[eid1]);
     /*
     if(worst_q>min_Q)
       return;
     */
-
-    index_t i = rhombus.middleEdge.edge.first;
-    index_t j = rhombus.middleEdge.edge.second;
-
-    int n_off = rhombus.n_off;
-    int m_off = rhombus.m_off;
-
-    const index_t *n = _mesh->get_element(eid0);
-    const index_t *m = _mesh->get_element(eid1);
 
     index_t k = n[n_off];
     index_t l = m[m_off];
@@ -248,16 +341,15 @@ template<typename real_t, typename index_t> class Swapping2D{
       typename std::vector<index_t>::iterator it;
       it = std::find(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), j);
       _mesh->NNList[i].erase(it);
-      it = std::find(_mesh->NNList[j].begin(), _mesh->NNList[j].end(), i);
-      _mesh->NNList[j].erase(it);
-      _mesh->NNList[k].push_back(l);
-      _mesh->NNList[l].push_back(k);
+      _mesh->deferred_remNN(j, i, tid);
+      _mesh->deferred_addNN(k, l, tid);
+      _mesh->deferred_addNN(l, k, tid);
 
       // Update node-element list.
-      _mesh->NEList[n_swap[2]].erase(eid1);
-      _mesh->NEList[m_swap[1]].erase(eid0);
-      _mesh->NEList[n_swap[0]].insert(eid1);
-      _mesh->NEList[n_swap[1]].insert(eid0);
+      _mesh->deferred_remNE(n_swap[2], eid1, tid);
+      _mesh->deferred_remNE(m_swap[1], eid0, tid);
+      _mesh->deferred_addNE(n_swap[0], eid1, tid);
+      _mesh->deferred_addNE(n_swap[1], eid0, tid);
 
       // Update element-node list for this element.
       for(size_t cnt=0;cnt<nloc;cnt++){
@@ -265,127 +357,29 @@ template<typename real_t, typename index_t> class Swapping2D{
         _mesh->_ENList[eid1*nloc+cnt] = m_swap[cnt];
       }
 
-      rhombus.middleEdge = Edge<index_t>(k, l);
+      edge.edge.first = std::min(k, l);
+      edge.edge.second = std::max(k, l);
     }
+
+    return;
   }
 
-  bool is_eligible(Rhombus &rhombus, int tid){
-    index_t i = rhombus.middleEdge.edge.first;
-    index_t j = rhombus.middleEdge.edge.second;
-
-    /*
-     * For safe MPI execution, it is not allowed at phases 1 and 2 to
-     * delete edges or create new edges on the halo of an MPI partition.
-     */
-    if(_mesh->is_halo_node(i) && _mesh->is_halo_node(j))
-      return false;
-
-    // Find the two elements sharing this edge
-    std::set<index_t> intersection;
-    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-        _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
-        std::inserter(intersection, intersection.begin()));
-
-    // If this is a surface edge, it cannot be swapped, so un-mark it.
-    if(intersection.size()!=2){
-      typename std::list<index_t>::iterator it;
-      it = std::find(marked_edges[i].begin(), marked_edges[i].end(), j);
-      marked_edges[i].erase(it);
-      return false;
-    }
-
-    index_t eid0 = *intersection.begin();
-    index_t eid1 = *intersection.rbegin();
-
-    const index_t *n = _mesh->get_element(eid0);
-    int n_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((n[k]!=i) && (n[k]!=j)){
-        n_off = k;
-        break;
-      }
-    }
-    assert(n[n_off]>=0);
-    if(tpartition[n[n_off]]!=tid)
-      return false;
-
-    const index_t *m = _mesh->get_element(eid1);
-    int m_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((m[k]!=i) && (m[k]!=j)){
-        m_off = k;
-        break;
-      }
-    }
-    assert(m[m_off]>=0);
-    if(tpartition[m[m_off]]!=tid)
-      return false;
-
-    assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
-
-    if(_mesh->is_halo_node(n[n_off]) && _mesh->is_halo_node(m[m_off]))
-      return false;
-
-    rhombus.eid0 = eid0;
-    rhombus.eid1 = eid1;
-    rhombus.n_off = n_off;
-    rhombus.m_off = m_off;
-
-    return true;
-  }
-
-  void process_list(std::deque< Edge<index_t> > *tdynamic_edge, int tid){
-    while(!tdynamic_edge->empty()){
-      Edge<index_t> oldEdge = *tdynamic_edge->begin();
-      tdynamic_edge->pop_front();
-
-      Rhombus rhombus(oldEdge);
-      if(!is_eligible(rhombus, tid))
-        continue;
-
-      // Process the edge and update the rhombus with
-      // the new middle edge if swapping occurs.
-      swap_kernel(rhombus);
-
-      // Mark the edge as processed
-      typename std::list<index_t>::iterator it;
-      it = std::find(marked_edges[oldEdge.edge.first].begin(),
-          marked_edges[oldEdge.edge.first].end(), oldEdge.edge.second);
-      marked_edges[oldEdge.edge.first].erase(it);
-
-      // If the edge was swapped, propagate the operation
-      Edge<index_t> newEdge = rhombus.middleEdge;
-      if(newEdge != oldEdge){
-        Edge<index_t> lateralEdges[] = {
-            Edge<index_t>(oldEdge.edge.first, newEdge.edge.first),
-            Edge<index_t>(oldEdge.edge.first, newEdge.edge.second),
-            Edge<index_t>(oldEdge.edge.second, newEdge.edge.first),
-            Edge<index_t>(oldEdge.edge.second, newEdge.edge.second)};
-
-        for(size_t i=0; i<4; ++i){
-          it = std::find(marked_edges[lateralEdges[i].edge.first].begin(),
-              marked_edges[lateralEdges[i].edge.first].end(), lateralEdges[i].edge.second);
-
-          // If the edge is already marked, then continue
-          if(it != marked_edges[lateralEdges[i].edge.first].end())
-            continue;
-
-          marked_edges[lateralEdges[i].edge.first].push_back(lateralEdges[i].edge.second);
-          tdynamic_edge->push_back(lateralEdges[i]);
-        }
-      }
-    }
+  inline virtual index_t is_dynamic(index_t vid){
+    return (index_t) marked_edges[vid].size();
   }
 
   Mesh<real_t, index_t> *_mesh;
   Surface2D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
+  Colouring<real_t, index_t> *colouring;
+
+  size_t nnodes_reserve;
+
   static const size_t ndims=2;
   static const size_t nloc=3;
   int nthreads;
-  std::vector< std::list<index_t> > marked_edges;
+  std::vector< std::set<index_t> > marked_edges;
   std::vector<real_t> quality;
-  int *tpartition, *dynamic_vertex;
   real_t min_Q;
 };
 

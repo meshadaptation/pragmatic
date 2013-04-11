@@ -551,18 +551,15 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
               index_t target_vertex = dynamic_vertex[rm_vertex];
 
               // Mark neighbours for re-evaluation.
-              // Two threads might be marking the same vertex at the same time.
-              // This is a race condition which doesn't cause any trouble.
               for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                  dynamic_vertex[*jt] = -2;
+                  _mesh->deferred_propagate_coarsening(*jt, tid);
 
               // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is a race condition here, but it doesn't do any harm.
               if(colouring->node_colour[target_vertex] >= 0){
                 for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
                   if(*jt != target_vertex){
                     if(colouring->node_colour[*jt] == colouring->node_colour[target_vertex]){
-                      colouring->node_colour[target_vertex] = -1;
+                      _mesh->deferred_reset_colour(target_vertex, tid);
                       break;
                     }
                   }
@@ -577,6 +574,8 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
             }
 
             _mesh->commit_deferred(tid);
+            _mesh->commit_coarsening_propagation(dynamic_vertex, tid);
+            _mesh->commit_colour_reset(colouring->node_colour, tid);
             _surface->commit_deferred(tid);
 #pragma omp barrier
           }

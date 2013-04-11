@@ -1059,6 +1059,9 @@ template<typename real_t, typename index_t> class Mesh{
     std::vector<index_t> addNE_fix; // addNE_fix -> [i, n] : Fix ID of element n according to
                                     // threadIdx[thread_which_created_n] and add it to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
+    std::vector<index_t> propagation_vector; // [i] : Mark Coarseninig::dynamic_vertex[i]=-2.
+    std::vector<index_t> propagation_set; // [i, n] : Mark Swapping::marked_edges[i].insert(n).
+    std::vector<index_t> reset_colour; // [i] : Set Colouring::node_colour[i]=-1.
   };
 
   void _init(int _NNodes, int _NElements, const index_t *globalENList,
@@ -1373,6 +1376,19 @@ template<typename real_t, typename index_t> class Mesh{
     deferred_operations[tid][hash(i) % num_threads].remNE.push_back(n);
   }
 
+  inline void deferred_propagate_coarsening(index_t i, size_t tid){
+    deferred_operations[tid][hash(i) % num_threads].propagation_vector.push_back(i);
+  }
+
+  inline void deferred_propagate_swapping(index_t i, index_t n, size_t tid){
+    deferred_operations[tid][hash(i) % num_threads].propagation_set.push_back(i);
+    deferred_operations[tid][hash(i) % num_threads].propagation_set.push_back(n);
+  }
+
+  inline void deferred_reset_colour(index_t i, size_t tid){
+    deferred_operations[tid][hash(i) % num_threads].reset_colour.push_back(i);
+  }
+
   void commit_deferred(size_t tid){
     commit_deferred(tid, NULL);
   }
@@ -1417,6 +1433,39 @@ template<typename real_t, typename index_t> class Mesh{
         }
         pending.addNE_fix.clear();
       }
+    }
+  }
+
+  void commit_coarsening_propagation(index_t *dynamic_vertex, size_t tid){
+    for(int i=0; i<num_threads; ++i){
+      DeferredOperations& pending = deferred_operations[i][tid];
+
+      for(typename std::vector<index_t>::const_iterator it=pending.propagation_vector.begin(); it!=pending.propagation_vector.end(); ++it)
+        dynamic_vertex[*it] = -2;
+
+      pending.propagation_vector.clear();
+    }
+  }
+
+  void commit_swapping_propagation(std::vector< std::set<index_t> >&marked_edges , size_t tid){
+    for(int i=0; i<num_threads; ++i){
+      DeferredOperations& pending = deferred_operations[i][tid];
+
+      for(typename std::vector<index_t>::const_iterator it=pending.propagation_set.begin(); it!=pending.propagation_set.end(); it+=2)
+        marked_edges[*it].insert(*(it+1));
+
+      pending.propagation_set.clear();
+    }
+  }
+
+  void commit_colour_reset(int *node_colour, size_t tid){
+    for(int i=0; i<num_threads; ++i){
+      DeferredOperations& pending = deferred_operations[i][tid];
+
+      for(typename std::vector<index_t>::const_iterator it=pending.reset_colour.begin(); it!=pending.reset_colour.end(); ++it)
+        node_colour[*it] = -1;
+
+      pending.reset_colour.clear();
     }
   }
 
