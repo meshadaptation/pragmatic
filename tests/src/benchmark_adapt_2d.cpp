@@ -143,7 +143,7 @@ int main(int argc, char **argv){
     surface.defragment(&active_vertex_map);
     
     tic = get_wtime();
-    smooth.smooth("optimisation Linf", 200);
+    smooth.smooth("optimisation Linf", 10);
     toc = get_wtime();
     if(t>0) time_smooth += (toc-tic);
 

@@ -75,7 +75,7 @@ int main(int argc, char **argv){
   MetricField2D<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.00001;
+  double eta=0.0001;
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
@@ -93,7 +93,7 @@ int main(int argc, char **argv){
   Refine2D<double, int> adapt(*mesh, surface);
 
   double tic = get_wtime();
-  for(int i=0;i<5;i++)
+  for(int i=0;i<10;i++)
     adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 

@@ -345,7 +345,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
           _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
 
-          // Now that global numbering has been updated, update send_map and recv_map.
+          // Now that the global numbering has been updated, update send_map and recv_map.
           for(int i=0;i<nprocs;++i){
             for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
               _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
@@ -497,7 +497,7 @@ template<typename real_t, typename index_t> class Refine2D{
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
 
-      replace_element(eid, ele0, tid);
+      replace_element(eid, ele0);
       append_element(ele1, tid);
 
       return 1;
@@ -559,7 +559,7 @@ template<typename real_t, typename index_t> class Refine2D{
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
       assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
 
-      replace_element(eid, ele1, tid);
+      replace_element(eid, ele1);
       append_element(ele0, tid);
       append_element(ele2, tid);
 
@@ -605,7 +605,7 @@ template<typename real_t, typename index_t> class Refine2D{
       assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
       assert(ele3[0]>=0 && ele3[1]>=0 && ele3[2]>=0);
 
-      replace_element(eid, ele0, tid);
+      replace_element(eid, ele0);
       append_element(ele1, tid);
       append_element(ele2, tid);
       append_element(ele3, tid);
@@ -619,7 +619,7 @@ template<typename real_t, typename index_t> class Refine2D{
       newElements[tid].push_back(elem[i]);
   }
 
-  inline void replace_element(const index_t eid, const index_t *n, size_t tid){
+  inline void replace_element(const index_t eid, const index_t *n){
     for(size_t i=0;i<nloc;i++)
       _mesh->_ENList[eid*nloc+i]=n[i];
   }

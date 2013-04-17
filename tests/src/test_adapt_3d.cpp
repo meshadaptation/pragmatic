@@ -67,12 +67,12 @@ int main(int argc, char **argv){
     float hy=0.025 + 0.09*mesh->get_coords(i)[1];
     float hz=0.025 + 0.09*mesh->get_coords(i)[2];
     float m[] =
-      {1.0/pow(hx, 2),
-       0.0,           
-       0.0,
-       1.0/pow(hy, 2),
-       0.0,
-       1.0/pow(hz, 2)};
+      {1.0f/powf(hx, 2),
+       0.0f,           
+       0.0f,
+       1.0f/powf(hy, 2),
+       0.0f,
+       1.0f/powf(hz, 2)};
 
     metric_field.set_metric(m, i);
   }
