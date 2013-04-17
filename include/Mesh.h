@@ -469,9 +469,9 @@ template<typename real_t, typename index_t> class Mesh{
     real_t length=-1.0;
     if(ndims==2){
       float m[3];
-      m[0] = (metric[nid0*msize]+metric[nid1*msize])*0.5;
-      m[1] = (metric[nid0*msize+1]+metric[nid1*msize+1])*0.5;
-      m[2] = (metric[nid0*msize+2]+metric[nid1*msize+2])*0.5;
+      m[0] = (metric[nid0*3  ]+metric[nid1*3  ])*0.5;
+      m[1] = (metric[nid0*3+1]+metric[nid1*3+1])*0.5;
+      m[2] = (metric[nid0*3+2]+metric[nid1*3+2])*0.5;
 
       length = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), m);
     }else{

@@ -281,6 +281,81 @@ template<typename real_t, typename index_t>
     delete [] Hessian;
   }
 
+  /*! Apply gradation to the metric field.
+   * @param gradation specifies the required gradation factor (<=1.3 recommended).
+   */
+  void apply_gradation(double gradation){
+    // Form NNlist.
+    std::deque< std::set<index_t> > NNList( _NNodes );
+    for(int e=0; e<_NElements; e++){
+      const index_t *n=_mesh->get_element(e);           // indices for element e start at _ENList[ nloc*e ]
+      for(index_t i=0; i<3; i++){
+        for(index_t j=i+1; j<3; j++){
+          NNList[n[i]].insert(n[j]);
+          NNList[n[j]].insert(n[i]);
+        }
+      }
+    }
+
+    // float log_gradation = logf(gradation);
+
+    // This is used to ensure we don't revisit parts of the mesh that
+    // are known to have converged.
+    // std::vector<bool> active(_NNodes, true);
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(size_t cnt=0; cnt<100; cnt++){
+        
+        for(index_t p=0;p<_NNodes;p++){
+          
+          float Dp[2], Vp[4], hp[2];
+          
+          std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
+          
+          for(typename std::set<index_t>::const_iterator it=adjacent_nodes.begin(); it!=adjacent_nodes.end(); it++){
+            index_t q=*it;
+            
+            // Resize eigenvalues if necessary
+            /*
+            float m[3];
+            m[0] = (_metric[p].get_metric()[0]+_metric[q].get_metric()[0])*0.5;
+            m[1] = (_metric[p].get_metric()[1]+_metric[q].get_metric()[1])*0.5;
+            m[2] = (_metric[p].get_metric()[2]+_metric[q].get_metric()[2])*0.5;
+            
+            float Lpq = ElementProperty<real_t>::length2d(&(_mesh->_coords[p*2]), &(_mesh->_coords[q*2]), m);
+            
+            if(Lpq==0)
+              continue;
+            
+            float dh=Lpq*log_gradation;
+            */
+            float dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
+            float dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
+
+            float Lpq = sqrtf(dx*dx+dy*dy);
+            float dh=Lpq*gradation;
+
+            MetricTensor2D<float> Mq(_metric[q]);
+            Mq.eigen_decomp(Dp, Vp);
+            
+            hp[0] = 1.0/sqrt(Dp[0]) + dh;
+            hp[1] = 1.0/sqrt(Dp[1]) + dh;
+            
+            Dp[0] = 1.0/(hp[0]*hp[0]); 
+            Dp[1] = 1.0/(hp[1]*hp[1]); 
+            
+            Mq.eigen_undecomp(Dp, Vp);
+            
+            _metric[p].constrain(Mq.get_metric());
+          }
+        }
+      }
+    }
+
+    return;
+  }
+
   /*! Apply maximum edge length constraint.
    * @param max_len specifies the maximum allowed edge length.
    */

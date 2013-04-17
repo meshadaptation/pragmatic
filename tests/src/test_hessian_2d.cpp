@@ -51,7 +51,10 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
@@ -104,6 +107,8 @@ int main(int argc, char **argv){
     std::cout<<"pass\n";
 
   delete mesh;
+
+  MPI_Finalize();
 
   return 0;
 }
