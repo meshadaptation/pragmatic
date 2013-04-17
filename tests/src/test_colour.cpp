@@ -79,7 +79,7 @@ int main(int argc, char **argv){
   
   /* Process owner of each node.
    */
-  size_t owner[] = {0, 0, 0, 0};
+  int owner[] = {0, 0, 0, 0};
   graph.owner = owner;
 
   /* Graph colouring.

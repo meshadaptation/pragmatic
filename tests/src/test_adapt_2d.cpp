@@ -228,8 +228,7 @@ int main(int argc, char **argv){
     psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 
-  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
-  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
+  VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

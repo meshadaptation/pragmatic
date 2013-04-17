@@ -124,7 +124,7 @@ int main(int argc, char **argv){
   graph.csr_edges = &(csr_edges[0]);
 
   std::vector<int> lnn2gnn(NNodes);
-  std::vector<size_t> owner(NNodes, 0);
+  std::vector<int> owner(NNodes, 0);
   for(size_t i=0;i<NNodes;i++){
     lnn2gnn[i] = i;
   }
