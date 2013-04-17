@@ -41,9 +41,7 @@
 #include <omp.h>
 #endif
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 #include <vector>
 #include <set>
@@ -56,13 +54,13 @@
 #include "zoltan_tools.h"
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
-
-  int rank = 0;
-  if(MPI::Is_initialized()){
-    rank = MPI::COMM_WORLD.Get_rank();
-  }
-  assert(MPI::COMM_WORLD.Get_size()==1);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   const char filename[]="../data/box10x10x10.vtu";
 
@@ -135,7 +133,7 @@ int main(int argc, char **argv){
   zoltan_colour(&graph, 1, MPI_COMM_WORLD);
   zoltan_colour(&graph, 1, MPI_COMM_WORLD);
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   std::cout<<"pass\n";
 

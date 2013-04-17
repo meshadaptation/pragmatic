@@ -59,8 +59,13 @@
 #include "ticker.h"
 
 int main(int argc, char **argv){
-#ifdef HAVE_MPI
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
 
@@ -90,14 +95,12 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  if(MPI::COMM_WORLD.Get_rank()==0){
+  if(rank==0){
     std::cout<<"Coarsen time = "<<toc-tic<<std::endl;
     std::cout<<"pass"<<std::endl;
   }
 
-  MPI::Finalize();
-#else
-  std::cout<<"warning - no MPI compiled"<<std::endl;
-#endif
+  MPI_Finalize();
+
   return 0;
 }

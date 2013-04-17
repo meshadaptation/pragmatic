@@ -55,9 +55,13 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
-  MPI::Init_thread(argc,argv, MPI::THREAD_SERIALIZED);
-
-  int rank = MPI::COMM_WORLD.Get_rank();
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
   const double target_quality_mean[] = {0.4, 0.7, 0.7, 0.7};
@@ -135,7 +139,7 @@ int main(int argc, char **argv){
     }
   }
   
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

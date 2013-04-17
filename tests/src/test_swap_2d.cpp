@@ -53,14 +53,13 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
-  MPI::Init(argc, argv);
-
-  int rank = 0;
-#ifdef HAVE_MPI
-  if(MPI::Is_initialized()){
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  }
-#endif
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   
   bool verbose = false;
   if(argc>1){
@@ -152,7 +151,7 @@ int main(int argc, char **argv){
   
   delete mesh;
   
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

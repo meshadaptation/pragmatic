@@ -284,7 +284,7 @@ template<typename real_t, typename index_t>
   /*! Apply gradation to the metric field.
    * @param gradation specifies the required gradation factor (<=1.3 recommended).
    */
-  void apply_gradation(double gradation){
+  void apply_gradation(float gradation){
     // Form NNlist.
     std::deque< std::set<index_t> > NNList( _NNodes );
     for(int e=0; e<_NElements; e++){
@@ -296,8 +296,6 @@ template<typename real_t, typename index_t>
         }
       }
     }
-
-    // float log_gradation = logf(gradation);
 
     // This is used to ensure we don't revisit parts of the mesh that
     // are known to have converged.
@@ -317,19 +315,6 @@ template<typename real_t, typename index_t>
             index_t q=*it;
             
             // Resize eigenvalues if necessary
-            /*
-            float m[3];
-            m[0] = (_metric[p].get_metric()[0]+_metric[q].get_metric()[0])*0.5;
-            m[1] = (_metric[p].get_metric()[1]+_metric[q].get_metric()[1])*0.5;
-            m[2] = (_metric[p].get_metric()[2]+_metric[q].get_metric()[2])*0.5;
-            
-            float Lpq = ElementProperty<real_t>::length2d(&(_mesh->_coords[p*2]), &(_mesh->_coords[q*2]), m);
-            
-            if(Lpq==0)
-              continue;
-            
-            float dh=Lpq*log_gradation;
-            */
             float dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
             float dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
 

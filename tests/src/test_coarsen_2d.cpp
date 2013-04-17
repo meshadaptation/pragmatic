@@ -49,21 +49,16 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 int main(int argc, char **argv){
-#ifdef HAVE_MPI
-  MPI::Init(argc,argv);
-#endif
-
-  int rank = 0;
-#ifdef HAVE_MPI
-  if(MPI::Is_initialized()){
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  }
-#endif
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   bool verbose = false;
   if(argc>1){
@@ -122,9 +117,7 @@ int main(int argc, char **argv){
       std::cout<<"fail"<<std::endl;
   }
 
-#ifdef HAVE_MPI
-  MPI::Finalize();
-#endif
+  MPI_Finalize();
 
   return 0;
 }

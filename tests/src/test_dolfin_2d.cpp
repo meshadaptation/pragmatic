@@ -55,18 +55,19 @@
 #include "tinyxml.h"
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank, nprocs;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
-  int rank = MPI::COMM_WORLD.Get_rank();
-
   // For now only support a single process.
-#ifndef NDEBUG
-  int nprocs = MPI::COMM_WORLD.Get_size();
-  assert(nprocs==1);
-#endif
 
   int NNodes, NElements;
   Mesh<double, int> *mesh;
@@ -298,6 +299,7 @@ int main(int argc, char **argv){
   }
 
   delete mesh;
-  MPI::Finalize();
+
+  MPI_Finalize();
 }
 

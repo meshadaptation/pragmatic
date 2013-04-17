@@ -57,12 +57,14 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+
   const double pi = 3.141592653589793;
   const double period = 100.0;
-
-  MPI::Init(argc,argv);
-  int rank = MPI::COMM_WORLD.Get_rank();
-
+  
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
@@ -173,7 +175,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

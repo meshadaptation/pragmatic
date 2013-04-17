@@ -51,7 +51,10 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
 
   bool verbose = false;
   if(argc>1){
@@ -74,7 +77,7 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.02);
+  metric_field.add_field(&(psi[0]), 0.1);
   metric_field.update_mesh();
   
   Refine3D<double, int> adapt(*mesh, surface);
@@ -110,7 +113,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

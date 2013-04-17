@@ -43,7 +43,13 @@
 #include "zoltan_tools.h"
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   /* 0: 3, 1
      1: 0, 2
@@ -100,7 +106,7 @@ int main(int argc, char **argv){
     std::cout<<"fail\n";
   }
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

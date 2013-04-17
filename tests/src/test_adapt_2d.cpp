@@ -55,7 +55,13 @@
 #include <mpi.h>
 
 int main(int argc, char **argv){
-  MPI::Init_thread(argc,argv, MPI::THREAD_SERIALIZED);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   bool verbose = false;
   if(argc>1){
@@ -64,8 +70,6 @@ int main(int argc, char **argv){
   
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
-
-  int rank = MPI::COMM_WORLD.Get_rank();
 
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
 
@@ -251,7 +255,7 @@ int main(int argc, char **argv){
       std::cout<<"fail"<<std::endl;
   }
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }
