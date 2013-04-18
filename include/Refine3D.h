@@ -80,12 +80,8 @@ template<typename real_t, typename index_t> class Refine3D{
 
     rank = 0;
     nprocs = 1;
-#ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-      MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
-    }
-#endif
+	MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
+    MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
 
 #ifdef _OPENMP
     nthreads = omp_get_max_threads();
