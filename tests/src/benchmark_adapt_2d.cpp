@@ -71,7 +71,6 @@ int main(int argc, char **argv){
   Surface2D<double, int> surface(*mesh);
   surface.find_surface(true);
 
-  char filename[256];
   double eta=0.0001;
 
   if(rank==0)

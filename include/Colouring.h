@@ -83,7 +83,7 @@ public:
 
   void multiHashJonesPlassmann(){
     // Construct the node adjacency list for the active sub-mesh.
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic, 16)
     for(size_t i=0; i<GlobalActiveSet_size; ++i){
       index_t vid = GlobalActiveSet[i];
       std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;

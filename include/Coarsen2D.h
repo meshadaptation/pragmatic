@@ -71,12 +71,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     }
 #endif
 
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#else
-    nthreads = 1;
-#endif
-
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
     for(size_t i=0;i<NElements;i++){
@@ -295,7 +289,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
               }
 
               // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              // There is a race condition here, but it doesn't do any harm.
               index_t target_vertex = dynamic_vertex[rm_vertex];
               if(colouring->node_colour[target_vertex] >= 0){
                 for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
@@ -519,6 +512,8 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
             }
 
             _mesh->commit_deferred(tid);
+            _mesh->commit_coarsening_propagation(dynamic_vertex, tid);
+            _mesh->commit_colour_reset(colouring->node_colour, tid);
             _surface->commit_deferred(tid);
 #pragma omp barrier
           }
@@ -1180,7 +1175,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
   const static size_t idx_coords = idx_owner + 1;
   const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);
 
-  int nprocs, rank, nthreads;
+  int nprocs, rank;
 };
 
 #endif
