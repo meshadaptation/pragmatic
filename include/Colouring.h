@@ -200,7 +200,7 @@ public:
 #pragma omp atomic capture
     {
       nsets_local = nsets;
-      nsets += (nsets_local < max_colours ? max_colours - nsets_local : 0);
+      nsets += (nsets_local < max_colour ? max_colour - nsets_local : 0);
     }
 
     // Allocate memory for the global independent sets.
