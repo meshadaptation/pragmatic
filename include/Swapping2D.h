@@ -109,13 +109,16 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     // Total number of active vertices. Used to break the infinite loop.
     size_t total_active;
 
-    if(nnodes_reserve<NNodes){
-      nnodes_reserve = 1.5*NNodes;
+    if(nnodes_reserve<1.5*NNodes){
+      nnodes_reserve = 2*NNodes;
 
       if(colouring==NULL)
         colouring = new Colouring<real_t, index_t>(_mesh, this, nnodes_reserve);
       else
         colouring->resize(nnodes_reserve);
+
+      quality.resize(nnodes_reserve * 2, 0.0);
+      marked_edges.resize(nnodes_reserve, std::set<index_t>());
     }
 
 #ifdef HAVE_MPI
@@ -137,12 +140,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     std::vector<size_t> sent_vertices_vec_size(nprocs, 0);
 #endif
 
-    quality.clear();
-    quality.resize(nnodes_reserve * 2);
-    
-    marked_edges.clear();
-    marked_edges.resize(nnodes_reserve);
-    
 #pragma omp parallel
     {
       int tid = get_tid();
@@ -169,8 +166,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
       // Initialise list of dynamic edges.
       if(nprocs>1){
 #pragma omp for schedule(static, 32)
-        for(size_t i=0;i<NNodes;i++){
+        for(index_t i=0; i<(index_t)_mesh->NNodes;i++){
           colouring->node_colour[i] = -1;
+          marked_edges[i].clear();
 
           if(_mesh->node_owner[i] != rank)
             continue;
@@ -182,8 +180,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         }
       }else{
 #pragma omp for schedule(static, 32)
-        for(size_t i=0;i<NNodes;i++){
+        for(index_t i=0;i<(index_t)NNodes;i++){
           colouring->node_colour[i] = -1;
+          marked_edges[i].clear();
 
           for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it){
             if(i < *it)
@@ -193,7 +192,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
       }
 
       do{
-        // Finding which vertices comprise the active sub-mesh.
+        // Find which vertices comprise the active sub-mesh.
         std::vector<index_t> active_set;
 
 #pragma omp single
@@ -204,6 +203,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #pragma omp for schedule(dynamic, 32) reduction(+:total_active)
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(marked_edges[i].size()>0){
+            assert(_mesh->node_owner[i]==rank);
             active_set.push_back(i);
             ++total_active;
           }
@@ -452,8 +452,10 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
                   index_t gnn = _mesh->lnn2gnn[*it];
 
                   if(owner==rank){
-                    sent_vertices[i][gnn] = *it;
-                    _mesh->send_map[i][gnn] = *it;
+                    if(_mesh->send_map[i].count(gnn)==0){
+                      sent_vertices[i][gnn] = *it;
+                      _mesh->send_map[i][gnn] = *it;
+                    }
                   }
                   else{
                     // Send message (gnn, proc): Tell the owner that we have sent vertex gnn to process proc.
@@ -527,6 +529,11 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
                 if(colouring->node_colour[i] < 0)
                   continue;
 
+                if(_mesh->send_halo.count(i)>0){
+                  colouring->node_colour[i] = -1;
+                  continue;
+                }
+
                 assert(colouring->node_colour[i] == set_no);
 
                 // Set of elements in this cavity which were modified since the last commit of deferred operations.
@@ -568,6 +575,10 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
                         lateralEdges[ee].edge.first = lateralEdges[ee].edge.second;
                         lateralEdges[ee].edge.second = tmp;
                       }
+
+                      // Oh yes, this check is necessary.... Unbelievable!
+                      if(_mesh->node_owner[lateralEdges[ee].edge.first]!=rank)
+                        continue;
 
                       _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
                     }
@@ -638,6 +649,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
               global_interior_size = 0;
               global_halo_size = 0;
+
+              if(nprocs>1)
+                _mesh->trim_halo();
             }
           }
 #endif
@@ -723,12 +737,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         }
 
 #pragma omp barrier
-        if(nprocs>1){
-#pragma omp single
-          {
-            _mesh->trim_halo();
-          }
-        }
         colouring->destroy();
       }while(true);
     }
@@ -793,7 +801,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
           local_buffers[*proc].push_back(1);
 
           index_t inv_vertex = (_mesh->node_owner[k] == *proc ? l : k);
-          //assert(_mesh->send_map[*proc].count(_mesh->lnn2gnn[inv_vertex]) == 0);
           sent[*proc].push_back(inv_vertex);
 
           std::vector<int> ivertex(node_package_int_size);
@@ -951,6 +958,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
             _mesh->node_owner[new_lnn] = owner;
             _mesh->recv_map[owner][gnn] = new_lnn;
             colouring->node_colour[new_lnn] = -1;
+            marked_edges[new_lnn].clear();
             recv_vertices[owner][gnn] = new_lnn;
           }
 
@@ -1058,7 +1066,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
           }else{ // This is the 6th case
             assert(_mesh->send_map[proc].count(gnn) > 0);
             ref_vertex = _mesh->send_map[proc][gnn];
-            assert(buffer[loc+1] == -2);
+            assert(buffer[loc] == -2);
           }
           assert(ref_vertex==k || ref_vertex==l);
 
@@ -1106,6 +1114,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         _mesh->recv[i].push_back(it->second);
         _mesh->recv_halo.insert(it->second);
       }
+
+      assert(_mesh->send[i].size() == _mesh->send_map[i].size());
+      assert(_mesh->recv[i].size() == _mesh->recv_map[i].size());
     }
   }
 

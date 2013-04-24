@@ -111,8 +111,8 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     
     size_t NNodes= _mesh->get_number_nodes();
     
-    if(nnodes_reserve<NNodes){
-      nnodes_reserve = 1.5*NNodes;
+    if(nnodes_reserve<1.5*NNodes){
+      nnodes_reserve = 2*NNodes;
       
       if(dynamic_vertex!=NULL){
         delete [] dynamic_vertex;
