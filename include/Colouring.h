@@ -196,14 +196,12 @@ public:
     }
 
     // Total number of independent sets
-    int nsets_local;
-#pragma omp atomic capture
+#pragma omp critical
     {
-      nsets_local = nsets;
-      nsets += (nsets_local < max_colour ? max_colour - nsets_local : 0);
+      if(max_colour > nsets)
+        nsets = max_colour;
     }
 
-    // Allocate memory for the global independent sets.
 #pragma omp barrier
 
 #ifdef HAVE_MPI
@@ -216,6 +214,7 @@ public:
     }
 #endif
 
+    // Allocate memory for the global independent sets.
 #pragma omp for schedule(static)
     for(int set_no=0; set_no<nsets; ++set_no)
       independent_sets[set_no] = new index_t[ind_set_size[set_no]];
@@ -261,6 +260,10 @@ private:
   template<typename _real_t, typename _index_t> friend class Smooth3D;
   template<typename _real_t, typename _index_t> friend class Swapping2D;
   template<typename _real_t, typename _index_t> friend class Swapping3D;
+
+  inline int nsets_incr(int nsets, int max_colour){
+    return (max_colour > nsets ? max_colour - nsets : 0);
+  }
 
   int *node_colour;
 

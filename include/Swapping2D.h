@@ -129,13 +129,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     size_t global_interior_size = 0;
     size_t global_halo_size = 0;
 
-    // Receive and send buffers for all MPI processes.
     std::vector< std::vector<int> > send_buffer(nprocs);
-    std::vector< std::vector<int> > recv_buffer(nprocs);
     std::vector<int> send_buffer_size(nprocs, 0);
-    std::vector<int> recv_buffer_size(nprocs, 0);
-    std::vector<MPI_Request> request(2*nprocs);
-    std::vector<MPI_Status> status(2*nprocs);
     std::vector< std::vector<index_t> > sent_vertices_vec(nprocs);
     std::vector<size_t> sent_vertices_vec_size(nprocs, 0);
 #endif
@@ -246,7 +241,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #pragma omp for schedule(dynamic, 32) nowait
             for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
               index_t i = colouring->independent_sets[set_no][idx];
-              assert(i < NNodes);
+              assert(i < (index_t) NNodes);
 
               // If the node has been un-coloured, skip it.
               if(colouring->node_colour[i] < 0)
@@ -429,88 +424,12 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
              *********************************************************/
 #pragma omp single nowait
             {
-              /* For each process P_i, we create a map(gnn, lnn) containing all
-               * vertices owned by *this* MPI process which will be sent to P_i,
-               * no matter whether the vertex is sent by *this* process or by a third
-               * process. Similarly, we create a map for vertices *this* process will
-               * receive. Vertices will be sorted by their gnn's, so they will be
-               * added later to _mesh->send[P_i] on *this* process in the same order
-               * as they will be added to _mesh->recv[*this*] on P_i and vice versa.
-               */
-              std::vector< std::map<index_t, index_t> > sent_vertices(nprocs);
-              std::vector< std::map<index_t, index_t> > recv_vertices(nprocs);
-
-              // Set up sent_vertices and append appropriate data to the end of send
-              // buffers. So far, every sent_vertices_vec[i] contains all vertices
-              // sent to process i, no matter whether they are owned by us or not.
-              std::vector< std::vector<int> > message_extensions(nprocs);
-
-              for(int i=0; i<nprocs; ++i){
-                for(typename std::vector<index_t>::const_iterator it = sent_vertices_vec[i].begin();
-                    it != sent_vertices_vec[i].end(); ++it){
-                  int owner = _mesh->node_owner[*it];
-                  index_t gnn = _mesh->lnn2gnn[*it];
-
-                  if(owner==rank){
-                    if(_mesh->send_map[i].count(gnn)==0){
-                      sent_vertices[i][gnn] = *it;
-                      _mesh->send_map[i][gnn] = *it;
-                    }
-                  }
-                  else{
-                    // Send message (gnn, proc): Tell the owner that we have sent vertex gnn to process proc.
-                    message_extensions[owner].push_back(gnn);
-                    message_extensions[owner].push_back(i);
-                  }
-                }
-              }
-
-              for(int i=0; i<nprocs; ++i){
-                // Append the extension.
-                if(message_extensions[i].size()>0){
-                  // If there is no original part in the message, indicate
-                  // its zero length before pushing back the extension.
-                  if(send_buffer[i].size() == 0)
-                    send_buffer[i].push_back(0);
-
-                  send_buffer[i].insert(send_buffer[i].end(),
-                      message_extensions[i].begin(), message_extensions[i].end());
-                  send_buffer_size[i] = send_buffer[i].size();
-                }
-              }
-
-              // First we need to communicate message sizes using MPI_Alltoall.
-              MPI_Alltoall(&send_buffer_size[0], 1, MPI_INT, &recv_buffer_size[0], 1, MPI_INT, _mesh->get_mpi_comm());
-
-              // Now that we know the size of all messages we are going to receive from
-              // other MPI processes, we can set up asynchronous communication for the
-              // exchange of the actual send_buffers. Also, allocate memory for the receive buffers.
-              for(int i=0;i<nprocs;i++){
-                if(recv_buffer_size[i]>0){
-                  recv_buffer[i].resize(recv_buffer_size[i]);
-                  MPI_Irecv(&recv_buffer[i][0], recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &request[i]);
-                }
-                else
-                  request[i] = MPI_REQUEST_NULL;
-
-                if(send_buffer_size[i]>0)
-                  MPI_Isend(&send_buffer[i][0], send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &request[nprocs+i]);
-                else
-                  request[nprocs+i] = MPI_REQUEST_NULL;
-              }
-
-              // Wait for MPI transfers to complete and unmarshal data.
-              MPI_Waitall(2*nprocs, &request[0], &status[0]);
-
-              global_halo_size = 0;
-              unmarshal_data(recv_buffer, global_halo, global_halo_size, sent_vertices, recv_vertices);
+              process_recv_halo(send_buffer, send_buffer_size, sent_vertices_vec, sent_vertices_vec_size);
 
               for(int i=0; i<nprocs; ++i){
                 send_buffer[i].clear();
-                recv_buffer[i].clear();
                 sent_vertices_vec[i].clear();
                 send_buffer_size[i] = 0;
-                recv_buffer_size[i] = 0;
                 sent_vertices_vec_size[i] = 0;
               }
             }
@@ -523,7 +442,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #pragma omp for schedule(dynamic, 4)
               for(size_t idx=0; idx<global_interior_size; ++idx){
                 index_t i = global_interior[idx];
-                assert(i < NNodes);
+                assert(i < (index_t) NNodes);
 
                 // If the node has been un-coloured, skip it.
                 if(colouring->node_colour[i] < 0)
@@ -610,49 +529,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               memcpy(&global_interior[pos], &active_set[0], active_set.size() * sizeof(index_t));
 #pragma omp barrier
             }while(global_interior_size>0);
-
-            // By now, all interior vertices for this independent set have
-            // been processed. One thread will now apply the halo
-            // modifications we have received from other MPI processes.
-#pragma omp single
-            {
-              for(size_t idx=0; idx<global_halo_size; idx+=4){
-                index_t i = global_halo[idx];
-                index_t j = global_halo[idx+1];
-                index_t k = global_halo[idx+2];
-                index_t l = global_halo[idx+3];
-
-                Edge<index_t> edge(i,j);
-                swap_kernel_single_thr(edge);
-
-                k = edge.edge.first;
-                l = edge.edge.second;
-
-                Edge<index_t> lateralEdges[] = {
-                    Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-                // Propagate the operation
-                for(size_t ee=0; ee<4; ++ee){
-                  // Swap first and second vertices of the edge if necessary.
-                  if(_mesh->lnn2gnn[lateralEdges[ee].edge.first] > _mesh->lnn2gnn[lateralEdges[ee].edge.second]){
-                    index_t tmp = lateralEdges[ee].edge.first;
-                    lateralEdges[ee].edge.first = lateralEdges[ee].edge.second;
-                    lateralEdges[ee].edge.second = tmp;
-                  }
-
-                  if(_mesh->node_owner[lateralEdges[ee].edge.first] != rank)
-                    continue;
-
-                  marked_edges[lateralEdges[ee].edge.first].insert(lateralEdges[ee].edge.second);
-                }
-              }
-
-              global_interior_size = 0;
-              global_halo_size = 0;
-
-              if(nprocs>1)
-                _mesh->trim_halo();
-            }
           }
 #endif
         }else{
@@ -663,7 +539,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #pragma omp for schedule(dynamic, 4)
               for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
                 index_t i = colouring->independent_sets[set_no][idx];
-                assert(i < NNodes);
+                assert(i < (index_t) NNodes);
 
                 // If the node has been un-coloured, skip it.
                 if(colouring->node_colour[i] < 0)
@@ -744,381 +620,15 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #ifdef HAVE_MPI
     delete[] global_interior;
     delete[] global_halo;
+
+    if(nprocs>1)
+      _mesh->trim_halo();
 #endif
 
     return;
   }
 
  private:
-
-  void marshal_data(index_t i, index_t j, index_t k, index_t l, std::vector<index_t>& ele0, std::vector<index_t>& ele1,
-      std::vector< std::vector<int> >& local_buffers, std::vector< std::vector<index_t> >& sent){
-    // Find which MPI processes are involved in this operation.
-    std::set<int> procs;
-    if(_mesh->node_owner[j] != rank)
-      procs.insert(_mesh->node_owner[j]);
-    if(_mesh->node_owner[k] != rank)
-      procs.insert(_mesh->node_owner[k]);
-    if(_mesh->node_owner[l] != rank)
-      procs.insert(_mesh->node_owner[l]);
-
-    for(typename std::set<int>::const_iterator proc=procs.begin(); proc!=procs.end(); ++proc){
-      /* See whether additional data needs to be sent to some other MPI process P. There are three cases here:
-       *
-       * 1st case: The original edge crosses the halo between *this* and P.
-       *           No additional data needs to be communicated.
-       *
-       * 2nd case: Both the original and the flipped edge do not cross the halo between *this*
-       *           and P. No additional data needs to be communicated. Actually, P does not
-       *           even see those edges, so it does not need to know about this operation.
-       *
-       * 3rd case: The original edge does not cross the halo between *this* and P but the flipped
-       *           edge does. The element behind the original edge is not visible by the other
-       *           MPI process. Also, the third vertex of that element may not be visible either.
-       */
-      if(_mesh->node_owner[j] == *proc){ // 1st case
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[i]); // Owner of i is always the sender
-        assert(_mesh->node_owner[i]==rank);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[j]);
-        local_buffers[*proc].push_back(_mesh->node_owner[j]);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[k]);
-        local_buffers[*proc].push_back(_mesh->node_owner[k]);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[l]);
-        local_buffers[*proc].push_back(_mesh->node_owner[l]);
-        local_buffers[*proc].push_back(0); // No extra data will be sent
-      }else if(_mesh->node_owner[k] == *proc || _mesh->node_owner[l] == *proc){ // Possibly 3rd case
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[i]);
-        assert(_mesh->node_owner[i]==rank);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[j]);
-        local_buffers[*proc].push_back(_mesh->node_owner[j]);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[k]);
-        local_buffers[*proc].push_back(_mesh->node_owner[k]);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[l]);
-        local_buffers[*proc].push_back(_mesh->node_owner[l]);
-
-        if(_mesh->node_owner[k] != _mesh->node_owner[l]){ // Definitely 3rd case
-          // We are sending 1 invisible vertex and 1 invisible element.
-          local_buffers[*proc].push_back(1);
-
-          index_t inv_vertex = (_mesh->node_owner[k] == *proc ? l : k);
-          sent[*proc].push_back(inv_vertex);
-
-          std::vector<int> ivertex(node_package_int_size);
-
-          index_t *rgnn = (index_t *) &ivertex[0];
-          int *rowner = (int *) &ivertex[idx_owner];
-          real_t *rcoords = (real_t *) &ivertex[idx_coords];
-          float *rmetric = (float *) &ivertex[idx_metric];
-
-          *rgnn = _mesh->lnn2gnn[inv_vertex];
-          *rowner = _mesh->node_owner[inv_vertex];
-
-          const real_t *x = _mesh->get_coords(inv_vertex);
-          rcoords[0] = x[0];
-          rcoords[1] = x[1];
-
-          const float *m = _mesh->get_metric(inv_vertex);
-          rmetric[0] = m[0];
-          rmetric[1] = m[1];
-          rmetric[2] = m[2];
-
-          local_buffers[*proc].insert(local_buffers[*proc].end(), ivertex.begin(), ivertex.end());
-
-          bool is_ele0 = false;
-          for(size_t t=0; t<nloc; ++t)
-            if(inv_vertex == ele0[t]){
-              is_ele0 = true;
-              break;
-            }
-
-          std::vector<index_t>& ele = (is_ele0 ? ele0 : ele1);
-          for(size_t t=0; t<nloc; ++t){
-            local_buffers[*proc].push_back(_mesh->lnn2gnn[ele[t]]);
-            local_buffers[*proc].push_back(_mesh->node_owner[ele[t]]);
-          }
-
-          // If the invisible vertex is on the surface, send the corresponding facets.
-          std::vector<int> lfacets;
-          _surface->find_facets(&ele[0], lfacets);
-
-          local_buffers[*proc].push_back(lfacets.size());
-
-          for(size_t f=0; f<lfacets.size(); ++f){
-            // Push back surface vertices
-            const int *sn = _surface->get_facet(lfacets[f]);
-            for(size_t t=0; t<snloc; ++t){
-              local_buffers[*proc].push_back(_mesh->lnn2gnn[sn[t]]);
-              local_buffers[*proc].push_back(_mesh->node_owner[sn[t]]);
-            }
-
-            local_buffers[*proc].push_back(_surface->get_boundary_id(lfacets[f]));
-            local_buffers[*proc].push_back(_surface->get_coplanar_id(lfacets[f]));
-          }
-        }else
-          local_buffers[*proc].push_back(0);
-      }else
-        continue;
-
-      /* Take care of colouring. There are six cases:
-       *
-       * 1st case: *This* process owns both vertices k and l.
-       *           Nothing needs to be sent, *this* process can decide alone
-       *           what has to be done, no one else cares about the colours.
-       *
-       * 2nd case: Process *proc owns both vertices k and l.
-       *           Nothing needs to be sent, *proc can decide alone what
-       *           has to be done, no one else cares about the colours.
-       *
-       * 3rd case: None of k and l are owned by *this* process or *proc.
-       *           Nothing needs to be sent, neither *this* process nor
-       *           *proc care about the colours of those vertices.
-       *
-       * 4th case: *This* process owns one of k or l and *proc owns the other.
-       *           Keep the colour of owned vertex and send it to *proc.
-       *
-       * 5th case: *This process owns one of k or l and a third process owns the other.
-       *           Process *proc does not care about the colours of those vertices, so
-       *           nothing needs to be sent.
-       *
-       * 6th case: Process *proc owns one of k or l and a third process owns the other. We don't
-       *           know anything about the colour of the vertex owned by the third process,
-       *           so tell *proc to uncolour the vertex owned by it for security reasons.
-       */
-
-      if((_mesh->node_owner[k] == rank && _mesh->node_owner[l] == *proc) ||
-          (_mesh->node_owner[k] == *proc && _mesh->node_owner[l] == rank)){ // 4th case
-        index_t owned = (_mesh->node_owner[k] == rank ? k : l);
-        local_buffers[*proc].push_back(1);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[owned]);
-        local_buffers[*proc].push_back(rank);
-        local_buffers[*proc].push_back(colouring->node_colour[owned]);
-      }else if((_mesh->node_owner[k] == *proc && _mesh->node_owner[l] != rank && _mesh->node_owner[l] != *proc) ||
-          (_mesh->node_owner[l] == *proc && _mesh->node_owner[k] != rank && _mesh->node_owner[k] != *proc)){ // 6th case
-        index_t owned = (_mesh->node_owner[k] == *proc ? k : l);
-        local_buffers[*proc].push_back(1);
-        local_buffers[*proc].push_back(_mesh->lnn2gnn[owned]);
-        local_buffers[*proc].push_back(*proc);
-        // -2 is a special value which indicates that we don't know the colour of the
-        // other vertex. This is a message for the receiver to uncolour its owned vertex.
-        local_buffers[*proc].push_back(-2);
-      }else
-        local_buffers[*proc].push_back(0); // Nothing to be sent
-    }
-  }
-
-  void unmarshal_data(std::vector< std::vector<int> >& recv_buffer, index_t *halo, size_t& halo_size,
-      std::vector< std::map<index_t, index_t> >& sent_vertices, std::vector< std::map<index_t, index_t> >& recv_vertices){
-    for(int proc=0;proc<nprocs;proc++){
-      if(recv_buffer[proc].size()==0)
-        continue;
-
-      int *buffer = &recv_buffer[proc][0];
-      size_t original_part_size = buffer[0];
-      size_t loc=1;
-
-      // Part 1: append new vertices, elements and facets to the mesh.
-      while(loc < original_part_size){
-        // Find vertices i and j
-        index_t ignn = buffer[loc++];
-        // Vertex i is always owned by the sender.
-        assert(_mesh->recv_map[proc].count(ignn) > 0);
-        index_t i = _mesh->recv_map[proc][ignn];
-
-        index_t jgnn = buffer[loc++];
-        int jowner = buffer[loc++];
-        index_t j;
-        if(jowner == rank){
-          assert(_mesh->send_map[proc].count(jgnn) > 0);
-          j = _mesh->send_map[proc][jgnn];
-        }else{
-          assert(_mesh->recv_map[jowner].count(jgnn) > 0);
-          j = _mesh->recv_map[jowner][jgnn];
-        }
-
-        // k or l may not be known to us yet - we will resolve this later.
-        index_t kgnn = buffer[loc++];
-        int kowner = buffer[loc++];
-        index_t lgnn = buffer[loc++];
-        int lowner = buffer[loc++];
-
-        // Parse data about invisible vertex and element.
-        int inv_data = buffer[loc++];
-        if(inv_data == 1){
-          index_t gnn = *((index_t *) &buffer[loc]);
-          int owner = buffer[loc+idx_owner];
-
-          // Only append this vertex to the mesh if we haven't received it before.
-          if(_mesh->recv_map[owner].count(gnn) == 0){
-            real_t *rcoords = (real_t *) &buffer[loc+idx_coords];
-            float *rmetric = (float *) &buffer[loc+idx_metric];
-
-            index_t new_lnn = _mesh->append_vertex(rcoords, rmetric);
-
-            _mesh->lnn2gnn[new_lnn] = gnn;
-            _mesh->node_owner[new_lnn] = owner;
-            _mesh->recv_map[owner][gnn] = new_lnn;
-            colouring->node_colour[new_lnn] = -1;
-            marked_edges[new_lnn].clear();
-            recv_vertices[owner][gnn] = new_lnn;
-          }
-
-          loc += node_package_int_size;
-
-          index_t ele[] = {-1, -1, -1};
-          for(size_t t=0; t<nloc; ++t){
-            index_t gnn = buffer[loc++];
-            int owner = buffer[loc++];
-            assert(_mesh->recv_map[owner].count(gnn)>0);
-            ele[t] = _mesh->recv_map[owner][gnn];
-            assert(ele[t] >= 0);
-          }
-
-          std::set<index_t> intersection;
-          std::set_intersection(_mesh->NEList[ele[0]].begin(), _mesh->NEList[ele[0]].end(),
-              _mesh->NEList[ele[1]].begin(), _mesh->NEList[ele[1]].end(),
-              std::inserter(intersection, intersection.begin()));
-          std::set<index_t> common_element;
-          std::set_intersection(_mesh->NEList[ele[2]].begin(), _mesh->NEList[ele[2]].end(),
-              intersection.begin(), intersection.end(),
-              std::inserter(common_element, common_element.begin()));
-
-          if(common_element.empty()){
-            index_t eid = _mesh->append_element(ele);
-
-            /* Update NNList and NEList. Updates are thread-safe, because they pertain
-             * to recv_halo vertices only, which are not touched by the rest of the
-             * OpenMP threads that are processing the interior of this MPI partition.
-             */
-            for(size_t t=0; t<nloc; ++t){
-              _mesh->NEList[ele[t]].insert(eid);
-
-              for(size_t u=t+1; u<nloc; ++u){
-                typename std::vector<index_t>::iterator it;
-                it = std::find(_mesh->NNList[ele[t]].begin(), _mesh->NNList[ele[t]].end(), ele[u]);
-
-                if(it == _mesh->NNList[ele[t]].end()){
-                  _mesh->NNList[ele[t]].push_back(ele[u]);
-                  _mesh->NNList[ele[u]].push_back(ele[t]);
-                }
-              }
-            }
-          }
-
-          // Unpack any new facets
-          int nFacets = buffer[loc++];
-
-          for(int i=0; i<nFacets; ++i){
-            index_t facet[] = {-1, -1};
-
-            for(size_t j=0; j<snloc; ++j){
-              index_t gnn = buffer[loc++];
-              int owner = buffer[loc++];
-              assert(_mesh->recv_map[owner].count(gnn) > 0);
-              facet[j] = _mesh->recv_map[owner][gnn];
-              assert(facet[j] >= 0);
-            }
-
-            int boundary_id = buffer[loc++];
-            int coplanar_id = buffer[loc++];
-
-            // Updates to surface are thread-safe for the
-            // same reason as updates to adjacency lists.
-            _surface->append_facet(facet, boundary_id, coplanar_id, true);
-          }
-        }
-
-        // By now, the receiver has all necessary information
-        // to perform swapping on edge (i,j). Resolve k and l.
-        index_t k;
-        if(kowner == rank){
-          assert(_mesh->send_map[proc].count(kgnn) > 0);
-          k = _mesh->send_map[proc][kgnn];
-        }else{
-          assert(_mesh->recv_map[kowner].count(kgnn) > 0);
-          k = _mesh->recv_map[kowner][kgnn];
-        }
-
-        index_t l;
-        if(lowner == rank){
-          assert(_mesh->send_map[proc].count(lgnn) > 0);
-          l = _mesh->send_map[proc][lgnn];
-        }else{
-          assert(_mesh->recv_map[lowner].count(lgnn) > 0);
-          l = _mesh->recv_map[lowner][lgnn];
-        }
-
-        // Push (i,j,k,l) back into the halo worklist.
-        halo[halo_size++] = i;
-        halo[halo_size++] = j;
-        halo[halo_size++] = k;
-        halo[halo_size++] = l;
-
-        int extra_colour = buffer[loc++];
-        if(extra_colour == 1){
-          index_t gnn = buffer[loc++];
-          int owner = buffer[loc++];
-          assert(owner == proc || owner == rank);
-
-          index_t ref_vertex;
-          if(owner == proc){ // This is the 4th case
-            assert(_mesh->recv_map[proc].count(gnn) > 0);
-            ref_vertex = _mesh->recv_map[proc][gnn];
-          }else{ // This is the 6th case
-            assert(_mesh->send_map[proc].count(gnn) > 0);
-            ref_vertex = _mesh->send_map[proc][gnn];
-            assert(buffer[loc] == -2);
-          }
-          assert(ref_vertex==k || ref_vertex==l);
-
-          index_t other_vertex = (ref_vertex==k ? l : k);
-
-          int colour = buffer[loc++];
-          if(colour >= 0){
-            // Check whether ref_vertex's colour (owned by the sender)
-            // clashes with other_vertex's colour (owned by the receiver).
-            if(colouring->node_colour[other_vertex] == colour)
-              colouring->node_colour[other_vertex] = -1;
-          }else
-            colouring->node_colour[ref_vertex] = -1;
-        }
-      }
-
-      assert(loc == original_part_size);
-
-      // Part 2: Look at the extensions. The extension contains pairs (gnn, receiver):
-      // The sender process proc sent to process receiver information about vertex gnn.
-      while(loc < recv_buffer[proc].size()){
-        index_t gnn = buffer[loc++];
-        assert(_mesh->send_map[proc].count(gnn) > 0);
-        index_t vid = _mesh->send_map[proc][gnn];
-
-        int receiver = buffer[loc++];
-
-        // If the receiver didn't know about vertex vid before, now we know that this process
-        // has appended vid to its halo, so we have to add vid to our _mesh->send[receiver].
-        if(_mesh->send_map[receiver].count(gnn) == 0){
-          _mesh->send_map[receiver][gnn] = vid;
-          sent_vertices[receiver][gnn] = vid;
-        }
-      }
-    }
-
-    // Update _mesh->send and _mesh->recv.
-    for(int i=0; i<nprocs; ++i){
-      for(typename std::map<index_t, index_t>::const_iterator it=sent_vertices[i].begin(); it!=sent_vertices[i].end(); ++it){
-        _mesh->send[i].push_back(it->second);
-        _mesh->send_halo.insert(it->second);
-      }
-
-      for(typename std::map<index_t, index_t>::const_iterator it=recv_vertices[i].begin(); it!=recv_vertices[i].end(); ++it){
-        _mesh->recv[i].push_back(it->second);
-        _mesh->recv_halo.insert(it->second);
-      }
-
-      assert(_mesh->send[i].size() == _mesh->send_map[i].size());
-      assert(_mesh->recv[i].size() == _mesh->recv_map[i].size());
-    }
-  }
 
   void swap_kernel(Edge<index_t>& edge, std::set<index_t>& modified_elements,
       std::vector<index_t>* ele0, std::vector<index_t>* ele1, size_t tid){
@@ -1316,6 +826,516 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
   inline virtual index_t is_dynamic(index_t vid){
     return (index_t) marked_edges[vid].size();
+  }
+
+  void marshal_data(index_t i, index_t j, index_t k, index_t l, std::vector<index_t>& ele0, std::vector<index_t>& ele1,
+      std::vector< std::vector<int> >& local_buffers, std::vector< std::vector<index_t> >& sent){
+    index_t lnns[] = {j, k, l};
+    index_t gnns[] = {_mesh->lnn2gnn[j], _mesh->lnn2gnn[k], _mesh->lnn2gnn[l]};
+    bool visible_by_proc[3];
+
+    for(int proc=0; proc<nprocs; ++proc){
+      if(proc == rank)
+        continue;
+
+      if(_mesh->send_map[proc].count(_mesh->lnn2gnn[i])==0)
+        continue;
+
+      /* A vertex is visible by proc either if it is owned by proc
+       * or if it is in our send_map[proc]. There is a third case in
+       * which proc knows about this vertex through another process.
+       */
+      for(size_t t=0; t<3; ++t){
+        if(_mesh->node_owner[lnns[t]] == proc)
+          visible_by_proc[t] = true;
+        else if(_mesh->send_map[proc].count(gnns[t]) > 0)
+          visible_by_proc[t] = true;
+        else{
+          visible_by_proc[t] = false;
+          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[lnns[t]].begin();it!=_mesh->NNList[lnns[t]].end();++it){
+            if(_mesh->node_owner[*it]==proc){
+              visible_by_proc[t] = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if(visible_by_proc[0]){
+        // The edge is possibly visible by proc, so we have to communicate the operation.
+        local_buffers[proc].push_back(_mesh->lnn2gnn[i]);
+        assert(_mesh->node_owner[i]==rank); // Owner of i is always the sender
+        for(size_t t=0; t<3; ++t){
+          local_buffers[proc].push_back(gnns[t]);
+          local_buffers[proc].push_back(_mesh->node_owner[lnns[t]]);
+        }
+
+        // Check whether extra data needs to be sent.
+        if(_mesh->node_owner[j]==proc){
+          // If j is owned by proc, then proc sees both elements and all vertices involved.
+          local_buffers[proc].push_back(0); // 0 vertices
+          local_buffers[proc].push_back(0); // 0 elements
+        }
+        else{
+          // Otherwise, send any data which may not be visible to proc.
+          std::vector<int> vertex_idx;
+          std::vector< std::vector<index_t> > elements;
+
+          if((_mesh->node_owner[k] == proc) != (_mesh->node_owner[l] == proc)){
+            // If proc owns one (but not both) of k,l it definitely sees one of
+            // the two elements involved. Send the other one and the non-owned
+            // vertex if it is not visible by proc.
+            int idx = (_mesh->node_owner[k] == proc ? 2 : 1); // 2-->l, 1-->k
+            if(!visible_by_proc[idx]){ // If it is really invisible
+              vertex_idx.push_back(idx);
+            }
+
+            // Find which is the invisible element
+            bool is_ele0 = false;
+            for(size_t t=0; t<nloc; ++t)
+              if(lnns[idx] == ele0[t]){
+                is_ele0 = true;
+                break;
+              }
+
+            if(is_ele0)
+              elements.push_back(ele0);
+            else
+              elements.push_back(ele1);
+
+          }else{
+            // Send any invisible vertex and both elements just in case.
+            for(size_t t=1; t<nloc; ++t)
+              if(!visible_by_proc[t])
+                vertex_idx.push_back(t);
+
+            elements.push_back(ele0);
+            elements.push_back(ele1);
+          }
+
+          local_buffers[proc].push_back(vertex_idx.size()); // We are sending so many vertices
+          for(typename std::vector<int>::const_iterator it=vertex_idx.begin(); it!=vertex_idx.end(); ++it){
+            sent[proc].push_back(lnns[*it]);
+
+            std::vector<int> ivertex(node_package_int_size);
+
+            index_t *rgnn = (index_t *) &ivertex[0];
+            int *rowner = (int *) &ivertex[idx_owner];
+            real_t *rcoords = (real_t *) &ivertex[idx_coords];
+            float *rmetric = (float *) &ivertex[idx_metric];
+
+            *rgnn = gnns[*it];
+            *rowner = _mesh->node_owner[lnns[*it]];
+
+            const real_t *x = _mesh->get_coords(lnns[*it]);
+            rcoords[0] = x[0];
+            rcoords[1] = x[1];
+
+            const float *m = _mesh->get_metric(lnns[*it]);
+            rmetric[0] = m[0];
+            rmetric[1] = m[1];
+            rmetric[2] = m[2];
+
+            local_buffers[proc].insert(local_buffers[proc].end(), ivertex.begin(), ivertex.end());
+          }
+
+          local_buffers[proc].push_back(elements.size()); // We are sending so many elements
+          for(typename std::vector< std::vector<index_t> >::const_iterator it=elements.begin(); it!=elements.end(); ++it){
+            const std::vector<index_t>& ele = *it;
+
+            for(size_t t=0; t<nloc; ++t){
+              local_buffers[proc].push_back(_mesh->lnn2gnn[ele[t]]);
+              local_buffers[proc].push_back(_mesh->node_owner[ele[t]]);
+            }
+
+            // Check for surface facets
+            std::vector<int> lfacets;
+            _surface->find_facets(&ele[0], lfacets);
+
+            local_buffers[proc].push_back(lfacets.size());
+
+            for(size_t f=0; f<lfacets.size(); ++f){
+              // Push back surface vertices
+              const int *sn = _surface->get_facet(lfacets[f]);
+              for(size_t t=0; t<snloc; ++t){
+                local_buffers[proc].push_back(_mesh->lnn2gnn[sn[t]]);
+                local_buffers[proc].push_back(_mesh->node_owner[sn[t]]);
+              }
+
+              local_buffers[proc].push_back(_surface->get_boundary_id(lfacets[f]));
+              local_buffers[proc].push_back(_surface->get_coplanar_id(lfacets[f]));
+            }
+          }
+        }
+
+        /* Take care of colouring. There are six cases:
+         *
+         * 1st case: *This* process owns both vertices k and l.
+         *           Nothing needs to be sent, *this* process can decide alone
+         *           what has to be done, no one else cares about the colours.
+         *
+         * 2nd case: Process *proc owns both vertices k and l.
+         *           Nothing needs to be sent, *proc can decide alone what
+         *           has to be done, no one else cares about the colours.
+         *
+         * 3rd case: None of k and l are owned by *this* process or *proc.
+         *           Nothing needs to be sent, neither *this* process nor
+         *           *proc care about the colours of those vertices.
+         *
+         * 4th case: *This* process owns one of k or l and *proc owns the other.
+         *           Keep the colour of owned vertex and send it to *proc.
+         *
+         * 5th case: *This process owns one of k or l and a third process owns the other.
+         *           Process *proc does not care about the colours of those vertices, so
+         *           nothing needs to be sent.
+         *
+         * 6th case: Process *proc owns one of k or l and a third process owns the other. We don't
+         *           know anything about the colour of the vertex owned by the third process,
+         *           so tell *proc to uncolour the vertex owned by it for security reasons.
+         */
+
+        if((_mesh->node_owner[k] == rank && _mesh->node_owner[l] == proc) ||
+            (_mesh->node_owner[k] == proc && _mesh->node_owner[l] == rank)){ // 4th case
+          index_t owned = (_mesh->node_owner[k] == rank ? k : l);
+          local_buffers[proc].push_back(1);
+          local_buffers[proc].push_back(_mesh->lnn2gnn[owned]);
+          local_buffers[proc].push_back(rank);
+          local_buffers[proc].push_back(colouring->node_colour[owned]);
+        }else if((_mesh->node_owner[k] == proc && _mesh->node_owner[l] != rank && _mesh->node_owner[l] != proc) ||
+            (_mesh->node_owner[l] == proc && _mesh->node_owner[k] != rank && _mesh->node_owner[k] != proc)){ // 6th case
+          index_t owned = (_mesh->node_owner[k] == proc ? k : l);
+          local_buffers[proc].push_back(1);
+          local_buffers[proc].push_back(_mesh->lnn2gnn[owned]);
+          local_buffers[proc].push_back(proc);
+          // -2 is a special value which indicates that we don't know the colour of the
+          // other vertex. This is a message for the receiver to uncolour its owned vertex.
+          local_buffers[proc].push_back(-2);
+        }else
+          local_buffers[proc].push_back(0); // Nothing to be sent
+      }
+    }
+  }
+
+  void process_recv_halo(std::vector< std::vector<int> >& send_buffer, std::vector<int>&  send_buffer_size,
+      std::vector< std::vector<index_t> >& sent_vertices_vec, std::vector<size_t>& sent_vertices_vec_size){
+    std::vector< std::vector<int> > recv_buffer(nprocs);
+    std::vector<int> recv_buffer_size(nprocs, 0);
+    std::vector<MPI_Request> request(2*nprocs);
+    std::vector<MPI_Status> status(2*nprocs);
+
+    /* For each process P_i, we create a map(gnn, lnn) containing all
+     * vertices owned by *this* MPI process which will be sent to P_i,
+     * no matter whether the vertex is sent by *this* process or by a third
+     * process. Similarly, we create a map for vertices *this* process will
+     * receive. Vertices will be sorted by their gnn's, so they will be
+     * added later to _mesh->send[P_i] on *this* process in the same order
+     * as they will be added to _mesh->recv[*this*] on P_i and vice versa.
+     */
+    std::vector< std::map<index_t, index_t> > sent_vertices(nprocs);
+    std::vector< std::map<index_t, index_t> > recv_vertices(nprocs);
+
+    // Set up sent_vertices and append appropriate data to the end of send
+    // buffers. So far, every sent_vertices_vec[i] contains all vertices
+    // sent to process i, no matter whether they are owned by us or not.
+    std::vector< std::vector<int> > message_extensions(nprocs);
+
+    for(int i=0; i<nprocs; ++i){
+      for(typename std::vector<index_t>::const_iterator it = sent_vertices_vec[i].begin();
+          it != sent_vertices_vec[i].end(); ++it){
+        int owner = _mesh->node_owner[*it];
+        index_t gnn = _mesh->lnn2gnn[*it];
+
+        if(owner==rank){
+          if(_mesh->send_map[i].count(gnn)==0){
+            sent_vertices[i][gnn] = *it;
+            _mesh->send_map[i][gnn] = *it;
+          }
+        }
+        else{
+          // Send message (gnn, proc): Tell the owner that we have sent vertex gnn to process proc.
+          message_extensions[owner].push_back(gnn);
+          message_extensions[owner].push_back(i);
+        }
+      }
+    }
+
+    for(int i=0; i<nprocs; ++i){
+      // Append the extension.
+      if(message_extensions[i].size()>0){
+        // If there is no original part in the message, indicate
+        // its zero length before pushing back the extension.
+        if(send_buffer[i].size() == 0)
+          send_buffer[i].push_back(0);
+
+        send_buffer[i].insert(send_buffer[i].end(),
+            message_extensions[i].begin(), message_extensions[i].end());
+        send_buffer_size[i] = send_buffer[i].size();
+      }
+    }
+
+    // First we need to communicate message sizes using MPI_Alltoall.
+    MPI_Alltoall(&send_buffer_size[0], 1, MPI_INT, &recv_buffer_size[0], 1, MPI_INT, _mesh->get_mpi_comm());
+
+    // Now that we know the size of all messages we are going to receive from
+    // other MPI processes, we can set up asynchronous communication for the
+    // exchange of the actual send_buffers. Also, allocate memory for the receive buffers.
+    for(int i=0;i<nprocs;i++){
+      if(recv_buffer_size[i]>0){
+        recv_buffer[i].resize(recv_buffer_size[i]);
+        MPI_Irecv(&recv_buffer[i][0], recv_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &request[i]);
+      }
+      else
+        request[i] = MPI_REQUEST_NULL;
+
+      if(send_buffer_size[i]>0)
+        MPI_Isend(&send_buffer[i][0], send_buffer_size[i], MPI_INT, i, 0, _mesh->get_mpi_comm(), &request[nprocs+i]);
+      else
+        request[nprocs+i] = MPI_REQUEST_NULL;
+    }
+
+    // Wait for MPI transfers to complete.
+    MPI_Waitall(2*nprocs, &request[0], &status[0]);
+
+    // Unmarshal data and apply received operations.
+
+    for(int proc=0;proc<nprocs;proc++){
+      if(recv_buffer[proc].size()==0)
+        continue;
+
+      int *buffer = &recv_buffer[proc][0];
+      size_t original_part_size = buffer[0];
+      size_t loc=1;
+
+      // Part 1: append new vertices, elements and facets to the mesh.
+      while(loc < original_part_size){
+        // Find vertices i and j
+        index_t ignn = buffer[loc++];
+        // Vertex i is always owned by the sender.
+        assert(_mesh->recv_map[proc].count(ignn) > 0);
+        index_t i = _mesh->recv_map[proc][ignn];
+
+        index_t jgnn = buffer[loc++];
+        int jowner = buffer[loc++];
+        index_t j;
+        if(jowner == rank){
+          assert(_mesh->send_map[proc].count(jgnn) > 0);
+          j = _mesh->send_map[proc][jgnn];
+        }else{
+          assert(_mesh->recv_map[jowner].count(jgnn) > 0);
+          j = _mesh->recv_map[jowner][jgnn];
+        }
+
+        // k or l may not be known to us yet - we will resolve this later.
+        index_t kgnn = buffer[loc++];
+        int kowner = buffer[loc++];
+        index_t lgnn = buffer[loc++];
+        int lowner = buffer[loc++];
+
+        // Parse data about invisible vertices.
+        int nVertices = buffer[loc++];
+        for(size_t cnt=0; cnt<(size_t)nVertices; ++cnt){
+          index_t gnn = *((index_t *) &buffer[loc]);
+          int owner = buffer[loc+idx_owner];
+
+          // Only append this vertex to the mesh if we haven't received it before.
+          if(_mesh->recv_map[owner].count(gnn) == 0){
+            real_t *rcoords = (real_t *) &buffer[loc+idx_coords];
+            float *rmetric = (float *) &buffer[loc+idx_metric];
+
+            index_t new_lnn = _mesh->append_vertex(rcoords, rmetric);
+
+            _mesh->lnn2gnn[new_lnn] = gnn;
+            _mesh->node_owner[new_lnn] = owner;
+            _mesh->recv_map[owner][gnn] = new_lnn;
+            colouring->node_colour[new_lnn] = -1;
+            marked_edges[new_lnn].clear();
+            recv_vertices[owner][gnn] = new_lnn;
+          }
+
+          loc += node_package_int_size;
+        }
+
+        // Parse data about invisible elements.
+        int nElements = buffer[loc++];
+        for(size_t cnt=0; cnt<(size_t)nElements; ++cnt){
+          index_t ele[] = {-1, -1, -1};
+          for(size_t t=0; t<nloc; ++t){
+            index_t gnn = buffer[loc++];
+            int owner = buffer[loc++];
+            if(owner == rank){
+              assert(_mesh->send_map[proc].count(gnn)>0);
+              ele[t] = _mesh->send_map[proc][gnn];
+            }else{
+              assert(_mesh->recv_map[owner].count(gnn)>0);
+              ele[t] = _mesh->recv_map[owner][gnn];
+            }
+            assert(ele[t] >= 0);
+          }
+
+          std::set<index_t> intersection;
+          std::set_intersection(_mesh->NEList[ele[0]].begin(), _mesh->NEList[ele[0]].end(),
+              _mesh->NEList[ele[1]].begin(), _mesh->NEList[ele[1]].end(),
+              std::inserter(intersection, intersection.begin()));
+          std::set<index_t> common_element;
+          std::set_intersection(_mesh->NEList[ele[2]].begin(), _mesh->NEList[ele[2]].end(),
+              intersection.begin(), intersection.end(),
+              std::inserter(common_element, common_element.begin()));
+
+          if(common_element.empty()){
+            index_t eid = _mesh->append_element(ele);
+
+            /* Update NNList and NEList. Updates are thread-safe, because they pertain
+             * to recv_halo vertices only, which are not touched by the rest of the
+             * OpenMP threads that are processing the interior of this MPI partition.
+             */
+            for(size_t t=0; t<nloc; ++t){
+              _mesh->NEList[ele[t]].insert(eid);
+
+              for(size_t u=t+1; u<nloc; ++u){
+                typename std::vector<index_t>::iterator it;
+                it = std::find(_mesh->NNList[ele[t]].begin(), _mesh->NNList[ele[t]].end(), ele[u]);
+
+                if(it == _mesh->NNList[ele[t]].end()){
+                  _mesh->NNList[ele[t]].push_back(ele[u]);
+                  _mesh->NNList[ele[u]].push_back(ele[t]);
+                }
+              }
+            }
+          }
+
+          // Unpack any new facets which are part of this element.
+          int nFacets = buffer[loc++];
+
+          for(int i=0; i<nFacets; ++i){
+            index_t facet[] = {-1, -1};
+
+            for(size_t j=0; j<snloc; ++j){
+              index_t gnn = buffer[loc++];
+              int owner = buffer[loc++];
+              assert(_mesh->recv_map[owner].count(gnn) > 0);
+              facet[j] = _mesh->recv_map[owner][gnn];
+              assert(facet[j] >= 0);
+            }
+
+            int boundary_id = buffer[loc++];
+            int coplanar_id = buffer[loc++];
+
+            // Updates to surface are thread-safe for the
+            // same reason as updates to adjacency lists.
+            _surface->append_facet(facet, boundary_id, coplanar_id, true);
+          }
+        }
+
+        // By now, the receiver has all necessary information
+        // to perform swapping on edge (i,j). Resolve k and l.
+        index_t k;
+        if(kowner == rank){
+          assert(_mesh->send_map[proc].count(kgnn) > 0);
+          k = _mesh->send_map[proc][kgnn];
+        }else{
+          assert(_mesh->recv_map[kowner].count(kgnn) > 0);
+          k = _mesh->recv_map[kowner][kgnn];
+        }
+
+        index_t l;
+        if(lowner == rank){
+          assert(_mesh->send_map[proc].count(lgnn) > 0);
+          l = _mesh->send_map[proc][lgnn];
+        }else{
+          assert(_mesh->recv_map[lowner].count(lgnn) > 0);
+          l = _mesh->recv_map[lowner][lgnn];
+        }
+
+        int extra_colour = buffer[loc++];
+        if(extra_colour == 1){
+          index_t gnn = buffer[loc++];
+          int owner = buffer[loc++];
+          assert(owner == proc || owner == rank);
+
+          index_t ref_vertex;
+          if(owner == proc){ // This is the 4th case
+            assert(_mesh->recv_map[proc].count(gnn) > 0);
+            ref_vertex = _mesh->recv_map[proc][gnn];
+          }else{ // This is the 6th case
+            assert(_mesh->send_map[proc].count(gnn) > 0);
+            ref_vertex = _mesh->send_map[proc][gnn];
+            assert(buffer[loc] == -2);
+          }
+          assert(ref_vertex==k || ref_vertex==l);
+
+          index_t other_vertex = (ref_vertex==k ? l : k);
+
+          int colour = buffer[loc++];
+          if(colour >= 0){
+            // Check whether ref_vertex's colour (owned by the sender)
+            // clashes with other_vertex's colour (owned by the receiver).
+            if(colouring->node_colour[other_vertex] == colour)
+              colouring->node_colour[other_vertex] = -1;
+          }else
+            colouring->node_colour[ref_vertex] = -1;
+        }
+
+        // Perform swapping for this edge.
+        Edge<index_t> edge(i,j);
+        swap_kernel_single_thr(edge);
+
+        k = edge.edge.first;
+        l = edge.edge.second;
+
+        Edge<index_t> lateralEdges[] = {
+            Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+
+        // Propagate the operation
+        for(size_t ee=0; ee<4; ++ee){
+          // Swap first and second vertices of the edge if necessary.
+          if(_mesh->lnn2gnn[lateralEdges[ee].edge.first] > _mesh->lnn2gnn[lateralEdges[ee].edge.second]){
+            index_t tmp = lateralEdges[ee].edge.first;
+            lateralEdges[ee].edge.first = lateralEdges[ee].edge.second;
+            lateralEdges[ee].edge.second = tmp;
+          }
+
+          if(_mesh->node_owner[lateralEdges[ee].edge.first] != rank)
+            continue;
+
+          marked_edges[lateralEdges[ee].edge.first].insert(lateralEdges[ee].edge.second);
+        }
+      }
+
+      assert(loc == original_part_size);
+
+      // Part 2: Look at the extensions. The extension contains pairs (gnn, receiver):
+      // The sender process proc sent to process receiver information about vertex gnn.
+      while(loc < recv_buffer[proc].size()){
+        index_t gnn = buffer[loc++];
+        assert(_mesh->send_map[proc].count(gnn) > 0);
+        index_t vid = _mesh->send_map[proc][gnn];
+
+        int receiver = buffer[loc++];
+
+        // If the receiver didn't know about vertex vid before, now we know that this process
+        // has appended vid to its halo, so we have to add vid to our _mesh->send[receiver].
+        if(_mesh->send_map[receiver].count(gnn) == 0){
+          _mesh->send_map[receiver][gnn] = vid;
+          sent_vertices[receiver][gnn] = vid;
+        }
+      }
+    }
+
+    // Update _mesh->send and _mesh->recv.
+    for(int i=0; i<nprocs; ++i){
+      for(typename std::map<index_t, index_t>::const_iterator it=sent_vertices[i].begin(); it!=sent_vertices[i].end(); ++it){
+        _mesh->send[i].push_back(it->second);
+        _mesh->send_halo.insert(it->second);
+      }
+
+      for(typename std::map<index_t, index_t>::const_iterator it=recv_vertices[i].begin(); it!=recv_vertices[i].end(); ++it){
+        _mesh->recv[i].push_back(it->second);
+        _mesh->recv_halo.insert(it->second);
+      }
+
+      assert(_mesh->send[i].size() == _mesh->send_map[i].size());
+      assert(_mesh->recv[i].size() == _mesh->recv_map[i].size());
+    }
   }
 
   Mesh<real_t, index_t> *_mesh;
