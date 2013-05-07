@@ -510,7 +510,7 @@ template<typename real_t, typename index_t>
     graph.csr_edges = &(csr_edges[0]);
 
     graph.gid = &(_mesh->lnn2gnn[0]);
-    graph.owner = &(_mesh->node_owner[0]);
+    graph.owner = (int*) &(_mesh->node_owner[0]);
 
     std::vector<int> colour(NNodes);
     graph.colour = &(colour[0]);

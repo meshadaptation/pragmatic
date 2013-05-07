@@ -45,7 +45,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "graph_partitioning.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
