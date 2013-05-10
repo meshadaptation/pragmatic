@@ -10,38 +10,41 @@ CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
 FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
 
-AR = @AR@
-ARFLAGS = @ARFLAGS@
+LDFLAGS = @LDFLAGS@
 
-LIB = ../lib/libpragmatic.a
+libdir = @prefix@/lib
+libversion = 2:0:0
 
 VPATH = ./:./src
 
 ifeq (@USING_FORTRAN@,yes)
-fortran_objs = pragmatic.o  pragmatic_Fortran.o
+fortran_objs = pragmatic.lo  pragmatic_Fortran.lo
 endif
-objects = zoltan_tools.o $(fortran_objs)
+objects = zoltan_tools.lo $(fortran_objs)
 
-.SUFFIXES: .F90 .cpp .c .o
+.SUFFIXES: .F90 .cpp .c .o .lo
 
 # cancel implicit rule that tries to make .o from .mod with m2c:
 %.o: %.mod
 
-.cpp.o:
-	@$(CXX) $(CXXFLAGS) -c $<
-.c.o:
-	@$(CC) $(CFLAGS) -c $<
-.F90.o:
-	@$(FC) $(FCFLAGS) -c $<
+.cpp.lo:
+	@libtool --mode=compile --tag=CXX $(CXX) $(CXXFLAGS) -c $<
+.c.lo:
+	@libtool --mode=compile --tag=CC $(CC) $(CFLAGS) -c $<
+.F90.lo:
+	@libtool --mode=compile --tag=FC $(FC) $(FCFLAGS) -c $<
 
 default: lib
 
 lib: $(objects)
 	mkdir -p ../lib
-	$(AR) $(ARFLAGS) $(LIB) $(objects)
+	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects) -rpath $(libdir) -version-info $(libversion)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
 
+install:
+	libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
+
 clean:
-	rm -rf *.o *.mod
+	rm -rf *.o *.mod *.lo *.la .libs

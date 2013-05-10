@@ -35,7 +35,13 @@
 #  SUCH DAMAGE.
 
 dnl Process this file with autoconf to produce a configure script.
+
 AC_INIT(Makefile.in)
+
+LT_INIT
+AC_SUBST([LIBTOOL_DEPS])
+
+AC_CONFIG_MACRO_DIR([m4])
 
 # Check system type
 AC_CANONICAL_HOST
@@ -108,7 +114,7 @@ AC_SUBST(OPENMP_CXXFLAGS)
 AC_PROG_INSTALL
 AC_CHECK_PROG(AR, ar, ar, ,$PATH)
 test -n "$ARFLAGS" || ARFLAGS="cr"
-AC_PROG_RANLIB
+
 AC_CHECK_PROG(MAKE, gmake, gmake, make, $PATH)
 
 AC_ARG_ENABLE(fortran,
