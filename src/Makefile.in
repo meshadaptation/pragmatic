@@ -10,7 +10,7 @@ CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
 FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
 
-LDFLAGS = @LDFLAGS@
+LDFLAGS = @LDFLAGS@ @OPENMP_CXXFLAGS@
 
 libdir = @prefix@/lib
 libversion = 2:0:0
@@ -21,6 +21,8 @@ ifeq (@USING_FORTRAN@,yes)
 fortran_objs = pragmatic.lo  
 endif
 objects = cpragmatic.lo zoltan_tools.lo $(fortran_objs)
+
+LIBS = $(objects) @LIBS_ZOLTAN@ @LIBS@
 
 .SUFFIXES: .F90 .cpp .c .o .lo
 
@@ -38,7 +40,7 @@ default: lib
 
 lib: $(objects)
 	mkdir -p ../lib
-	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects) -rpath $(libdir) -version-info $(libversion) @LIBS@
+	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
