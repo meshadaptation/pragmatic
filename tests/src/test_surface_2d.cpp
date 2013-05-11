@@ -56,6 +56,11 @@
  */
 
 int main(int argc, char **argv){
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+
   Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
 
   Surface2D<double, int> surface(*mesh);
@@ -74,6 +79,8 @@ int main(int argc, char **argv){
     std::cout<<"fail\n";
 
   delete mesh;
-  
+
+  MPI_Finalize();
+
   return 0;
 }

@@ -235,7 +235,7 @@ extern "C" {
       mesh->defragment(&active_vertex_map);
       surface->defragment(&active_vertex_map);
       
-      smooth.smooth("optimisation Linf", 50);
+      smooth.smooth("optimisation Linf", 10);
     }else{
       Surface3D<double, int> *surface = (Surface3D<double, int> *)_pragmatic_surface;
 
@@ -266,7 +266,7 @@ extern "C" {
       mesh->defragment(&active_vertex_map);
       surface->defragment(&active_vertex_map);
       
-      smooth.smooth("optimisation Linf", 50);
+      smooth.smooth("optimisation Linf", 10);
     }
   }
 

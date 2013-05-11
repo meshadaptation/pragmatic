@@ -129,9 +129,7 @@ template<typename real_t, typename index_t> class VTKTools{
 
 #ifdef HAVE_MPI
     // Handle mpi parallel run.
-    if(MPI::Is_initialized()){
-      nparts = MPI::COMM_WORLD.Get_size();
-    }
+    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
     if(nparts>1){
       std::vector<index_t> owner_range;
@@ -139,7 +137,9 @@ template<typename real_t, typename index_t> class VTKTools{
       std::vector<int> node_owner;
 
       std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
-      int rank = MPI::COMM_WORLD.Get_rank();
+      int rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
       if(rank==0){
         int numflag = 0, edgecut;
         int etype = 1; // triangles
@@ -158,8 +158,8 @@ template<typename real_t, typename index_t> class VTKTools{
       mpi_type_wrapper<index_t> mpi_index_t_wrapper;
       MPI_Datatype MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
 
-      MPI::COMM_WORLD.Bcast(&(epart[0]), NElements, MPI_INDEX_T, 0);
-      MPI::COMM_WORLD.Bcast(&(npart[0]), NNodes, MPI_INDEX_T, 0);
+      MPI_Bcast(&(epart[0]), NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&(npart[0]), NNodes, MPI_INDEX_T, 0, MPI_COMM_WORLD);
 
       // Separate out owned nodes.
       std::vector< std::vector<index_t> > node_partition(nparts);
@@ -467,9 +467,7 @@ template<typename real_t, typename index_t> class VTKTools{
     
     int nparts=1;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      nparts = MPI::COMM_WORLD.Get_size();
-    }
+    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 #endif
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
@@ -481,8 +479,9 @@ template<typename real_t, typename index_t> class VTKTools{
       writer->Delete();
     }else{
 #ifdef HAVE_MPI
-      int rank = MPI::COMM_WORLD.Get_rank();
-      int nparts = MPI::COMM_WORLD.Get_size();
+      int rank=0, nparts=1;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      MPI_Comm_size(MPI_COMM_WORLD, &nparts);
       
       vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
@@ -547,11 +546,10 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetCellData()->AddArray(normal);
     normal->Delete();
     
-    int nparts=1;
+    int rank=0, nparts=1;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      nparts = MPI::COMM_WORLD.Get_size();
-    }
+    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
@@ -563,9 +561,6 @@ template<typename real_t, typename index_t> class VTKTools{
       writer->Delete();
     }else{
 #ifdef HAVE_MPI
-      int rank = MPI::COMM_WORLD.Get_rank();
-      int nparts = MPI::COMM_WORLD.Get_size();
-      
       vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
       writer->SetFileName(filename.c_str());
@@ -625,11 +620,10 @@ template<typename real_t, typename index_t> class VTKTools{
     ug->GetCellData()->AddArray(normal);
     normal->Delete();
 
-    int nparts=1;
+    int rank=0, nparts=1;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      nparts = MPI::COMM_WORLD.Get_size();
-    }
+    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
@@ -641,9 +635,6 @@ template<typename real_t, typename index_t> class VTKTools{
       writer->Delete();
     }else{
 #ifdef HAVE_MPI
-      int rank = MPI::COMM_WORLD.Get_rank();
-      int nparts = MPI::COMM_WORLD.Get_size();
-      
       vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
       writer->SetFileName(filename.c_str());

@@ -70,6 +70,8 @@ VPATH = ./:./src
 .cu.o:
 	@$(NVCC) $(NVCCFLAGS) -c $<
 
+.SECONDARY: $(objs)
+
 default: test
 
 test: $(TEST_GENERIC) $(TEST2D_BIN) $(TEST3D_BIN)

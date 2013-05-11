@@ -65,10 +65,8 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     nprocs = 1;
     rank = 0;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
-      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-    }
+    MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
+    MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
     property = NULL;

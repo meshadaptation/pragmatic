@@ -931,11 +931,9 @@ template<typename real_t, typename index_t> class Mesh{
         max_ele_area = std::max(max_ele_area, larea);
       }
 
-      if(MPI::Is_initialized()){
-        MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-        MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
-        MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
-      }
+      MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
 
       if(rank==0){
         std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
@@ -973,11 +971,10 @@ template<typename real_t, typename index_t> class Mesh{
         min_ele_vol = std::min(min_ele_vol, lvolume);
         max_ele_vol = std::max(max_ele_vol, lvolume);
       }
-      if(MPI::Is_initialized()){
-        MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-        MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
-        MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
-      }
+
+      MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
 
       if(rank==0){
         std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
@@ -1077,14 +1074,12 @@ template<typename real_t, typename index_t> class Mesh{
     NNodes = _NNodes;
 
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      MPI_Comm_size(_mpi_comm, &num_processes);
-      MPI_Comm_rank(_mpi_comm, &rank);
-
-      // Assign the correct MPI data type to MPI_INDEX_T
-      mpi_type_wrapper<index_t> mpi_index_t_wrapper;
-      MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
-    }
+    MPI_Comm_size(_mpi_comm, &num_processes);
+    MPI_Comm_rank(_mpi_comm, &rank);
+    
+    // Assign the correct MPI data type to MPI_INDEX_T
+    mpi_type_wrapper<index_t> mpi_index_t_wrapper;
+    MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
 #endif
 
 #ifdef _OPENMP

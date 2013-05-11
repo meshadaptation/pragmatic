@@ -46,6 +46,8 @@ program test_adapt
   integer :: i
   real :: x, y
 
+  call mpi_init()
+
   call pragmatic_begin("../data/smooth_2d.vtu"//C_NULL_CHAR)
   
   call pragmatic_get_info(NNodes, NElements, NSElements)
@@ -70,4 +72,6 @@ program test_adapt
 
   ! For now just be happy we get this far without dieing.
   print*, "pass"
+
+  call mpi_finalize()
 end program test_adapt

@@ -18,9 +18,9 @@ libversion = 2:0:0
 VPATH = ./:./src
 
 ifeq (@USING_FORTRAN@,yes)
-fortran_objs = pragmatic.lo  pragmatic_Fortran.lo
+fortran_objs = pragmatic.lo  
 endif
-objects = zoltan_tools.lo $(fortran_objs)
+objects = cpragmatic.lo zoltan_tools.lo $(fortran_objs)
 
 .SUFFIXES: .F90 .cpp .c .o .lo
 
@@ -38,7 +38,7 @@ default: lib
 
 lib: $(objects)
 	mkdir -p ../lib
-	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects) -rpath $(libdir) -version-info $(libversion)
+	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects) -rpath $(libdir) -version-info $(libversion) @LIBS@
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif

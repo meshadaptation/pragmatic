@@ -61,10 +61,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     nprocs = 1;
     rank = 0;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
-      MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-    }
+    MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
+    MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
     size_t NElements = _mesh->get_number_elements();

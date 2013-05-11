@@ -7,7 +7,7 @@ import numpy
 
 from dolfin import *
 
-__all__ = ["_libcpragmatic",
+__all__ = ["_libpragmatic",
            "InvalidArgumentException",
            "LibraryException",
            "NotImplementedException",
@@ -26,11 +26,13 @@ class NotImplementedException(Exception):
 class ParameterException(Exception):
   pass
 
-#lib = ctypes.util.find_library("cpragmatic")
-lib = "./libcpragmatic.so"
-if lib is None:
-  raise LibraryException("Unable to find libcpragmatic")
-_libcpragmatic = ctypes.cdll.LoadLibrary(lib)
+try:
+  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so.2.0.0")
+except:
+  raise LibraryException("Failed to load libpragmatic.so")
+
+
+
 
 def mesh_metric(mesh):
   cells = mesh.cells()
@@ -275,7 +277,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
 
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
-  _libcpragmatic.cpragmatic_initialise_2d(ctypes.byref(NNodes), ctypes.byref(NElements), cells.ctypes.data, x.ctypes.data, y.ctypes.data)
+  _libpragmatic.cpragmatic_initialise_2d(ctypes.byref(NNodes), ctypes.byref(NElements), cells.ctypes.data, x.ctypes.data, y.ctypes.data)
 
   nfacets = ctypes.c_int(len(faces))
   facets = numpy.empty(2 * nfacets.value, numpy.intc)
@@ -284,7 +286,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
     facets[i * 2 + 1] = faces[i][1]
   boundary_ids = numpy.zeros(nfacets.value, dtype = numpy.intc)
   info("Setting surface ...")
-  _libcpragmatic.cpragmatic_set_surface(ctypes.byref(nfacets), facets.ctypes.data, boundary_ids.ctypes.data, colinear_ids.ctypes.data)
+  _libpragmatic.cpragmatic_set_surface(ctypes.byref(nfacets), facets.ctypes.data, boundary_ids.ctypes.data, colinear_ids.ctypes.data)
 
   for field, e in zip(fields, eps):
     if not e is None:
@@ -292,36 +294,36 @@ def adapt(fields, eps, gradation = None, bounds = None):
       error = ctypes.c_double(e)
       pnorm = ctypes.c_int(-1)
       info("Adding field %s ..." % field.name())
-      _libcpragmatic.cpragmatic_metric_add_field(field_arr.ctypes.data, ctypes.byref(error), ctypes.byref(pnorm))
+      _libpragmatic.cpragmatic_metric_add_field(field_arr.ctypes.data, ctypes.byref(error), ctypes.byref(pnorm))
 
   if not bounds is None:
     min_len = ctypes.c_double(min(bounds[0], bounds[1]))
     max_len = ctypes.c_double(max(bounds[0], bounds[1]))
     info("Bounding metric...")
-    _libcpragmatic.cpragmatic_apply_metric_bounds(ctypes.byref(min_len), ctypes.byref(max_len))
+    _libpragmatic.cpragmatic_apply_metric_bounds(ctypes.byref(min_len), ctypes.byref(max_len))
 
   if not gradation is None:
     gradation = ctypes.c_double(gradation)
     info("Applying metric gradation ...")
-    _libcpragmatic.cpragmatic_apply_metric_gradation(ctypes.byref(gradation))
+    _libpragmatic.cpragmatic_apply_metric_gradation(ctypes.byref(gradation))
 
   smooth = ctypes.c_int(0)
   info("Entering adapt ...")
-  _libcpragmatic.cpragmatic_adapt(ctypes.byref(smooth))
+  _libpragmatic.cpragmatic_adapt(ctypes.byref(smooth))
 
   n_NNodes = ctypes.c_int()
   n_NElements = ctypes.c_int()
   info("Querying output ...")
-  _libcpragmatic.cpragmatic_query_output(ctypes.byref(n_NNodes), ctypes.byref(n_NElements))
+  _libpragmatic.cpragmatic_query_output(ctypes.byref(n_NNodes), ctypes.byref(n_NElements))
 
   n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
   n_x = numpy.empty(n_NNodes.value)
   n_y = numpy.empty(n_NNodes.value)
   info("Extracting output ...")
-  _libcpragmatic.cpragmatic_get_output_2d(n_enlist.ctypes.data, n_x.ctypes.data, n_y.ctypes.data)
+  _libpragmatic.cpragmatic_get_output_2d(n_enlist.ctypes.data, n_x.ctypes.data, n_y.ctypes.data)
 
   info("Finalising PRAgMaTIc ...")
-  _libcpragmatic.cpragmatic_finalise()
+  _libpragmatic.cpragmatic_finalise()
   info("PRAgMaTIc adapt complete")
 
   n_mesh = Mesh()
