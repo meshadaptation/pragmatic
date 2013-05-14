@@ -157,7 +157,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
       }
       
       // Initialise list of dynamic edges.
-      if(nprocs>1){
+      if(false){
 #pragma omp for schedule(static, 32)
         for(index_t i=0; i<(index_t)_mesh->NNodes;i++){
           colouring->node_colour[i] = -1;
@@ -196,7 +196,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #pragma omp for schedule(dynamic, 32) reduction(+:total_active)
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(marked_edges[i].size()>0){
-            assert(_mesh->node_owner[i]==rank);
+            //assert(_mesh->node_owner[i]==rank);
             active_set.push_back(i);
             ++total_active;
           }
@@ -228,7 +228,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         colouring->multiHashJonesPlassmann();
 
         // Start processing independent sets
-        if(nprocs>1){
+        if(false){
 #ifdef HAVE_MPI
           for(int set_no=0; set_no<colouring->global_nsets; ++set_no){
             std::vector<index_t> interior_vertices;
@@ -633,6 +633,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     index_t i = edge.edge.first;
     index_t j = edge.edge.second;
 
+    if(_mesh->is_halo_node(i)&& _mesh->is_halo_node(j))
+      return;
+
     // Find the two elements sharing this edge
     std::set<index_t> intersection;
     std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
@@ -676,6 +679,9 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
     index_t k = n[n_off];
     index_t l = m[m_off];
+
+    if(_mesh->is_halo_node(k)&& _mesh->is_halo_node(l))
+      return;
 
     int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
     int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};       // new eid1
@@ -735,20 +741,45 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     return;
   }
 
-  void swap_kernel_single_thr(Edge<index_t>& edge){
-    index_t i = edge.edge.first;
-    index_t j = edge.edge.second;
-
+  void swap_kernel_single_thr(index_t i, index_t j, index_t k, index_t l){
     // Find the two elements sharing this edge
     std::set<index_t> intersection;
     std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
         _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
         std::inserter(intersection, intersection.begin()));
 
-    assert(intersection.size() == 2);
+    //assert(intersection.size() == 2);
 
     index_t eid0 = *intersection.begin();
     index_t eid1 = *intersection.rbegin();
+
+    if(intersection.size() > 2){
+      eid0 = -1;
+      for(typename std::set<index_t>::const_iterator ee=intersection.begin(); ee!=intersection.end(); ++ee){
+        const index_t *ele = _mesh->get_element(*ee);
+        for(size_t c=0; c<nloc; ++c)
+          if(ele[c]==k){
+            eid0 = *ee;
+            break;
+          }
+
+        if(eid0 >= 0)
+          break;
+      }
+
+      eid1 = -1;
+      for(typename std::set<index_t>::const_iterator ee=intersection.begin(); ee!=intersection.end(); ++ee){
+        const index_t *ele = _mesh->get_element(*ee);
+        for(size_t c=0; c<nloc; ++c)
+          if(ele[c]==l){
+            eid1 = *ee;
+            break;
+          }
+
+        if(eid1 >= 0)
+          break;
+      }
+    }
 
     const index_t *n = _mesh->get_element(eid0);
     int n_off=-1;
@@ -772,8 +803,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
     assert(n[(n_off+2)%3]==m[(m_off+1)%3] && n[(n_off+1)%3]==m[(m_off+2)%3]);
 
-    index_t k = n[n_off];
-    index_t l = m[m_off];
+    //index_t k = n[n_off];
+    //index_t l = m[m_off];
 
     int n_swap[] = {n[n_off], m[m_off],       n[(n_off+2)%3]}; // new eid0
     int m_swap[] = {n[n_off], n[(n_off+1)%3], m[m_off]};       // new eid1
@@ -815,9 +846,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
       _mesh->_ENList[eid0*nloc+cnt] = n_swap[cnt];
       _mesh->_ENList[eid1*nloc+cnt] = m_swap[cnt];
     }
-
-    edge.edge.first = std::min(k, l);
-    edge.edge.second = std::max(k, l);
 
     return;
   }
@@ -1274,11 +1302,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         }
 
         // Perform swapping for this edge.
-        Edge<index_t> edge(i,j);
-        swap_kernel_single_thr(edge);
-
-        k = edge.edge.first;
-        l = edge.edge.second;
+        swap_kernel_single_thr(i,j,k,l);
 
         Edge<index_t> lateralEdges[] = {
             Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
