@@ -48,7 +48,7 @@ program test_adapt
 
   call mpi_init()
 
-  call pragmatic_begin("../data/smooth_2d.vtu"//C_NULL_CHAR)
+  call pragmatic_init("../data/smooth_2d.vtu"//C_NULL_CHAR)
   
   call pragmatic_get_info(NNodes, NElements, NSElements)
 
@@ -68,7 +68,7 @@ program test_adapt
 
   call pragmatic_dump("../data/ftest_adapt_2d"//C_NULL_CHAR)
 
-  call pragmatic_end()
+  call pragmatic_finalize()
 
   ! For now just be happy we get this far without dieing.
   print*, "pass"

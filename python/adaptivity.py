@@ -58,11 +58,12 @@ from numpy import array
 from dolfin import *
 
 __all__ = ["_libpragmatic",
-           "pragmatic_begin",
+           "pragmatic_init",
            "pragmatic_add_field",
            "pragmatic_set_surface",
            "pragmatic_set_metric",
            "pragmatic_adapt",
+           "pragmatic_finalize",
            "InvalidArgumentException",
            "LibraryException",
            "NotImplementedException",
@@ -86,30 +87,36 @@ try:
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
-__pragmatic_dimension = -1
-
-def pragmatic_begin(NNodes, NElements, enlist, x, y, z=None):
-  """ Initialise pragmatic with mesh to be adapted. pragmatic_end must
-  be called before this can be called again, i.e. cannot adapt
-  multiple meshes at the same time.
+def pragmatic_init(mesh):
+  """ Initialise pragmatic with dolfin mesh to be
+  adapted. pragmatic_finalize must be called before this can be called
+  again, i.e. cannot adapt multiple meshes at the same time.
   """
-  ctype_NNodes = ctypes.c_int(NNodes)
-  ctype_NElements = ctypes.c_int(NElements)
-  if z:
-    _libpragmatic.pragmatic_3d_begin(ctypes.byref(ctype_NNodes),
-                                     ctypes.byref(ctype_NElements),
-                                     enlist.ctypes.data,
-                                     x.ctypes.data,
-                                     y.ctypes.data,
-                                     z.ctypes.data)
-    __pragmatic_dimension = 3
-  else:
-    _libpragmatic.pragmatic_2d_begin(ctypes.byref(ctype_NNodes),
-                                     ctypes.byref(ctype_NElements),
-                                     enlist.ctypes.data,
-                                     x.ctypes.data,
-                                     y.ctypes.data)
-    __pragmatic_dimension = 2
+
+  # Import dolfin mesh into pragmatic
+  enlist_list=[]
+  for c in cells(mesh):
+    for v in vertices(c):
+      enlist_list.append(v.index())
+  enlist = array(enlist_list, dtype=numpy.intc)
+
+  x_list = []
+  y_list = []
+  for v in vertices(mesh):
+    x_list.append(mesh.coordinates()[v.index()][0])
+    y_list.append(mesh.coordinates()[v.index()][1])
+  x = array(x_list, dtype=numpy.float64)
+  y = array(y_list, dtype=numpy.float64)
+
+  NNodes = ctypes.c_int(mesh.num_vertices())
+  NElements = ctypes.c_int(mesh.num_cells())
+
+  _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes),
+                                  ctypes.byref(NElements),
+                                  enlist.ctypes.data,
+                                  x.ctypes.data,
+                                  y.ctypes.data)
+
   return
 
 def pragmatic_add_field(psi, error, pnorm=-1):
@@ -146,7 +153,7 @@ def pragmatic_set_metric(metric):
 def pragmatic_adapt():
   """ Adapt the mesh.
   """
-  _libpragmatic.pragmatic_adapt()
+  # _libpragmatic.pragmatic_adapt()
 
   # Get information about the new size of the mesh.
   NNodes = ctypes.c_int()
@@ -157,33 +164,42 @@ def pragmatic_adapt():
                                    ctypes.byref(NElements), 
                                    ctypes.byref(NSElements))
 
-  # Get out the new mesh.
-  if __pragmatic_dimension == 2:
-    x = numpy.empty(NNodes)
-    y = numpy.empty(NNodes)
-    _libpragmatic.pragmatic_get_coords_2d(x.ctypes.data,
-                                          y.ctypes.data)
+  # Create new dolfin mesh
+  new_mesh = Mesh()
+  editor = MeshEditor()
+  editor.open(new_mesh, 2, 2)
+  editor.init_vertices(NNodes.value)
+  editor.init_cells(NElements.value)
 
-    enlist = numpy.empty(NElements*3)
-    _libpragmatic.pragmatic_get_elements(elements.ctypes.data)
+  x = numpy.empty(NNodes.value, dtype=numpy.float64)
+  y = numpy.empty(NNodes.value, dtype=numpy.float64)
+  _libpragmatic.pragmatic_get_coords_2d(x.ctypes.data,
+                                        y.ctypes.data)
+  for v in vertices(mesh):
+    editor.add_vertex(v.index(), array([x[v.index()], y[v.index()]]))
 
-    facets = numpy.empty(NElements*2)
-    boundary_ids = numpy.empty(NElements)
-    coplanar_ids = numpy.empty(NElements)
-    _libpragmatic.pragmatic_get_surface(facets.ctypes.data,
-                                        boundary_ids.ctypes.data,
-                                        coplanar_ids.ctypes.data)
+  enlist = numpy.empty(NElements.value*3, dtype=numpy.intc)
+  _libpragmatic.pragmatic_get_elements(enlist.ctypes.data)
 
-    return x, y, enlist, facets, boundary_ids, coplanar_ids
-  else:
-    assert(False)
+  for c in cells(mesh):
+    editor.add_cell(c.index(), array(enlist[c.index()*3:(c.index()+1)*3], dtype=numpy.uintp))
 
-  return
+  # Not sure how to incorperate surface information.
+  #facets = numpy.empty(NElements*2)
+  #boundary_ids = numpy.empty(NElements)
+  #coplanar_ids = numpy.empty(NElements)
+  #_libpragmatic.pragmatic_get_surface(facets.ctypes.data,
+  #                                    boundary_ids.ctypes.data,
+  #                                    coplanar_ids.ctypes.data)
+  
+  editor.close()
 
-def pragmatic_end():
+  return new_mesh
+
+def pragmatic_finalize():
   """ Free up pragmatic data structures.
   """
-  _libpragmatic.pragmatic_end()
+  _libpragmatic.pragmatic_finalize()
   return
 
 def mesh_metric(mesh):
@@ -523,44 +539,18 @@ if __name__=="__main__":
   # Create a dolfin mesh
   mesh = UnitSquareMesh(4, 4)
 
-  # Import dolfin mesh into pragmatic
-  enlist_list=[]
-  for c in cells(mesh):
-    for v in vertices(c):
-      enlist_list.append(v.index())
-      print enlist_list
-      enlist = array(enlist_list, dtype=numpy.int)
-
-  x_list = []
-  y_list = []
-  for v in vertices(mesh):
-    x_list.append(mesh.coordinates()[v.index()][0])
-    y_list.append(mesh.coordinates()[v.index()][1])
-  x = array(x_list, dtype=numpy.float64)
-  y = array(y_list, dtype=numpy.float64)
-
   # Initialise pragmatic
-  pragmatic_begin(mesh.num_vertices(), mesh.num_cells(), enlist, x, y)
+  pragmatic_init(mesh)
+
+  new_mesh = pragmatic_adapt()
 
   # End pragmatic
-  pragmatic_end()
+  pragmatic_finalize()
 
-  new_mesh = Mesh()
-  editor = MeshEditor()
-  editor.open(new_mesh, mesh.topology().dim(), mesh.geometry().dim())
-  editor.init_vertices(mesh.num_vertices())
-  editor.init_cells(mesh.num_cells())
-  for c in cells(mesh):
-    editor.add_cell(c.index(), array([v.index() for v in vertices(c)], dtype="uintp"))
-    
-  for v in vertices(mesh):
-    editor.add_vertex(v.index(), mesh.coordinates()[v.index()])
 
-  editor.close()
-
-  #plot(mesh, title="Old mesh")
-  #plot(new_mesh, title="New mesh")
-  #interactive()
+  plot(mesh, title="Old mesh")
+  plot(new_mesh, title="New mesh")
+  interactive()
 
   V = TensorFunctionSpace(mesh, "CG", 1)
   id = interpolate(Expression((("1", "0"), ("0.0", "1.0"))), V)

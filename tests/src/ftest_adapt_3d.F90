@@ -46,7 +46,7 @@ program test_adapt
   integer :: i
   real :: hx, hy, hz
 
-  call pragmatic_begin("../data/box10x10x10.vtu"//C_NULL_CHAR)
+  call pragmatic_init("../data/box10x10x10.vtu"//C_NULL_CHAR)
   
   call pragmatic_get_info(NNodes, NElements, NSElements)
 
@@ -70,7 +70,7 @@ program test_adapt
 
   call pragmatic_dump("../data/ftest_adapt_3d"//C_NULL_CHAR)
 
-  call pragmatic_end()
+  call pragmatic_finalize()
 
   ! For now just be happy we get this far without dieing.
   print*, "pass"

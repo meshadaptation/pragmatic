@@ -52,7 +52,7 @@ static void *_pragmatic_surface=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
-  /** Initialise pragmatic with mesh to be adapted. pragmatic_end must
+  /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
       be called before this can be called again, i.e. cannot adapt
       multiple meshes at the same time.
 
@@ -62,23 +62,17 @@ extern "C" {
       @param [in] x x coordinate array
       @param [in] y y coordinate array
    */
-  void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
-    if(_pragmatic_mesh==NULL ||
-       _pragmatic_surface==NULL ||
-       _pragmatic_metric_field==NULL){
-      throw new std::String("PRAgMaTIc: only one mesh can be adapted at a time");
+  void pragmatic_2d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
+    if(_pragmatic_mesh!=NULL){
+      throw new std::string("PRAgMaTIc: only one mesh can be adapted at a time");
     }
 
-    int *fenlist = new int [(*NElements)*3];
-    for(int i=0;i<(*NElements)*3;i++)
-      fenlist[i] = enlist[i]-1;
-    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, fenlist, x, y);
-    delete [] fenlist;
-
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y);
+    
     _pragmatic_mesh = mesh;
   }
 
-  /** Initialise pragmatic with mesh to be adapted. pragmatic_end must
+  /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
       be called before this can be called again, i.e. cannot adapt
       multiple meshes at the same time.
 
@@ -89,23 +83,19 @@ extern "C" {
       @param [in] y y coordinate array
       @param [in] z z coordinate array
    */
-  void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
+  void pragmatic_3d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
     
-    int *fenlist = new int [(*NElements)*4];
-    for(int i=0;i<(*NElements)*4;i++)
-      fenlist[i] = enlist[i]-1;
-    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, fenlist, x, y, z);
-    delete [] fenlist;
+    Mesh<double, int> *mesh = new Mesh<double, int>(*NNodes, *NElements, enlist, x, y, z);
     
     _pragmatic_mesh = mesh;
   }
 
   /** Initialise pragmatic with name of VTK file to be adapted.
   */
-  void pragmatic_vtk_begin(const char *filename){
+  void pragmatic_vtk_init(const char *filename){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
@@ -184,26 +174,14 @@ extern "C" {
       
       size_t NSElements = *nfacets;
       
-      const size_t snloc = 2;
-      
-      int *fenlist = new int [NSElements*snloc];
-      for(size_t i=0;i<NSElements*snloc;i++)
-        fenlist[i] = facets[i]-1;
-      surface->set_surface(NSElements, fenlist, boundary_ids, coplanar_ids);
-      delete [] fenlist;
+      surface->set_surface(NSElements, facets, boundary_ids, coplanar_ids);
     }else{
       Surface3D<double, int> *surface = new Surface3D<double, int>(*mesh);
       _pragmatic_surface = surface;
       
       size_t NSElements = *nfacets;
       
-      const size_t snloc = 3;
-      
-      int *fenlist = new int [NSElements*snloc];
-      for(size_t i=0;i<NSElements*snloc;i++)
-        fenlist[i] = facets[i]-1;
-      surface->set_surface(NSElements, fenlist, boundary_ids, coplanar_ids);
-      delete [] fenlist;
+      surface->set_surface(NSElements, facets, boundary_ids, coplanar_ids);
     }
   }
 
@@ -331,12 +309,14 @@ extern "C" {
     
     const size_t ndims = mesh->get_number_dimensions();
     
-    if(ndims==2){
-      Surface2D<double, int> *surface = (Surface2D<double, int> *)_pragmatic_surface;
-      *NSElements = surface->get_number_facets();
-    }else{
-      Surface3D<double, int> *surface = (Surface3D<double, int> *)_pragmatic_surface;
-      *NSElements = surface->get_number_facets();
+    if(_pragmatic_surface!=NULL){
+      if(ndims==2){
+        Surface2D<double, int> *surface = (Surface2D<double, int> *)_pragmatic_surface;
+        *NSElements = surface->get_number_facets();
+      }else{
+        Surface3D<double, int> *surface = (Surface3D<double, int> *)_pragmatic_surface;
+        *NSElements = surface->get_number_facets();
+      }
     }
   }
 
@@ -367,8 +347,8 @@ extern "C" {
 
       for(size_t j=0;j<nloc;j++){
         assert(n[j]>=0);
-        elements[i*nloc+j] = n[j]+1;
-      }
+        elements[i*nloc+j] = n[j];
+      } 
     }
   }
 
@@ -387,7 +367,7 @@ extern "C" {
         
         for(size_t j=0;j<snloc;j++){
           assert(n[j]>=0);
-          facets[i*snloc+j] = n[j]+1;
+          facets[i*snloc+j] = n[j];
         }
         
         boundary_ids[i] = surface->get_boundary_id(i);
@@ -404,7 +384,7 @@ extern "C" {
         
         for(size_t j=0;j<snloc;j++){
           assert(n[j]>=0);
-          facets[i*snloc+j] = n[j]+1;
+          facets[i*snloc+j] = n[j];
         }
         
         boundary_ids[i] = surface->get_boundary_id(i);
@@ -437,13 +417,17 @@ extern "C" {
     VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
   }
 
-  void pragmatic_end(){
+  void pragmatic_finalize(){
     if(((Mesh<double, int> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      delete (MetricField2D<double, int> *)_pragmatic_metric_field; 
-      delete (Surface2D<double, int> *)_pragmatic_surface;
+      if(_pragmatic_metric_field!=NULL)
+        delete (MetricField2D<double, int> *)_pragmatic_metric_field; 
+      if(_pragmatic_surface!=NULL)
+        delete (Surface2D<double, int> *)_pragmatic_surface;
     }else{
-      delete (MetricField3D<double, int> *)_pragmatic_metric_field; 
-      delete (Surface3D<double, int> *)_pragmatic_surface;
+      if(_pragmatic_metric_field!=NULL)
+        delete (MetricField3D<double, int> *)_pragmatic_metric_field; 
+      if(_pragmatic_surface!=NULL)
+        delete (Surface3D<double, int> *)_pragmatic_surface;
     }
     _pragmatic_metric_field=NULL;
     _pragmatic_surface=NULL;
