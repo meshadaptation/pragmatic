@@ -1,13 +1,68 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2010 Imperial College London and others.
+#
+# Please see the AUTHORS file in the main source directory for a
+# full list of copyright holders.
+#
+# Gerard Gorman
+# Applied Modelling and Computation Group
+# Department of Earth Science and Engineering
+# Imperial College London
+#
+# g.gorman@imperial.ac.uk
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above
+# copyright notice, this list of conditions and the following
+# disclaimer in the documentation and/or other materials provided
+# with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+# CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+# TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+# TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+# THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+# Many thanks to James Maddinson for the original version of this.
+#
+"""@package PRAgMaTIc
+
+The python interface to PRAgMaTIc (Parallel anisotRopic Adaptive Mesh
+ToolkIt) provides anisotropic mesh adaptivity for meshes of
+simplexes. The target applications are finite element and finite
+volume methods although the it can also be used as a lossy compression
+algorithm for data (e.g. image compression). It takes as its input the
+mesh and a metric tensor field which encodes desired mesh element size
+anisotropically.
+"""
+
 import ctypes
 import ctypes.util
 
 import numpy
+from numpy import array
 
 from dolfin import *
 
 __all__ = ["_libpragmatic",
+           "pragmatic_begin",
+           "pragmatic_add_field",
+           "pragmatic_set_surface",
+           "pragmatic_set_metric",
+           "pragmatic_adapt",
            "InvalidArgumentException",
            "LibraryException",
            "NotImplementedException",
@@ -31,8 +86,105 @@ try:
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
+__pragmatic_dimension = -1
 
+def pragmatic_begin(NNodes, NElements, enlist, x, y, z=None):
+  """ Initialise pragmatic with mesh to be adapted. pragmatic_end must
+  be called before this can be called again, i.e. cannot adapt
+  multiple meshes at the same time.
+  """
+  ctype_NNodes = ctypes.c_int(NNodes)
+  ctype_NElements = ctypes.c_int(NElements)
+  if z:
+    _libpragmatic.pragmatic_3d_begin(ctypes.byref(ctype_NNodes),
+                                     ctypes.byref(ctype_NElements),
+                                     enlist.ctypes.data,
+                                     x.ctypes.data,
+                                     y.ctypes.data,
+                                     z.ctypes.data)
+    __pragmatic_dimension = 3
+  else:
+    _libpragmatic.pragmatic_2d_begin(ctypes.byref(ctype_NNodes),
+                                     ctypes.byref(ctype_NElements),
+                                     enlist.ctypes.data,
+                                     x.ctypes.data,
+                                     y.ctypes.data)
+    __pragmatic_dimension = 2
+  return
 
+def pragmatic_add_field(psi, error, pnorm=-1):
+  """ Add field which should be adapted to. The optional argument
+    pnorm applies the p-norm scaling to the metric, as in Chen, Sun
+    and Xu, Mathematics of Computation, Volume 76, Number 257, January
+    2007. Default (-1) specifies the absolute error measure.
+  """
+  ctype_error = ctypes.c_double(error)
+  ctype_pnorm = ctypes.c_int(pnorm)
+  _libpragmatic.pragmatic_add_field(psi.ctypes.data,
+                                    ctypes.byref(ctype_error),
+                                    ctypes.byref(ctype_pnorm))
+  return
+
+def pragmatic_set_surface(nfacets, facets, boundary_ids, coplanar_ids):
+  """ Set the surface boundary.
+
+  """
+  ctype_nfacets = ctypes.c_int(nfacets)
+  _libpragmatic.pragmatic_set_surface(ctypes.byref(ctype_nfacets),
+                                      facets.ctypes.data,
+                                      boundary_ids.ctypes.data,
+                                      coplanar_ids.ctypes.data)
+  return
+
+def pragmatic_set_metric(metric):
+  """ Set the node centred metric field
+  """
+  _libpragmatic.pragmatic_set_metric(metric.ctypes.data)
+
+  return
+
+def pragmatic_adapt():
+  """ Adapt the mesh.
+  """
+  _libpragmatic.pragmatic_adapt()
+
+  # Get information about the new size of the mesh.
+  NNodes = ctypes.c_int()
+  NElements = ctypes.c_int()
+  NSElements = ctypes.c_int()
+
+  _libpragmatic.pragmatic_get_info(ctypes.byref(NNodes),
+                                   ctypes.byref(NElements), 
+                                   ctypes.byref(NSElements))
+
+  # Get out the new mesh.
+  if __pragmatic_dimension == 2:
+    x = numpy.empty(NNodes)
+    y = numpy.empty(NNodes)
+    _libpragmatic.pragmatic_get_coords_2d(x.ctypes.data,
+                                          y.ctypes.data)
+
+    enlist = numpy.empty(NElements*3)
+    _libpragmatic.pragmatic_get_elements(elements.ctypes.data)
+
+    facets = numpy.empty(NElements*2)
+    boundary_ids = numpy.empty(NElements)
+    coplanar_ids = numpy.empty(NElements)
+    _libpragmatic.pragmatic_get_surface(facets.ctypes.data,
+                                        boundary_ids.ctypes.data,
+                                        coplanar_ids.ctypes.data)
+
+    return x, y, enlist, facets, boundary_ids, coplanar_ids
+  else:
+    assert(False)
+
+  return
+
+def pragmatic_end():
+  """ Free up pragmatic data structures.
+  """
+  _libpragmatic.pragmatic_end()
+  return
 
 def mesh_metric(mesh):
   cells = mesh.cells()
@@ -157,7 +309,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
     cell =  dof.cell_dofs(i)
     for node in cell:
       nodes.add(node)
-  nodes = numpy.array(sorted(list(nodes)), dtype = numpy.intc)
+  nodes = array(sorted(list(nodes)), dtype = numpy.intc)
 
   cells = numpy.empty([mesh.num_cells(), 3], dtype = numpy.intc)
   for i in range(mesh.num_cells()):
@@ -366,3 +518,57 @@ def adapt(fields, eps, gradation = None, bounds = None):
     n_fields.append(n_field)
 
   return n_fields
+
+if __name__=="__main__":
+  # Create a dolfin mesh
+  mesh = UnitSquareMesh(4, 4)
+
+  # Import dolfin mesh into pragmatic
+  enlist_list=[]
+  for c in cells(mesh):
+    for v in vertices(c):
+      enlist_list.append(v.index())
+      print enlist_list
+      enlist = array(enlist_list, dtype=numpy.int)
+
+  x_list = []
+  y_list = []
+  for v in vertices(mesh):
+    x_list.append(mesh.coordinates()[v.index()][0])
+    y_list.append(mesh.coordinates()[v.index()][1])
+  x = array(x_list, dtype=numpy.float64)
+  y = array(y_list, dtype=numpy.float64)
+
+  # Initialise pragmatic
+  pragmatic_begin(mesh.num_vertices(), mesh.num_cells(), enlist, x, y)
+
+  # End pragmatic
+  pragmatic_end()
+
+  new_mesh = Mesh()
+  editor = MeshEditor()
+  editor.open(new_mesh, mesh.topology().dim(), mesh.geometry().dim())
+  editor.init_vertices(mesh.num_vertices())
+  editor.init_cells(mesh.num_cells())
+  for c in cells(mesh):
+    editor.add_cell(c.index(), array([v.index() for v in vertices(c)], dtype="uintp"))
+    
+  for v in vertices(mesh):
+    editor.add_vertex(v.index(), mesh.coordinates()[v.index()])
+
+  editor.close()
+
+  #plot(mesh, title="Old mesh")
+  #plot(new_mesh, title="New mesh")
+  #interactive()
+
+  V = TensorFunctionSpace(mesh, "CG", 1)
+  id = interpolate(Expression((("1", "0"), ("0.0", "1.0"))), V)
+  
+  dofmap = V.dofmap()
+  print "mesh.num_vertices(): ", mesh.num_vertices()
+  vmap = dofmap.vertex_to_dof_map(mesh)
+  dmap = dofmap.dof_to_vertex_map(mesh)
+  print "len(vmap): ", len(vmap)
+  print id.vector().array()[vmap[0:4]]
+  print id(mesh.coordinates()[0])

@@ -52,10 +52,22 @@ static void *_pragmatic_surface=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
+  /** Initialise pragmatic with mesh to be adapted. pragmatic_end must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
+      @param [in] NNodes Number of nodes
+      @param [in] NElements Number of elements
+      @param [in] enlist Element-node list
+      @param [in] x x coordinate array
+      @param [in] y y coordinate array
+   */
   void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
-    assert(_pragmatic_mesh==NULL);
-    assert(_pragmatic_surface==NULL);
-    assert(_pragmatic_metric_field==NULL);
+    if(_pragmatic_mesh==NULL ||
+       _pragmatic_surface==NULL ||
+       _pragmatic_metric_field==NULL){
+      throw new std::String("PRAgMaTIc: only one mesh can be adapted at a time");
+    }
 
     int *fenlist = new int [(*NElements)*3];
     for(int i=0;i<(*NElements)*3;i++)
@@ -66,6 +78,17 @@ extern "C" {
     _pragmatic_mesh = mesh;
   }
 
+  /** Initialise pragmatic with mesh to be adapted. pragmatic_end must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
+      @param [in] NNodes Number of nodes
+      @param [in] NElements Number of elements
+      @param [in] enlist Element-node list
+      @param [in] x x coordinate array
+      @param [in] y y coordinate array
+      @param [in] z z coordinate array
+   */
   void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
@@ -80,6 +103,8 @@ extern "C" {
     _pragmatic_mesh = mesh;
   }
 
+  /** Initialise pragmatic with name of VTK file to be adapted.
+  */
   void pragmatic_vtk_begin(const char *filename){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_surface==NULL);
@@ -101,6 +126,15 @@ extern "C" {
     }
   }
   
+  /** Add field which should be adapted to.
+      
+      @param [in] psi Node centred field variable
+      @param [in] error Error target
+      @param [in] pnorm P-norm value for error measure. Applies the
+      p-norm scaling to the metric, as in Chen, Sun and Xu,
+      Mathematics of Computation, Volume 76, Number 257, January
+      2007. Set to -1 to default to absolute error measure.
+   */
   void pragmatic_add_field(const double *psi, const double *error, int *pnorm){
     assert(_pragmatic_mesh!=NULL);
     assert(_pragmatic_surface!=NULL);
@@ -131,6 +165,13 @@ extern "C" {
     }
   }
 
+  /** Set the surface boundary.
+      
+      @param [in] nfacets
+      @param [in] facets
+      @param [in] boundary_ids
+      @param [in] coplanar_ids
+  */
   void pragmatic_set_surface(const int *nfacets, const int *facets, const int *boundary_ids, const int *coplanar_ids){
     assert(_pragmatic_mesh!=NULL);
     assert(_pragmatic_surface==NULL);
@@ -166,6 +207,10 @@ extern "C" {
     }
   }
 
+  /** Set the node centred metric field
+
+      @param [in] metric Metric tensor field.
+   */
   void pragmatic_set_metric(const double *metric){
     assert(_pragmatic_mesh!=NULL);
     assert(_pragmatic_surface!=NULL);
@@ -196,6 +241,8 @@ extern "C" {
     }
   }
 
+  /** Adapt the mesh.
+   */
   void pragmatic_adapt(){
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
 
@@ -270,6 +317,12 @@ extern "C" {
     }
   }
 
+  /** Get size of mesh.
+      
+      @param [out] NNodes
+      @param [out] NElements
+      @param [out] NSElements
+   */
   void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements){
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
     
