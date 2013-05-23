@@ -133,8 +133,10 @@ template<typename real_t, typename index_t>
     if(_metric==NULL)
       _metric = new MetricTensor2D<float>[_NNodes];
     
-    for(int i=0;i<_NNodes;i++)
-      _metric[i].set_metric(metric+3*i);
+    for(int i=0;i<_NNodes;i++){
+      float M[] = {metric[4*i], metric[4*i+1], metric[4*i+3]};
+      _metric[i].set_metric(M);
+    }
   }
 
   /*! Set the metric tensor field.
@@ -144,8 +146,10 @@ template<typename real_t, typename index_t>
     if(_metric==NULL)
       _metric = new MetricTensor2D<float>[_NNodes];
     
-    for(int i=0;i<_NNodes;i++)
-      _metric[i].set_metric(metric+3*i);
+    for(int i=0;i<_NNodes;i++){
+      float M[] = {(float)metric[4*i], (float)metric[4*i+1], (float)metric[4*i+3]};
+      _metric[i].set_metric(M);
+    }
   }
 
   /*! Set the metric tensor field.
@@ -174,7 +178,7 @@ template<typename real_t, typename index_t>
   void update_mesh(){
     assert(_metric!=NULL);
     
-    size_t pNElements = (size_t) predict_nelements_part();
+    size_t pNElements = (size_t) 3*predict_nelements_part();
 
     if(pNElements > _mesh->NElements){
       // Let's leave a safety margin.

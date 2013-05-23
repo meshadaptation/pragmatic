@@ -52,6 +52,14 @@ static void *_pragmatic_surface=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
+  void pragmatic_dump(const char *filename){
+    VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
+  }
+
+  void pragmatic_dump_debug(){
+    pragmatic_dump("dump\0");
+  }
+
   /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
       be called before this can be called again, i.e. cannot adapt
       multiple meshes at the same time.
@@ -173,8 +181,8 @@ extern "C" {
       _pragmatic_surface = surface;
       
       size_t NSElements = *nfacets;
-      
-      surface->set_surface(NSElements, facets, boundary_ids, coplanar_ids);
+      surface->find_surface(true);
+      // surface->set_surface(NSElements, facets, boundary_ids, coplanar_ids);
     }else{
       Surface3D<double, int> *surface = new Surface3D<double, int>(*mesh);
       _pragmatic_surface = surface;
@@ -222,6 +230,10 @@ extern "C" {
   /** Adapt the mesh.
    */
   void pragmatic_adapt(){
+
+    pragmatic_dump_debug();
+
+
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
 
     const size_t ndims = mesh->get_number_dimensions();
@@ -248,7 +260,7 @@ extern "C" {
         
         refine.refine(L_ref);
         coarsen.coarsen(L_low, L_ref);
-        swapping.swap(0.95);
+        swapping.swap(0.7);
         
         L_max = mesh->maximal_edge_length();
         
@@ -260,7 +272,7 @@ extern "C" {
       mesh->defragment(&active_vertex_map);
       surface->defragment(&active_vertex_map);
       
-      smooth.smooth("optimisation Linf", 10);
+      // smooth.smooth("optimisation Linf", 10);
     }else{
       Surface3D<double, int> *surface = (Surface3D<double, int> *)_pragmatic_surface;
 
@@ -411,10 +423,6 @@ extern "C" {
     }else{
       ((MetricField3D<double, int> *)_pragmatic_metric_field)->get_metric(metric);
     }
-  }
-
-  void pragmatic_dump(const char *filename){
-    VTKTools<double, int>::export_vtu(filename, (Mesh<double, int>*)_pragmatic_mesh);
   }
 
   void pragmatic_finalize(){

@@ -36,8 +36,9 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# Many thanks to James Maddinson for the original version of this.
-#
+# Many thanks to:
+# James Maddinson for the original version of Dolfin interface.
+# Davide Longoni for p-norm function.
 """@package PRAgMaTIc
 
 The python interface to PRAgMaTIc (Parallel anisotRopic Adaptive Mesh
@@ -53,17 +54,11 @@ import ctypes
 import ctypes.util
 
 import numpy
-from numpy import array
+from numpy import array, zeros, matrix, linalg
 
 from dolfin import *
 
 __all__ = ["_libpragmatic",
-           "pragmatic_init",
-           "pragmatic_add_field",
-           "pragmatic_set_surface",
-           "pragmatic_set_metric",
-           "pragmatic_adapt",
-           "pragmatic_finalize",
            "InvalidArgumentException",
            "LibraryException",
            "NotImplementedException",
@@ -86,121 +81,6 @@ try:
   _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
-
-def pragmatic_init(mesh):
-  """ Initialise pragmatic with dolfin mesh to be
-  adapted. pragmatic_finalize must be called before this can be called
-  again, i.e. cannot adapt multiple meshes at the same time.
-  """
-
-  # Import dolfin mesh into pragmatic
-  enlist_list=[]
-  for c in cells(mesh):
-    for v in vertices(c):
-      enlist_list.append(v.index())
-  enlist = array(enlist_list, dtype=numpy.intc)
-
-  x_list = []
-  y_list = []
-  for v in vertices(mesh):
-    x_list.append(mesh.coordinates()[v.index()][0])
-    y_list.append(mesh.coordinates()[v.index()][1])
-  x = array(x_list, dtype=numpy.float64)
-  y = array(y_list, dtype=numpy.float64)
-
-  NNodes = ctypes.c_int(mesh.num_vertices())
-  NElements = ctypes.c_int(mesh.num_cells())
-
-  _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes),
-                                  ctypes.byref(NElements),
-                                  enlist.ctypes.data,
-                                  x.ctypes.data,
-                                  y.ctypes.data)
-
-  return
-
-def pragmatic_add_field(psi, error, pnorm=-1):
-  """ Add field which should be adapted to. The optional argument
-    pnorm applies the p-norm scaling to the metric, as in Chen, Sun
-    and Xu, Mathematics of Computation, Volume 76, Number 257, January
-    2007. Default (-1) specifies the absolute error measure.
-  """
-  ctype_error = ctypes.c_double(error)
-  ctype_pnorm = ctypes.c_int(pnorm)
-  _libpragmatic.pragmatic_add_field(psi.ctypes.data,
-                                    ctypes.byref(ctype_error),
-                                    ctypes.byref(ctype_pnorm))
-  return
-
-def pragmatic_set_surface(nfacets, facets, boundary_ids, coplanar_ids):
-  """ Set the surface boundary.
-
-  """
-  ctype_nfacets = ctypes.c_int(nfacets)
-  _libpragmatic.pragmatic_set_surface(ctypes.byref(ctype_nfacets),
-                                      facets.ctypes.data,
-                                      boundary_ids.ctypes.data,
-                                      coplanar_ids.ctypes.data)
-  return
-
-def pragmatic_set_metric(metric):
-  """ Set the node centred metric field
-  """
-  _libpragmatic.pragmatic_set_metric(metric.ctypes.data)
-
-  return
-
-def pragmatic_adapt():
-  """ Adapt the mesh.
-  """
-  # _libpragmatic.pragmatic_adapt()
-
-  # Get information about the new size of the mesh.
-  NNodes = ctypes.c_int()
-  NElements = ctypes.c_int()
-  NSElements = ctypes.c_int()
-
-  _libpragmatic.pragmatic_get_info(ctypes.byref(NNodes),
-                                   ctypes.byref(NElements), 
-                                   ctypes.byref(NSElements))
-
-  # Create new dolfin mesh
-  new_mesh = Mesh()
-  editor = MeshEditor()
-  editor.open(new_mesh, 2, 2)
-  editor.init_vertices(NNodes.value)
-  editor.init_cells(NElements.value)
-
-  x = numpy.empty(NNodes.value, dtype=numpy.float64)
-  y = numpy.empty(NNodes.value, dtype=numpy.float64)
-  _libpragmatic.pragmatic_get_coords_2d(x.ctypes.data,
-                                        y.ctypes.data)
-  for v in vertices(mesh):
-    editor.add_vertex(v.index(), array([x[v.index()], y[v.index()]]))
-
-  enlist = numpy.empty(NElements.value*3, dtype=numpy.intc)
-  _libpragmatic.pragmatic_get_elements(enlist.ctypes.data)
-
-  for c in cells(mesh):
-    editor.add_cell(c.index(), array(enlist[c.index()*3:(c.index()+1)*3], dtype=numpy.uintp))
-
-  # Not sure how to incorperate surface information.
-  #facets = numpy.empty(NElements*2)
-  #boundary_ids = numpy.empty(NElements)
-  #coplanar_ids = numpy.empty(NElements)
-  #_libpragmatic.pragmatic_get_surface(facets.ctypes.data,
-  #                                    boundary_ids.ctypes.data,
-  #                                    coplanar_ids.ctypes.data)
-  
-  editor.close()
-
-  return new_mesh
-
-def pragmatic_finalize():
-  """ Free up pragmatic data structures.
-  """
-  _libpragmatic.pragmatic_finalize()
-  return
 
 def mesh_metric(mesh):
   cells = mesh.cells()
@@ -272,53 +152,26 @@ def edge_lengths(M):
 
   return e
 
-def adapt(fields, eps, gradation = None, bounds = None):
-  if isinstance(fields, Function):
-    return adapt([fields], [eps], gradation = gradation, bounds = bounds)[0]
-
+def adapt(metric, fields=[]):
   if not isinstance(fields, list):
-    raise InvalidArgumentException("fields must be a Function or a list of Function s")
-  if not isinstance(eps, list):
-    raise InvalidArgumentException("eps must be a non-negative float or a list of non-negative floats or None")
-  elif not len(eps) == len(fields):
-    raise InvalidArgumentException("Invalid length for eps")
-  for field in fields:
-    if not isinstance(field, Function):
-      raise InvalidArgumentException("fields must be a Function or a list of Function s")
-  neps = 0
-  for e in eps:
-    if not e is None:
-      if not isinstance(e, float) or e <= 0.0:
-        raise InvalidArgumentException("eps must be a non-negative float a list of non-negative floats or None")
-      neps += 1
-  if neps == 0:
-    raise InvalidArgumentException("eps must contain at least one non-negative float")
+    return adapt(metric, [fields])
 
-  if not gradation is None:
-    if not isinstance(gradation, float) or gradation <= 0.0:
-      raise InvalidArgumentException("gradation must be a non-negative float")
-  if not bounds is None:
-    if not isinstance(bounds, (list, tuple)) or not len(bounds) == 2 \
-      or not isinstance(bounds[0], float) or not isinstance(bounds[1], float) \
-      or bounds[0] <= 0.0 or bounds[1] <= 0.0:
-      raise InvalidArgumentException("bounds must be a list of 2 non-negative floats")
+  mesh = metric.function_space().mesh()
+  space = FunctionSpace(mesh, "CG", 1)
+  element = space.ufl_element()
 
-  if len(fields) == 0:
-    raise InvalidArgumentException("Require at least one field")
-  space = fields[0].function_space()
-  mesh = space.mesh()
-  e = space.ufl_element()
+  # Sanity checks
   if not mesh.geometry().dim() == 2 \
-    or not e.cell().geometric_dimension() == 2 or not e.cell().topological_dimension() == 2 \
-    or not e.family() == "Lagrange" or not e.degree() == 1:
-    raise InvalidArgumentException("Require 2D P1 function spaces")
-  for field in fields[1:]:
-    e = space.ufl_element()
-    if not mesh.geometry().dim() == 2 \
-      or not e.cell().geometric_dimension() == 2 or not e.cell().topological_dimension() == 2 \
-      or not e.family() == "Lagrange" or not e.degree() == 1:
-      raise InvalidArgumentException("Require 2D P1 function spaces")
+        or not element.cell().geometric_dimension() == 2 \
+        or not element.cell().topological_dimension() == 2 \
+        or not element.family() == "Lagrange" \
+        or not element.degree() == 1:
+    raise InvalidArgumentException("Require 2D P1 function space for metric tensor field")
 
+  # Create an ordered array of all the node id's in the mesh.  It is
+  # not clear to me that we should be going to all this effort. Will
+  # we only be adapting parts of the mesh? This would cause problems
+  # on the boundary etc. Ask James Maddinson about his reasoning here.
   dof = space.dofmap()
   nodes = set()
   for i in range(mesh.num_cells()):
@@ -327,14 +180,17 @@ def adapt(fields, eps, gradation = None, bounds = None):
       nodes.add(node)
   nodes = array(sorted(list(nodes)), dtype = numpy.intc)
 
+  # Create the list of cells
   cells = numpy.empty([mesh.num_cells(), 3], dtype = numpy.intc)
   for i in range(mesh.num_cells()):
     cells[i, :] = dof.cell_dofs(i)
 
+  # Gather x and y coordinates
   x = interpolate(Expression("x[0]"), space).vector().gather(nodes)
   y = interpolate(Expression("x[1]"), space).vector().gather(nodes)
-  n = x.shape[0]
 
+  # Create facets and associated data. This is quite slow and a real
+  # pain. Need to think harder.
   facets = []
   i = 0
   for cell in cells:
@@ -369,6 +225,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
     faces.append(facets[-1])
   del(facets)
 
+  n = x.shape[0]
   nf_list = numpy.empty([n, 2], dtype = numpy.int)
   nf_list[:] = -1
   for i, face in enumerate(faces):
@@ -440,58 +297,63 @@ def adapt(fields, eps, gradation = None, bounds = None):
       nids += 1
   info("Found %i co-linear edges" % nids)
 
-  NNodes = ctypes.c_int(n)
-  NElements = ctypes.c_int(cells.shape[0])
-
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
-  _libpragmatic.cpragmatic_initialise_2d(ctypes.byref(NNodes), ctypes.byref(NElements), cells.ctypes.data, x.ctypes.data, y.ctypes.data)
+  NNodes = ctypes.c_int(x.shape[0])
+  NElements = ctypes.c_int(cells.shape[0])
+  _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
+                                  ctypes.byref(NElements), 
+                                  cells.ctypes.data, 
+                                  x.ctypes.data, 
+                                  y.ctypes.data)
 
+  info("Setting surface ...")
   nfacets = ctypes.c_int(len(faces))
   facets = numpy.empty(2 * nfacets.value, numpy.intc)
   for i in range(nfacets.value):
     facets[i * 2    ] = faces[i][0]
     facets[i * 2 + 1] = faces[i][1]
   boundary_ids = numpy.zeros(nfacets.value, dtype = numpy.intc)
-  info("Setting surface ...")
-  _libpragmatic.cpragmatic_set_surface(ctypes.byref(nfacets), facets.ctypes.data, boundary_ids.ctypes.data, colinear_ids.ctypes.data)
+  _libpragmatic.pragmatic_set_surface(ctypes.byref(nfacets),
+                                      facets.ctypes.data,
+                                      boundary_ids.ctypes.data, 
+                                      colinear_ids.ctypes.data)
 
-  for field, e in zip(fields, eps):
-    if not e is None:
-      field_arr = field.vector().array()
-      error = ctypes.c_double(e)
-      pnorm = ctypes.c_int(-1)
-      info("Adding field %s ..." % field.name())
-      _libpragmatic.cpragmatic_metric_add_field(field_arr.ctypes.data, ctypes.byref(error), ctypes.byref(pnorm))
+  info("Setting metric tensor field ...")
+  # Dolfin stores the tensor as:
+  # |dyy dxy|
+  # |dyx dxx|
+  metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
+  for i in range(0, metric.vector().array().size, 4):
+    metric_arr[i  ] = metric.vector().array()[i+3]
+    metric_arr[i+1] = metric.vector().array()[i+2]
+    metric_arr[i+2] = metric.vector().array()[i+1]
+    metric_arr[i+3] = metric.vector().array()[i]
 
-  if not bounds is None:
-    min_len = ctypes.c_double(min(bounds[0], bounds[1]))
-    max_len = ctypes.c_double(max(bounds[0], bounds[1]))
-    info("Bounding metric...")
-    _libpragmatic.cpragmatic_apply_metric_bounds(ctypes.byref(min_len), ctypes.byref(max_len))
+  _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data)
 
-  if not gradation is None:
-    gradation = ctypes.c_double(gradation)
-    info("Applying metric gradation ...")
-    _libpragmatic.cpragmatic_apply_metric_gradation(ctypes.byref(gradation))
-
-  smooth = ctypes.c_int(0)
   info("Entering adapt ...")
-  _libpragmatic.cpragmatic_adapt(ctypes.byref(smooth))
+  _libpragmatic.pragmatic_adapt()
 
   n_NNodes = ctypes.c_int()
   n_NElements = ctypes.c_int()
+  n_NSElements = ctypes.c_int()
+
   info("Querying output ...")
-  _libpragmatic.cpragmatic_query_output(ctypes.byref(n_NNodes), ctypes.byref(n_NElements))
+  _libpragmatic.pragmatic_get_info(ctypes.byref(n_NNodes), 
+                                   ctypes.byref(n_NElements),
+                                   ctypes.byref(n_NSElements))
 
   n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
   n_x = numpy.empty(n_NNodes.value)
   n_y = numpy.empty(n_NNodes.value)
   info("Extracting output ...")
-  _libpragmatic.cpragmatic_get_output_2d(n_enlist.ctypes.data, n_x.ctypes.data, n_y.ctypes.data)
+  _libpragmatic.pragmatic_get_coords_2d(n_x.ctypes.data,
+                                        n_y.ctypes.data)
+  _libpragmatic.pragmatic_get_elements(n_enlist.ctypes.data)
 
   info("Finalising PRAgMaTIc ...")
-  _libpragmatic.cpragmatic_finalise()
+  _libpragmatic.pragmatic_finalize()
   info("PRAgMaTIc adapt complete")
 
   n_mesh = Mesh()
@@ -505,6 +367,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
     ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
   ed.close()
 
+  # Sanity check to be deleted or made optional
   n_space = FunctionSpace(n_mesh, "CG", 1)
 
   area = assemble(Constant(1.0) * dx, mesh = mesh)
@@ -514,7 +377,7 @@ def adapt(fields, eps, gradation = None, bounds = None):
   info("Target mesh area: %.17e" % n_area)
   info("Change          : %.17e" % err)
   info("Relative change : %.17e" % (err / area))
-  assert(err < 2.0e-13 * area)
+  # assert(err < 2.0e-13 * area)
 
   n_fields = []
   for field in fields:
@@ -530,35 +393,84 @@ def adapt(fields, eps, gradation = None, bounds = None):
       coord[1] = ny[i]
       field.eval(val, coord)
       n_field_arr[i] = val
-    n_field.vector().set_local(n_field_arr);  n_field.vector().apply("insert")
+    n_field.vector().set_local(n_field_arr)
+    n_field.vector().apply("insert")
     n_fields.append(n_field)
 
   return n_fields
 
-if __name__=="__main__":
-  # Create a dolfin mesh
-  mesh = UnitSquareMesh(4, 4)
+# p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
+# Computation, Volume 76, Number 257, January 2007, pp. 179-204.
+def metric_pnorm(f, mesh, eta, sigma=1.0e-6, p=2):
+  # Sanity checks
+  n = mesh.geometry().dim()
+  if not n == 2:
+    raise InvalidArgumentException("Currently only 2D is supported")
 
-  # Initialise pragmatic
-  pragmatic_init(mesh)
+  element = f.function_space().ufl_element()
+  if not element.family() == "Lagrange" \
+        or not element.degree() == 2:
+    raise InvalidArgumentException("Require Lagrange P2 function spaces")
 
-  new_mesh = pragmatic_adapt()
-
-  # End pragmatic
-  pragmatic_finalize()
-
-
-  plot(mesh, title="Old mesh")
-  plot(new_mesh, title="New mesh")
-  interactive()
-
-  V = TensorFunctionSpace(mesh, "CG", 1)
-  id = interpolate(Expression((("1", "0"), ("0.0", "1.0"))), V)
+  gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
+  H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
   
-  dofmap = V.dofmap()
-  print "mesh.num_vertices(): ", mesh.num_vertices()
-  vmap = dofmap.vertex_to_dof_map(mesh)
-  dmap = dofmap.dof_to_vertex_map(mesh)
-  print "len(vmap): ", len(vmap)
-  print id.vector().array()[vmap[0:4]]
-  print id(mesh.coordinates()[0])
+  # Make H positive definite and calculate the p-norm.
+  space = H.function_space()
+  cbig=numpy.zeros((H.vector().array()).size)
+
+  for i in range(mesh.num_cells()):
+    indold = space.dofmap().cell_dofs(i)
+    ind = numpy.array(indold)
+    
+    # Enforce symmetry
+    ind[1]=ind[2]
+    
+    v,w=linalg.eig(numpy.matrix(H.vector().gather(ind).reshape(2,2)))
+    
+    diags=numpy.diag(abs(v))
+
+    temph=w*diags*w.T # + sigma*numpy.identity(2)
+
+    # Deal with zero eigenvalues.
+    if linalg.det(temph) == 0:
+      if v[0]<v[1]:
+        v[0] = 0.1*v[1]
+      elif v[0]>v[1]:
+        v[1] = 0.1*v[0]
+      else:
+        v = sigma
+      diags=numpy.diag(v)
+      temph=w*diags*w.T    
+    temph=1./eta*(linalg.det(temph)**(-1.0/(2*p + n)))*temph
+    # HACK!
+    # temph[1,1] = 1.0
+
+    cbig[indold]=temph.reshape(1,4)
+  H.vector().set_local(cbig)
+
+  Mp = project(H, TensorFunctionSpace(mesh, "CG", 1))
+  return Mp
+
+if __name__=="__main__":
+  from mpi4py import MPI
+  import sys
+
+  comm = MPI.COMM_WORLD
+
+  mesh = UnitSquareMesh(50, 50)
+  V = FunctionSpace(mesh, "CG", 2)
+  # f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
+  f = interpolate(Expression("pow(x[0]-0.5, 2)+pow(x[1]-0.5, 2)"), V)
+  # f = interpolate(Expression("pow(x[0]-0.5, 2)"), V)
+  Mp = metric_pnorm(f, mesh, 0.001)
+
+  new_f = adapt(Mp, f)
+
+  # plot(Mp[0,0])
+  # from IPython import embed
+  # embed()
+
+  plot(new_f[0], title="adapted mesh")
+  plot(new_f[0].function_space().mesh(), title="adapted mesh")
+  interactive()
