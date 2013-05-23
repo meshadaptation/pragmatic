@@ -202,8 +202,11 @@ template<typename real_t, typename index_t> class Refine2D{
 
         typename std::vector<index_t>::iterator it;
         it = std::find(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end(), secondid);
+        assert(it!=_mesh->NNList[firstid].end());
         *it = vid;
+
         it = std::find(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end(), firstid);
+        assert(it!=_mesh->NNList[firstid].end());
         *it = vid;
 
         // Check if surface edge
