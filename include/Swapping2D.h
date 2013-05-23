@@ -531,6 +531,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #endif
         }else{
           for(int set_no=0; set_no<colouring->nsets; ++set_no){
+            if(colouring->ind_set_size[set_no]==0)
+              continue;
             do{
               active_set.clear();
 

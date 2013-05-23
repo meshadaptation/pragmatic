@@ -518,6 +518,8 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
 #endif
         }else{
           for(int set_no=0; set_no<colouring->nsets; ++set_no){
+            if(colouring->ind_set_size[set_no]==0)
+              continue;
 #pragma omp for schedule(dynamic, 16)
             for(size_t i=0; i<colouring->ind_set_size[set_no]; ++i){
               index_t rm_vertex = colouring->independent_sets[set_no][i];
