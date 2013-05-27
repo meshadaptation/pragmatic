@@ -230,10 +230,6 @@ extern "C" {
   /** Adapt the mesh.
    */
   void pragmatic_adapt(){
-
-    pragmatic_dump_debug();
-
-
     Mesh<double, int> *mesh = (Mesh<double, int> *)_pragmatic_mesh;
 
     const size_t ndims = mesh->get_number_dimensions();
@@ -250,18 +246,18 @@ extern "C" {
       Refine2D<double, int> refine(*mesh, *surface);
       Swapping2D<double, int> swapping(*mesh, *surface);
       
-      coarsen.coarsen(L_low, L_up);
-      
       double L_max = mesh->maximal_edge_length();
       
       double alpha = sqrt(2.0)/2.0;
       for(size_t i=0;i<10;i++){
         double L_ref = std::max(alpha*L_max, L_up);
-        
-        refine.refine(L_ref);
+      
         coarsen.coarsen(L_low, L_ref);
         swapping.swap(0.7);
-        
+        refine.refine(L_ref);
+  
+        smooth.smooth("optimisation Linf", 1);
+
         L_max = mesh->maximal_edge_length();
         
         if((L_max-L_up)<0.01)
@@ -272,7 +268,7 @@ extern "C" {
       mesh->defragment(&active_vertex_map);
       surface->defragment(&active_vertex_map);
       
-      // smooth.smooth("optimisation Linf", 10);
+      smooth.smooth("optimisation Linf", 10);
     }else{
       Surface3D<double, int> *surface = (Surface3D<double, int> *)_pragmatic_surface;
 
