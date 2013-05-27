@@ -111,13 +111,8 @@ def mesh_metric(mesh):
   space = TensorFunctionSpace(mesh, "DG", 0)
   M = interpolate(CellExpression(), space)
 
-  space = TensorFunctionSpace(mesh, "CG", 1)
-  M2 = Function(space)
+  M2 = project(M, TensorFunctionSpace(mesh, "CG", 1), solver_type="lu")
   M2.rename("mesh_metric", "mesh_metric")
-
-  test, trial = TestFunction(space), TrialFunction(space)
-  solver = LUSolver()
-  solver.solve(assemble(inner(test, trial) * dx), M2.vector(), assemble(inner(test, M) * dx))
 
   return M2
 
@@ -397,7 +392,10 @@ def adapt(metric, fields=[]):
     n_field.vector().apply("insert")
     n_fields.append(n_field)
 
-  return n_fields
+  if len(n_fields) > 0:
+    return n_fields
+  else:
+    return n_mesh
 
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
@@ -460,17 +458,21 @@ if __name__=="__main__":
 
   mesh = UnitSquareMesh(50, 50)
   V = FunctionSpace(mesh, "CG", 2)
-  # f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
-  f = interpolate(Expression("pow(x[0]-0.5, 2)+pow(x[1]-0.5, 2)"), V)
-  # f = interpolate(Expression("pow(x[0]-0.5, 2)"), V)
-  Mp = metric_pnorm(f, mesh, 0.001)
+  f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
+  #f = interpolate(Expression("pow(x[0]-0.5, 2)+pow(x[1]-0.5, 2)"), V)
+  #f = interpolate(Expression("pow(x[0]-0.5, 2)"), V)
 
-  new_f = adapt(Mp, f)
+  #Mp = metric_pnorm(f, mesh, 0.001)
+  Mp = refine_metric(mesh_metric(mesh), 0.5)
+
+  new_mesh = adapt(Mp)
 
   # plot(Mp[0,0])
   # from IPython import embed
   # embed()
 
-  plot(new_f[0], title="adapted mesh")
-  plot(new_f[0].function_space().mesh(), title="adapted mesh")
+  # plot(new_f[0], title="adapted mesh")
+  # plot(new_f[0].function_space().mesh(), title="adapted mesh")
+  plot(mesh, title="old mesh")
+  plot(new_mesh, title="adapted mesh")
   interactive()
