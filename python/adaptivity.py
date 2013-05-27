@@ -108,7 +108,7 @@ def mesh_metric(mesh):
     def value_shape(self):
       return (2, 2)
 
-  space = TensorFunctionSpace(mesh, "DG", 0)
+  space = TensorFunctionSpace(mesh, "DG", 0, symmetry=True)
   M = interpolate(CellExpression(), space)
 
   M2 = project(M, TensorFunctionSpace(mesh, "CG", 1), solver_type="lu")
@@ -147,10 +147,7 @@ def edge_lengths(M):
 
   return e
 
-def adapt(metric, fields=[]):
-  if not isinstance(fields, list):
-    return adapt(metric, [fields])
-
+def adapt(metric, debug=False):
   mesh = metric.function_space().mesh()
   space = FunctionSpace(mesh, "CG", 1)
   element = space.ufl_element()
@@ -322,8 +319,11 @@ def adapt(metric, fields=[]):
   for i in range(0, metric.vector().array().size, 4):
     metric_arr[i  ] = metric.vector().array()[i+3]
     metric_arr[i+1] = metric.vector().array()[i+2]
-    metric_arr[i+2] = metric.vector().array()[i+1]
+    metric_arr[i+2] = metric.vector().array()[i+2]
     metric_arr[i+3] = metric.vector().array()[i]
+
+  #from IPython import embed
+  #embed()
 
   _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data)
 
@@ -362,18 +362,26 @@ def adapt(metric, fields=[]):
     ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
   ed.close()
 
-  # Sanity check to be deleted or made optional
+  if debug:
+    # Sanity check to be deleted or made optional
+    n_space = FunctionSpace(n_mesh, "CG", 1)
+
+    area = assemble(Constant(1.0) * dx, mesh = mesh)
+    n_area = assemble(Constant(1.0) * dx, mesh = n_mesh)
+    err = abs(area - n_area)
+    info("Donor mesh area : %.17e" % area)
+    info("Target mesh area: %.17e" % n_area)
+    info("Change          : %.17e" % err)
+    info("Relative change : %.17e" % (err / area))
+    assert(err < 2.0e-13 * area)
+
+  return n_mesh
+
+def consistent_interpolation(mesh, fields=[]):
+  if not isinstance(fields, list):
+    return consistent_interpolation(mesh, [fields])
+
   n_space = FunctionSpace(n_mesh, "CG", 1)
-
-  area = assemble(Constant(1.0) * dx, mesh = mesh)
-  n_area = assemble(Constant(1.0) * dx, mesh = n_mesh)
-  err = abs(area - n_area)
-  info("Donor mesh area : %.17e" % area)
-  info("Target mesh area: %.17e" % n_area)
-  info("Change          : %.17e" % err)
-  info("Relative change : %.17e" % (err / area))
-  # assert(err < 2.0e-13 * area)
-
   n_fields = []
   for field in fields:
     n_field = Function(n_space)
@@ -399,16 +407,21 @@ def adapt(metric, fields=[]):
 
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
-def metric_pnorm(f, mesh, eta, sigma=1.0e-6, p=2):
+def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
   # Sanity checks
+  if max_edge_ratio < 1.0:
+    raise InvalidArgumentException("The maximum edge ratio must be greater greater or equal to 1")
+  else:
+    max_edge_ratio = max_edge_ratio**2 # ie we are going to be looking at eigenvalues
+
   n = mesh.geometry().dim()
   if not n == 2:
     raise InvalidArgumentException("Currently only 2D is supported")
 
   element = f.function_space().ufl_element()
-  if not element.family() == "Lagrange" \
-        or not element.degree() == 2:
-    raise InvalidArgumentException("Require Lagrange P2 function spaces")
+  #if not element.family() == "Lagrange" \
+  #      or not element.degree() == 2:
+  #  raise InvalidArgumentException("Require Lagrange P2 function spaces")
 
   gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
   H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
@@ -416,6 +429,13 @@ def metric_pnorm(f, mesh, eta, sigma=1.0e-6, p=2):
   # Make H positive definite and calculate the p-norm.
   space = H.function_space()
   cbig=numpy.zeros((H.vector().array()).size)
+
+  exponent1d = -1.0/(2*p + 1)
+  exponent2d = -1.0/(2*p + 2)
+
+  min_eigenvalue = 0.0
+  if max_edge_length is not None:
+    min_eigenvalue = 1.0/max_edge_length**2
 
   for i in range(mesh.num_cells()):
     indold = space.dofmap().cell_dofs(i)
@@ -425,29 +445,41 @@ def metric_pnorm(f, mesh, eta, sigma=1.0e-6, p=2):
     ind[1]=ind[2]
     
     v,w=linalg.eig(numpy.matrix(H.vector().gather(ind).reshape(2,2)))
-    
-    diags=numpy.diag(abs(v))
+    v[0] = max(abs(v[0]), min_eigenvalue)
+    v[1] = max(abs(v[1]), min_eigenvalue)
+    if v[0] < v[1]:
+      v[0] = max(v[0], v[1]/max_edge_ratio)
+    else:
+      v[1] = max(v[1], v[0]/max_edge_ratio)
 
-    temph=w*diags*w.T # + sigma*numpy.identity(2)
+    diags=numpy.diag(v)
+
+    temph=w*diags*w.T
 
     # Deal with zero eigenvalues.
-    if linalg.det(temph) == 0:
-      if v[0]<v[1]:
-        v[0] = 0.1*v[1]
-      elif v[0]>v[1]:
-        v[1] = 0.1*v[0]
-      else:
-        v = sigma
-      diags=numpy.diag(v)
-      temph=w*diags*w.T    
-    temph=1./eta*(linalg.det(temph)**(-1.0/(2*p + n)))*temph
-    # HACK!
-    # temph[1,1] = 1.0
+    det = linalg.det(temph)
+    exponent = exponent2d
+    if v[0] == 0 and v[1] == 0:
+      raise FloatingPointError("All eigenvalues are zero")
+    elif v[0] == 0:
+      det = v[1]
+      exponent = exponent1d
+    elif v[1] == 0:
+      det = v[0]
+      exponent = exponent1d
+      
+    temph=1./eta*det**exponent*temph
 
     cbig[indold]=temph.reshape(1,4)
+
   H.vector().set_local(cbig)
 
+  #Mp = project(H, TensorFunctionSpace(mesh, "CG", 1, symmetry=True))
   Mp = project(H, TensorFunctionSpace(mesh, "CG", 1))
+
+  File("H.pvd") << H
+  File("Mp.pvd") << Mp
+
   return Mp
 
 if __name__=="__main__":
@@ -456,23 +488,43 @@ if __name__=="__main__":
 
   comm = MPI.COMM_WORLD
 
-  mesh = UnitSquareMesh(50, 50)
+  # mesh = Mesh("greenland.xml.gz")
+  mesh = UnitSquareMesh(100, 100)
+
   V = FunctionSpace(mesh, "CG", 2)
   f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
-  #f = interpolate(Expression("pow(x[0]-0.5, 2)+pow(x[1]-0.5, 2)"), V)
-  #f = interpolate(Expression("pow(x[0]-0.5, 2)"), V)
 
-  #Mp = metric_pnorm(f, mesh, 0.001)
+  Mp = metric_pnorm(f, mesh, 0.01, max_edge_ratio=5)
+  mesh = adapt(Mp)
+  
   Mp = refine_metric(mesh_metric(mesh), 0.5)
+  new_mesh1 = adapt(Mp)
 
-  new_mesh = adapt(Mp)
+  Mp = refine_metric(mesh_metric(new_mesh1), 0.5)
+  new_mesh2 = adapt(Mp)
+  
+  Mp = refine_metric(mesh_metric(new_mesh2), 0.5)
+  new_mesh3 = adapt(Mp)
 
+  Mp = refine_metric(mesh_metric(new_mesh3), 0.5)
+  new_mesh4 = adapt(Mp)
+
+  Mp = refine_metric(mesh_metric(new_mesh4), 0.5)
+  new_mesh5 = adapt(Mp)
+
+  Mp = refine_metric(mesh_metric(new_mesh5), 0.5)
+  new_mesh6 = adapt(Mp)
+  
   # plot(Mp[0,0])
   # from IPython import embed
   # embed()
 
-  # plot(new_f[0], title="adapted mesh")
-  # plot(new_f[0].function_space().mesh(), title="adapted mesh")
-  plot(mesh, title="old mesh")
-  plot(new_mesh, title="adapted mesh")
+  plot(mesh, title="initial mesh")
+  plot(new_mesh1, title="coarsen 1")
+  plot(new_mesh2, title="coarsen 2")
+  plot(new_mesh3, title="coarsen 3")
+  plot(new_mesh4, title="coarsen 4")
+  plot(new_mesh5, title="coarsen 5")
+  plot(new_mesh6, title="coarsen 6")
+  
   interactive()
