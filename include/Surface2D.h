@@ -215,19 +215,14 @@ template<typename real_t, typename index_t>
       return false;
     }
 
-    std::set<int> incident_plane_target;
-    typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(nid_target);
-    assert(jSNEList!=SNEList.end());
-    for(typename std::set<index_t>::const_iterator it=jSNEList->second.begin();it!=jSNEList->second.end();++it)
-      incident_plane_target.insert(coplanar_ids[*it]);
+    std::set<index_t> Intersection;
+    std::set_intersection(SNEList[nid_target].begin(), SNEList[nid_target].end(),
+                          SNEList[nid_free].begin(), SNEList[nid_free].end(),
+                          std::inserter(Intersection,Intersection.begin()));
+    if(Intersection.size()==0)
+      return false;
 
-    // The final case is that the vertex is on a plane and
-    // can collapse to any other vertex on that plane.
-    assert(incident_plane_free.size()==1);
-
-    bool on_plane = incident_plane_target.count(*incident_plane_free.begin())>0;
-
-    return on_plane;
+    return true;
   }
 
   /*! Defragment surface mesh. This compresses the storage of internal data
