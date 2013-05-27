@@ -640,7 +640,7 @@ template<typename real_t, typename index_t>
     zoltan_colour(&graph, 1, _mesh->get_mpi_comm());
     
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i)))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty()))
         continue;
       colour_sets[colour[i]].push_back(i);
     }
