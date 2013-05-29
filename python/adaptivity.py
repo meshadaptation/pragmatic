@@ -494,27 +494,59 @@ if __name__=="__main__":
   V = FunctionSpace(mesh, "CG", 2)
   f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
 
-  Mp = metric_pnorm(f, mesh, 0.01, max_edge_ratio=5)
+  eta = 0.01
+  Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
   mesh = adapt(Mp)
-  
-  Mp = refine_metric(mesh_metric(mesh), 0.5)
-  new_mesh1 = adapt(Mp)
 
-  Mp = refine_metric(mesh_metric(new_mesh1), 0.5)
-  new_mesh2 = adapt(Mp)
-  
-  Mp = refine_metric(mesh_metric(new_mesh2), 0.5)
-  new_mesh3 = adapt(Mp)
+  if False:
+    level = 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh1 = adapt(Mp)
+    
+    level *= 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh2 = adapt(Mp)
+    
+    level *= 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh3 = adapt(Mp)
+    
+    level *= 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh4 = adapt(Mp)
+    
+    level *= 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh5 = adapt(Mp)
+    
+    level *= 0.5
+    Mp = refine_metric(mesh_metric(mesh), level)
+    new_mesh6 = adapt(Mp)
+  else:
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh1 = adapt(Mp)
 
-  Mp = refine_metric(mesh_metric(new_mesh3), 0.5)
-  new_mesh4 = adapt(Mp)
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh2 = adapt(Mp)
 
-  Mp = refine_metric(mesh_metric(new_mesh4), 0.5)
-  new_mesh5 = adapt(Mp)
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh3 = adapt(Mp)
 
-  Mp = refine_metric(mesh_metric(new_mesh5), 0.5)
-  new_mesh6 = adapt(Mp)
-  
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh4 = adapt(Mp)
+
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh5 = adapt(Mp)
+
+    eta *= 2
+    Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+    new_mesh6 = adapt(Mp)
+
   # plot(Mp[0,0])
   # from IPython import embed
   # embed()
