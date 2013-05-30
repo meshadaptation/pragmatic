@@ -45,6 +45,7 @@
 #include <set>
 #include <stack>
 #include <cmath>
+#include <stdint.h>
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
