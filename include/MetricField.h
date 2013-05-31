@@ -910,8 +910,13 @@ template<typename real_t, typename index_t>
     // Form quadratic system to be solved. The quadratic fit is:
     // P = 1 + x + y + z + x^2 + y^2 + z^2 + xy + xz + yz
     // A = P^TP
+#ifdef __FUJITSU
+    Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(10,10);
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
+#else
     Eigen::Matrix<real_t, 10, 10> A = Eigen::Matrix<real_t, 10, 10>::Zero(10,10);
     Eigen::Matrix<real_t, 10, 1> b = Eigen::Matrix<real_t, 10, 1>::Zero(10);
+#endif
 
     real_t x0=_mesh->_coords[i*3], y0=_mesh->_coords[i*3+1], z0=_mesh->_coords[i*3+2];
     
@@ -941,8 +946,12 @@ template<typename real_t, typename index_t>
                                                                                              A[67] = A[76]; A[68] = A[86]; A[69] = A[96];
                                                                                                             A[78] = A[87]; A[79] = A[97];
                                                                                                                            A[89] = A[98];
-                  
+
+#ifdef __FUJITSU
+    Eigen::Matrix<real_t, Eigen::Dynamic, 1> a = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(10);
+#else
     Eigen::Matrix<real_t, 10, 1> a = Eigen::Matrix<real_t, 10, 1>::Zero(10);
+#endif
     A.svd().solve(b, &a);
 
     Hessian[i*6  ] = a[4]*2.0; // d2/dx2
