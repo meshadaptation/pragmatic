@@ -59,7 +59,7 @@
 
 #include "zoltan_tools.h"
 
-#ifdef COMPILER_FUJITSU
+#ifdef __FUJITSU
 #define pragmatic_isnormal isnormal
 #else
 #define pragmatic_isnormal std::isnormal

@@ -188,7 +188,7 @@ public:
     // Capture and increment the index in independent_sets[colour] at which the local independent
     // sets will be copied later, after memory for the global independent sets will have been allocated.
     for(int colour=0; colour < max_colour; ++colour){
-#pragma omp atomic capture
+      pragmatic_omp_atomic_capture()
       {
         idx[colour] = ind_set_size[colour];
         ind_set_size[colour] += local_ind_sets[colour].size();

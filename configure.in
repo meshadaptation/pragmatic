@@ -391,6 +391,13 @@ AC_OUTPUT(Makefile
 cat > include/pragmatic_config.h << EOF
 #ifndef PRAGMATIC_CONFIG_H
 #define PRAGMATIC_CONFIG_H
+
+#if _OPENMP >= 201107
+#define pragmatic_omp_atomic_capture() _Pragma("omp atomic capture")
+#else
+#define pragmatic_omp_atomic_capture() _Pragma("omp critical")
+#endif
+
 EOF
 cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h
 cat >> include/pragmatic_config.h << EOF

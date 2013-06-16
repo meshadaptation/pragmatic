@@ -57,7 +57,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
   Swapping2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
-    
+
     nprocs = 1;
     rank = 0;
 #ifdef HAVE_MPI
@@ -66,14 +66,14 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 #endif
 
     size_t NElements = _mesh->get_number_elements();
-    
+
     // Set the orientation of elements.
     property = NULL;
     for(size_t i=0;i<NElements;i++){
       const int *n=_mesh->get_element(i);
       if(n[0]<0)
         continue;
-      
+
       property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
                                              _mesh->get_coords(n[1]),
                                              _mesh->get_coords(n[2]));
@@ -89,7 +89,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     nthreads=1;
 #endif
   }
-  
+
   /// Default destructor.
   ~Swapping2D(){
     if(property!=NULL)
@@ -98,7 +98,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     if(colouring!=NULL)
       delete colouring;
   }
-  
+
   void swap(real_t Q_min){
     min_Q = Q_min;
     size_t NNodes = _mesh->get_number_nodes();
@@ -149,13 +149,13 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
         const real_t *x0 = _mesh->get_coords(n[0]);
         const real_t *x1 = _mesh->get_coords(n[1]);
         const real_t *x2 = _mesh->get_coords(n[2]);
-        
+
         quality[i] = property->lipnikov(x0, x1, x2,
                                         _mesh->get_metric(n[0]),
                                         _mesh->get_metric(n[1]),
                                         _mesh->get_metric(n[2]));
       }
-      
+
       // Initialise list of dynamic edges.
       if(false){
 #pragma omp for schedule(static, 32)
@@ -215,7 +215,8 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
           break;
 
         size_t pos;
-#pragma omp atomic capture
+
+        pragmatic_omp_atomic_capture()
         {
           pos = colouring->GlobalActiveSet_size;
           colouring->GlobalActiveSet_size += active_set.size();
@@ -257,13 +258,13 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
             size_t int_pos, halo_pos;
 
-#pragma omp atomic capture
+            pragmatic_omp_atomic_capture()
             {
               int_pos = global_interior_size;
               global_interior_size += interior_vertices.size();
             }
 
-#pragma omp atomic capture
+            pragmatic_omp_atomic_capture()
             {
               halo_pos = global_halo_size;
               global_halo_size += halo_vertices.size();
@@ -357,7 +358,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               _mesh->commit_swapping_propagation(marked_edges, tid);
               _mesh->commit_colour_reset(colouring->node_colour, tid);
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 pos = global_halo_size;
                 global_halo_size += active_set.size();
@@ -377,13 +378,13 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               if(local_buffers[i].size() == 0)
                 continue;
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 send_pos[i] = send_buffer_size[i];
                 send_buffer_size[i] += local_buffers[i].size();
               }
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 sent_vert_pos[i] = sent_vertices_vec_size[i];
                 sent_vertices_vec_size[i] += local_sent[i].size();
@@ -518,7 +519,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               _mesh->commit_swapping_propagation(marked_edges, tid);
               _mesh->commit_colour_reset(colouring->node_colour, tid);
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 pos = global_interior_size;
                 global_interior_size += active_set.size();
@@ -600,7 +601,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               _mesh->commit_swapping_propagation(marked_edges, tid);
               _mesh->commit_colour_reset(colouring->node_colour, tid);
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 pos = colouring->ind_set_size[set_no];
                 colouring->ind_set_size[set_no] += active_set.size();

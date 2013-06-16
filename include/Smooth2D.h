@@ -56,7 +56,7 @@ template<typename real_t, typename index_t>
 #endif
 
     sigma_q = 0.0001;
-    good_q = 0.7;
+    good_q = 0.5;
 
     // Set the orientation of elements.
     property = NULL;
@@ -90,18 +90,22 @@ template<typename real_t, typename index_t>
 
     std::vector<int> halo_elements;
     int NElements = _mesh->get_number_elements();
-    for(int i=0;i<NElements;i++){
-      const int *n=_mesh->get_element(i);
-      if(n[0]<0)
-        continue;
-      
-      for(size_t j=0;j<nloc;j++){
-        if(!_mesh->is_owned_node(n[j])){
-          halo_elements.push_back(i);
-          break;
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        for(size_t j=0;j<nloc;j++){
+          if(!_mesh->is_owned_node(n[j])){
+            halo_elements.push_back(i);
+            break;
+          }
         }
-      }
-    } 
+      } 
+    }
+#endif
 
     bool (Smooth2D<real_t, index_t>::*smooth_kernel)(index_t) = NULL;
     
@@ -120,17 +124,17 @@ template<typename real_t, typename index_t>
     // vertex moved into the active_vertex list.
     int max_colour = colour_sets.rbegin()->first;
 #ifdef HAVE_MPI
-    if(mpi_nparts>1)
+    if(mpi_nparts>1){
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+    }
 #endif
 
-    int nav = 1;
 #pragma omp parallel
     {    
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
           int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
             
@@ -142,18 +146,17 @@ template<typename real_t, typename index_t>
           }
         }
         
-#pragma omp master
-        {
+#pragma omp single
+        if(mpi_nparts>1){
           _mesh->halo_update(&(_mesh->_coords[0]), ndims);
           _mesh->halo_update(&(_mesh->metric[0]), msize);
-
+          
           for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
             quality[*ie] = -1;
         }
-#pragma omp barrier
       }
 
-      for(int iter=1;(iter<max_iterations)&&(nav>0);iter++){
+      for(int iter=1;iter<max_iterations;iter++){
         for(int ic=1;ic<=max_colour;ic++){
           if(colour_sets.count(ic)){
             int node_set_size = colour_sets[ic].size();
@@ -175,37 +178,17 @@ template<typename real_t, typename index_t>
               }
             }
           }
-#pragma omp master
-          {
-            _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-            _mesh->halo_update(&(_mesh->metric[0]), msize);
-            
-            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-              quality[*ie] = -1;
-          }
-#pragma omp barrier
-        }
-        
-        // Count number of active vertices.
 #pragma omp single
-        {
-          nav = 0;    
-        }
-#pragma omp for schedule(static) reduction(+:nav)
-        for(int i=0;i<NNodes;i++){
-          if(_mesh->is_owned_node(i))
-            nav += active_vertices[i];
-        }
-#ifdef HAVE_MPI
-        if(mpi_nparts>1){
-#pragma omp master
           {
-            MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+            if(mpi_nparts>1){
+              _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+              _mesh->halo_update(&(_mesh->metric[0]), msize);
+              
+              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+                quality[*ie] = -1;
+            }
           }
         }
-#endif
-
-#pragma omp barrier
       }
     }
     
@@ -649,7 +632,7 @@ template<typename real_t, typename index_t>
     quality.resize(NElements);
 #pragma omp parallel
     {
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){

@@ -217,7 +217,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
           break;
 
         size_t pos;
-#pragma omp atomic capture
+        pragmatic_omp_atomic_capture()
         {
           pos = colouring->GlobalActiveSet_size;
           colouring->GlobalActiveSet_size += active_set.size();
@@ -314,13 +314,13 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
             size_t *send_pos = new size_t[nprocs];
             size_t *sent_vert_pos = new size_t[nprocs];
 
-#pragma omp atomic capture
+            pragmatic_omp_atomic_capture()
             {
               int_pos = global_interior_size;
               global_interior_size += interior_vertices.size();
             }
 
-#pragma omp atomic capture
+            pragmatic_omp_atomic_capture()
             {
               halo_pos = global_halo_size;
               global_halo_size += halo_vertices.size();
@@ -333,13 +333,13 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
               if(local_buffers[i].size() == 0)
                 continue;
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 send_pos[i] = send_buffer_size[i];
                 send_buffer_size[i] += local_buffers[i].size();
               }
 
-#pragma omp atomic capture
+              pragmatic_omp_atomic_capture()
               {
                 sent_vert_pos[i] = sent_vertices_vec_size[i];
                 sent_vertices_vec_size[i] += local_sent[i].size();
@@ -1157,7 +1157,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
   Surface2D<real_t, index_t> *_surface;
   ElementProperty<real_t> *property;
   Colouring<real_t, index_t> *colouring;
-  
+
   size_t nnodes_reserve;
   index_t *dynamic_vertex;
 

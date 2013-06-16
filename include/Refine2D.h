@@ -153,7 +153,7 @@ template<typename real_t, typename index_t> class Refine2D{
         }
       }
 
-#pragma omp atomic capture
+      pragmatic_omp_atomic_capture()
       {
         threadIdx[tid] = _mesh->NNodes;
         _mesh->NNodes += splitCnt[tid];
@@ -242,7 +242,7 @@ template<typename real_t, typename index_t> class Refine2D{
           }
       }
 
-#pragma omp atomic capture
+      pragmatic_omp_atomic_capture()
       {
         threadIdx[tid] = _mesh->NElements;
         _mesh->NElements += splitCnt[tid];

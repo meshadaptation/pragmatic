@@ -37,8 +37,10 @@
 # SUCH DAMAGE.
 #
 # Many thanks to:
+# Patrick Farrell for mesh based metric used for coarsening.
 # James Maddinson for the original version of Dolfin interface.
 # Davide Longoni for p-norm function.
+
 """@package PRAgMaTIc
 
 The python interface to PRAgMaTIc (Parallel anisotRopic Adaptive Mesh
@@ -415,23 +417,17 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
     max_edge_ratio = max_edge_ratio**2 # ie we are going to be looking at eigenvalues
 
   n = mesh.geometry().dim()
-  if not n == 2:
-    raise InvalidArgumentException("Currently only 2D is supported")
 
   element = f.function_space().ufl_element()
-  #if not element.family() == "Lagrange" \
-  #      or not element.degree() == 2:
-  #  raise InvalidArgumentException("Require Lagrange P2 function spaces")
 
   gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
   H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
-  
+
   # Make H positive definite and calculate the p-norm.
   space = H.function_space()
   cbig=numpy.zeros((H.vector().array()).size)
 
-  exponent1d = -1.0/(2*p + 1)
-  exponent2d = -1.0/(2*p + 2)
+  exponent = -1.0/(2*p + n)
 
   min_eigenvalue = 0.0
   if max_edge_length is not None:
@@ -440,10 +436,10 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
   for i in range(mesh.num_cells()):
     indold = space.dofmap().cell_dofs(i)
     ind = numpy.array(indold)
-    
+
     # Enforce symmetry
     ind[1]=ind[2]
-    
+
     v,w=linalg.eig(numpy.matrix(H.vector().gather(ind).reshape(2,2)))
     v[0] = max(abs(v[0]), min_eigenvalue)
     v[1] = max(abs(v[1]), min_eigenvalue)
@@ -456,29 +452,17 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
 
     temph=w*diags*w.T
 
-    # Deal with zero eigenvalues.
     det = linalg.det(temph)
-    exponent = exponent2d
-    if v[0] == 0 and v[1] == 0:
-      raise FloatingPointError("All eigenvalues are zero")
-    elif v[0] == 0:
-      det = v[1]
-      exponent = exponent1d
-    elif v[1] == 0:
-      det = v[0]
-      exponent = exponent1d
-      
+    if det == 0 :
+      raise FloatingPointError("Eigenvalues are zero")
+
     temph=1./eta*det**exponent*temph
 
     cbig[indold]=temph.reshape(1,4)
 
   H.vector().set_local(cbig)
 
-  #Mp = project(H, TensorFunctionSpace(mesh, "CG", 1, symmetry=True))
   Mp = project(H, TensorFunctionSpace(mesh, "CG", 1))
-
-  File("H.pvd") << H
-  File("Mp.pvd") << Mp
 
   return Mp
 
@@ -495,30 +479,30 @@ if __name__=="__main__":
   f = interpolate(Expression("0.1*sin(50.*(2*x[0]-1)) + atan2(-0.1, (2.0*(2*x[0]-1) - sin(5.*(2*x[1]-1))))"), V)
 
   eta = 0.01
-  Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
-  mesh = adapt(Mp)
+  #Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
+  #mesh = adapt(Mp)
 
   if False:
     level = 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh1 = adapt(Mp)
-    
+
     level *= 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh2 = adapt(Mp)
-    
+
     level *= 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh3 = adapt(Mp)
-    
+
     level *= 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh4 = adapt(Mp)
-    
+
     level *= 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh5 = adapt(Mp)
-    
+
     level *= 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh6 = adapt(Mp)
@@ -558,5 +542,5 @@ if __name__=="__main__":
   plot(new_mesh4, title="coarsen 4")
   plot(new_mesh5, title="coarsen 5")
   plot(new_mesh6, title="coarsen 6")
-  
+
   interactive()
