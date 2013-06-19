@@ -66,12 +66,12 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
   
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
   
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
   
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
   
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.0001;
@@ -94,8 +94,8 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double, int> coarsen(*mesh, surface);
-  Refine2D<double, int> refine(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
 
   if(verbose&&rank==0)
     std::cout<<"Initial quality:\n"
@@ -120,7 +120,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  Swapping2D<double, int> swapping(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
   
   double tic = get_wtime();
   //for(int i=0;i<100;i++)
@@ -132,12 +132,12 @@ int main(int argc, char **argv){
     mesh->defragment(&active_vertex_map);
     surface.defragment(&active_vertex_map);
     
-    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+    VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
     exit(-1);
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_swap_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_swap_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_swap_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_swap_2d_surface", &surface);
   
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

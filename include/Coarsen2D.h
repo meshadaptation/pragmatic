@@ -55,10 +55,10 @@
  *
  */
 
-template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlgorithm<real_t, index_t>{
+template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
  public:
   /// Default constructor.
-  Coarsen2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
+  Coarsen2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
 
@@ -119,7 +119,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
       dynamic_vertex = new index_t[nnodes_reserve];
 
       if(colouring==NULL)
-        colouring = new Colouring<real_t, index_t>(_mesh, this, nnodes_reserve);
+        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
       else
         colouring->resize(nnodes_reserve);
     }
@@ -161,7 +161,7 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
 
 #pragma omp parallel
     {
-      const int tid = omp_get_thread_num();
+      const int tid = pragmatic_thread_id();
 
       // Mark all vertices for evaluation.
 #pragma omp for schedule(static)
@@ -602,10 +602,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     if(_mesh->NNList[rm_vertex].empty())
       return -1;
 
-    // If this is a corner-vertex then cannot collapse;
-    if(_surface->is_corner_vertex(rm_vertex))
-      return -1;
-
     // If this is not owned then return -1.
     if(!_mesh->is_owned_node(rm_vertex))
       return -1;
@@ -618,12 +614,12 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
       // First check if this edge can be collapsed
       if(!_surface->is_collapsible(rm_vertex, *nn))
         continue;
-      
+
       double length = _mesh->calc_edge_length(rm_vertex, *nn);
       if(length<L_low)
         short_edges.insert(std::pair<real_t, index_t>(length, *nn));
     }
-    
+
     bool reject_collapse = false;
     index_t target_vertex=-1;
     while(short_edges.size()){
@@ -642,12 +638,12 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
       std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                        _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                        std::inserter(collapsed_elements,collapsed_elements.begin()));
-      
+
       // Check volume/area of new elements.
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
         if(collapsed_elements.count(*ee))
           continue;
-        
+
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
         const int *orig_n=_mesh->get_element(*ee);
@@ -658,16 +654,16 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
           else
             n[i] = nid;
         }
-        
+
         // Check the area of this new element.
         double orig_area = property->area(_mesh->get_coords(orig_n[0]),
                                           _mesh->get_coords(orig_n[1]),
                                           _mesh->get_coords(orig_n[2]));
-        
+
         double area = property->area(_mesh->get_coords(n[0]),
                                      _mesh->get_coords(n[1]),
                                      _mesh->get_coords(n[2]));
-        
+
         // Not very satisfactory - requires more thought.
         if(area/orig_area<=1.0e-3){
           reject_collapse=true;
@@ -679,22 +675,22 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
       for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
         if(target_vertex==*nn)
           continue;
-        
+
         if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
           reject_collapse=true;
           break;
         }
       }
-      
+
       // If this edge is ok to collapse then jump out.
       if(!reject_collapse)
         break;
     }
-    
+
     // If we've checked all edges and none is collapsible then return.
     if(reject_collapse)
       return -2;
-    
+
     return target_vertex;
   }
 
@@ -799,7 +795,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     std::vector<index_t> facets;
     std::vector<int> facets_owner;
     std::vector<int> boundary_ids;
-    std::vector<int> coplanar_ids;
   };
 
   void marshal_data(index_t rm_vertex, index_t target_vertex, std::vector< std::vector<int> >& local_buffers,
@@ -895,7 +890,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
           }
 
           msg.boundary_ids.push_back(_surface->get_boundary_id(lfacets[i]));
-          msg.coplanar_ids.push_back(_surface->get_coplanar_id(lfacets[i]));
         }
       }
 
@@ -949,7 +943,6 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
         }
 
         local_buffers[*proc].push_back(msg.boundary_ids[i]);
-        local_buffers[*proc].push_back(msg.coplanar_ids[i]);
       }
     }
   }
@@ -1107,11 +1100,10 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
           }
 
           int boundary_id = buffer[loc++];
-          int coplanar_id = buffer[loc++];
 
           // Updates to surface are thread-safe for the
           // same reason as updates to adjacency lists.
-          _surface->append_facet(facet, boundary_id, coplanar_id, true);
+          _surface->append_facet(facet, boundary_id, true);
         }
       }
 
@@ -1153,10 +1145,10 @@ template<typename real_t, typename index_t> class Coarsen2D : public AdaptiveAlg
     return dynamic_vertex[vid];
   }
 
-  Mesh<real_t, index_t> *_mesh;
-  Surface2D<real_t, index_t> *_surface;
+  Mesh<real_t> *_mesh;
+  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
-  Colouring<real_t, index_t> *colouring;
+  Colouring<real_t> *colouring;
 
   size_t nnodes_reserve;
   index_t *dynamic_vertex;

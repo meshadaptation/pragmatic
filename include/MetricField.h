@@ -69,13 +69,13 @@
  * index_t should be set as int32_t for problems with less than 2 billion nodes.
  * For larger meshes int64_t should be used.
  */
-template<typename real_t, typename index_t>
+template<typename real_t>
   class MetricField2D{
  public:
   
   /*! Default constructor.
    */
-  MetricField2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
+  MetricField2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _surface = &surface;
@@ -539,8 +539,8 @@ template<typename real_t, typename index_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor2D<float> *_metric;
-  Surface2D<real_t, index_t> *_surface;
-  Mesh<real_t, index_t> *_mesh;
+  Surface2D<real_t> *_surface;
+  Mesh<real_t> *_mesh;
 };
 
 // 3D implementation
@@ -553,13 +553,13 @@ template<typename real_t, typename index_t>
  * index_t should be set as int32_t for problems with less than 2 billion nodes.
  * For larger meshes int64_t should be used.
  */
-template<typename real_t, typename index_t>
+template<typename real_t>
   class MetricField3D{
  public:
 
   /*! Default constructor.
    */
-  MetricField3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
+  MetricField3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _surface = &surface;
@@ -965,8 +965,8 @@ template<typename real_t, typename index_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor3D<float> *_metric;
-  Surface3D<real_t, index_t> *_surface;
-  Mesh<real_t, index_t> *_mesh;
+  Surface3D<real_t> *_surface;
+  Mesh<real_t> *_mesh;
 };
 
 #endif

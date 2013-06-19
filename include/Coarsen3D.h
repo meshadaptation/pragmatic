@@ -55,10 +55,10 @@
  *
  */
 
-template<typename real_t, typename index_t> class Coarsen3D{
+template<typename real_t> class Coarsen3D{
  public:
   /// Default constructor.
-  Coarsen3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
+  Coarsen3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
 
@@ -69,10 +69,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
-    nthreads = 1;
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#endif
+    nthreads = pragmatic_nthreads();
 
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
@@ -80,7 +77,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
       const int *n=_mesh->get_element(i);
       if(n[0]<0)
         continue;
-      
+
       property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
                                              _mesh->get_coords(n[1]),
                                              _mesh->get_coords(n[2]),
@@ -88,7 +85,7 @@ template<typename real_t, typename index_t> class Coarsen3D{
 
       break;
     }
-    
+
     nnodes_reserve = 0;
     dynamic_vertex = NULL;
   }
@@ -934,8 +931,8 @@ template<typename real_t, typename index_t> class Coarsen3D{
   }
 
  private:
-  Mesh<real_t, index_t> *_mesh;
-  Surface3D<real_t, index_t> *_surface;
+  Mesh<real_t> *_mesh;
+  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
   
   size_t nnodes_reserve;

@@ -80,12 +80,12 @@ int main(int argc, char **argv){
     }
   }
 
-  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+  Mesh<double> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
-  Surface3D<double, int> surface(mesh);
+  Surface3D<double> surface(mesh);
   surface.find_surface();
 
-  MetricField3D<double, int> metric_field(mesh, surface);
+  MetricField3D<double> metric_field(mesh, surface);
   
   std::vector<double> psi(NNodes);
   
@@ -102,21 +102,21 @@ int main(int argc, char **argv){
   // metric_field.apply_gradation(1.3);
   metric_field.update_mesh();
 
-  VTKTools<double, int>::export_vtu("../data/test_chaste_metric", &mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_chaste_metric", &mesh, &(psi[0]));
   
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
     
-  Coarsen3D<double, int> coarsen(mesh, surface);
+  Coarsen3D<double> coarsen(mesh, surface);
   coarsen.coarsen(L_low, L_up);
   
-  Smooth3D<double, int> smooth(mesh, surface);
+  Smooth3D<double> smooth(mesh, surface);
   double L_max = mesh.maximal_edge_length();
   
   int adapt_iter=0;
   double alpha = 0.95; //sqrt(2)/2;
-  Refine3D<double, int> refine(mesh, surface);
+  Refine3D<double> refine(mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
       
@@ -141,7 +141,7 @@ int main(int argc, char **argv){
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
   
-  VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
+  VTKTools<double>::export_vtu("../data/test_chaste_mesh", &mesh);
     
   if((lrms<0.8)&&(qrms<2.2))
     std::cout<<"pass"<<std::endl;

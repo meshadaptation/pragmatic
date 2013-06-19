@@ -60,12 +60,12 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
 
-  Surface3D<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField3D<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -81,7 +81,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
   
-  Coarsen3D<double, int> adapt(*mesh, surface);
+  Coarsen3D<double> adapt(*mesh, surface);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -109,8 +109,8 @@ int main(int argc, char **argv){
              <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_coarsen_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_coarsen_3d_surface", &surface);
 
   if(nelements<50)
     std::cout<<"pass"<<std::endl;

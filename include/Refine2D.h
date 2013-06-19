@@ -51,10 +51,10 @@
 /*! \brief Performs 2D mesh refinement.
  *
  */
-template<typename real_t, typename index_t> class Refine2D{
+template<typename real_t> class Refine2D{
  public:
   /// Default constructor.
-  Refine2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
+  Refine2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
 
@@ -79,11 +79,7 @@ template<typename real_t, typename index_t> class Refine2D{
     MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
 #endif
 
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#else
-    nthreads=1;
-#endif
+    nthreads = pragmatic_nthreads();
 
     newVertices.resize(nthreads);
     newElements.resize(nthreads);
@@ -117,7 +113,7 @@ template<typename real_t, typename index_t> class Refine2D{
 
 #pragma omp parallel
     {
-      int tid = get_tid();
+      int tid = pragmatic_thread_id();
 
       /*
        * Average vertex degree is ~6, so there
@@ -645,8 +641,8 @@ template<typename real_t, typename index_t> class Refine2D{
   std::vector< std::vector<index_t> > newElements;
   std::vector<index_t> new_vertices_per_element;
 
-  Mesh<real_t, index_t> *_mesh;
-  Surface2D<real_t, index_t> *_surface;
+  Mesh<real_t> *_mesh;
+  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   static const size_t ndims=2, nloc=3, msize=3;

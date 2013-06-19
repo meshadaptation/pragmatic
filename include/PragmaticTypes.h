@@ -1,12 +1,14 @@
-/*  Copyright (C) 2013 Imperial College London and others.
+/*  Copyright (C) 2010 Imperial College London and others.
  *
  *  Please see the AUTHORS file in the main source directory for a
  *  full list of copyright holders.
  *
- *  Georgios Rokos
- *  Software Performance Optimisation Group
- *  Department of Computing
+ *  Gerard Gorman
+ *  Applied Modelling and Computation Group
+ *  Department of Earth Science and Engineering
  *  Imperial College London
+ *
+ *  g.gorman@imperial.ac.uk
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -33,16 +35,17 @@
  *  SUCH DAMAGE.
  */
 
-#ifndef ADAPTIVEALGORITHM_H
-#define ADAPTIVEALGORITHM_H
+#ifndef PRAGMATICTYPES_H
+#define PRAGMATICTYPES_H
 
-template<typename real_t>
-class AdaptiveAlgorithm{
-private:
-  template<typename _real_t> friend class Colouring;
+typedef int index_t;
 
-  virtual index_t is_dynamic(index_t vid) = 0;
-};
-
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+#include <boost/unordered_map.hpp>
+typedef boost::unordered_map<index_t, std::set<index_t> > SNEList_t;
+#else
+#include <map>
+typedef std::map<index_t, std::set<index_t> > SNEList_t;
+#endif
 
 #endif

@@ -56,10 +56,10 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv){
       psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
   }
   
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
   
   double tic = get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);
@@ -97,7 +97,7 @@ int main(int argc, char **argv){
   }
   
   std::string vtu_filename("../data/test_hessian_2d");
-  VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
+  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
   
   std::cout<<"Hessian :: loop time = "<<toc-tic<<std::endl
            <<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<std::endl;

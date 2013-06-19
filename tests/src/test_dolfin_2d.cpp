@@ -70,7 +70,7 @@ int main(int argc, char **argv){
   // For now only support a single process.
 
   int NNodes, NElements;
-  Mesh<double, int> *mesh;
+  Mesh<double> *mesh;
   {
     char pFilename[] = "../data/doughnut.xml\0";
 
@@ -138,15 +138,15 @@ int main(int argc, char **argv){
       std::istringstream(xmlnode->ToElement()->Attribute("v2"))>>n[2];
     }
 
-    mesh = new Mesh<double, int>(NNodes, NElements, &(Triangles[0]), &(x[0]), &(y[0]));
+    mesh = new Mesh<double>(NNodes, NElements, &(Triangles[0]), &(x[0]), &(y[0]));
   }
 
   // Stuff this into a pragmatic mesh.
-  Surface2D<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
   // Need to get the metric from the xml file - but for now just add this dummy.
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   // Begin dummy...
   double I[] = {1.0, 0.0, 1.0};
@@ -173,16 +173,16 @@ int main(int argc, char **argv){
                        <<"Quality mean:  "<<qmean<<std::endl
                        <<"Quality min:   "<<qmin<<std::endl
                        <<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_dolfin_2d-initial", mesh);
+  VTKTools<double>::export_vtu("../data/test_dolfin_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double, int> coarsen(*mesh, surface);  
-  Smooth2D<double, int> smooth(*mesh, surface);
-  Refine2D<double, int> refine(*mesh, surface);
-  Swapping2D<double, int> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);  
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
 
@@ -233,7 +233,7 @@ int main(int argc, char **argv){
   if(rank==0) std::cout<<"After optimisation based smoothing:\n";
   mesh->verify();
 
-  VTKTools<double, int>::export_vtu("../data/test_dolfin_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_dolfin_2d", mesh);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

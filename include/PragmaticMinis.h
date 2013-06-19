@@ -1,12 +1,14 @@
-/*  Copyright (C) 2013 Imperial College London and others.
+/*  Copyright (C) 2010 Imperial College London and others.
  *
  *  Please see the AUTHORS file in the main source directory for a
  *  full list of copyright holders.
  *
- *  Georgios Rokos
- *  Software Performance Optimisation Group
- *  Department of Computing
+ *  Gerard Gorman
+ *  Applied Modelling and Computation Group
+ *  Department of Earth Science and Engineering
  *  Imperial College London
+ *
+ *  g.gorman@imperial.ac.uk
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -33,16 +35,25 @@
  *  SUCH DAMAGE.
  */
 
-#ifndef ADAPTIVEALGORITHM_H
-#define ADAPTIVEALGORITHM_H
+#ifndef PRAGMATICMINIS_H
+#define PRAGMATICMINIS_H
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+int pragmatic_nthreads(){
+#ifdef _OPENMP
+  return omp_get_max_threads();
+#else
+  return 1;
+#endif
+}
 
-template<typename real_t>
-class AdaptiveAlgorithm{
-private:
-  template<typename _real_t> friend class Colouring;
-
-  virtual index_t is_dynamic(index_t vid) = 0;
-};
-
+int pragmatic_thread_id(){
+#ifdef _OPENMP
+  return omp_get_thread_num();
+#else
+  return 0;
+#endif
+}
 
 #endif

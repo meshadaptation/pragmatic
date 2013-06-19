@@ -53,10 +53,10 @@
 /*! \brief Performs 3D mesh refinement.
  *
  */
-template<typename real_t, typename index_t> class Refine3D{
+template<typename real_t> class Refine3D{
  public:
   /// Default constructor.
-  Refine3D(Mesh<real_t, index_t> &mesh, Surface3D<real_t, index_t> &surface){
+  Refine3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
 
@@ -81,11 +81,7 @@ template<typename real_t, typename index_t> class Refine3D{
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
     MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
 
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#else
-    nthreads=1;
-#endif
+    nthreads = pragmatic_nthreads();
   }
 
   /// Default destructor.
@@ -164,7 +160,7 @@ template<typename real_t, typename index_t> class Refine3D{
         }
       } // barrier implied
 
-      int tid = omp_get_thread_num();
+      int tid = pragmatic_thread_id();
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
@@ -750,8 +746,8 @@ template<typename real_t, typename index_t> class Refine3D{
       ENList.push_back(elem[i]);
   }
 
-  Mesh<real_t, index_t> *_mesh;
-  Surface3D<real_t, index_t> *_surface;
+  Mesh<real_t> *_mesh;
+  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   index_t *lnn2gnn;

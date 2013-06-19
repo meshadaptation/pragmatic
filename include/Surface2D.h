@@ -46,6 +46,7 @@
 
 #include "Mesh.h"
 #include "Edge.h"
+#include "PragmaticTypes.h"
 
 /*! \brief Manages surface information and classification.
  *
@@ -58,14 +59,14 @@
  * good quality elements near the geometry).
  */
 
-template<typename real_t, typename index_t>
+template<typename real_t>
   class Surface2D{
  public:
 
   /// Default constructor.
-  Surface2D(Mesh<real_t, index_t> &mesh){
+  Surface2D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    num_threads = _mesh->num_threads;
+    nthreads = pragmatic_nthreads();
 
     size_t NNodes = _mesh->get_number_nodes();
     surface_nodes.resize(NNodes);
@@ -74,9 +75,9 @@ template<typename real_t, typename index_t>
     // Default coplanar tolerance.
     set_coplanar_tolerance(0.9999999);
 
-    deferred_operations.resize(_mesh->num_threads);
-    for(size_t i=0; i<(size_t) num_threads; ++i)
-      deferred_operations[i].resize(num_threads);
+    deferred_operations.resize(nthreads);
+    for(size_t i=0; i<(size_t) nthreads; ++i)
+      deferred_operations[i].resize(nthreads);
   }
 
   /// Default destructor.
@@ -84,7 +85,7 @@ template<typename real_t, typename index_t>
   }
 
   /// Append a facet to the surface
-  void append_facet(const int *facet, int boundary_id, int coplanar_id, bool check_duplicates=false){
+  void append_facet(const int *facet, int boundary_id, bool check_duplicates=false){
     if(check_duplicates){
       std::set<index_t> Intersection;
       std::set_intersection(SNEList[facet[0]].begin(), SNEList[facet[0]].end(),
@@ -98,10 +99,9 @@ template<typename real_t, typename index_t>
     if(surface_nodes.size() < _mesh->NNodes)
       surface_nodes.resize(_mesh->NNodes, 0);
 
-    index_t eid = coplanar_ids.size();
+    index_t eid = boundary_ids.size();
 
     boundary_ids.push_back(boundary_id);
-    coplanar_ids.push_back(coplanar_id);
     for(size_t i=0;i<snloc;i++){
       index_t nid = facet[i];
       SNEList[nid].insert(eid);
@@ -110,12 +110,6 @@ template<typename real_t, typename index_t>
 
       SENList.push_back(nid);
     }
-
-    double normal[2];
-    calculate_normal_2d(facet, normal);
-
-    for(size_t i=0;i<ndims;i++)
-      normals.push_back(normal[i]);
   }
 
   /// True if surface contains vertex nid.
@@ -129,8 +123,7 @@ template<typename real_t, typename index_t>
   }
 
   /// Detects the surface nodes of the domain.
-  void find_surface(bool assume_bounding_box=false){
-    use_bbox = assume_bounding_box;
+  void find_surface(){
 
     size_t NElements = _mesh->get_number_elements();
 
@@ -170,18 +163,19 @@ template<typename real_t, typename index_t>
         surface_nodes[*jt] = (char) 1;
     }
 
-    calculate_coplanar_ids();
+    // Calculate the boundary representation.
+    calculate_brep();
   }
 
   /// True if node nid is a corner vertex OR if more than ndims boundary labels are incident on the vertex.
-  bool is_corner_vertex(index_t nid) const{
-    typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid);
+  bool is_corner(index_t nid) const{
+    typename SNEList_t::const_iterator iSNEList = SNEList.find(nid);
     if(iSNEList==SNEList.end())
       return false;
 
     std::set<int> incident_plane;
     for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it){
-      incident_plane.insert(coplanar_ids[*it]);
+      incident_plane.insert(boundary_ids[*it]);
     }
 
     return (incident_plane.size()>=ndims);
@@ -204,10 +198,10 @@ template<typename real_t, typename index_t>
     }
 
     std::set<int> incident_plane_free;
-    typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(nid_free);
+    typename SNEList_t::const_iterator iSNEList = SNEList.find(nid_free);
     assert(iSNEList!=SNEList.end());
     for(typename std::set<index_t>::const_iterator it=iSNEList->second.begin();it!=iSNEList->second.end();++it){
-      incident_plane_free.insert(coplanar_ids[*it]);
+      incident_plane_free.insert(boundary_ids[*it]);
     }
 
     // Non-collapsible if nid_free is a corner node.
@@ -234,8 +228,7 @@ template<typename real_t, typename index_t>
       surface_nodes[i] = (char) 0;
 
     std::vector<index_t> defrag_SENList;
-    std::vector<int> defrag_boundary_ids, defrag_coplanar_ids;
-    std::vector<real_t> defrag_normals;
+    std::vector<int> defrag_boundary_ids;
     size_t NSElements = get_number_facets();
     for(size_t i=0;i<NSElements;i++){
       const int *n=get_facet(i);
@@ -261,14 +254,9 @@ template<typename real_t, typename index_t>
         surface_nodes[nid] = (char) 1;
       }
       defrag_boundary_ids.push_back(boundary_ids[i]);
-      defrag_coplanar_ids.push_back(coplanar_ids[i]);
-      for(size_t j=0;j<ndims;j++)
-        defrag_normals.push_back(normals[i*ndims+j]);
     }
     defrag_SENList.swap(SENList);
     defrag_boundary_ids.swap(boundary_ids);
-    defrag_coplanar_ids.swap(coplanar_ids);
-    defrag_normals.swap(normals);
 
     // Finally, fix the Node-Element adjacency list.
     SNEList.clear();
@@ -285,11 +273,11 @@ template<typename real_t, typename index_t>
     for(size_t i=0;i<nloc;i++){
       std::set<index_t> Intersection;
 
-      typename std::map<int, std::set<index_t> >::const_iterator iSNEList = SNEList.find(element[i]);
+      typename SNEList_t::const_iterator iSNEList = SNEList.find(element[i]);
       if(iSNEList==SNEList.end())
         continue;
 
-      typename std::map<int, std::set<index_t> >::const_iterator jSNEList = SNEList.find(element[(i+1)%nloc]);
+      typename SNEList_t::const_iterator jSNEList = SNEList.find(element[(i+1)%nloc]);
       if(jSNEList==SNEList.end())
         continue;
 
@@ -323,13 +311,13 @@ template<typename real_t, typename index_t>
   };
 
   inline void deferred_addSNE(index_t i, index_t e, size_t tid){
-    deferred_operations[tid][i % num_threads].addSNE.push_back(i);
-    deferred_operations[tid][i % num_threads].addSNE.push_back(e);
+    deferred_operations[tid][i % nthreads].addSNE.push_back(i);
+    deferred_operations[tid][i % nthreads].addSNE.push_back(e);
   }
 
   inline void deferred_remSNE(index_t i, index_t e, size_t tid){
-    deferred_operations[tid][i % num_threads].remSNE.push_back(i);
-    deferred_operations[tid][i % num_threads].remSNE.push_back(e);
+    deferred_operations[tid][i % nthreads].remSNE.push_back(i);
+    deferred_operations[tid][i % nthreads].remSNE.push_back(e);
   }
 
   // SNEList is a map. Adding/removing items is not thread safe,
@@ -343,19 +331,19 @@ template<typename real_t, typename index_t>
   }
 
   void commit_deferred(size_t tid){
-    for(int i=0; i<num_threads; ++i){
+    for(int i=0; i<nthreads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       // Commit element removals from SNEList sets.
       for(typename std::vector<index_t>::const_iterator it=pending.remSNE.begin(); it!=pending.remSNE.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
+        assert(*it % nthreads == (int) tid);
         SNEList[*it].erase(*(it+1));
       }
       pending.remSNE.clear();
 
       // Commit element additions to SNEList sets.
       for(typename std::vector<index_t>::const_iterator it=pending.addSNE.begin(); it!=pending.addSNE.end(); it+=2){
-        assert(*it % num_threads == (int) tid);
+        assert(*it % nthreads == (int) tid);
         SNEList[*it].insert(*(it+1));
       }
       pending.addSNE.clear();
@@ -406,25 +394,17 @@ template<typename real_t, typename index_t>
   }
 
   void refine(std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges){
-    unsigned int nthreads;
-
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#else
-    nthreads=1;
-#endif
+    unsigned int nthreads = pragmatic_nthreads();
 
     // Given the refined edges, refine facets.
     std::vector< std::vector<index_t> > private_SENList(nthreads);
     std::vector< std::vector<int> > private_boundary_ids(nthreads);
-    std::vector< std::vector<int> > private_coplanar_ids(nthreads);
-    std::vector< std::vector<real_t> > private_normals(nthreads);
     std::vector<unsigned int> threadIdx(nthreads), splitCnt(nthreads);
     std::vector< DirectedEdge<index_t> > refined_edges;
 
 #pragma omp parallel
     {
-      const int tid = omp_get_thread_num();
+      const int tid = pragmatic_thread_id();
       splitCnt[tid] = 0;
 
       // Serialise surfaceEdges
@@ -471,9 +451,6 @@ template<typename real_t, typename index_t>
         private_SENList[tid].push_back(cache_n1);
 
         private_boundary_ids[tid].push_back(boundary_ids[i]);
-        private_coplanar_ids[tid].push_back(coplanar_ids[i]);
-        for(size_t j=0;j<ndims;j++)
-          private_normals[tid].push_back(normals[ndims*i+j]);
 
         splitCnt[tid]++;
       }
@@ -495,16 +472,12 @@ template<typename real_t, typename index_t>
 
       	SENList.resize(snloc*newSize);
         boundary_ids.resize(newSize);
-        coplanar_ids.resize(newSize);
-        normals.resize(ndims*newSize);
       }
 #pragma omp barrier
 
       // Append new elements to the surface
       memcpy(&SENList[snloc*threadIdx[tid]], &private_SENList[tid][0], snloc*splitCnt[tid]*sizeof(index_t));
       memcpy(&boundary_ids[threadIdx[tid]], &private_boundary_ids[tid][0], splitCnt[tid]*sizeof(int));
-      memcpy(&coplanar_ids[threadIdx[tid]], &private_coplanar_ids[tid][0], splitCnt[tid]*sizeof(int));
-      memcpy(&normals[ndims*threadIdx[tid]], &private_normals[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
     }
 
     size_t NNodes = _mesh->get_number_nodes();
@@ -550,18 +523,6 @@ template<typename real_t, typename index_t>
     return &(boundary_ids[0]);
   }
 
-  int get_coplanar_id(int eid) const{
-    return coplanar_ids[eid];
-  }
-
-  const int* get_coplanar_ids() const{
-    return &(coplanar_ids[0]);
-  }
-
-  const real_t* get_normal(int eid) const{
-    return &(normals[eid*ndims]);
-  }
-
   std::set<index_t> get_surface_patch(int nid) const{
     assert(SNEList.find(nid)!=SNEList.end());
     return SNEList.find(nid)->second;
@@ -573,16 +534,14 @@ template<typename real_t, typename index_t>
   }
 
   /// Set surface.
-  void set_surface(int NSElements, const int *senlist, const int *boundary_ids_, const int *coplanar_ids_){
+  void set_surface(int NSElements, const int *senlist, const int *boundary_ids_){
     boundary_ids.resize(NSElements);
-    coplanar_ids.resize(NSElements);
     SENList.resize(NSElements*snloc);
     surface_nodes.resize(_mesh->get_number_nodes());
     std::fill(surface_nodes.begin(), surface_nodes.end(), (char) 0);
     SNEList.clear();
     for(int i=0;i<NSElements;i++){
       boundary_ids[i] = boundary_ids_[i];
-      coplanar_ids[i] = coplanar_ids_[i];
       const int *n = senlist+i*snloc;
       for(size_t j=0;j<snloc;j++){
         SNEList[n[j]].insert(i);
@@ -591,27 +550,11 @@ template<typename real_t, typename index_t>
         SENList[i*snloc+j] = n[j];
       }
     }
-
-    calculate_normals();
   }
 
  private:
-  template<typename _real_t, typename _index_t> friend class VTKTools;
-  template<typename _real_t, typename _index_t> friend class CUDATools;
-
-  /// Calculate surface normals.
-  void calculate_normals(){
-    // Calculate all element normals
-    size_t NSElements = get_number_facets();
-    normals.resize(NSElements*ndims);
-
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(size_t i=0;i<NSElements;i++)
-        calculate_normal_2d(&(SENList[2*i]), &(normals[i*2]));
-    }
-  }
+  template<typename _real_t> friend class VTKTools;
+  template<typename _real_t> friend class CUDATools;
 
   /// Calculate facet normal (2D).
   inline void calculate_normal_2d(const index_t *facet, double *normal){
@@ -632,12 +575,17 @@ template<typename real_t, typename index_t>
       normal[1] *= -1;
   }
 
-  /// Calculate co-planar patches.
-  void calculate_coplanar_ids(){
-    if(normals.empty())
-      calculate_normals();
-
+  /// Calculate BRep.
+  void calculate_brep(){
     size_t NSElements = get_number_facets();
+    std::vector<real_t> normals(NSElements*2);
+
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(size_t i=0;i<NSElements;i++)
+        calculate_normal_2d(&(SENList[2*i]), &(normals[i*2]));
+    }
 
     // Create Node-Element list
     for(size_t i=0;i<NSElements;i++){
@@ -649,83 +597,66 @@ template<typename real_t, typename index_t>
     boundary_ids.resize(NSElements);
     std::fill(boundary_ids.begin(), boundary_ids.end(), 0);
 
-    coplanar_ids.resize(NSElements);
-    std::fill(coplanar_ids.begin(), coplanar_ids.end(), 0);
-
-    if(use_bbox){
-      for(size_t i=0;i<NSElements;i++){
-        if(normals[i*ndims]<-0.9999){
-          coplanar_ids[i]=1;
-        }else if(normals[i*ndims]>0.9999){
-          coplanar_ids[i]=2;
-        }else if(normals[i*ndims+1]<-0.9999){
-          coplanar_ids[i]=3;
-        }else if(normals[i*ndims+1]>0.9999){
-          coplanar_ids[i]=4;
-        }
-      }
-    }else{
-      // Create EEList for surface
-      std::vector<int> EEList(NSElements*snloc);
-      for(size_t i=0;i<NSElements;i++){
-        for(size_t j=0;j<2;j++){
-          index_t nid=SENList[i*2+j];
-          for(typename std::set<index_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
-            if(*it==(index_t)i){
-              continue;
-            }else{
-              EEList[i*2+j] = *it;
-              break;
-            }
-          }
-        }
-      }
-
-      // Grow patches
-      int current_id = 1;
-      for(size_t pos = 0;pos<NSElements;){
-        // Create a new starting point
-        const real_t *ref_normal=NULL;
-        for(size_t i=pos;i<NSElements;i++){
-          if(coplanar_ids[i]==0){
-            // This is the first element in the new patch
-            pos = i;
-            coplanar_ids[pos] = current_id;
-            ref_normal = &(normals[pos*ndims]);
+    // Create EEList for surface
+    std::vector<int> EEList(NSElements*snloc);
+    for(size_t i=0;i<NSElements;i++){
+      for(size_t j=0;j<2;j++){
+        index_t nid=SENList[i*2+j];
+        for(typename std::set<index_t>::iterator it=SNEList[nid].begin();it!=SNEList[nid].end();++it){
+          if(*it==(index_t)i){
+            continue;
+          }else{
+            EEList[i*2+j] = *it;
             break;
           }
         }
-        if(ref_normal==NULL)
+      }
+    }
+
+    // Grow patches
+    int current_id = 1;
+    for(size_t pos = 0;pos<NSElements;){
+      // Create a new starting point
+      const real_t *ref_normal=NULL;
+      for(size_t i=pos;i<NSElements;i++){
+        if(boundary_ids[i]==0){
+          // This is the first element in the new patch
+          pos = i;
+          boundary_ids[pos] = current_id;
+          ref_normal = &(normals[pos*ndims]);
           break;
+        }
+      }
+      if(ref_normal==NULL)
+        break;
 
-        // Initialise the front
-        std::set<int> front;
-        front.insert(pos);
+      // Initialise the front
+      std::set<int> front;
+      front.insert(pos);
 
-        // Advance this front
-        while(!front.empty()){
-          int sele = *front.begin();
-          front.erase(front.begin());
+      // Advance this front
+      while(!front.empty()){
+        int sele = *front.begin();
+        front.erase(front.begin());
 
-          // Check surrounding surface elements:
-          for(size_t i=0; i<snloc; i++){
-            int sele2 = EEList[sele*snloc+i];
-            if(coplanar_ids[sele2]>0)
-              continue;
+        // Check surrounding surface elements:
+        for(size_t i=0; i<snloc; i++){
+          int sele2 = EEList[sele*snloc+i];
+          if(boundary_ids[sele2]>0)
+            continue;
 
-            double coplanar = 0.0;
-            for(size_t d=0;d<ndims;d++)
-              coplanar += ref_normal[d]*normals[sele2*ndims+d];
+          double coplanar = 0.0;
+          for(size_t d=0;d<ndims;d++)
+            coplanar += ref_normal[d]*normals[sele2*ndims+d];
 
-            if(coplanar>=COPLANAR_MAGIC_NUMBER){
-              front.insert(sele2);
-              coplanar_ids[sele2] = current_id;
-            }
+          if(coplanar>=COPLANAR_MAGIC_NUMBER){
+            front.insert(sele2);
+            boundary_ids[sele2] = current_id;
           }
         }
-        current_id++;
-        pos++;
       }
+      current_id++;
+      pos++;
     }
   }
 
@@ -741,18 +672,17 @@ template<typename real_t, typename index_t>
   const static size_t nloc=3;
   const static size_t snloc=2;
 
-  std::map<int, std::set<index_t> > SNEList;
+  SNEList_t SNEList;
   std::vector<char> surface_nodes;
   std::vector<index_t> SENList;
-  std::vector<int> boundary_ids, coplanar_ids;
-  std::vector<real_t> normals;
+  std::vector<int> boundary_ids;
   real_t COPLANAR_MAGIC_NUMBER;
   bool use_bbox;
 
   std::vector< std::vector<DeferredOperations> > deferred_operations;
 
-  Mesh<real_t, index_t> *_mesh;
-  int num_threads;
+  Mesh<real_t> *_mesh;
+  int nthreads;
 };
 
 #endif

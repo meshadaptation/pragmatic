@@ -64,12 +64,12 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface3D<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface(true);
 
-  MetricField3D<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
-  Smooth3D<double, int> smooth(*mesh, surface);
+  Smooth3D<double> smooth(*mesh, surface);
   double tic = get_wtime();
   smooth.smooth("Laplacian");
   smooth.smooth("smart Laplacian");
@@ -96,8 +96,8 @@ int main(int argc, char **argv){
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
 
-  VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_smooth_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_mpi_smooth_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_mpi_smooth_3d_surface", &surface);
 
   delete mesh;
 

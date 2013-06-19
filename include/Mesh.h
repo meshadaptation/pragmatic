@@ -55,36 +55,27 @@
 #include <omp.h>
 #endif
 
-#ifdef HAVE_LIBNUMA
-#include <numa.h>
-#endif
-
 #ifdef HAVE_MPI
 #include "mpi_tools.h"
 #endif
 
+#include "PragmaticTypes.h"
+#include "PragmaticMinis.h"
+
 #include "Metis.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
-
-inline int get_tid(){
-#ifdef _OPENMP
-  return omp_get_thread_num();
-#else
-  return 0;
-#endif
-}
 
 /*! \brief Manages mesh data.
  *
  * This class is used to store the mesh and associated meta-data.
  */
 
-template<typename real_t, typename index_t> class Mesh{
+template<typename real_t> class Mesh{
  public:
 
   /*! 2D triangular mesh constructor. This is for use when there is no MPI.
-   * 
+   *
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
    * @param ENList array storing the global node number for each element.
@@ -93,14 +84,14 @@ template<typename real_t, typename index_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y){
 #ifdef HAVE_MPI
-    _mpi_comm = MPI_COMM_WORLD;      
+    _mpi_comm = MPI_COMM_WORLD;
 #endif
     _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
   }
-  
-#ifdef HAVE_MPI  
+
+#ifdef HAVE_MPI
   /*! 2D triangular mesh constructor. This is used when parallelised with MPI.
-   * 
+   *
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
    * @param ENList array storing the global node number for each element.
@@ -119,7 +110,7 @@ template<typename real_t, typename index_t> class Mesh{
 #endif
 
   /*! 3D tetrahedra mesh constructor. This is for use when there is no MPI.
-   * 
+   *
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
    * @param ENList array storing the global node number for each element.
@@ -130,14 +121,14 @@ template<typename real_t, typename index_t> class Mesh{
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const real_t *z){
 #ifdef HAVE_MPI
-      _mpi_comm = MPI_COMM_WORLD;      
+      _mpi_comm = MPI_COMM_WORLD;
 #endif
     _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
   }
 
 #ifdef HAVE_MPI
   /*! 3D tetrahedra mesh constructor. This is used when parallelised with MPI.
-   * 
+   *
    * @param NNodes number of nodes in the local mesh.
    * @param NElements number of nodes in the local mesh.
    * @param ENList array storing the global node number for each element.
@@ -165,7 +156,7 @@ template<typename real_t, typename index_t> class Mesh{
   index_t append_vertex(const real_t *x, const float *m){
     for(size_t i=0;i<ndims;i++)
       _coords[ndims*NNodes+i] = x[i];
-    
+
     for(size_t i=0;i<msize;i++)
       metric[msize*NNodes+i] = m[i];
 
@@ -186,7 +177,7 @@ template<typename real_t, typename index_t> class Mesh{
   index_t append_element(const index_t *n){
     for(size_t i=0;i<nloc;i++)
       _ENList[nloc*NElements+i] = n[i];
-    
+
     ++NElements;
 
     return get_number_elements()-1;
@@ -282,23 +273,23 @@ template<typename real_t, typename index_t> class Mesh{
       for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-            if(i<*it){ // Ensure that every edge length is only calculated once. 
+            if(i<*it){ // Ensure that every edge length is only calculated once.
               total_length += calc_edge_length(i, *it);
               nedges++;
             }
           }
       }
     }
-    
+
 #ifdef HAVE_MPI
     if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
-    
+
     float mean = total_length/nedges;
-    
+
     return mean;
   }
 
@@ -314,7 +305,7 @@ template<typename real_t, typename index_t> class Mesh{
       for(int i=0;i<(int)NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-            if(i<*it){ // Ensure that every edge length is only calculated once. 
+            if(i<*it){ // Ensure that every edge length is only calculated once.
               rms+=pow(calc_edge_length(i, *it) - mean, 2);
               nedges++;
             }
@@ -328,9 +319,9 @@ template<typename real_t, typename index_t> class Mesh{
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
-    
+
     rms = sqrt(rms/nedges);
-    
+
     return rms;
   }
 
@@ -338,7 +329,7 @@ template<typename real_t, typename index_t> class Mesh{
   float get_qmean() const{
     float sum=0;
     int nele=0;
-    
+
 #pragma omp parallel reduction(+:sum, nele)
     {
 #pragma omp for schedule(static)
@@ -346,12 +337,12 @@ template<typename real_t, typename index_t> class Mesh{
         const index_t *n=get_element(i);
         if(n[0]<0)
           continue;
-        
+
         if(ndims==2){
-          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
                                     get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
         }else{
-          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
                                     get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
         }
         nele++;
@@ -380,12 +371,12 @@ template<typename real_t, typename index_t> class Mesh{
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
-      
+
       if(ndims==2)
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
                                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
       else
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
                                                  get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
     }
 #ifdef HAVE_MPI
@@ -409,10 +400,10 @@ template<typename real_t, typename index_t> class Mesh{
 
       real_t q;
       if(ndims==2)
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), 
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
                                get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
       else
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]), 
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
                                get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
 
       rms += pow(q-mean, 2);
@@ -454,14 +445,14 @@ template<typename real_t, typename index_t> class Mesh{
             }
           }
         }
-        
+
         if(patch.size()>=std::min(min_patch_size, NNodes))
           break;
-        
+
         front.swap(new_front);
       }
     }
-    
+
     return patch;
   }
 
@@ -480,29 +471,29 @@ template<typename real_t, typename index_t> class Mesh{
       m[0] = (metric[nid0*msize  ]+metric[nid1*msize  ])*0.5;
       m[1] = (metric[nid0*msize+1]+metric[nid1*msize+1])*0.5;
       m[2] = (metric[nid0*msize+2]+metric[nid1*msize+2])*0.5;
-      
+
       m[3] = (metric[nid0*msize+3]+metric[nid1*msize+3])*0.5;
       m[4] = (metric[nid0*msize+4]+metric[nid1*msize+4])*0.5;
-      
+
       m[5] = (metric[nid0*msize+5]+metric[nid1*msize+5])*0.5;
-      
+
       length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
     }
     return length;
   }
-  
+
   real_t maximal_edge_length(){
     double L_max = 0;
 
     for(index_t i=0;i<(index_t) NNodes;i++){
       if(is_owned_node(i) && (NNList[i].size()>0))
         for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          if(i<*it){ // Ensure that every edge length is only calculated once. 
+          if(i<*it){ // Ensure that every edge length is only calculated once.
             L_max = std::max(L_max, calc_edge_length(i, *it));
           }
         }
     }
-    
+
 #ifdef HAVE_MPI
     if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
@@ -510,7 +501,7 @@ template<typename real_t, typename index_t> class Mesh{
 
     return L_max;
   }
-  
+
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significantly
     coarsened. */
@@ -812,14 +803,14 @@ template<typename real_t, typename index_t> class Mesh{
           owner = std::min(owner, mpi_node_owner[_ENList[i*nloc+j]]);
         mpi_ele_owner[i] = owner;
       }
-    
+
     // Check for the correctness of NNList and NEList.
     std::vector< std::set<index_t> > local_NEList(NNodes);
     std::vector< std::set<index_t> > local_NNList(NNodes);
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
-      
+
       for(size_t j=0;j<nloc;j++){
         index_t nid_j = _ENList[i*nloc+j];
 
@@ -863,7 +854,7 @@ template<typename real_t, typename index_t> class Mesh{
             for(typename std::set<index_t>::iterator kt=local_NNList[i].begin();kt!=local_NNList[i].end();++kt)
               std::cerr<<*kt<<" ";
             std::cerr<<std::endl;
-            
+
             state = false;
           }
         }
@@ -907,7 +898,7 @@ template<typename real_t, typename index_t> class Mesh{
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
-        
+
         area = property->area(get_coords(n[0]),
                               get_coords(n[1]),
                               get_coords(n[2]));
@@ -919,7 +910,7 @@ template<typename real_t, typename index_t> class Mesh{
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
-        
+
         real_t larea = property->area(get_coords(n[0]),
                                       get_coords(n[1]),
                                       get_coords(n[2]));
@@ -950,7 +941,7 @@ template<typename real_t, typename index_t> class Mesh{
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
-        
+
         volume = property->volume(get_coords(n[0]),
                                   get_coords(n[1]),
                                   get_coords(n[2]),
@@ -963,7 +954,7 @@ template<typename real_t, typename index_t> class Mesh{
         const index_t *n=get_element(i);
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
-        
+
         real_t lvolume = property->volume(get_coords(n[0]),
                                           get_coords(n[1]),
                                           get_coords(n[2]),
@@ -1037,21 +1028,21 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
  private:
-  template<typename _real_t, typename _index_t> friend class MetricField2D;
-  template<typename _real_t, typename _index_t> friend class MetricField3D;
-  template<typename _real_t, typename _index_t> friend class Smooth2D;
-  template<typename _real_t, typename _index_t> friend class Smooth3D;
-  template<typename _real_t, typename _index_t> friend class Swapping2D;
-  template<typename _real_t, typename _index_t> friend class Swapping3D;
-  template<typename _real_t, typename _index_t> friend class Coarsen2D;
-  template<typename _real_t, typename _index_t> friend class Coarsen3D;
-  template<typename _real_t, typename _index_t> friend class Refine2D;
-  template<typename _real_t, typename _index_t> friend class Refine3D;
-  template<typename _real_t, typename _index_t> friend class Surface2D;
-  template<typename _real_t, typename _index_t> friend class Surface3D;
-  template<typename _real_t, typename _index_t> friend class VTKTools;
-  template<typename _real_t, typename _index_t> friend class CUDATools;
-  template<typename _real_t, typename _index_t> friend class Colouring;
+  template<typename _real_t> friend class MetricField2D;
+  template<typename _real_t> friend class MetricField3D;
+  template<typename _real_t> friend class Smooth2D;
+  template<typename _real_t> friend class Smooth3D;
+  template<typename _real_t> friend class Swapping2D;
+  template<typename _real_t> friend class Swapping3D;
+  template<typename _real_t> friend class Coarsen2D;
+  template<typename _real_t> friend class Coarsen3D;
+  template<typename _real_t> friend class Refine2D;
+  template<typename _real_t> friend class Refine3D;
+  template<typename _real_t> friend class Surface2D;
+  template<typename _real_t> friend class Surface3D;
+  template<typename _real_t> friend class VTKTools;
+  template<typename _real_t> friend class CUDATools;
+  template<typename _real_t> friend class Colouring;
 
   struct DeferredOperations{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
@@ -1077,23 +1068,13 @@ template<typename real_t, typename index_t> class Mesh{
 #ifdef HAVE_MPI
     MPI_Comm_size(_mpi_comm, &num_processes);
     MPI_Comm_rank(_mpi_comm, &rank);
-    
+
     // Assign the correct MPI data type to MPI_INDEX_T
     mpi_type_wrapper<index_t> mpi_index_t_wrapper;
     MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
 #endif
 
-#ifdef _OPENMP
-    num_threads = omp_get_max_threads();
-#else
-    num_threads = 1;
-#endif
-
-#ifdef HAVE_LIBNUMA
-    num_uma = numa_max_node()+1;
-#else
-    num_uma = num_threads; // Assume the worst
-#endif
+    nthreads = pragmatic_nthreads();
 
     if(z==NULL){
       nloc = 3;
@@ -1200,7 +1181,7 @@ template<typename real_t, typename index_t> class Mesh{
     NEList.resize(NNodes);
     node_owner.resize(NNodes);
     this->lnn2gnn.resize(NNodes);
-    deferred_operations.resize(num_threads);
+    deferred_operations.resize(nthreads);
 
     // TODO I don't know whether this method makes sense anymore.
     // Enforce first-touch policy
@@ -1227,9 +1208,9 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
 
-      // Each thread allocates num_threads DeferredOperations
+      // Each thread allocates nthreads DeferredOperations
       // structs, one for each OMP thread.
-      deferred_operations[get_tid()].resize(num_threads);
+      deferred_operations[pragmatic_thread_id()].resize(nthreads);
 
 #pragma omp single nowait
       {
@@ -1301,8 +1282,7 @@ template<typename real_t, typename index_t> class Mesh{
 
   /// Create required adjacency lists.
   void create_adjacency(){
-    int tid = omp_get_thread_num();
-    int nthreads = omp_get_max_threads();
+    int tid = pragmatic_thread_id();
 
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
@@ -1321,7 +1301,7 @@ template<typename real_t, typename index_t> class Mesh{
         }
       }
     }
-    
+
 #pragma omp barrier
 
     // Finalise
@@ -1329,12 +1309,12 @@ template<typename real_t, typename index_t> class Mesh{
     for(size_t i=0;i<NNodes;i++){
       if(NNList[i].empty())
         continue;
-      
+
       std::vector<index_t> *nnset = new std::vector<index_t>();
-      
+
       std::sort(NNList[i].begin(),NNList[i].end());
       std::unique_copy(NNList[i].begin(), NNList[i].end(), std::inserter(*nnset, nnset->begin()));
-      
+
       NNList[i].swap(*nnset);
       delete nnset;
     }
@@ -1351,41 +1331,41 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   inline void deferred_addNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].addNN.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].addNN.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].addNN.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].addNN.push_back(n);
   }
 
   inline void deferred_remNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].remNN.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].remNN.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].remNN.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].remNN.push_back(n);
   }
 
   inline void deferred_addNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].addNE.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].addNE.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].addNE.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].addNE.push_back(n);
   }
 
   inline void deferred_addNE_fix(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].addNE_fix.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].addNE_fix.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].addNE_fix.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].addNE_fix.push_back(n);
   }
 
   inline void deferred_remNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].remNE.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].remNE.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].remNE.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].remNE.push_back(n);
   }
 
   inline void deferred_propagate_coarsening(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].propagation_vector.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].propagation_vector.push_back(i);
   }
 
   inline void deferred_propagate_swapping(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].propagation_set.push_back(i);
-    deferred_operations[tid][hash(i) % num_threads].propagation_set.push_back(n);
+    deferred_operations[tid][hash(i) % nthreads].propagation_set.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].propagation_set.push_back(n);
   }
 
   inline void deferred_reset_colour(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % num_threads].reset_colour.push_back(i);
+    deferred_operations[tid][hash(i) % nthreads].reset_colour.push_back(i);
   }
 
   void commit_deferred(size_t tid){
@@ -1393,7 +1373,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   void commit_deferred(size_t tid, std::vector<size_t> *threadIdx){
-    for(int i=0; i<num_threads; ++i){
+    for(int i=0; i<nthreads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       // Commit removals from NNList
@@ -1436,7 +1416,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   void commit_coarsening_propagation(index_t *dynamic_vertex, size_t tid){
-    for(int i=0; i<num_threads; ++i){
+    for(int i=0; i<nthreads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.propagation_vector.begin(); it!=pending.propagation_vector.end(); ++it)
@@ -1447,7 +1427,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   void commit_swapping_propagation(std::vector< std::set<index_t> >&marked_edges , size_t tid){
-    for(int i=0; i<num_threads; ++i){
+    for(int i=0; i<nthreads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.propagation_set.begin(); it!=pending.propagation_set.end(); it+=2)
@@ -1458,7 +1438,7 @@ template<typename real_t, typename index_t> class Mesh{
   }
 
   void commit_colour_reset(int *node_colour, size_t tid){
-    for(int i=0; i<num_threads; ++i){
+    for(int i=0; i<nthreads; ++i){
       DeferredOperations& pending = deferred_operations[i][tid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.reset_colour.begin(); it!=pending.reset_colour.end(); ++it)
@@ -1675,10 +1655,10 @@ template<typename real_t, typename index_t> class Mesh{
           node_owner[i] = rank;
         }
       }
-      
+
       // Update GNN's for the halo nodes.
       halo_update(&(lnn2gnn[0]), 1);
-      
+
       // Finish writing node ownerships.
       for(int i=0;i<num_processes;i++){
         for(std::vector<int>::const_iterator it=recv[i].begin();it!=recv[i].end();++it){
@@ -1800,7 +1780,7 @@ template<typename real_t, typename index_t> class Mesh{
   std::vector<float> metric;
 
   // Parallel support.
-  int rank, num_processes, num_uma, num_threads;
+  int rank, num_processes, nthreads;
   std::vector< std::vector<index_t> > send, recv;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
   std::vector< boost::unordered_map<index_t, index_t> > send_map, recv_map;

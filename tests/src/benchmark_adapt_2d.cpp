@@ -74,10 +74,10 @@ int main(int argc, char **argv){
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
   double eta=0.0001;
   char filename[4096];
@@ -87,12 +87,12 @@ int main(int argc, char **argv){
   for(int t=0;t<101;t++){
     size_t NNodes = mesh->get_number_nodes();
 
-    MetricField2D<double, int> metric_field(*mesh, surface);
+    MetricField2D<double> metric_field(*mesh, surface);
     std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
-      
+
       psi[i] = 0.1*sin(20*x+2*pi*t/period) + atan2(-0.1, (double)(2*x - sin(5*y + 2*pi*t/period)));
     }
 
@@ -112,10 +112,10 @@ int main(int argc, char **argv){
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
 
-    Coarsen2D<double, int> coarsen(*mesh, surface);
-    Smooth2D<double, int> smooth(*mesh, surface);
-    Refine2D<double, int> refine(*mesh, surface);
-    Swapping2D<double, int> swapping(*mesh, surface);
+    Coarsen2D<double> coarsen(*mesh, surface);
+    Smooth2D<double> smooth(*mesh, surface);
+    Refine2D<double> refine(*mesh, surface);
+    Swapping2D<double> swapping(*mesh, surface);
 
     double L_max = mesh->maximal_edge_length();
 
@@ -175,7 +175,6 @@ int main(int argc, char **argv){
                <<std::setw(9)<<time_swap/t<<" "
                <<std::setw(11)<<time_smooth/t<<" "
                <<std::setw(10)<<time_adapt/t<<"\n";
-    
     sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
     VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
   }

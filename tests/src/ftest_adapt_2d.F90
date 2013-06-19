@@ -42,14 +42,14 @@ program test_adapt
   integer(kind=c_int) :: NNodes, NElements, NSElements
   real(c_double), allocatable, dimension(:) :: xv, yv, psi
   real(c_double), parameter :: eta=0.002
-  
+
   integer :: i
   real :: x, y
 
   call mpi_init()
 
   call pragmatic_init("../data/smooth_2d.vtu"//C_NULL_CHAR)
-  
+
   call pragmatic_get_info(NNodes, NElements, NSElements)
 
   allocate(xv(NNodes), yv(NNodes))
@@ -59,9 +59,9 @@ program test_adapt
   do i=1, NNodes
      x = 2*xv(i)-1
      y = 2*yv(i)-1
-     
+
      psi(i) = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, 2*x - sin(5*y))
-  end do  
+  end do
   call pragmatic_add_field(psi, eta, 1);
 
   call pragmatic_adapt()

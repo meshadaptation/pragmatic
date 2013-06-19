@@ -71,12 +71,12 @@ int main(int argc, char **argv){
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.001;
@@ -100,16 +100,16 @@ int main(int argc, char **argv){
                                     <<"Quality mean:  "<<qmean<<std::endl
                                     <<"Quality min:   "<<qmin<<std::endl
                                     <<"Quality RMS:   "<<qrms<<std::endl;
-  //VTKTools<double, int>::export_vtu("../data/test_adapt_2d-initial", mesh);
+  //VTKTools<double>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double, int> coarsen(*mesh, surface);  
-  Smooth2D<double, int> smooth(*mesh, surface);
-  Refine2D<double, int> refine(*mesh, surface);
-  Swapping2D<double, int> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
 
@@ -148,7 +148,7 @@ int main(int argc, char **argv){
       std::cout<<"Basic quality:\n";
     mesh->verify();
 
-    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
+    VTKTools<double>::export_vtu("../data/test_adapt_2d-basic", mesh);
   }
 
   tic = get_wtime();
@@ -172,7 +172,7 @@ int main(int argc, char **argv){
     psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

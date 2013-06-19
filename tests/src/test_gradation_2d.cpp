@@ -68,10 +68,10 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
   
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box50x50.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -85,7 +85,7 @@ int main(int argc, char **argv){
       psi[i] = -1.0;
   }
   
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
   
   metric_field.add_field(&(psi[0]), 0.2);
 
@@ -97,10 +97,10 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double, int> coarsen(*mesh, surface);  
-  Smooth2D<double, int> smooth(*mesh, surface);
-  Refine2D<double, int> refine(*mesh, surface);
-  Swapping2D<double, int> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);  
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
   coarsen.coarsen(L_low, L_up);
 
@@ -110,7 +110,7 @@ int main(int argc, char **argv){
       mesh->defragment(&active_vertex_map);
       surface.defragment(&active_vertex_map);
       
-      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
+      VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
       exit(-1);
     }
 
@@ -133,7 +133,7 @@ int main(int argc, char **argv){
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-refine", mesh);
         exit(-1);
       }
     }
@@ -151,7 +151,7 @@ int main(int argc, char **argv){
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
         exit(-1);
       }
     }
@@ -169,7 +169,7 @@ int main(int argc, char **argv){
         mesh->defragment(&active_vertex_map);
         surface.defragment(&active_vertex_map);
         
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
         exit(-1);
       }
     }
@@ -190,7 +190,7 @@ int main(int argc, char **argv){
     mesh->verify();
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_gradation_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_gradation_2d", mesh);
 
   std::cout<<"pass\n";
   

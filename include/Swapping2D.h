@@ -51,10 +51,10 @@
 /*! \brief Performs edge/face swapping.
  *
  */
-template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAlgorithm<real_t, index_t>{
+template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
  public:
   /// Default constructor.
-  Swapping2D(Mesh<real_t, index_t> &mesh, Surface2D<real_t, index_t> &surface){
+  Swapping2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
 
@@ -83,11 +83,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     nnodes_reserve = 0;
     colouring = NULL;
 
-#ifdef _OPENMP
-    nthreads = omp_get_max_threads();
-#else
-    nthreads=1;
-#endif
+    nthreads = pragmatic_nthreads();
   }
 
   /// Default destructor.
@@ -111,7 +107,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
       nnodes_reserve = 2*NNodes;
 
       if(colouring==NULL)
-        colouring = new Colouring<real_t, index_t>(_mesh, this, nnodes_reserve);
+        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
       else
         colouring->resize(nnodes_reserve);
 
@@ -135,7 +131,7 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
 
 #pragma omp parallel
     {
-      int tid = get_tid();
+      int tid = pragmatic_thread_id();
 
       // Cache the element quality's.
 #pragma omp for schedule(static, 32)
@@ -992,7 +988,6 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
               }
 
               local_buffers[proc].push_back(_surface->get_boundary_id(lfacets[f]));
-              local_buffers[proc].push_back(_surface->get_coplanar_id(lfacets[f]));
             }
           }
         }
@@ -1247,11 +1242,10 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
             }
 
             int boundary_id = buffer[loc++];
-            int coplanar_id = buffer[loc++];
 
             // Updates to surface are thread-safe for the
             // same reason as updates to adjacency lists.
-            _surface->append_facet(facet, boundary_id, coplanar_id, true);
+            _surface->append_facet(facet, boundary_id, true);
           }
         }
 
@@ -1363,10 +1357,10 @@ template<typename real_t, typename index_t> class Swapping2D : public AdaptiveAl
     }
   }
 
-  Mesh<real_t, index_t> *_mesh;
-  Surface2D<real_t, index_t> *_surface;
+  Mesh<real_t> *_mesh;
+  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
-  Colouring<real_t, index_t> *colouring;
+  Colouring<real_t> *colouring;
 
   size_t nnodes_reserve;
 

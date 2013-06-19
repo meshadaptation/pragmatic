@@ -67,12 +67,12 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
 
-  Surface3D<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField3D<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 0.1);
   metric_field.update_mesh();
   
-  Refine3D<double, int> adapt(*mesh, surface);
+  Refine3D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
   adapt.refine(sqrt(2.0));
@@ -96,8 +96,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  VTKTools<double, int>::export_vtu("../data/test_mpi_refine_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_refine_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_3d_surface", &surface);
 
   delete mesh;
 

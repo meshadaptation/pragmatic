@@ -109,15 +109,13 @@ module pragmatic
   !> @param[in] nfacets Number of surface elements.
   !> @param[in] facets Surface elements.
   !> @param[in] boundary_ids Boundary ID's.
-  !> @param[in] coplanar_ids Co-planar ID's.
   interface pragmatic_set_surface
-     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_set_surface")
+     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids) bind(c,name="pragmatic_set_surface")
        use iso_c_binding
        implicit none
        integer(c_int) :: nfacets
        integer(c_int) :: facets(*)
        integer(c_int) :: boundary_ids(*)
-       integer(c_int) :: coplanar_ids(*)
      end subroutine pragmatic_set_surface
   end interface pragmatic_set_surface
   
@@ -189,14 +187,12 @@ module pragmatic
   !
   !> @param[out] facets Surface elements.
   !> @param[out] boundary_ids Boundary ID's.
-  !> @param[out] coplanar_ids Co-planar ID's.
   interface pragmatic_get_surface
-     subroutine pragmatic_get_surface(facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_get_surface")
+     subroutine pragmatic_get_surface(facets, boundary_ids) bind(c,name="pragmatic_get_surface")
        use iso_c_binding
        implicit none
        integer(c_int) :: facets(*)
        integer(c_int) :: boundary_ids(*)
-       integer(c_int) :: coplanar_ids(*)
      end subroutine pragmatic_get_surface
   end interface pragmatic_get_surface
 

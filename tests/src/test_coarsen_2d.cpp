@@ -65,12 +65,12 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -79,7 +79,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  Coarsen2D<double, int> adapt(*mesh, surface);
+  Coarsen2D<double> adapt(*mesh, surface);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -97,7 +97,7 @@ int main(int argc, char **argv){
   if(verbose){
     double lrms = mesh->get_lrms();
     double qrms = mesh->get_qrms();
-    
+
     if(rank==0)
       std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
                <<"Number elements:      "<<nelements<<std::endl
@@ -105,8 +105,8 @@ int main(int argc, char **argv){
                <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 

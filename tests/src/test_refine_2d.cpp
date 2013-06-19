@@ -64,12 +64,12 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
 
-  Surface2D<double, int> surface(*mesh);
-  surface.find_surface(true);
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
-  MetricField2D<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.0001;
@@ -85,9 +85,9 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), eta, 1);
   metric_field.update_mesh();
 
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d-initial", mesh);
+  VTKTools<double>::export_vtu("../data/test_refine_2d-initial", mesh);
 
-  Refine2D<double, int> adapt(*mesh, surface);
+  Refine2D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
   for(int i=0;i<10;i++)
@@ -102,8 +102,8 @@ int main(int argc, char **argv){
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_refine_2d_surface", &surface);
   
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();

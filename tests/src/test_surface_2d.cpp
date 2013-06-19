@@ -61,16 +61,16 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20.vtu");
 
-  Surface2D<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
-  VTKTools<double, int>::export_vtu("../data/test_surface_2d", &surface);
+  VTKTools<double>::export_vtu("../data/test_surface_2d", &surface);
 
   std::set<int> unique_ids;
   for(int i=0;i<surface.get_number_facets();i++){
-    unique_ids.insert(surface.get_coplanar_id(i));
+    unique_ids.insert(surface.get_boundary_id(i));
   }
 
   if(unique_ids.size()==4)

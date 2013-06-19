@@ -58,12 +58,12 @@
  * good quality elements near the geometry).
  */
 
-template<typename real_t, typename index_t>
+template<typename real_t>
   class Surface3D{
  public:
 
   /// Default constructor.
-  Surface3D(Mesh<real_t, index_t> &mesh){
+  Surface3D(Mesh<real_t> &mesh){
     _mesh = &mesh;
 
     size_t NNodes = _mesh->get_number_nodes();
@@ -408,7 +408,7 @@ template<typename real_t, typename index_t>
 
 #pragma omp parallel
     {
-      nthreads = omp_get_num_threads();
+      nthreads = pragmatic_nthreads();
 
 #pragma omp master
       {
@@ -426,7 +426,7 @@ template<typename real_t, typename index_t>
 
 #pragma omp parallel
     {
-      const unsigned int tid = omp_get_thread_num();
+      const unsigned int tid = pragmatic_thread_id();
       splitCnt[tid] = 0;
 
 #pragma omp for schedule(dynamic)
@@ -543,7 +543,7 @@ template<typename real_t, typename index_t>
     {
       // Perform parallel prefix sum to find (for each OMP thread) the starting position
       // in SENList at which new elements should be appended.
-      const unsigned int tid = omp_get_thread_num();
+      const unsigned int tid = pragmatic_thread_id();
       threadIdx[tid] = splitCnt[tid];
 
 #pragma omp barrier
@@ -677,8 +677,8 @@ template<typename real_t, typename index_t>
   }
 
  private:
-  template<typename _real_t, typename _index_t> friend class VTKTools;
-  template<typename _real_t, typename _index_t> friend class CUDATools;
+  template<typename _real_t> friend class VTKTools;
+  template<typename _real_t> friend class CUDATools;
 
   /// Calculate surface normals.
   void calculate_normals(){
@@ -842,7 +842,7 @@ template<typename real_t, typename index_t>
   real_t COPLANAR_MAGIC_NUMBER;
   bool use_bbox;
 
-  Mesh<real_t, index_t> *_mesh;
+  Mesh<real_t> *_mesh;
 };
 
 #endif

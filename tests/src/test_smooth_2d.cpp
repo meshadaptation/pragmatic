@@ -69,11 +69,11 @@ int main(int argc, char **argv){
   for(int m=0;m<4;m++){
     const char *method = methods[m];
 
-    Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
-    Surface2D<double, int> surface(*mesh);
-    surface.find_surface(true);
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
+    Surface2D<double> surface(*mesh);
+    surface.find_surface();
 
-    MetricField2D<double, int> metric_field(*mesh, surface);
+    MetricField2D<double> metric_field(*mesh, surface);
 
     size_t NNodes = mesh->get_number_nodes();
 
@@ -91,7 +91,7 @@ int main(int argc, char **argv){
     metric_field.update_mesh();
     
     if(m==0){
-      VTKTools<double, int>::export_vtu("../data/test_smooth_2d_init", mesh);
+      VTKTools<double>::export_vtu("../data/test_smooth_2d_init", mesh);
       double qmean = mesh->get_qmean();
       double qrms = mesh->get_qrms();
       double qmin = mesh->get_qmin();
@@ -103,7 +103,7 @@ int main(int argc, char **argv){
                  <<"Quality RMS:     "<<qrms<<std::endl;
     }
     
-    Smooth2D<double, int> smooth(*mesh, surface);
+    Smooth2D<double> smooth(*mesh, surface);
     
     int max_smooth_iter=2;
     
@@ -127,7 +127,7 @@ int main(int argc, char **argv){
                <<"Quality RMS:          "<<qrms<<std::endl;
     
     std::string vtu_filename = std::string("../data/test_smooth_2d_")+std::string(method);
-    VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh);
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
     delete mesh;
     
     if(rank==0){

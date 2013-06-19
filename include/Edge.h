@@ -52,24 +52,24 @@ template<typename index_t> class Edge{
     edge.first = std::min(nid0, nid1);
     edge.second = std::max(nid0, nid1);
   }
-  
+
   /*! Copy constructor
    * @param in Edge object.
    */
   Edge(const Edge& in){
     *this = in;
   }
-  
+
   /// Destructor
   ~Edge(){}
-  
+
   /// Assignment operator
   Edge& operator=(const Edge &in){
     edge = in.edge;
 
     return *this;
   }
-  
+
   /// Equality operator.
   bool operator==(const Edge& in) const{
     return this->edge == in.edge;
@@ -97,15 +97,15 @@ template<typename index_t> class Edge{
     return (nid==edge.first)||(nid==edge.second);
   }
 
-  template<typename _real_t, typename _index_t> friend class Mesh;
-  template<typename _real_t, typename _index_t> friend class Surface2D;
-  template<typename _real_t, typename _index_t> friend class Surface3D;
-  template<typename _real_t, typename _index_t> friend class Coarsen2D;
-  template<typename _real_t, typename _index_t> friend class Coarsen3D;
-  template<typename _real_t, typename _index_t> friend class Swapping2D;
-  template<typename _real_t, typename _index_t> friend class Swapping3D;
-  template<typename _real_t, typename _index_t> friend class Refine2D;
-  template<typename _real_t, typename _index_t> friend class Refine3D;
+  template<typename _real_t> friend class Mesh;
+  template<typename _real_t> friend class Surface2D;
+  template<typename _real_t> friend class Surface3D;
+  template<typename _real_t> friend class Coarsen2D;
+  template<typename _real_t> friend class Coarsen3D;
+  template<typename _real_t> friend class Swapping2D;
+  template<typename _real_t> friend class Swapping3D;
+  template<typename _real_t> friend class Refine2D;
+  template<typename _real_t> friend class Refine3D;
 
  private:
 
@@ -177,15 +177,15 @@ template<typename index_t> class DirectedEdge{
     return (nid==edge.first)||(nid==edge.second);
   }
 
-  template<typename _real_t, typename _index_t> friend class Mesh;
-  template<typename _real_t, typename _index_t> friend class Surface2D;
-  template<typename _real_t, typename _index_t> friend class Surface3D;
-  template<typename _real_t, typename _index_t> friend class Coarsen2D;
-  template<typename _real_t, typename _index_t> friend class Coarsen3D;
-  template<typename _real_t, typename _index_t> friend class Swapping2D;
-  template<typename _real_t, typename _index_t> friend class Swapping3D;
-  template<typename _real_t, typename _index_t> friend class Refine2D;
-  template<typename _real_t, typename _index_t> friend class Refine3D;
+  template<typename _real_t> friend class Mesh;
+  template<typename _real_t> friend class Surface2D;
+  template<typename _real_t> friend class Surface3D;
+  template<typename _real_t> friend class Coarsen2D;
+  template<typename _real_t> friend class Coarsen3D;
+  template<typename _real_t> friend class Swapping2D;
+  template<typename _real_t> friend class Swapping3D;
+  template<typename _real_t> friend class Refine2D;
+  template<typename _real_t> friend class Refine3D;
 
  private:
   index_t id;

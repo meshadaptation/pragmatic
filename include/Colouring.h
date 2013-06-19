@@ -38,9 +38,9 @@
 
 #include "AdaptiveAlgorithm.h"
 
-template<typename real_t, typename index_t> class Colouring{
+template<typename real_t> class Colouring{
 public:
-  Colouring(Mesh<real_t, index_t> *mesh, AdaptiveAlgorithm<real_t, index_t> *algorithm, size_t nnodes_reserve){
+  Colouring(Mesh<real_t> *mesh, AdaptiveAlgorithm<real_t> *algorithm, size_t nnodes_reserve){
     alg = algorithm;
     _mesh = mesh;
 
@@ -254,12 +254,12 @@ public:
   }
 
 private:
-  template<typename _real_t, typename _index_t> friend class Coarsen2D;
-  template<typename _real_t, typename _index_t> friend class Coarsen3D;
-  template<typename _real_t, typename _index_t> friend class Smooth2D;
-  template<typename _real_t, typename _index_t> friend class Smooth3D;
-  template<typename _real_t, typename _index_t> friend class Swapping2D;
-  template<typename _real_t, typename _index_t> friend class Swapping3D;
+  template<typename _real_t> friend class Coarsen2D;
+  template<typename _real_t> friend class Coarsen3D;
+  template<typename _real_t> friend class Smooth2D;
+  template<typename _real_t> friend class Smooth3D;
+  template<typename _real_t> friend class Swapping2D;
+  template<typename _real_t> friend class Swapping3D;
 
   inline int nsets_incr(int nsets, int max_colour){
     return (max_colour > nsets ? max_colour - nsets : 0);
@@ -280,9 +280,9 @@ private:
   index_t **independent_sets;
   std::vector<size_t> ind_set_size;
 
-  Mesh<real_t, index_t> *_mesh;
+  Mesh<real_t> *_mesh;
 
-  AdaptiveAlgorithm<real_t, index_t> *alg;
+  AdaptiveAlgorithm<real_t> *alg;
 
   const static int max_colours = 256;
 };

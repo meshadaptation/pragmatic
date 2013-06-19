@@ -52,12 +52,12 @@
 #include "Swapping.h"
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
 
-  Surface3D<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField3D<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   size_t NElements = mesh->get_number_elements();
@@ -87,16 +87,16 @@ int main(int argc, char **argv){
            <<"Quality mean:  "<<qmean<<std::endl
            <<"Quality min:   "<<qmin<<std::endl
            <<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_adapt_3d-initial", mesh);
+  VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
 
-  Coarsen3D<double, int> coarsen(*mesh, surface);
-  Smooth3D<double, int> smooth(*mesh, surface);
-  Refine3D<double, int> refine(*mesh, surface);
-  Swapping3D<double, int> swapping(*mesh, surface);
+  Coarsen3D<double> coarsen(*mesh, surface);
+  Smooth3D<double> smooth(*mesh, surface);
+  Refine3D<double> refine(*mesh, surface);
+  Swapping3D<double> swapping(*mesh, surface);
   
   coarsen.coarsen(L_low, L_up);
   
@@ -136,8 +136,8 @@ int main(int argc, char **argv){
   std::cout<<"After adaptivity:\n";
   mesh->verify();
   
-  VTKTools<double, int>::export_vtu("../data/test_adapt_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_adapt_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_adapt_3d_surface", &surface);
   
   delete mesh;
   
