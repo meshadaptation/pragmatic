@@ -38,6 +38,8 @@
 #ifndef PRAGMATICTYPES_H
 #define PRAGMATICTYPES_H
 
+#include "pragmatic_config.h"
+
 typedef int index_t;
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP

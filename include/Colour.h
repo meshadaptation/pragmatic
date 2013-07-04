@@ -43,11 +43,10 @@
 #include <vector>
 #include <deque>
 
-#include "pragmatic_config.h"
+#include "PragmaticTypes.h"
 
 /*! \brief Performs a simple first breath greedy graph colouring of a local undirected graph.
  */
-template<typename index_t>
 class Colour{
  public:
   /*! This routine colours a undirected graph using the greedy colouring algorithm.
@@ -73,7 +72,7 @@ class Colour{
         continue;
 
       std::vector<bool> used_colours(max_colour, false);;
-      for(typename std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
+      for(std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
         if(*it<(int)node){
           if(colour[*it]>=(signed)max_colour){
             max_colour*=2;
@@ -92,39 +91,122 @@ class Colour{
     }
   }
 
-  /*! This routine colours a undirected graph using the greedy colouring algorithm.
+  /*! This routine colours a undirected graph using Gebremedhin &
+   *  Manne's algorithm, "Scalable parallel graph coloring
+   *  algorithms".
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
-   * @param active indicates which nodes are turned on in the graph.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(std::vector< std::deque<index_t> > &NNList, std::vector<bool> &active, index_t *colour){
+  static void GebremedhinManne(std::vector< std::vector<index_t> > &NNList, int *colour){
     size_t NNodes = NNList.size();
-    
-    // Colour first active node.
-    size_t node;
-    for(node=0;node<NNodes;node++){
-      if(active[node]){
-        colour[node] = 0;
-        break;
+    std::vector<bool> conflicts(NNodes, false);
+#pragma omp parallel firstprivate(NNodes)
+    {
+      // Initialize.
+#pragma omp for
+      for(size_t i=0;i<NNodes;i++){
+        colour[i] = 0;
+      }
+
+      // Phase 1: pseudo-colouring. Note - assuming graph can be colored with fewer than 64 colours.
+#pragma omp for
+      for(size_t i=0;i<NNodes;i++){
+        unsigned long colours = 0;
+        unsigned long c;
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+#pragma omp atomic read
+          c = colour[*it];
+          colours = colours | 1<<c;
+        }
+        colours = ~colours;
+
+        for(unsigned int j=0;j<64;j++){
+          c=1<<j;
+          if(colours&c){
+            colour[i] = j;
+            break;
+          }
+        }
+      }
+
+      // Phase 2: find conflicts
+#pragma omp for
+      for(size_t i=0;i<NNodes;i++){
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          conflicts[i] = conflicts[i] || (colour[i]==colour[*it]);
+        }
+      }
+
+      // Phase 3: serial resolution of conflicts
+      for(size_t i=0;i<NNodes;i++){
+        if(!conflicts[i])
+          continue;
+        
+        unsigned int colours = 0;
+        int c;
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          c = colour[*it];
+          colours = colours | 1<<c;
+        }
+        colours = ~colours;
+
+        for(unsigned int j=0;j<64;j++){
+          c = 1<<j;
+          if(colours&c){
+            colour[i] = j;
+            break;
+          }else{
+            c = c<<1;
+          }
+        }
       }
     }
-    
-    // Colour remaining active nodes.
-    for(;node<NNodes;node++){
-      if(!active[node])
-        continue;
-      
-      std::set<index_t> used_colours;
-      for(typename std::deque<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it)
-        if(*it<(int)node)
-          used_colours.insert(colour[*it]);
-      
-      for(index_t i=0;;i++)
-        if(used_colours.count(i)==0){
-          colour[node] = i;
-          break;
+  }
+
+  /*! This routine repairs the colouring - based on the second and
+   *  third phases of Gebremedhin & Manne's algorithm, "Scalable
+   *  parallel graph coloring algorithms".
+   * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
+   * @param colour array that the node colouring is copied into.
+   */
+  static void repair(std::vector< std::vector<index_t> > &NNList, int *colour){
+    size_t NNodes = NNList.size();
+    std::vector<bool> conflicts(NNodes, false);
+#pragma omp parallel firstprivate(NNodes)
+    {
+      // Phase 2: find conflicts
+#pragma omp for
+      for(size_t i=0;i<NNodes;i++){
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          conflicts[i] = conflicts[i] || (colour[i]==colour[*it]);
         }
+      }
+
+      // Phase 3: serial resolution of conflicts
+      for(size_t i=0;i<NNodes;i++){
+        if(!conflicts[i])
+          continue;
+        
+        unsigned int colours = 0;
+        int c;
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          c = colour[*it];
+          colours = colours | 1<<c;
+        }
+        colours = ~colours;
+
+        for(unsigned int j=0;j<64;j++){
+          c = 1<<j;
+          if(colours&c){
+            colour[i] = j;
+            break;
+          }else{
+            c = c<<1;
+          }
+        }
+      }
     }
   }
+
 };
 #endif
