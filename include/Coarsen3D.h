@@ -889,7 +889,7 @@ template<typename real_t> class Coarsen3D{
     int NNodes = _mesh->get_number_nodes();
     
     std::vector<int> colour(NNodes);
-    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    Colour::greedy(NNodes, _mesh->NNList, colour);
     
     std::map<int, int> ncolours;
     if(nprocs==1){

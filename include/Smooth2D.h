@@ -607,9 +607,9 @@ template<typename real_t>
 #else
     int NNodes = _mesh->get_number_nodes();
     std::vector<int> colour(NNodes);
-    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    Colour::greedy(NNodes, _mesh->NNList, colour);
 #endif
-    
+
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty()))
         continue;

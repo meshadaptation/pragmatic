@@ -164,7 +164,7 @@ template<typename real_t> class Swapping3D{
       }
     }
     std::vector<index_t> colour(graph.size());
-    Colour<index_t>::greedy(NNList, &(colour[0]));
+    Colour::greedy(graph.size(), NNList, colour);
 
     // Assume colour 0 will be the maximal independent set.
 
