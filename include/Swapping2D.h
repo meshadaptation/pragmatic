@@ -44,7 +44,7 @@
 #include <vector>
 
 #include "AdaptiveAlgorithm.h"
-#include "Colouring.h"
+#include "Colour.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -81,7 +81,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     }
 
     nnodes_reserve = 0;
-    colouring = NULL;
 
     nthreads = pragmatic_nthreads();
   }
@@ -90,539 +89,147 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
   ~Swapping2D(){
     if(property!=NULL)
       delete property;
-
-    if(colouring!=NULL)
-      delete colouring;
   }
 
-  void swap(real_t Q_min){
-    min_Q = Q_min;
+  void swap(real_t quality_tolerance){
     size_t NNodes = _mesh->get_number_nodes();
-    size_t NElements = _mesh->get_number_elements();
 
-    // Total number of active vertices. Used to break the infinite loop.
-    size_t total_active;
+    size_t NElements = _mesh->get_number_elements();
+    int active_colour;
+
+    min_Q = quality_tolerance;
+    total_active=0;
 
     if(nnodes_reserve<1.5*NNodes){
       nnodes_reserve = 2*NNodes;
-
-      if(colouring==NULL)
-        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
-      else
-        colouring->resize(nnodes_reserve);
 
       quality.resize(nnodes_reserve * 2, 0.0);
       marked_edges.resize(nnodes_reserve, std::set<index_t>());
     }
 
-#ifdef HAVE_MPI
-    // Global arrays used to separate all vertices of an
-    // independent set into interior vertices and halo vertices.
-    index_t *global_interior = new index_t[nnodes_reserve];
-    index_t *global_halo = new index_t[nnodes_reserve];
-    size_t global_interior_size = 0;
-    size_t global_halo_size = 0;
-
-    std::vector< std::vector<int> > send_buffer(nprocs);
-    std::vector<int> send_buffer_size(nprocs, 0);
-    std::vector< std::vector<index_t> > sent_vertices_vec(nprocs);
-    std::vector<size_t> sent_vertices_vec_size(nprocs, 0);
-#endif
-
-#pragma omp parallel
+    std::vector<int> colouring(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colouring);
+    
+    int colour_count[64];
+#pragma omp parallel firstprivate(NNodes, NElements)
     {
       int tid = pragmatic_thread_id();
-
-      // Cache the element quality's.
-#pragma omp for schedule(static, 32)
+      
+      // Cache the element quality's. Really need to make this persistent within Mesh.
+      // Also, initialize marked_edges.
+#pragma omp for schedule(static, 8)
       for(size_t i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
-        if(n[0]<0){
+        if(n[0]>=0){
+          const real_t *x0 = _mesh->get_coords(n[0]);
+          const real_t *x1 = _mesh->get_coords(n[1]);
+          const real_t *x2 = _mesh->get_coords(n[2]);
+          
+          quality[i] = property->lipnikov(x0, x1, x2,
+                                          _mesh->get_metric(n[0]),
+                                          _mesh->get_metric(n[1]),
+                                          _mesh->get_metric(n[2]));
+
+          if(quality[i]<min_Q){
+            for(size_t j=0;j<3;j++){
+              for(size_t k=j+1;k<3;k++){
+#pragma omp critical
+                {
+                  std::cerr<<std::min(n[j], n[k])<<" :: "<<std::max(n[j], n[k])<<std::endl;
+                  marked_edges[std::min(n[j], n[k])].insert(std::max(n[j], n[k]));
+                }
+              }
+            }
+          }
+        }else{
           quality[i] = 0.0;
-          continue;
-        }
-
-        const real_t *x0 = _mesh->get_coords(n[0]);
-        const real_t *x1 = _mesh->get_coords(n[1]);
-        const real_t *x2 = _mesh->get_coords(n[2]);
-
-        quality[i] = property->lipnikov(x0, x1, x2,
-                                        _mesh->get_metric(n[0]),
-                                        _mesh->get_metric(n[1]),
-                                        _mesh->get_metric(n[2]));
-      }
-
-      // Initialise list of dynamic edges.
-      if(false){
-#pragma omp for schedule(static, 32)
-        for(index_t i=0; i<(index_t)_mesh->NNodes;i++){
-          colouring->node_colour[i] = -1;
-          marked_edges[i].clear();
-
-          if(_mesh->node_owner[i] != rank)
-            continue;
-
-          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it){
-            if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[*it])
-              marked_edges[i].insert(*it);
-          }
-        }
-      }else{
-#pragma omp for schedule(static, 32)
-        for(index_t i=0;i<(index_t)NNodes;i++){
-          colouring->node_colour[i] = -1;
-          marked_edges[i].clear();
-
-          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it){
-            if(i < *it)
-              marked_edges[i].insert(*it);
-          }
         }
       }
 
-      do{
-        // Find which vertices comprise the active sub-mesh.
-        std::vector<index_t> active_set;
-
+      for(size_t sweep=0;sweep<100;sweep++){
+        // Find the maximal independant set.
+#pragma omp single
+        for(size_t i=0;i<64;i++)
+          colour_count[i] = 0;
+#pragma omp for schedule(static)
+        for(size_t i=0;i<_mesh->NNodes;i++){
+          if(!marked_edges[i].empty()){
+#pragma omp atomic update
+            colour_count[colouring[i]]++;
+          }
+        }
+        
+        // Find the maximal independant set.
 #pragma omp single
         {
-          total_active = 0;
-        }
-
-#pragma omp for schedule(dynamic, 32) reduction(+:total_active)
-        for(size_t i=0;i<_mesh->NNodes;i++){
-          if(marked_edges[i].size()>0){
-            //assert(_mesh->node_owner[i]==rank);
-            active_set.push_back(i);
-            ++total_active;
+          active_colour = -1;
+          int cnt=-1;
+          size_t i;
+          for(i=0;i<64;i++){
+            if(colour_count[i]>0){
+              cnt=colour_count[i];
+              active_colour = i;
+            }
           }
-        }
-
-#ifdef HAVE_MPI
-        if(nprocs>1){
-#pragma omp single
-          {
-            MPI_Allreduce(MPI_IN_PLACE, &total_active, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+          for(;i<64;i++){
+            if(colour_count[i]>cnt){
+              active_colour = i;
+            }
           }
+          std::cerr<<"tid="<<tid<<", "<<cnt<<std::endl;
         }
-#endif
-
-        if(total_active == 0)
+        if(active_colour<0)
           break;
 
-        size_t pos;
+#pragma omp for schedule(dynamic, 1)
+        for(size_t i=0; i<NNodes; ++i){
+          // Only process if it is the active colour and has marked edges.
+          if(!((colouring[i]==active_colour)&&(!marked_edges[i].empty())))
+            continue;
 
-        pragmatic_omp_atomic_capture()
-        {
-          pos = colouring->GlobalActiveSet_size;
-          colouring->GlobalActiveSet_size += active_set.size();
-        }
-
-        memcpy(&colouring->GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
-
-#pragma omp barrier
-
-        colouring->multiHashJonesPlassmann();
-
-        // Start processing independent sets
-        if(false){
-#ifdef HAVE_MPI
-          for(int set_no=0; set_no<colouring->global_nsets; ++set_no){
-            std::vector<index_t> interior_vertices;
-            std::vector<index_t> halo_vertices;
-            std::vector< std::vector<int> > local_buffers(nprocs);
-            std::vector< std::vector<index_t> > local_sent(nprocs);
-
-#pragma omp for schedule(dynamic, 32) nowait
-            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
-              index_t i = colouring->independent_sets[set_no][idx];
-              assert(i < (index_t) NNodes);
-
-              // If the node has been un-coloured, skip it.
-              if(colouring->node_colour[i] < 0)
+          // Set of elements in this cavity which were modified since the last commit of deferred operations.
+          std::set<index_t> modified_elements;
+                
+          for(typename std::set<index_t>::const_iterator vid=marked_edges[i].begin(); vid!=marked_edges[i].end();){
+            std::set<index_t>::const_iterator j_ref = vid; ++vid;
+            index_t j = *j_ref;
+                  
+            // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
+            bool skip=false;
+            for(std::set<index_t>::const_iterator it=modified_elements.begin();it!=modified_elements.end();++it){
+              if(_mesh->NEList[j].find(*it)!=_mesh->NEList[j].end()){
+                skip=true;
+                break;
+              }
+              if(skip)
                 continue;
-
-              assert(colouring->node_colour[i] == set_no);
-
-              // Separate interior vertices from halo vertices.
-              assert(_mesh->recv_halo.count(i)==0);
-              if(_mesh->send_halo.count(i) > 0)
-                halo_vertices.push_back(i);
-              else
-                interior_vertices.push_back(i);
-            }
-
-            size_t int_pos, halo_pos;
-
-            pragmatic_omp_atomic_capture()
-            {
-              int_pos = global_interior_size;
-              global_interior_size += interior_vertices.size();
-            }
-
-            pragmatic_omp_atomic_capture()
-            {
-              halo_pos = global_halo_size;
-              global_halo_size += halo_vertices.size();
-            }
-
-            memcpy(&global_interior[int_pos], &interior_vertices[0], interior_vertices.size() * sizeof(index_t));
-            memcpy(&global_halo[halo_pos], &halo_vertices[0], halo_vertices.size() * sizeof(index_t));
-
-#pragma omp barrier
-
-            do{
-              active_set.clear();
-
-              // Process all halo vertices and marshal all necessary data which
-              // need to be communicated to other processes. Also, mark the order
-              // in which edges adjacent to each vertex were swapped.
-
-#pragma omp for schedule(dynamic, 4)
-              for(size_t idx=0; idx<global_halo_size; ++idx){
-                index_t i = global_halo[idx];
-                assert(_mesh->node_owner[i] == rank);
-                assert(_mesh->send_halo.count(i) > 0);
-
-                // Set of elements in this cavity which were modified since the last commit of deferred operations.
-                std::set<index_t> modified_elements;
-                std::set<index_t> marked_edges_copy = marked_edges[i];
-
-                for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
-                  index_t j = *vid;
-
-                  // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
-                  std::vector<index_t> intersection;
-                  std::set_intersection(modified_elements.begin(), modified_elements.end(),
-                      _mesh->NEList[j].begin(), _mesh->NEList[j].end(), std::inserter(intersection, intersection.begin()));
-                  if(intersection.size()>0)
-                    continue;
-
-                  // Mark edge as processed, i.e. remove it from the set of marked edges
-                  marked_edges[i].erase(j);
-
-                  Edge<index_t> edge(i, j);
-                  std::vector<index_t> ele0(3), ele1(3);
-                  swap_kernel(edge, modified_elements, &ele0, &ele1, tid);
-
-                  // If edge was swapped
-                  if(edge.edge.first != i && edge.edge.first != j){ // The edge was marked for swapping using gnn's
-                    index_t k = edge.edge.first;
-                    index_t l = edge.edge.second;
-                    // Uncolour one of the lateral vertices if their colours
-                    // clash and both of them are owned by *this* process.
-                    if(_mesh->node_owner[k] == rank && _mesh->node_owner[l] == rank &&
-                        colouring->node_colour[k] == colouring->node_colour[l])
-                      _mesh->deferred_reset_colour(l, tid);
-
-                    Edge<index_t> lateralEdges[] = {
-                        Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-                    // Propagate the operation
-                    for(size_t ee=0; ee<4; ++ee){
-                      // Swap first and second vertices of the edge if necessary.
-                      if(_mesh->lnn2gnn[lateralEdges[ee].edge.first] > _mesh->lnn2gnn[lateralEdges[ee].edge.second]){
-                        index_t tmp = lateralEdges[ee].edge.first;
-                        lateralEdges[ee].edge.first = lateralEdges[ee].edge.second;
-                        lateralEdges[ee].edge.second = tmp;
-                      }
-
-                      if(_mesh->node_owner[lateralEdges[ee].edge.first] != rank)
-                        continue;
-
-                      _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
-                    }
-
-                    // If the operation is visible by other processes, marshal necessary data.
-                    marshal_data(i, j, k, l, ele0, ele1, local_buffers, local_sent);
-                  }
-                }
-
-                // If all marked edges adjacent to i have been processed, reset i's colour.
-                if(marked_edges[i].empty())
-                  colouring->node_colour[i] = -1;
-                else
-                  active_set.push_back(i);
-              }
-
-#pragma omp single
-              {
-                global_halo_size = 0;
-              }
-
-              _mesh->commit_deferred(tid);
-              _mesh->commit_swapping_propagation(marked_edges, tid);
-              _mesh->commit_colour_reset(colouring->node_colour, tid);
-
-              pragmatic_omp_atomic_capture()
-              {
-                pos = global_halo_size;
-                global_halo_size += active_set.size();
-              }
-
-              memcpy(&global_halo[pos], &active_set[0], active_set.size() * sizeof(index_t));
-#pragma omp barrier
-            }while(global_halo_size>0);
-
-            // All processing on the halo for this independent set has been done.
-            // Let's create MPI messages and communicate them.
-
-            size_t *send_pos = new size_t[nprocs];
-            size_t *sent_vert_pos = new size_t[nprocs];
-
-            for(int i=0; i<nprocs; ++i){
-              if(local_buffers[i].size() == 0)
-                continue;
-
-              pragmatic_omp_atomic_capture()
-              {
-                send_pos[i] = send_buffer_size[i];
-                send_buffer_size[i] += local_buffers[i].size();
-              }
-
-              pragmatic_omp_atomic_capture()
-              {
-                sent_vert_pos[i] = sent_vertices_vec_size[i];
-                sent_vertices_vec_size[i] += local_sent[i].size();
+                  
+              // Mark edge as processed, i.e. remove it from the set of marked edges
+              marked_edges[i].erase(j_ref);
+                  
+              Edge<index_t> edge(i, j);
+              swap_kernel(edge, modified_elements, NULL, NULL, pragmatic_thread_id());
+                  
+              // If edge was swapped
+              if(edge.edge.first != i){
+                index_t k = edge.edge.first;
+                index_t l = edge.edge.second;
+              
+                Edge<index_t> lateralEdges[] = {
+                  Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+                    
+                // Propagate the operation
+                for(size_t ee=0; ee<4; ++ee)
+                  _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, pragmatic_thread_id());
               }
             }
-
-            // Wait for all threads to increment send_buffer_size[i] and then allocate
-            // memory for each send_buffer[i]. Same for sent_vertices_vec.
-#pragma omp barrier
-#pragma omp for schedule(static,1)
-            for(int i=0; i<nprocs; ++i){
-              if(send_buffer_size[i]>0){
-                // Allocate one extra int to store the length of the original message.
-                // The receiver will know that everything beyond that size is part of the extension.
-                send_buffer[i].resize(++send_buffer_size[i]);
-                send_buffer[i][0] = send_buffer_size[i];
-
-                sent_vertices_vec[i].resize(sent_vertices_vec_size[i]);
-              }
-            }
-
-            for(int i=0; i<nprocs; ++i){
-              if(local_buffers[i].size() > 0){
-                memcpy(&send_buffer[i][send_pos[i]+1], &local_buffers[i][0], local_buffers[i].size() * sizeof(int));
-                memcpy(&sent_vertices_vec[i][sent_vert_pos[i]], &local_sent[i][0], local_sent[i].size() * sizeof(index_t));
-              }
-            }
-
-            delete[] send_pos;
-            delete[] sent_vert_pos;
-
-#pragma omp barrier
-
-            /*********************************************************
-             * Let one OpenMP thread take care of all communication. *
-             *********************************************************/
-#pragma omp single nowait
-            {
-              process_recv_halo(send_buffer, send_buffer_size, sent_vertices_vec, sent_vertices_vec_size);
-
-              for(int i=0; i<nprocs; ++i){
-                send_buffer[i].clear();
-                sent_vertices_vec[i].clear();
-                send_buffer_size[i] = 0;
-                sent_vertices_vec_size[i] = 0;
-              }
-            }
-
-            // Meanwhile, the rest of the OpenMP threads
-            // can start processing interior vertices.
-            do{
-              active_set.clear();
-
-#pragma omp for schedule(dynamic, 4)
-              for(size_t idx=0; idx<global_interior_size; ++idx){
-                index_t i = global_interior[idx];
-                assert(i < (index_t) NNodes);
-
-                // If the node has been un-coloured, skip it.
-                if(colouring->node_colour[i] < 0)
-                  continue;
-
-                if(_mesh->send_halo.count(i)>0){
-                  colouring->node_colour[i] = -1;
-                  continue;
-                }
-
-                assert(colouring->node_colour[i] == set_no);
-
-                // Set of elements in this cavity which were modified since the last commit of deferred operations.
-                std::set<index_t> modified_elements;
-                std::set<index_t> marked_edges_copy = marked_edges[i];
-
-                for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
-                  index_t j = *vid;
-
-                  // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
-                  std::vector<index_t> intersection;
-                  std::set_intersection(modified_elements.begin(), modified_elements.end(),
-                      _mesh->NEList[j].begin(), _mesh->NEList[j].end(), std::inserter(intersection, intersection.begin()));
-                  if(intersection.size()>0)
-                    continue;
-
-                  // Mark edge as processed, i.e. remove it from the set of marked edges
-                  marked_edges[i].erase(j);
-
-                  Edge<index_t> edge(i, j);
-                  swap_kernel(edge, modified_elements, NULL, NULL, tid);
-
-                  // If edge was swapped
-                  if(edge.edge.first != i && edge.edge.first != j){ // The edge was marked for swapping using gnn's
-                    index_t k = edge.edge.first;
-                    index_t l = edge.edge.second;
-                    // Uncolour one of the lateral vertices if their colours clash.
-                    if(colouring->node_colour[k] == colouring->node_colour[l])
-                      _mesh->deferred_reset_colour(l, tid);
-
-                    Edge<index_t> lateralEdges[] = {
-                        Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-                    // Propagate the operation
-                    for(size_t ee=0; ee<4; ++ee){
-                      // Swap first and second vertices of the edge if necessary.
-                      if(_mesh->lnn2gnn[lateralEdges[ee].edge.first] > _mesh->lnn2gnn[lateralEdges[ee].edge.second]){
-                        index_t tmp = lateralEdges[ee].edge.first;
-                        lateralEdges[ee].edge.first = lateralEdges[ee].edge.second;
-                        lateralEdges[ee].edge.second = tmp;
-                      }
-
-                      // Oh yes, this check is necessary.... Unbelievable!
-                      if(_mesh->node_owner[lateralEdges[ee].edge.first]!=rank)
-                        continue;
-
-                      _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
-                    }
-                  }
-                }
-
-                // If all marked edges adjacent to i have been processed, reset i's colour.
-                if(marked_edges[i].empty())
-                  colouring->node_colour[i] = -1;
-                else
-                  active_set.push_back(i);
-              }
-
-#pragma omp single
-              {
-                global_interior_size = 0;
-              }
-
-              _mesh->commit_deferred(tid);
-              _mesh->commit_swapping_propagation(marked_edges, tid);
-              _mesh->commit_colour_reset(colouring->node_colour, tid);
-
-              pragmatic_omp_atomic_capture()
-              {
-                pos = global_interior_size;
-                global_interior_size += active_set.size();
-              }
-
-              memcpy(&global_interior[pos], &active_set[0], active_set.size() * sizeof(index_t));
-#pragma omp barrier
-            }while(global_interior_size>0);
           }
-#endif
-        }else{
-          for(int set_no=0; set_no<colouring->nsets; ++set_no){
-            if(colouring->ind_set_size[set_no]==0)
-              continue;
-            do{
-              active_set.clear();
-
-#pragma omp for schedule(dynamic, 4)
-              for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
-                index_t i = colouring->independent_sets[set_no][idx];
-                assert(i < (index_t) NNodes);
-
-                // If the node has been un-coloured, skip it.
-                if(colouring->node_colour[i] < 0)
-                  continue;
-
-                assert(colouring->node_colour[i] == set_no);
-
-                // Set of elements in this cavity which were modified since the last commit of deferred operations.
-                std::set<index_t> modified_elements;
-                std::set<index_t> marked_edges_copy = marked_edges[i];
-
-                for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
-                  index_t j = *vid;
-
-                  // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
-                  std::vector<index_t> intersection;
-                  std::set_intersection(modified_elements.begin(), modified_elements.end(),
-                      _mesh->NEList[j].begin(), _mesh->NEList[j].end(), std::inserter(intersection, intersection.begin()));
-                  if(intersection.size()>0)
-                    continue;
-
-                  // Mark edge as processed, i.e. remove it from the set of marked edges
-                  marked_edges[i].erase(j);
-
-                  Edge<index_t> edge(i, j);
-                  swap_kernel(edge, modified_elements, NULL, NULL, tid);
-
-                  // If edge was swapped
-                  if(edge.edge.first != i){
-                    index_t k = edge.edge.first;
-                    index_t l = edge.edge.second;
-                    // Uncolour one of the lateral vertices if their colours clash.
-                    if(colouring->node_colour[k] == colouring->node_colour[l])
-                      _mesh->deferred_reset_colour(l, tid);
-
-                    Edge<index_t> lateralEdges[] = {
-                        Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-                    // Propagate the operation
-                    for(size_t ee=0; ee<4; ++ee)
-                      _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
-                  }
-                }
-
-                // If all marked edges adjacent to i have been processed, reset i's colour.
-                if(marked_edges[i].empty())
-                  colouring->node_colour[i] = -1;
-                else
-                  active_set.push_back(i);
-              }
-
-#pragma omp single
-              {
-                colouring->ind_set_size[set_no] = 0;
-              }
-
-              _mesh->commit_deferred(tid);
-              _mesh->commit_swapping_propagation(marked_edges, tid);
-              _mesh->commit_colour_reset(colouring->node_colour, tid);
-
-              pragmatic_omp_atomic_capture()
-              {
-                pos = colouring->ind_set_size[set_no];
-                colouring->ind_set_size[set_no] += active_set.size();
-              }
-
-              memcpy(&colouring->independent_sets[set_no][pos], &active_set[0], active_set.size() * sizeof(index_t));
-#pragma omp barrier
-            }while(colouring->ind_set_size[set_no]>0);
-          }
-        }
-
-#pragma omp barrier
-        colouring->destroy();
-      }while(true);
+        } 
+        _mesh->commit_deferred(tid);
+        _mesh->commit_swapping_propagation(marked_edges, tid);
+        Colour::repair(NNodes, _mesh->NNList, colouring);
+      }
     }
-
-#ifdef HAVE_MPI
-    delete[] global_interior;
-    delete[] global_halo;
-
-    if(nprocs>1)
-      _mesh->trim_halo();
-#endif
-
-    return;
   }
 
  private:
@@ -636,17 +243,24 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
       return;
 
     // Find the two elements sharing this edge
-    std::set<index_t> intersection;
-    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-        _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
-        std::inserter(intersection, intersection.begin()));
+    index_t intersection[2];
+    {
+      size_t loc = 0;
+      std::set<index_t>::const_iterator it=_mesh->NEList[i].begin();
+      while(loc<2 && it!=_mesh->NEList[i].end()){
+        if(_mesh->NEList[j].find(*it)!=_mesh->NEList[j].end()){
+          intersection[loc++] = *it;
+        }
+        ++it;
+      }
 
-    // If this is a surface edge, it cannot be swapped.
-    if(intersection.size()!=2)
-      return;
+      // If this is a surface edge, it cannot be swapped.
+      if(loc!=2)
+        return;
+    }
 
-    index_t eid0 = *intersection.begin();
-    index_t eid1 = *intersection.rbegin();
+    index_t eid0 = intersection[0];
+    index_t eid1 = intersection[1];
 
     const index_t *n = _mesh->get_element(eid0);
     int n_off=-1;
@@ -746,8 +360,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
         _mesh->NEList[j].begin(), _mesh->NEList[j].end(),
         std::inserter(intersection, intersection.begin()));
-
-    //assert(intersection.size() == 2);
 
     index_t eid0 = *intersection.begin();
     index_t eid1 = *intersection.rbegin();
@@ -947,7 +559,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             index_t *rgnn = (index_t *) &ivertex[0];
             int *rowner = (int *) &ivertex[idx_owner];
             real_t *rcoords = (real_t *) &ivertex[idx_coords];
-            float *rmetric = (float *) &ivertex[idx_metric];
+            double *rmetric = (double *) &ivertex[idx_metric];
 
             *rgnn = gnns[*it];
             *rowner = _mesh->node_owner[lnns[*it]];
@@ -956,7 +568,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             rcoords[0] = x[0];
             rcoords[1] = x[1];
 
-            const float *m = _mesh->get_metric(lnns[*it]);
+            const double *m = _mesh->get_metric(lnns[*it]);
             rmetric[0] = m[0];
             rmetric[1] = m[1];
             rmetric[2] = m[2];
@@ -1123,7 +735,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     // Unmarshal data and apply received operations.
 
     for(int proc=0;proc<nprocs;proc++){
-      if(recv_buffer[proc].size()==0)
+      if(recv_buffer[proc].empty())
         continue;
 
       int *buffer = &recv_buffer[proc][0];
@@ -1164,7 +776,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
           // Only append this vertex to the mesh if we haven't received it before.
           if(_mesh->recv_map[owner].count(gnn) == 0){
             real_t *rcoords = (real_t *) &buffer[loc+idx_coords];
-            float *rmetric = (float *) &buffer[loc+idx_metric];
+            double *rmetric = (double *) &buffer[loc+idx_metric];
 
             index_t new_lnn = _mesh->append_vertex(rcoords, rmetric);
 
@@ -1360,7 +972,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
   Mesh<real_t> *_mesh;
   Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
-  Colouring<real_t> *colouring;
 
   size_t nnodes_reserve;
 
@@ -1369,13 +980,17 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
   const static size_t snloc=2;
   const static size_t msize=3;
   int nthreads;
+
+  // Total number of active vertices. Used to break the infinite loop.
+  size_t total_active;
+
   std::vector< std::set<index_t> > marked_edges;
   std::vector<real_t> quality;
   real_t min_Q;
 
   const static size_t node_package_int_size = 1 + (sizeof(index_t) +
                                                    ndims*sizeof(real_t) +
-                                                   msize*sizeof(float)) / sizeof(int);
+                                                   msize*sizeof(double)) / sizeof(int);
   const static size_t idx_owner = sizeof(index_t) / sizeof(int);
   const static size_t idx_coords = idx_owner + 1;
   const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);

@@ -217,7 +217,7 @@ template<typename real_t>
 
   bool laplacian_3d_kernel(index_t node){
     real_t p[3];
-    float mp[6];
+    double mp[6];
     if(laplacian_3d_kernel(node, p, mp)){
       // Looks good so lets copy it back;
       for(size_t j=0;j<3;j++)
@@ -231,7 +231,7 @@ template<typename real_t>
     return false;
   }
 
-  bool laplacian_3d_kernel(index_t node, real_t *p, float *mp){
+  bool laplacian_3d_kernel(index_t node, real_t *p, double *mp){
     const real_t *normal[]={NULL, NULL};
     std::vector<index_t> adj_nodes;
     if(_surface->contains_node(node)){
@@ -275,15 +275,15 @@ template<typename real_t>
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
     for(typename std::vector<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
-      const float *m0 = _mesh->get_metric(node);
-      const float *m1 = _mesh->get_metric(*il);
-
-      float ml00 = 0.5*(m0[0] + m1[0]);
-      float ml01 = 0.5*(m0[1] + m1[1]);
-      float ml02 = 0.5*(m0[2] + m1[2]);
-      float ml11 = 0.5*(m0[3] + m1[3]);
-      float ml12 = 0.5*(m0[4] + m1[4]);
-      float ml22 = 0.5*(m0[5] + m1[5]);
+      const real_t *m0 = _mesh->get_metric(node);
+      const real_t *m1 = _mesh->get_metric(*il);
+      
+      real_t ml00 = 0.5*(m0[0] + m1[0]);
+      real_t ml01 = 0.5*(m0[1] + m1[1]);
+      real_t ml02 = 0.5*(m0[2] + m1[2]);
+      real_t ml11 = 0.5*(m0[3] + m1[3]);
+      real_t ml12 = 0.5*(m0[4] + m1[4]);
+      real_t ml22 = 0.5*(m0[5] + m1[5]);
 
       q[0] += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
       q[1] += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
@@ -414,7 +414,7 @@ template<typename real_t>
 
   bool smart_laplacian_3d_kernel(index_t node){
     real_t p[3];
-    float mp[6];
+    double mp[6];
     if(!laplacian_3d_kernel(node, p, mp))
       return false;
 
@@ -567,7 +567,7 @@ template<typename real_t>
         const int *n=_mesh->get_element(*ie);
         assert(n[0]>=0);
         std::vector<const real_t *> x(nloc);
-        std::vector<const float *> m(nloc);
+        std::vector<const double *> m(nloc);
         for(size_t i=0;i<nloc;i++){
           x[i] = _mesh->get_coords(n[i]);
           m[i] = _mesh->get_metric(n[i]);
@@ -582,8 +582,8 @@ template<typename real_t>
 
     return patch_quality;
   }
-
-  real_t functional_Linf(index_t node, const real_t *p, const float *mp) const{
+  
+  real_t functional_Linf(index_t node, const real_t *p, const real_t *mp) const{
     real_t functional = DBL_MAX;
     for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
       const index_t *n=_mesh->get_element(*ie);

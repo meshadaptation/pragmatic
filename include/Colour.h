@@ -53,8 +53,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
+  static void greedy(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
     int max_colour=64;
 
     // Colour first active node.
@@ -97,8 +96,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void GebremedhinManne(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
+  static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
     std::vector<bool> conflicts(NNodes, false);
 #pragma omp parallel firstprivate(NNodes)
     {
@@ -169,8 +167,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void repair(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
+  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
     std::vector<bool> conflicts(NNodes, false);
 #pragma omp parallel firstprivate(NNodes)
     {

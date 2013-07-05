@@ -30,7 +30,7 @@
 
 #define EIGEN_WORLD_VERSION 2
 #define EIGEN_MAJOR_VERSION 0
-#define EIGEN_MINOR_VERSION 15
+#define EIGEN_MINOR_VERSION 17
 
 #define EIGEN_VERSION_AT_LEAST(x,y,z) (EIGEN_WORLD_VERSION>x || (EIGEN_WORLD_VERSION>=x && \
                                       (EIGEN_MAJOR_VERSION>y || (EIGEN_MAJOR_VERSION>=y && \
@@ -190,8 +190,7 @@ using Eigen::ei_cos;
 #elif (defined _MSC_VER)
 #define EIGEN_ALIGN_128 __declspec(align(16))
 #else
-// #error Please tell me what is the equivalent of __attribute__((aligned(16))) for your compiler
-#define EIGEN_ALIGN_128 __attribute__((aligned(16)))
+#error Please tell me what is the equivalent of __attribute__((aligned(16))) for your compiler
 #endif
 
 #ifdef EIGEN_DONT_USE_RESTRICT_KEYWORD

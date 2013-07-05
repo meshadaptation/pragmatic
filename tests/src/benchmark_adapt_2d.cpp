@@ -79,12 +79,12 @@ int main(int argc, char **argv){
   Surface2D<double> surface(*mesh);
   surface.find_surface();
 
-  double eta=0.0001;
+  double eta=0.00005;
   char filename[4096];
 
   if(rank==0)
     std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";  
-  for(int t=0;t<101;t++){
+  for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
     MetricField2D<double> metric_field(*mesh, surface);
@@ -103,8 +103,8 @@ int main(int argc, char **argv){
     else
       metric_field.relax_mesh(0.5);
 
-    sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
-    VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+    // sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
+    // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
 
     double T1 = get_wtime();
 
@@ -117,19 +117,19 @@ int main(int argc, char **argv){
     Refine2D<double> refine(*mesh, surface);
     Swapping2D<double> swapping(*mesh, surface);
 
-    double L_max = mesh->maximal_edge_length();
-
-    double alpha = sqrt(2.0)/2;
-
     double tic, toc;
+
+    double L_max = mesh->maximal_edge_length();
+    double alpha = sqrt(2.0)/2;
+    
     for(size_t i=0;i<20;i++){
       double L_ref = std::max(alpha*L_max, L_up);
-
+      
       tic = get_wtime();
       coarsen.coarsen(L_low, L_ref);
       toc = get_wtime();
       if(t>0) time_coarsen += (toc-tic);
-
+      
       tic = get_wtime();
       swapping.swap(0.5);
       toc = get_wtime();
@@ -141,7 +141,7 @@ int main(int argc, char **argv){
       if(t>0) time_refine += (toc-tic);
 
       L_max = mesh->maximal_edge_length();
-
+        
       if((L_max-L_up)<0.01)
         break;
     }
@@ -154,7 +154,7 @@ int main(int argc, char **argv){
     surface.defragment(&active_vertex_map);
 
     tic = get_wtime();
-    smooth.smooth("optimisation Linf", 10);
+    smooth.smooth("optimisation Linf", 20);
     toc = get_wtime();
     if(t>0) time_smooth += (toc-tic);
     if(t>0) time_adapt += (toc-tic);
@@ -174,9 +174,10 @@ int main(int argc, char **argv){
                <<std::setw(11)<<time_refine/t<<" "
                <<std::setw(9)<<time_swap/t<<" "
                <<std::setw(11)<<time_smooth/t<<" "
-               <<std::setw(10)<<time_adapt/t<<"\n";
-    sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
-    VTKTools<double, int>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+               <<std::setw(10)<<time_adapt/t<<std::endl
+               <<"NNodes, NElements = "<<mesh->get_number_nodes()<<", "<<mesh->get_number_elements()<<std::endl;
+    // sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
+    // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
   }
 
   delete mesh;

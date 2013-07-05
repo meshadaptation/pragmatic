@@ -78,8 +78,13 @@ template<typename real_t>
     deferred_operations.resize(nthreads);
     for(size_t i=0; i<(size_t) nthreads; ++i)
       deferred_operations[i].resize(nthreads);
-  }
 
+    private_SENList.resize(nthreads);
+    private_boundary_ids.resize(nthreads);
+    threadIdx.resize(nthreads);
+    splitCnt.resize(nthreads);
+  }
+  
   /// Default destructor.
   ~Surface2D(){
   }
@@ -394,17 +399,15 @@ template<typename real_t>
   }
 
   void refine(std::vector< std::vector<DirectedEdge<index_t> > > surfaceEdges){
-    unsigned int nthreads = pragmatic_nthreads();
-
-    // Given the refined edges, refine facets.
-    std::vector< std::vector<index_t> > private_SENList(nthreads);
-    std::vector< std::vector<int> > private_boundary_ids(nthreads);
-    std::vector<unsigned int> threadIdx(nthreads), splitCnt(nthreads);
-    std::vector< DirectedEdge<index_t> > refined_edges;
-
-#pragma omp parallel
+    // #pragma omp parallel
     {
       const int tid = pragmatic_thread_id();
+      private_SENList[tid].clear();
+      private_boundary_ids[tid].clear();
+
+#pragma omp single
+      refined_edges.clear();
+      
       splitCnt[tid] = 0;
 
       // Serialise surfaceEdges
@@ -478,23 +481,26 @@ template<typename real_t>
       // Append new elements to the surface
       memcpy(&SENList[snloc*threadIdx[tid]], &private_SENList[tid][0], snloc*splitCnt[tid]*sizeof(index_t));
       memcpy(&boundary_ids[threadIdx[tid]], &private_boundary_ids[tid][0], splitCnt[tid]*sizeof(int));
-    }
-
-    size_t NNodes = _mesh->get_number_nodes();
-    size_t NSElements = get_number_facets();
-
-    SNEList.clear();
-    surface_nodes.resize(NNodes);
-    std::fill(surface_nodes.begin(), surface_nodes.end(), (char) 0);
-
-    for(size_t i=0;i<NSElements;i++){
-      const int *n=get_facet(i);
-      if(n[0]<0)
-        continue;
-
-      for(size_t j=0;j<snloc;j++){
-        SNEList[n[j]].insert(i);
-        surface_nodes[n[j]] = true;
+    
+#pragma omp single
+      {
+        size_t NNodes = _mesh->get_number_nodes();
+        size_t NSElements = get_number_facets();
+        
+        SNEList.clear();
+        surface_nodes.resize(NNodes);
+        std::fill(surface_nodes.begin(), surface_nodes.end(), (char) 0);
+        
+        for(size_t i=0;i<NSElements;i++){
+          const int *n=get_facet(i);
+          if(n[0]<0)
+            continue;
+          
+          for(size_t j=0;j<snloc;j++){
+            SNEList[n[j]].insert(i);
+            surface_nodes[n[j]] = true;
+          }
+        }
       }
     }
   }
@@ -681,6 +687,11 @@ template<typename real_t>
 
   std::vector< std::vector<DeferredOperations> > deferred_operations;
 
+  std::vector< std::vector<index_t> > private_SENList;
+  std::vector< std::vector<int> > private_boundary_ids;
+  std::vector<unsigned int> threadIdx, splitCnt;
+  std::vector< DirectedEdge<index_t> > refined_edges;
+  
   Mesh<real_t> *_mesh;
   int nthreads;
 };

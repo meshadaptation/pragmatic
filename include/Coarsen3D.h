@@ -633,7 +633,7 @@ template<typename real_t> class Coarsen3D{
 
     // Push data to be sent onto the send_buffer.
     std::vector< std::vector<int> > send_buffer(nprocs);
-    size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
+    size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(double))/sizeof(int);
     for(int p=0;p<nprocs;p++){
       if(send_edges[p].size()==0)
         continue;
@@ -647,7 +647,7 @@ template<typename real_t> class Coarsen3D{
         // Stuff in coordinates and metric via int's.
         std::vector<int> ivertex(node_package_int_size);
         real_t *rcoords = (real_t *) &(ivertex[0]);
-        float *rmetric = (float *) &(rcoords[ndims]);
+        double *rmetric = (double *) &(rcoords[ndims]);
         _mesh->get_coords(*it, rcoords);
         _mesh->get_metric(*it, rmetric);
                 
@@ -734,7 +734,7 @@ template<typename real_t> class Coarsen3D{
         extra_halo_receives[lowner].insert(gnn);
                 
         real_t *coords = (real_t *) &(recv_buffer[p][loc]);
-        float *metric = (float *) &(coords[ndims]);
+        double *metric = (double *) &(coords[ndims]);
         loc+=node_package_int_size;
                 
         // Add vertex+metric if we have not already received this data.

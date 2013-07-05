@@ -38,6 +38,8 @@
 #ifndef METIS_H
 #define METIS_H
 
+#include "pragmatic_config.h"
+
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
@@ -46,21 +48,16 @@
 #include <set>
 
 extern "C" {
-  /*
-    #ifdef HAVE_METIS_H
-    #include <metis.h>
-    #else
-    #ifdef HAVE_METIS_METIS_H
-    #include <metis/metis.h>
-    #endif
-    #endif
-  */
-  typedef int idxtype;
-  void METIS_PartMeshNodal(int *, int *, idxtype *, int *, int *, int *, int *, idxtype *, idxtype *);
-  void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *); 
-  void METIS_PartGraphRecursive(int *, idxtype *, idxtype *, idxtype *, idxtype *, int *, int *, int *, int *, int *, idxtype *); 
-void METIS_PartGraphKway(int *, idxtype *, idxtype *, idxtype *, idxtype *, int *, int *, int *, int *, int *, idxtype *); 
+#ifdef HAVE_METIS_H
+#include <metis.h>
+#else
+#ifdef HAVE_METIS_METIS_H
+#include <metis/metis.h>
+#endif
+#endif
 
+typedef int idxtype;
+void METIS_PartMeshNodal(int *, int *, idxtype *, int *, int *, int *, int *, idxtype *, idxtype *);
 }
 
 /*! \brief Class provides a specialised interface to some METIS

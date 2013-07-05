@@ -101,20 +101,6 @@ template<typename real_t>
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
-  void get_metric(float *metric){
-    // Enforce first-touch policy.
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
-        _metric[i].get_metric(metric+i*3);
-      }
-    }
-  }
-
-  /*! Copy back the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field can be copied.
-   */
   void get_metric(double *metric){
     // Enforce first-touch policy.
 #pragma omp parallel
@@ -129,38 +115,14 @@ template<typename real_t>
   /*! Set the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
    */
-  void set_metric(const float *metric){
-    if(_metric==NULL)
-      _metric = new MetricTensor2D<float>[_NNodes];
-    
-    for(int i=0;i<_NNodes;i++){
-      float M[] = {metric[4*i], metric[4*i+1], metric[4*i+3]};
-      _metric[i].set_metric(M);
-    }
-  }
-
-  /*! Set the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   */
   void set_metric(const double *metric){
     if(_metric==NULL)
-      _metric = new MetricTensor2D<float>[_NNodes];
+      _metric = new MetricTensor2D<double>[_NNodes];
     
     for(int i=0;i<_NNodes;i++){
-      float M[] = {(float)metric[4*i], (float)metric[4*i+1], (float)metric[4*i+3]};
+      double M[] = {metric[4*i], metric[4*i+1], metric[4*i+3]};
       _metric[i].set_metric(M);
     }
-  }
-
-  /*! Set the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   * @param id is the node index of the metric field being set.
-   */
-  void set_metric(const float *metric, int id){
-    if(_metric==NULL)
-      _metric = new MetricTensor2D<float>[_NNodes];
-
-    _metric[id].set_metric(metric);
   }
 
   /*! Set the metric tensor field.
@@ -169,10 +131,61 @@ template<typename real_t>
    */
   void set_metric(const double *metric, int id){
     if(_metric==NULL)
-      _metric = new MetricTensor2D<float>[_NNodes];
+      _metric = new MetricTensor2D<double>[_NNodes];
 
     _metric[id].set_metric(metric);
   }
+
+  /// Update the metric field on the mesh.
+  void relax_mesh(double omega){
+    assert(_metric!=NULL);
+    
+    size_t pNElements = (size_t) 3*predict_nelements_part();
+
+    if(pNElements > _mesh->NElements){
+      // Let's leave a safety margin.
+      pNElements *= 3;
+    }else{
+      /* The mesh can contain more elements than the predicted number, however
+       * some elements may still need to be refined, therefore until the mesh
+       * is coarsened and defraged we need extra space for the new vertices and
+       * elements that will be created during refinement.
+       */
+      pNElements = _mesh->NElements * 3;
+    }
+
+    // In 2D, the number of nodes is ~ 1/2 the number of elements.
+    _mesh->_ENList.resize(pNElements*3);
+    _mesh->_coords.resize(pNElements);
+    _mesh->metric.resize(pNElements*1.5);
+    _mesh->NNList.resize(pNElements/2);
+    _mesh->NEList.resize(pNElements/2);
+    _mesh->node_owner.resize(pNElements/2, -1);
+    _mesh->lnn2gnn.resize(pNElements/2, -1);
+
+#ifdef HAVE_MPI
+    // At this point we can establish a new, gappy global numbering system
+    if(nprocs>1)
+      _mesh->create_gappy_global_numbering(pNElements);
+#endif
+
+    // Enforce first-touch policy
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++){
+        double M[3];
+        _metric[i].get_metric(M);
+        for(int j=0;j<3;j++)
+           _mesh->metric[i*3+j] = (1.0-omega)*_mesh->metric[i*3+j] + omega*M[j];
+        MetricTensor2D<double>::positive_definiteness(&(_mesh->metric[i*3]));
+      }
+    }
+    
+    // Halo update if parallel
+    _mesh->halo_update(&(_mesh->metric[0]), 3);
+  }
+
 
   /// Update the metric field on the mesh.
   void update_mesh(){
@@ -229,12 +242,12 @@ template<typename real_t>
     pp. 179-204.
    */
   void add_field(const real_t *psi, const real_t target_error, int p_norm=-1){
-    float *Hessian = new float[_NNodes*3];
+    double *Hessian = new double[_NNodes*3];
     
     bool add_to=true;
     if(_metric==NULL){
       add_to = false;
-      _metric = new MetricTensor2D<float>[_NNodes];
+      _metric = new MetricTensor2D<double>[_NNodes];
     }
 
     real_t eta = 1.0/target_error;
@@ -242,40 +255,40 @@ template<typename real_t>
     {
       // Calculate Hessian at each point.
       if(p_norm>0){
-#pragma omp for schedule(static)
+#pragma omp for schedule(static) nowait
         for(int i=0; i<_NNodes; i++){
           hessian_qls_kernel(psi, i, Hessian);
           
-          float *h=Hessian+i*3, m_det;
+          double *h=Hessian+i*3, m_det;
           /*|h[0] h[1]| 
             |h[1] h[2]|*/
           m_det = fabs(h[0]*h[2]-h[1]*h[1]);
           
-          float scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 2));  
+          double scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 2));  
           for(int j=0;j<3;j++)
             h[j] *= scaling_factor;
+
+          if(add_to){
+            // Merge this metric with the existing metric field.
+            _metric[i].constrain(Hessian+i*3);
+          }else{
+            _metric[i].set_metric(Hessian+i*3);
+          }  
         }
       }else{
-#pragma omp for schedule(static)
+#pragma omp for schedule(static) nowait
         for(int i=0; i<_NNodes; i++){
           hessian_qls_kernel(psi, i, Hessian);
           
           for(int j=0;j<3;j++)
             Hessian[i*3+j] *= eta;
-        }
-      }
-      
-      // Store metric.
-      if(add_to){
-#pragma omp for schedule(static)
-        for(int i=0; i<_NNodes; i++){
-          // Merge this metric with the existing metric field.
-          _metric[i].constrain(Hessian+i*3);
-        }
-      }else{
-#pragma omp for schedule(static)
-        for(int i=0; i<_NNodes; i++){
-          _metric[i].set_metric(Hessian+i*3);
+
+          if(add_to){
+            // Merge this metric with the existing metric field.
+            _metric[i].constrain(Hessian+i*3);
+          }else{
+            _metric[i].set_metric(Hessian+i*3);
+          }
         }
       }
     }
@@ -286,7 +299,7 @@ template<typename real_t>
   /*! Apply gradation to the metric field.
    * @param gradation specifies the required gradation factor (<=1.3 recommended).
    */
-  void apply_gradation(float gradation){
+  void apply_gradation(double gradation){
     // Form NNlist.
     std::deque< std::set<index_t> > NNList( _NNodes );
     for(int e=0; e<_NElements; e++){
@@ -299,9 +312,6 @@ template<typename real_t>
       }
     }
 
-    // This is used to ensure we don't revisit parts of the mesh that
-    // are known to have converged.
-    // std::vector<bool> active(_NNodes, true);
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -309,7 +319,7 @@ template<typename real_t>
         
         for(index_t p=0;p<_NNodes;p++){
           
-          float Dp[2], Vp[4], hp[2];
+          double Dp[2], Vp[4], hp[2];
           
           std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
           
@@ -317,13 +327,13 @@ template<typename real_t>
             index_t q=*it;
             
             // Resize eigenvalues if necessary
-            float dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
-            float dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
+            double dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
+            double dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
 
-            float Lpq = sqrtf(dx*dx+dy*dy);
-            float dh=Lpq*gradation;
+            double Lpq = sqrt(dx*dx+dy*dy);
+            double dh=Lpq*gradation;
 
-            MetricTensor2D<float> Mq(_metric[q]);
+            MetricTensor2D<double> Mq(_metric[q]);
             Mq.eigen_decomp(Dp, Vp);
             
             hp[0] = 1.0/sqrt(Dp[0]) + dh;
@@ -347,7 +357,7 @@ template<typename real_t>
    * @param max_len specifies the maximum allowed edge length.
    */
   void apply_max_edge_length(real_t max_len){
-    float M[3];
+    double M[3];
     M[0] = 1.0/(max_len*max_len);
     M[1] = 0.0;
     M[2] = M[0];
@@ -364,7 +374,7 @@ template<typename real_t>
    * @param min_len specifies the minimum allowed edge length globally.
    */
   void apply_min_edge_length(real_t min_len){
-    float M[3];
+    double M[3];
     M[0] = 1.0/(min_len*min_len);
     M[1] = 0.0;
     M[2] = M[0];
@@ -381,7 +391,7 @@ template<typename real_t>
    * @param min_len specifies the minimum allowed edge length locally at each vertex.
    */
   void apply_min_edge_length(const real_t *min_len){
-    float M[3];
+    double M[3];
     
 #pragma omp parallel
     {
@@ -400,7 +410,12 @@ template<typename real_t>
    * @param max_aspect_ratio maximum aspect ratio for elements.
    */
   void apply_max_aspect_ratio(real_t max_aspect_ratio){
-    std::cerr<<"ERROR: Not yet implemented\n";
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int i=0;i<_NNodes;i++)
+        _metric[i].limit_aspect_ratio(max_aspect_ratio);
+    }
   }
 
   /*! Apply maximum number of elements constraint.
@@ -425,9 +440,7 @@ template<typename real_t>
    * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){
-    float scale_factor = nelements/predict_nelements();
-    
-    std::cerr<<"here\n";
+    double scale_factor = nelements/predict_nelements();
 
 #pragma omp parallel
     {
@@ -440,8 +453,8 @@ template<typename real_t>
   /*! Predict the number of elements in this partition when mesh satisfies metric tensor field.
    */
   real_t predict_nelements_part(){
-    float predicted=0;
-    float inv3=1.0/3.0;
+    double predicted=0;
+    double inv3=1.0/3.0;
 
     if(_NElements>0){
       const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
@@ -458,9 +471,9 @@ template<typename real_t>
         const real_t *x2 = _mesh->get_coords(n[2]);
         real_t area = property.area(x0, x1, x2);
 
-        const float *m0=_metric[n[0]].get_metric();
-        const float *m1=_metric[n[1]].get_metric();
-        const float *m2=_metric[n[2]].get_metric();
+        const double *m0=_metric[n[0]].get_metric();
+        const double *m1=_metric[n[1]].get_metric();
+        const double *m2=_metric[n[2]].get_metric();
 
         real_t m00 = (m0[0]+m1[0]+m2[0])*inv3;
         real_t m01 = (m0[1]+m1[1]+m2[1])*inv3;
@@ -482,11 +495,11 @@ template<typename real_t>
   /*! Predict the number of elements when mesh satisfies metric tensor field.
    */
   real_t predict_nelements(){
-    float predicted=predict_nelements_part();
+    double predicted=predict_nelements_part();
 
 #ifdef HAVE_MPI
     if(nprocs>1){
-      MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, MPI_FLOAT, MPI_SUM, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
     }
 #endif
     
@@ -496,7 +509,7 @@ template<typename real_t>
  private:
   
   /// Least squared Hessian recovery.
-  void hessian_qls_kernel(const real_t *psi, int i, float *Hessian){
+  void hessian_qls_kernel(const real_t *psi, int i, double *Hessian){
     int min_patch_size = 6;
 
     std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
@@ -538,7 +551,7 @@ template<typename real_t>
 
   int rank, nprocs;
   int _NNodes, _NElements;
-  MetricTensor2D<float> *_metric;
+  MetricTensor2D<real_t> *_metric;
   Surface2D<real_t> *_surface;
   Mesh<real_t> *_mesh;
 };
@@ -585,20 +598,6 @@ template<typename real_t>
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
-  void get_metric(float *metric){
-    // Enforce first-touch policy
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<_NNodes;i++){
-        _metric[i].get_metric(metric+i*6);
-      }
-    }
-  }
-
-  /*! Copy back the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field can be copied.
-   */
   void get_metric(double *metric){
     // Enforce first-touch policy
 #pragma omp parallel
@@ -613,34 +612,12 @@ template<typename real_t>
   /*! Set the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
    */
-  void set_metric(const float *metric){
-    if(_metric==NULL)
-      _metric = new MetricTensor3D<float>[_NNodes];
-    
-    for(int i=0;i<_NNodes;i++)
-      _metric[i].set_metric(metric+i*6);
-  }
-
-  /*! Set the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   */
   void set_metric(const double *metric){
     if(_metric==NULL)
-      _metric = new MetricTensor3D<float>[_NNodes];
+      _metric = new MetricTensor3D<double>[_NNodes];
     
     for(int i=0;i<_NNodes;i++)
       _metric[i].set_metric(metric+i*6);
-  }
-
-  /*! Set the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   * @param id is the node index of the metric field being set.
-   */
-  void set_metric(const float *metric, int id){
-    if(_metric==NULL)
-      _metric = new MetricTensor3D<float>[_NNodes];
-
-    _metric[id].set_metric(metric);
   }
 
   /*! Set the metric tensor field.
@@ -649,7 +626,7 @@ template<typename real_t>
    */
   void set_metric(const double *metric, int id){
     if(_metric==NULL)
-      _metric = new MetricTensor3D<float>[_NNodes];
+      _metric = new MetricTensor3D<double>[_NNodes];
 
     _metric[id].set_metric(metric);
   }
@@ -683,32 +660,32 @@ template<typename real_t>
     pp. 179-204.
    */
   void add_field(const real_t *psi, const real_t target_error, int p_norm=-1){
-    float *Hessian = new float[_NNodes*6];
+    double *Hessian = new double[_NNodes*6];
     
     bool add_to=true;
     if(_metric==NULL){
       add_to = false;
-      _metric = new MetricTensor3D<float>[_NNodes];
+      _metric = new MetricTensor3D<double>[_NNodes];
     }
 
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
-      float eta = 1.0/target_error;
+      double eta = 1.0/target_error;
       
       if(p_norm>0){
 #pragma omp for schedule(static)
         for(int i=0; i<_NNodes; i++){
           hessian_qls_kernel(psi, i, Hessian);
           
-          float *h=Hessian+i*6, m_det;
+          double *h=Hessian+i*6, m_det;
           
           /*|h[0] h[1] h[2]| 
             |h[3] h[4] h[5]| 
             |h[6] h[7] h[8]|*/
           m_det = h[0]*(h[4]*h[8]-h[5]*h[7]) - h[1]*(h[3]*h[8]-h[5]*h[6]) + h[2]*(h[3]*h[7]-h[4]*h[6]);
           
-          float scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 3));  
+          double scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 3));  
           for(int j=0;j<6;j++)
             h[j] = scaling_factor*h[j];
         }
@@ -742,9 +719,9 @@ template<typename real_t>
   /*! Apply maximum edge length constraint.
    * @param max_len specifies the maximum allowed edge length.
    */
-  void apply_max_edge_length(float max_len){
-    float M[6];
-    float m = 1.0/(max_len*max_len);
+  void apply_max_edge_length(double max_len){
+    double M[6];
+    double m = 1.0/(max_len*max_len);
     M[0] = m;
     M[1] = 0.0;
     M[2] = 0.0;
@@ -764,8 +741,8 @@ template<typename real_t>
    * @param min_len specifies the minimum allowed edge length globally.
    */
   void apply_min_edge_length(real_t min_len){
-     float M[6];
-    float m = 1.0/(min_len*min_len);
+     double M[6];
+    double m = 1.0/(min_len*min_len);
     M[0] = m;
     M[1] = 0.0;
     M[2] = 0.0;
@@ -787,10 +764,10 @@ template<typename real_t>
   void apply_min_edge_length(const real_t *min_len){
 #pragma omp parallel
     {
-      float M[6];
+      double M[6];
 #pragma omp for schedule(static)
       for(int n=0;n<_NNodes;n++){
-        float m = 1.0/(min_len[n]*min_len[n]);
+        double m = 1.0/(min_len[n]*min_len[n]);
         M[0] = m;
         M[1] = 0.0;
         M[2] = 0.0;
@@ -832,7 +809,7 @@ template<typename real_t>
    * @param nelements is the required number of elements after adapting.
    */
   void apply_nelements(real_t nelements){    
-    float scale_factor = pow((nelements/predict_nelements()), 2.0/3.0);
+    double scale_factor = pow((nelements/predict_nelements()), 2.0/3.0);
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
@@ -853,7 +830,7 @@ template<typename real_t>
       const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
       ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
       
-      float total_volume_metric = 0.0;
+      double total_volume_metric = 0.0;
       for(int i=0;i<_NElements;i++){
         const index_t *n=_mesh->get_element(i);
         
@@ -861,19 +838,19 @@ template<typename real_t>
         const real_t *x1 = _mesh->get_coords(n[1]);
         const real_t *x2 = _mesh->get_coords(n[2]);
         const real_t *x3 = _mesh->get_coords(n[3]);
-        float volume = property.volume(x0, x1, x2, x3);
+        double volume = property.volume(x0, x1, x2, x3);
         
-        const float *m0=_metric[n[0]].get_metric();
-        const float *m1=_metric[n[1]].get_metric();
-        const float *m2=_metric[n[2]].get_metric();
-        const float *m3=_metric[n[3]].get_metric();
+        const double *m0=_metric[n[0]].get_metric();
+        const double *m1=_metric[n[1]].get_metric();
+        const double *m2=_metric[n[2]].get_metric();
+        const double *m3=_metric[n[3]].get_metric();
         
-        float m00 = (m0[0]+m1[0]+m2[0]+m3[0])*0.25;
-        float m01 = (m0[1]+m1[1]+m2[1]+m3[1])*0.25;
-        float m02 = (m0[2]+m1[2]+m2[2]+m3[2])*0.25;
-        float m11 = (m0[3]+m1[3]+m2[3]+m3[3])*0.25;
-        float m12 = (m0[4]+m1[4]+m2[4]+m3[4])*0.25;
-        float m22 = (m0[5]+m1[5]+m2[5]+m3[5])*0.25;
+        double m00 = (m0[0]+m1[0]+m2[0]+m3[0])*0.25;
+        double m01 = (m0[1]+m1[1]+m2[1]+m3[1])*0.25;
+        double m02 = (m0[2]+m1[2]+m2[2]+m3[2])*0.25;
+        double m11 = (m0[3]+m1[3]+m2[3]+m3[3])*0.25;
+        double m12 = (m0[4]+m1[4]+m2[4]+m3[4])*0.25;
+        double m22 = (m0[5]+m1[5]+m2[5]+m3[5])*0.25;
         
         real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
         total_volume_metric += volume*sqrt(det);
@@ -887,7 +864,7 @@ template<typename real_t>
     
 #ifdef HAVE_MPI
     if(nprocs>1){
-      MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, MPI_FLOAT, MPI_SUM, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, MPI_DOUBLE, MPI_SUM, _mesh->get_mpi_comm());
     }
 #endif
     
@@ -897,7 +874,7 @@ template<typename real_t>
  private:
   
   /// Least squared Hessian recovery.
-  void hessian_qls_kernel(const real_t *psi, int i, float *Hessian){
+  void hessian_qls_kernel(const real_t *psi, int i, double *Hessian){
     size_t min_patch_size=10;
 
     std::set<index_t> patch;
@@ -964,7 +941,7 @@ template<typename real_t>
 
   int rank, nprocs;
   int _NNodes, _NElements;
-  MetricTensor3D<float> *_metric;
+  MetricTensor3D<real_t> *_metric;
   Surface3D<real_t> *_surface;
   Mesh<real_t> *_mesh;
 };

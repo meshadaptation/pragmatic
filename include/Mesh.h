@@ -153,7 +153,7 @@ template<typename real_t> class Mesh{
   }
 
   /// Add a new vertex
-  index_t append_vertex(const real_t *x, const float *m){
+  index_t append_vertex(const real_t *x, const double *m){
     for(size_t i=0;i<ndims;i++)
       _coords[ndims*NNodes+i] = x[i];
 
@@ -239,13 +239,13 @@ template<typename real_t> class Mesh{
   }
 
   /// Return metric at that vertex.
-  const float *get_metric(index_t nid) const{
+  const double *get_metric(index_t nid) const{
     assert(metric.size()>0);
     return &(metric[nid*msize]);
   }
 
   /// Return copy of metric.
-  void get_metric(index_t nid, float *m) const{
+  void get_metric(index_t nid, double *m) const{
     assert(metric.size()>0);
     for(size_t i=0;i<msize;i++)
       m[i] = metric[nid*msize+i];
@@ -263,18 +263,21 @@ template<typename real_t> class Mesh{
   }
 
   /// Get the mean edge length metric space.
-  float get_lmean(){
+  double get_lmean(){
     int NNodes = get_number_nodes();
-    float total_length=0;
+    double total_length=0;
     int nedges=0;
-#pragma omp parallel reduction(+:total_length,nedges)
+// #pragma omp parallel reduction(+:total_length,nedges)
     {
 #pragma omp for schedule(static)
       for(int i=0;i<NNodes;i++){
         if(is_owned_node(i) && (NNList[i].size()>0))
           for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
             if(i<*it){ // Ensure that every edge length is only calculated once.
-              total_length += calc_edge_length(i, *it);
+              double length = calc_edge_length(i, *it);
+#pragma omp atomic
+              total_length += length;
+#pragma omp atomic
               nedges++;
             }
           }
@@ -283,21 +286,21 @@ template<typename real_t> class Mesh{
 
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
-
-    float mean = total_length/nedges;
+    
+    double mean = total_length/nedges;
 
     return mean;
   }
 
   /// Get the edge length RMS value in metric space.
-  float get_lrms(){
-    float mean = get_lmean();
+  double get_lrms(){
+    double mean = get_lmean();
 
-    float rms=0;
+    double rms=0;
     int nedges=0;
 #pragma omp parallel reduction(+:rms,nedges)
     {
@@ -315,7 +318,7 @@ template<typename real_t> class Mesh{
 
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
@@ -326,8 +329,8 @@ template<typename real_t> class Mesh{
   }
 
   /// Get the element mean quality in metric space.
-  float get_qmean() const{
-    float sum=0;
+  double get_qmean() const{
+    double sum=0;
     int nele=0;
 
 #pragma omp parallel reduction(+:sum, nele)
@@ -351,19 +354,19 @@ template<typename real_t> class Mesh{
 
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_FLOAT, MPI_SUM, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
 #endif
 
-    float mean = sum/nele;
+    double mean = sum/nele;
 
     return mean;
   }
 
   /// Get the element minimum quality in metric space.
-  float get_qmin() const{
-    float qmin=1; // Where 1 is ideal.
+  double get_qmin() const{
+    double qmin=1; // Where 1 is ideal.
 
     // TODO: This is not urgent - but when OpenMP 3.1 is more common we
     // should stick a proper min reduction in here.
@@ -381,17 +384,17 @@ template<typename real_t> class Mesh{
     }
 #ifdef HAVE_MPI
     if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_FLOAT, MPI_MIN, _mpi_comm);
+      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
     }
 #endif
     return qmin;
   }
 
   /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
-  float get_qrms() const{
-    float mean = get_qmean();
+  double get_qrms() const{
+    double mean = get_qmean();
 
-    float rms=0;
+    double rms=0;
     int nele=0;
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
@@ -460,14 +463,14 @@ template<typename real_t> class Mesh{
   real_t calc_edge_length(index_t nid0, index_t nid1) const{
     real_t length=-1.0;
     if(ndims==2){
-      float m[3];
+      double m[3];
       m[0] = (metric[nid0*3  ]+metric[nid1*3  ])*0.5;
       m[1] = (metric[nid0*3+1]+metric[nid1*3+1])*0.5;
       m[2] = (metric[nid0*3+2]+metric[nid1*3+2])*0.5;
 
       length = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), m);
     }else{
-      float m[6];
+      double m[6];
       m[0] = (metric[nid0*msize  ]+metric[nid1*msize  ])*0.5;
       m[1] = (metric[nid0*msize+1]+metric[nid1*msize+1])*0.5;
       m[2] = (metric[nid0*msize+2]+metric[nid1*msize+2])*0.5;
@@ -659,7 +662,7 @@ template<typename real_t> class Mesh{
 
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);
-    std::vector<float> defrag_metric(NNodes*msize);
+    std::vector<double> defrag_metric(NNodes*msize);
 
     assert(NElements==(size_t)metis_nelements);
 
@@ -707,7 +710,7 @@ template<typename real_t> class Mesh{
 
     memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
     memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
-    memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(float));
+    memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));
 
     // Renumber halo, fix lnn2gnn and node_owner.
     if(num_processes>1){
@@ -1777,7 +1780,7 @@ template<typename real_t> class Mesh{
   ElementProperty<real_t> *property;
 
   // Metric tensor field.
-  std::vector<float> metric;
+  std::vector<double> metric;
 
   // Parallel support.
   int rank, num_processes, nthreads;
