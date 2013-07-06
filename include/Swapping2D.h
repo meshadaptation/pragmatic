@@ -98,7 +98,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     int active_colour;
 
     min_Q = quality_tolerance;
-    total_active=0;
 
     if(nnodes_reserve<1.5*NNodes){
       nnodes_reserve = 2*NNodes;
@@ -107,7 +106,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
       marked_edges.resize(nnodes_reserve, std::set<index_t>());
     }
 
-    std::vector<int> colouring(NNodes);
+    std::vector<char> colouring(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colouring);
     
     int colour_count[64];
@@ -117,7 +116,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
       
       // Cache the element quality's. Really need to make this persistent within Mesh.
       // Also, initialize marked_edges.
-#pragma omp for schedule(static, 8)
+#pragma omp for schedule(static,8)
       for(size_t i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]>=0){
@@ -130,32 +129,40 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
                                           _mesh->get_metric(n[1]),
                                           _mesh->get_metric(n[2]));
 
-          if(quality[i]<min_Q){
-            for(size_t j=0;j<3;j++){
-              for(size_t k=j+1;k<3;k++){
-#pragma omp critical
-                marked_edges[std::min(n[j], n[k])].insert(std::max(n[j], n[k]));
-              }
-            }
-          }
         }else{
           quality[i] = 0.0;
+        }
+      }
+#pragma omp for schedule(static,8)
+      for(size_t i=0;i<NNodes;i++){
+        for(std::set<index_t>::const_iterator it=_mesh->NEList[i].begin();it!=_mesh->NEList[i].end();++it){
+          if(quality[i]<min_Q){
+            for(std::vector<index_t>::const_iterator jt=_mesh->NNList[i].begin();jt!=_mesh->NNList[i].end();++jt){
+              if(i<*jt)
+                marked_edges[i].insert(*jt);
+            }
+            break;
+          }
         }
       }
 
       for(size_t sweep=0;sweep<100;sweep++){
         // Find the maximal independant set.
-#pragma omp single
+        std::vector<int> local_colour_count(64, 0);
+#pragma omp single nowait
         for(size_t i=0;i<64;i++)
           colour_count[i] = 0;
-#pragma omp for schedule(static)
+#pragma omp for schedule(static,8)
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(!marked_edges[i].empty()){
-#pragma omp atomic update
-            colour_count[colouring[i]]++;
+            ++local_colour_count[colouring[i]];
           }
         }
-        
+        for(size_t i=0;i<64;i++)
+#pragma omp atomic update
+          colour_count[i]+=local_colour_count[i];
+#pragma omp barrier
+
         // Find the maximal independant set.
 #pragma omp single
         {
@@ -179,7 +186,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         if(active_colour<0)
           break;
 
-#pragma omp for schedule(dynamic, 1)
+#pragma omp for schedule(static,8)
         for(size_t i=0; i<NNodes; ++i){
           // Only process if it is the active colour and has marked edges.
           if(!((colouring[i]==active_colour)&&(!marked_edges[i].empty())))
@@ -223,7 +230,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             }
           }
         }
-#pragma omp critical
         _mesh->commit_deferred(tid);
         _mesh->commit_swapping_propagation(marked_edges, tid);
 #pragma omp barrier
@@ -476,9 +482,6 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
   const static size_t snloc=2;
   const static size_t msize=3;
   int nthreads;
-
-  // Total number of active vertices. Used to break the infinite loop.
-  size_t total_active;
 
   std::vector< std::set<index_t> > marked_edges;
   std::vector<real_t> quality;

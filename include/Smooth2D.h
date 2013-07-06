@@ -606,7 +606,7 @@ template<typename real_t>
     zoltan_colour(&graph, 1, _mesh->get_mpi_comm());
 #else
     int NNodes = _mesh->get_number_nodes();
-    std::vector<int> colour(NNodes);
+    std::vector<char> colour(NNodes);
     Colour::greedy(NNodes, _mesh->NNList, colour);
 #endif
 

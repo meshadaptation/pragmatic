@@ -53,8 +53,8 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
-    int max_colour=64;
+  static void greedy(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+    char max_colour=64;
 
     // Colour first active node.
     size_t node;
@@ -73,7 +73,7 @@ class Colour{
       std::vector<bool> used_colours(max_colour, false);;
       for(std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
         if(*it<(int)node){
-          if(colour[*it]>=(signed)max_colour){
+          if(colour[*it]>=max_colour){
             max_colour*=2;
             used_colours.resize(max_colour, false);
           }
@@ -82,7 +82,7 @@ class Colour{
         }
       }
 
-      for(index_t i=0;;i++)
+      for(char i=0;;i++)
         if(!used_colours[i]){
           colour[node] = i;
           break;
@@ -96,7 +96,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
+  static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
     std::vector<bool> conflicts(NNodes, false);
 #pragma omp parallel firstprivate(NNodes)
     {
@@ -118,7 +118,7 @@ class Colour{
         }
         colours = ~colours;
 
-        for(unsigned int j=0;j<64;j++){
+        for(size_t j=0;j<64;j++){
           c=1<<j;
           if(colours&c){
             colour[i] = j;
@@ -140,15 +140,15 @@ class Colour{
         if(!conflicts[i])
           continue;
         
-        unsigned int colours = 0;
-        int c;
+        unsigned long colours = 0;
+        unsigned long c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           c = colour[*it];
           colours = colours | 1<<c;
         }
         colours = ~colours;
 
-        for(unsigned int j=0;j<64;j++){
+        for(size_t j=0;j<64;j++){
           c = 1<<j;
           if(colours&c){
             colour[i] = j;
@@ -167,32 +167,33 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<int> &colour){
-    std::vector<bool> conflicts(NNodes, false);
-#pragma omp parallel firstprivate(NNodes)
-    {
-      // Phase 2: find conflicts
-#pragma omp for
-      for(size_t i=0;i<NNodes;i++){
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          conflicts[i] = conflicts[i] || (colour[i]==colour[*it]);
-        }
+  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+    // Phase 2: find conflicts
+    std::vector<bool> conflict(NNodes, false); // used to reduce false sharing.
+#pragma omp for schedule(static, 8)
+    for(size_t i=0;i<NNodes;i++){
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        conflict[i] = conflict[i] || (colour[i]==colour[*it]);
       }
+    }
+    for(size_t i=0;i<NNodes;i++)
+      if(conflict[i])
+        colour[i] = -1;
 
-      // Phase 3: serial resolution of conflicts
-      for(size_t i=0;i<NNodes;i++){
-        if(!conflicts[i])
-          continue;
+    // Phase 3: serial resolution of conflicts
+#pragma omp single
+    for(size_t i=0;i<NNodes;i++){
+      if(colour[i]==-1){
         
-        unsigned int colours = 0;
-        int c;
+        unsigned long colours = 0;
+        unsigned long c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
           c = colour[*it];
           colours = colours | 1<<c;
         }
         colours = ~colours;
 
-        for(unsigned int j=0;j<64;j++){
+        for(size_t j=0;j<64;j++){
           c = 1<<j;
           if(colours&c){
             colour[i] = j;
