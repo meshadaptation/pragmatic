@@ -41,7 +41,7 @@
 #include <vector>
 
 #include "PragmaticTypes.h"
-
+#include "PragmaticMinis.h"
 /*! \brief Performs a simple first breath greedy graph colouring of a local undirected graph.
  */
 class Colour{
@@ -171,10 +171,46 @@ class Colour{
 #pragma omp for schedule(static, 64)
     for(size_t i=0;i<NNodes;i++){
       char c = colour[i];
-      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-        if(c==colour[*it]){
+      switch(NNList[i].size()){
+      case 2:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]])
           conflicts.push_back(i);
-          break;
+        break;
+      case 3:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]])
+          conflicts.push_back(i);
+        break;
+      case 4:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]])
+          conflicts.push_back(i);
+        break;
+      case 5:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]])
+          conflicts.push_back(i);
+        break;
+      case 6:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]])
+          conflicts.push_back(i);
+        break;
+      case 7:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]])
+          conflicts.push_back(i);
+        break;
+      case 8:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]] || c==colour[NNList[i][7]])
+          conflicts.push_back(i);
+        break;
+      case 9:
+        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]] || c==colour[NNList[i][7]] || c==colour[NNList[i][8]])
+          conflicts.push_back(i);
+        break;
+      default:
+        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          char k = colour[*it];
+          if(c==k){
+            conflicts.push_back(i);
+            break;
+          }
         }
       }
     }

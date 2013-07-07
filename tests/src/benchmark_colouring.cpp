@@ -57,16 +57,22 @@
 #include "Colour.h"
 
 void colour_stats(std::vector< std::vector<index_t> > &graph, const char *colour, int NNodes){
-  std::map<int, int> colours;
+  std::map<int, int> colours, var;
   int max_var=0, mean_var=0; 
   bool valid=true;
   for(int i=0;i<NNodes;i++){
-    max_var = std::max(max_var, (int)graph[i].size());
-    mean_var += graph[i].size();
+    int v = (int)graph[i].size();
+    max_var = std::max(max_var, v);
+    mean_var += v;
     if(colours.count(colour[i])){
       colours[colour[i]]++;
     }else{
       colours[colour[i]]=1;
+    }
+    if(var.count(v)){
+      var[v]++;
+    }else{
+      var[v]=1;
     }
     for(std::vector<index_t>::const_iterator it=graph[i].begin();it!=graph[i].end();++it){
       valid = valid && (colour[i]!=colour[*it]);
@@ -92,6 +98,12 @@ void colour_stats(std::vector< std::vector<index_t> > &graph, const char *colour
 
   std::cout<<"Max variance: "<<max_var<<std::endl;
   std::cout<<"Mean variance: "<<mean_var<<std::endl;
+  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
+    std::cout<<it->first<<"\t";
+  std::cout<<std::endl;
+  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
+    std::cout<<it->second<<"\t";
+  std::cout<<std::endl;
 }
 
 int main(int argc, char **argv){
