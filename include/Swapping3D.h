@@ -163,14 +163,14 @@ template<typename real_t> class Swapping3D{
         NNList[irenumber[it->first]].push_back(irenumber[*jt]);
       }
     }
-    std::vector<index_t> colour(graph.size());
+    std::vector<char> colour(graph.size());
     Colour::greedy(graph.size(), NNList, colour);
 
     // Assume colour 0 will be the maximal independent set.
 
     int max_colour=colour[0];
     for(size_t i=1;i<graph.size();i++)
-      max_colour = std::max(max_colour, colour[i]);
+      max_colour = std::max(max_colour, (int)colour[i]);
 
     // Process face-to-edge swap.
     for(int c=0;c<max_colour;c++)

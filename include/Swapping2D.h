@@ -138,7 +138,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         for(std::set<index_t>::const_iterator it=_mesh->NEList[i].begin();it!=_mesh->NEList[i].end();++it){
           if(quality[i]<min_Q){
             for(std::vector<index_t>::const_iterator jt=_mesh->NNList[i].begin();jt!=_mesh->NNList[i].end();++jt){
-              if(i<*jt)
+              if(i<(size_t)*jt)
                 marked_edges[i].insert(*jt);
             }
             break;
@@ -158,7 +158,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             ++local_colour_count[colouring[i]];
           }
         }
-        for(size_t i=0;i<64;i++)
+        for(int i=0;i<64;i++)
 #pragma omp atomic update
           colour_count[i]+=local_colour_count[i];
 #pragma omp barrier
@@ -209,18 +209,18 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             }
             if(skip)
               continue;
-            
+
             // Mark edge as processed, i.e. remove it from the set of marked edges
             marked_edges[i].erase(j_ref);
-            
+
             Edge<index_t> edge(i, j);
             swap_kernel(edge, modified_elements, NULL, NULL, pragmatic_thread_id());
-            
+
             // If edge was swapped
             if(edge.edge.first != (index_t)i){
               index_t k = edge.edge.first;
               index_t l = edge.edge.second;
-              
+
               Edge<index_t> lateralEdges[] = {
                 Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
               

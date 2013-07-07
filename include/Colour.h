@@ -110,7 +110,7 @@ class Colour{
 #pragma omp for
       for(size_t i=0;i<NNodes;i++){
         unsigned long colours = 0;
-        unsigned long c;
+        char c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
 #pragma omp atomic read
           c = colour[*it];
@@ -119,8 +119,7 @@ class Colour{
         colours = ~colours;
 
         for(size_t j=0;j<64;j++){
-          c=1<<j;
-          if(colours&c){
+          if(colours&(1<<j)){
             colour[i] = j;
             break;
           }
@@ -139,22 +138,17 @@ class Colour{
       for(size_t i=0;i<NNodes;i++){
         if(!conflicts[i])
           continue;
-        
+
         unsigned long colours = 0;
-        unsigned long c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          c = colour[*it];
-          colours = colours | 1<<c;
+          colours = colours | 1<<(colour[*it]);
         }
         colours = ~colours;
 
         for(size_t j=0;j<64;j++){
-          c = 1<<j;
-          if(colours&c){
+          if(colours&(1<<j)){
             colour[i] = j;
             break;
-          }else{
-            c = c<<1;
           }
         }
       }
@@ -168,39 +162,18 @@ class Colour{
    * @param colour array that the node colouring is copied into.
    */
   static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
-    // Phase 2: find conflicts
-    std::vector<bool> conflict(NNodes, false); // used to reduce false sharing.
-#pragma omp for schedule(static, 8)
-    for(size_t i=0;i<NNodes;i++){
-      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-        conflict[i] = conflict[i] || (colour[i]==colour[*it]);
-      }
-    }
-    for(size_t i=0;i<NNodes;i++)
-      if(conflict[i])
-        colour[i] = -1;
-
-    // Phase 3: serial resolution of conflicts
 #pragma omp single
     for(size_t i=0;i<NNodes;i++){
-      if(colour[i]==-1){
-        
-        unsigned long colours = 0;
-        unsigned long c;
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          c = colour[*it];
-          colours = colours | 1<<c;
-        }
-        colours = ~colours;
+      unsigned long colours = 0;
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        colours = colours | 1<<(colour[*it]);
+      }
+      colours = ~colours;
 
-        for(size_t j=0;j<64;j++){
-          c = 1<<j;
-          if(colours&c){
-            colour[i] = j;
-            break;
-          }else{
-            c = c<<1;
-          }
+      for(size_t j=0;j<64;j++){
+        if(colours&(1<<j)){
+          colour[i] = j;
+          break;
         }
       }
     }
