@@ -168,10 +168,11 @@ class Colour{
   static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
     // Phase 2: find conflicts
     std::vector<size_t> conflicts;
-#pragma omp for
+#pragma omp for schedule(static, 64)
     for(size_t i=0;i<NNodes;i++){
+      char c = colour[i];
       for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-        if(colour[i]==colour[*it]){
+        if(c==colour[*it]){
           conflicts.push_back(i);
           break;
         }
