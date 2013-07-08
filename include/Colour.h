@@ -171,46 +171,53 @@ class Colour{
 #pragma omp for schedule(static, 64)
     for(size_t i=0;i<NNodes;i++){
       char c = colour[i];
-      switch(NNList[i].size()){
-      case 2:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]])
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        char k = colour[*it];
+        if(c==k){
           conflicts.push_back(i);
-        break;
-      case 3:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]])
-          conflicts.push_back(i);
-        break;
-      case 4:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]])
-          conflicts.push_back(i);
-        break;
-      case 5:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]])
-          conflicts.push_back(i);
-        break;
-      case 6:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]])
-          conflicts.push_back(i);
-        break;
-      case 7:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]])
-          conflicts.push_back(i);
-        break;
-      case 8:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]] || c==colour[NNList[i][7]])
-          conflicts.push_back(i);
-        break;
-      case 9:
-        if(c==colour[NNList[i][0]] || c==colour[NNList[i][1]] || c==colour[NNList[i][2]] || c==colour[NNList[i][3]] || c==colour[NNList[i][4]] || c==colour[NNList[i][5]] || c==colour[NNList[i][6]] || c==colour[NNList[i][7]] || c==colour[NNList[i][8]])
-          conflicts.push_back(i);
-        break;
-      default:
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          char k = colour[*it];
-          if(c==k){
-            conflicts.push_back(i);
-            break;
+          break;
+        }
+      }
+    }
+    
+    // Phase 3: serial resolution of conflicts
+    int tid = pragmatic_thread_id();
+    int nthreads = pragmatic_nthreads();
+    for(int i=0;i<nthreads;i++){
+      if(tid==i){  
+        for(std::vector<size_t>::const_iterator it=conflicts.begin();it!=conflicts.end();++it){
+          unsigned long colours = 0;
+          for(std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();++jt){
+            colours = colours | 1<<(colour[*jt]);
           }
+          colours = ~colours;
+          
+          for(size_t j=0;j<64;j++){
+            if(colours&(1<<j)){
+              colour[*it] = j;
+              break;
+            }
+          }
+        }
+      }
+#pragma omp barrier
+    }
+  }
+
+  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector< std::set<index_t> > &marked_edges, std::vector<char> &colour){
+    // Phase 2: find conflicts
+    std::vector<size_t> conflicts;
+#pragma omp for schedule(static, 64)
+    for(size_t i=0;i<NNodes;i++){
+      if(marked_edges[i].empty())
+        continue;
+      
+      char c = colour[i];
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        char k = colour[*it];
+        if(c==k){
+          conflicts.push_back(i);
+          break;
         }
       }
     }

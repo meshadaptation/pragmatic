@@ -233,7 +233,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         _mesh->commit_deferred(tid);
         _mesh->commit_swapping_propagation(marked_edges, tid);
 #pragma omp barrier
-        Colour::repair(NNodes, _mesh->NNList, colouring);
+        Colour::repair(NNodes, _mesh->NNList, marked_edges, colouring);
       }
     }
   }

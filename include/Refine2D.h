@@ -110,12 +110,10 @@ template<typename real_t> class Refine2D{
       size_t origNElements = _mesh->get_number_elements();
       int tid = pragmatic_thread_id();
       
+      surfaceEdges[tid].clear();
 #pragma omp single
       {
-        std::fill(splitCnt.begin(), splitCnt.end(), 0);
-        
-        for(int i=0;i<nthreads;i++)
-          surfaceEdges[i].clear();
+        std::fill(splitCnt.begin(), splitCnt.end(), 0);          
         
         n_marked_edges_per_element.resize(origNElements);
         std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
