@@ -122,12 +122,10 @@ template<typename real_t> class Refine2D{
         std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
       }
       
-#pragma omp single nowait
-      std::fill(splitCnt.begin(), splitCnt.end(), 0);
-      
       int tid = pragmatic_thread_id();
       surfaceEdges[tid].clear();
-      
+      splitCnt[tid] = 0;
+
       size_t origNNodes = _mesh->get_number_nodes();
 
       /*
@@ -138,8 +136,6 @@ template<typename real_t> class Refine2D{
       newVertices[tid].clear(); newVertices[tid].reserve(reserve_size);
       newCoords[tid].clear(); newCoords[tid].reserve(ndims*reserve_size);
       newMetric[tid].clear(); newMetric[tid].reserve(msize*reserve_size);
-      
-#pragma omp barrier
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
@@ -179,6 +175,8 @@ template<typename real_t> class Refine2D{
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
       
+#pragma omp barrier
+
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
       
