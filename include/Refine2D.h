@@ -106,29 +106,29 @@ template<typename real_t> class Refine2D{
   void refine(real_t L_max){
 #pragma omp parallel
     {
-      size_t origNNodes = _mesh->get_number_nodes();
       size_t origNElements = _mesh->get_number_elements();
-      int tid = pragmatic_thread_id();
-      
-      surfaceEdges[tid].clear();
-#pragma omp single nowait
-      std::fill(splitCnt.begin(), splitCnt.end(), 0);          
-        
-#pragma omp single nowait
-      {
-        n_marked_edges_per_element.resize(origNElements);
-        std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
-      }
-
 #pragma omp single nowait
       allNewVertices = new DirectedEdge<index_t>[3*origNElements];
-       
+      
 #pragma omp single nowait
       { 
         new_vertices_per_element.resize(3*origNElements);
         std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
       }
-#pragma omp barrier
+      
+#pragma omp single nowait
+      {
+        n_marked_edges_per_element.resize(origNElements);
+        std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
+      }
+      
+#pragma omp single nowait
+      std::fill(splitCnt.begin(), splitCnt.end(), 0);
+      
+      int tid = pragmatic_thread_id();
+      surfaceEdges[tid].clear();
+      
+      size_t origNNodes = _mesh->get_number_nodes();
 
       /*
        * Average vertex degree is ~6, so there
@@ -139,6 +139,8 @@ template<typename real_t> class Refine2D{
       newCoords[tid].clear(); newCoords[tid].reserve(ndims*reserve_size);
       newMetric[tid].clear(); newMetric[tid].reserve(msize*reserve_size);
       
+#pragma omp barrier
+
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
 #pragma omp for schedule(dynamic,16) nowait
