@@ -111,19 +111,25 @@ template<typename real_t> class Refine2D{
       int tid = pragmatic_thread_id();
       
       surfaceEdges[tid].clear();
-#pragma omp single
-      {
-        std::fill(splitCnt.begin(), splitCnt.end(), 0);          
+#pragma omp single nowait
+      std::fill(splitCnt.begin(), splitCnt.end(), 0);          
         
+#pragma omp single nowait
+      {
         n_marked_edges_per_element.resize(origNElements);
         std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
-        
-        allNewVertices = new DirectedEdge<index_t>[3*origNElements];
-        
+      }
+
+#pragma omp single nowait
+      allNewVertices = new DirectedEdge<index_t>[3*origNElements];
+       
+#pragma omp single nowait
+      { 
         new_vertices_per_element.resize(3*origNElements);
         std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
       }
-      
+#pragma omp barrier
+
       /*
        * Average vertex degree is ~6, so there
        * are approx. (6/2)*NNodes edges in the mesh.
