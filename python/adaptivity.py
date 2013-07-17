@@ -307,10 +307,8 @@ def adapt(metric, debug=False):
   for i in range(nfacets.value):
     facets[i * 2    ] = faces[i][0]
     facets[i * 2 + 1] = faces[i][1]
-  boundary_ids = numpy.zeros(nfacets.value, dtype = numpy.intc)
   _libpragmatic.pragmatic_set_surface(ctypes.byref(nfacets),
                                       facets.ctypes.data,
-                                      boundary_ids.ctypes.data, 
                                       colinear_ids.ctypes.data)
 
   info("Setting metric tensor field ...")

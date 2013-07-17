@@ -172,6 +172,7 @@ int main(int argc, char **argv){
   }
 
   VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

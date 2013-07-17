@@ -453,7 +453,7 @@ template<typename real_t>
         private_SENList[tid].push_back(newVertex);
         private_SENList[tid].push_back(cache_n1);
 
-        private_boundary_ids[tid].push_back(boundary_ids[i]);
+        private_boundary_ids[tid].push_back(boundary_ids[seid]);
 
         splitCnt[tid]++;
       }
@@ -469,14 +469,13 @@ template<typename real_t>
 #pragma omp barrier
 
       // Resize mesh containers
-#pragma omp master
+#pragma omp single
       {
       	const int newSize = threadIdx[nthreads - 1] + splitCnt[nthreads - 1];
 
       	SENList.resize(snloc*newSize);
         boundary_ids.resize(newSize);
       }
-#pragma omp barrier
 
       // Append new elements to the surface
       memcpy(&SENList[snloc*threadIdx[tid]], &private_SENList[tid][0], snloc*splitCnt[tid]*sizeof(index_t));
