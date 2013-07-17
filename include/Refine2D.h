@@ -164,6 +164,8 @@ template<typename real_t> class Refine2D{
           threadIdx[tid] = _mesh->NNodes;
           _mesh->NNodes += splitCnt[tid];
         }
+
+#pragma omp barrier
       
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
@@ -175,8 +177,6 @@ template<typename real_t> class Refine2D{
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
       
-#pragma omp barrier
-
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
       

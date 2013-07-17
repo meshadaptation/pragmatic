@@ -79,10 +79,10 @@ class NotImplementedException(Exception):
 class ParameterException(Exception):
   pass
 
-try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
-except:
-  raise LibraryException("Failed to load libpragmatic.so")
+#try:
+_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+#except:
+#  raise LibraryException("Failed to load libpragmatic.so")
 
 def mesh_metric(mesh):
   cells = mesh.cells()

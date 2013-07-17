@@ -479,15 +479,8 @@ template<typename real_t>
   void init_cache(std::string method){
     colour_sets.clear();
 
-    zoltan_graph_t graph;
-    graph.rank = rank;
-
     int NNodes = _mesh->get_number_nodes();
     assert(NNodes==(int)_mesh->NNList.size());
-    graph.nnodes = NNodes;
-
-    int NPNodes = NNodes - _mesh->recv_halo.size();
-    graph.npnodes = NPNodes;
 
     std::vector<size_t> nedges(NNodes);
     size_t sum = 0;
@@ -496,7 +489,6 @@ template<typename real_t>
       nedges[i] = cnt;
       sum+=cnt;
     }
-    graph.nedges = &(nedges[0]);
 
     std::vector<size_t> csr_edges(sum);
     sum=0;
@@ -505,14 +497,9 @@ template<typename real_t>
         csr_edges[sum++] = *it;
       }
     }
-    graph.csr_edges = &(csr_edges[0]);
 
-    graph.gid = &(_mesh->lnn2gnn[0]);
-    graph.owner = (int*) &(_mesh->node_owner[0]);
-
-    std::vector<int> colour(NNodes);
-    graph.colour = &(colour[0]);
-    zoltan_colour(&graph, 1, _mesh->get_mpi_comm());
+    std::vector<char> colour(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(!_mesh->is_owned_node(i)))

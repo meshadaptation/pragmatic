@@ -40,12 +40,6 @@ if(OpenMP_FOUND)
   set (CMAKE_FORTRAN_FLAGS OpenMP_C_FLAGS ${CMAKE_FORTRAN_FLAGS})
 endif()
 
-FIND_PACKAGE(Zoltan)
-if(Zoltan_FOUND)
-  include_directories(${Zoltan_INCLUDE_DIRS})
-  set (PRAGMATIC_LIBRARIES ${Zoltan_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-endif()
-
 FIND_PACKAGE(Metis)
 if(METIS_FOUND)
   include_directories(${METIS_INCLUDE_DIR})

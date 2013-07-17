@@ -47,7 +47,6 @@
 #endif
 
 #include "ElementProperty.h"
-#include "zoltan_tools.h"
 #include "Mesh.h"
 #include "Colour.h"
 
@@ -516,33 +515,20 @@ template<typename real_t> class Coarsen3D{
     }
           
     // Colour.
-    zoltan_graph_t graph;
-    std::vector<int> colour(NNodes);
-        
-    graph.rank = rank;
-    graph.nnodes = NNodes;
-    graph.npnodes = NPNodes;
-    graph.nedges = &(nedges[0]);
-    graph.csr_edges = &(csr_edges[0]);
-        
-    graph.gid = &(lnn2gnn[0]);
-    graph.owner = &(owner[0]);
-        
-    graph.colour = &(colour[0]);
-        
-    zoltan_colour(&graph, 1,  _mesh->get_mpi_comm());
+    std::vector<char> colour(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
           
     // Given a colouring, determine the maximum independent set.
           
     // Count number of active vertices of each colour.
-    int max_colour = 0;
+    char max_colour = 0;
     for(int i=0;i<NPNodes;i++){
       max_colour = std::max(max_colour, colour[i]);
     }
        
 #ifdef HAVE_MPI
     if(nprocs>1)
-      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_CHAR, MPI_MAX, _mesh->get_mpi_comm());
 #endif
 
     std::vector<int> ncolours(max_colour+1, 0);
@@ -888,8 +874,8 @@ template<typename real_t> class Coarsen3D{
   void select_max_independent_set_serial(std::vector<bool> &maximal_independent_set){
     int NNodes = _mesh->get_number_nodes();
     
-    std::vector<int> colour(NNodes);
-    Colour::greedy(NNodes, _mesh->NNList, colour);
+    std::vector<char> colour(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
     
     std::map<int, int> ncolours;
     if(nprocs==1){

@@ -4,7 +4,7 @@ CXX = @CXX@
 CC = @CC@
 FC = @FC@
 
-CPPFLAGS = @CPPFLAGS@ @CPPFLAGS_ZOLTAN@ -I../include
+CPPFLAGS = @CPPFLAGS@ -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
@@ -20,9 +20,9 @@ VPATH = ./:./src
 ifeq (@USING_FORTRAN@,yes)
 fortran_objs = pragmatic.lo  
 endif
-objects = cpragmatic.lo zoltan_tools.lo $(fortran_objs)
+objects = cpragmatic.lo $(fortran_objs)
 
-LIBS = $(objects) @LIBS_ZOLTAN@ @LIBS@
+LIBS = $(objects) @LIBS@
 
 .SUFFIXES: .F90 .cpp .c .o .lo
 
