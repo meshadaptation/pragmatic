@@ -79,10 +79,10 @@ class NotImplementedException(Exception):
 class ParameterException(Exception):
   pass
 
-#try:
-_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
-#except:
-#  raise LibraryException("Failed to load libpragmatic.so")
+try:
+  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+except:
+  raise LibraryException("Failed to load libpragmatic.so")
 
 def mesh_metric(mesh):
   cells = mesh.cells()
@@ -465,10 +465,10 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
   return Mp
 
 if __name__=="__main__":
-  from mpi4py import MPI
+  #  from mpi4py import MPI
   import sys
 
-  comm = MPI.COMM_WORLD
+#  comm = MPI.COMM_WORLD
 
   # mesh = Mesh("greenland.xml.gz")
   mesh = UnitSquareMesh(100, 100)

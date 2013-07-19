@@ -364,6 +364,30 @@ template<typename real_t> class Mesh{
     return mean;
   }
 
+  /// Print out the qualities. Useful if you want to plot a histogram of element qualities.
+  void print_quality() const{
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(size_t i=0;i<NElements;i++){
+        const index_t *n=get_element(i);
+        if(n[0]<0)
+          continue;
+        
+        double q;
+        if(ndims==2){
+          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+        }else{
+          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+        }
+#pragma omp critical
+        std::cout<<"Quality[ele="<<i<<"] = "<<q<<std::endl;
+      }
+    }
+  }
+
   /// Get the element minimum quality in metric space.
   double get_qmin() const{
     double qmin=1; // Where 1 is ideal.

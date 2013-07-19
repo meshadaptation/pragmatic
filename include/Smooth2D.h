@@ -58,7 +58,6 @@ template<typename real_t>
 #endif
 
     sigma_q = 0.0001;
-    good_q = 0.5;
 
     // Set the orientation of elements.
     property = NULL;
@@ -87,7 +86,9 @@ template<typename real_t>
 
   // Smooth the mesh using a given method. Valid methods are:
   // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=10){
+  void smooth(std::string method, int max_iterations=10, double quality_tol=0.5){
+    good_q = quality_tol;
+
     init_cache(method);
 
     std::vector<int> halo_elements;

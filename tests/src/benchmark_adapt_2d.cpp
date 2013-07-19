@@ -103,9 +103,10 @@ int main(int argc, char **argv){
     else
       metric_field.relax_mesh(0.5);
 
-    // sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
-    // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
-
+    if(verbose){
+      sprintf(filename, "../data/benchmark_adapt_2d-init-%d", t);
+      VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+    }
     double T1 = get_wtime();
 
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -122,42 +123,51 @@ int main(int argc, char **argv){
     double L_max = mesh->maximal_edge_length();
     double alpha = sqrt(2.0)/2;
     
-    for(size_t i=0;i<20;i++){
-      double L_ref = std::max(alpha*L_max, L_up);
-      
-      tic = get_wtime();
-      coarsen.coarsen(L_low, L_ref);
-      toc = get_wtime();
-      if(t>0) time_coarsen += (toc-tic);
-      
-      tic = get_wtime();
-      swapping.swap(0.5);
-      toc = get_wtime();
-      if(t>0) time_swap += (toc-tic);
-
-      tic = get_wtime();
-      refine.refine(L_ref);
-      toc = get_wtime();
-      if(t>0) time_refine += (toc-tic);
-
-      L_max = mesh->maximal_edge_length();
+    for(size_t I=0;I<5;I++){
+      for(size_t i=0;i<10;i++){
+        double L_ref = std::max(alpha*L_max, L_up);
         
-      if((L_max-L_up)<0.01)
+        tic = get_wtime();
+        coarsen.coarsen(L_low, L_ref);
+        toc = get_wtime();
+        if(t>0) time_coarsen += (toc-tic);
+        
+        tic = get_wtime();
+        swapping.swap(0.7);
+        toc = get_wtime();
+        if(t>0) time_swap += (toc-tic);
+        
+        tic = get_wtime();
+        refine.refine(L_ref);
+        toc = get_wtime();
+        if(t>0) time_refine += (toc-tic);
+        
+        L_max = mesh->maximal_edge_length();
+        
+        if((L_max-L_up)<0.01)
+          break;
+      }
+      
+      double T2 = get_wtime();
+      if(t>0) time_adapt += (T2-T1);
+      
+      std::vector<int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
+      
+      tic = get_wtime();
+      if(I>0)
+        smooth.smooth("smart Laplacian", I*10, 1.0);
+      smooth.smooth("optimisation Linf", 10);
+      toc = get_wtime();
+      if(t>0) time_smooth += (toc-tic);
+      if(t>0) time_adapt += (toc-tic);
+      
+      if(mesh->get_qmin()>0.4)
         break;
+      if(verbose)
+        std::cerr<<I<<" :: meatgrinder "<<mesh->get_qmin()<<std::endl;
     }
-
-    double T2 = get_wtime();
-    if(t>0) time_adapt += (T2-T1);
-
-    std::vector<int> active_vertex_map;
-    mesh->defragment(&active_vertex_map);
-    surface.defragment(&active_vertex_map);
-
-    tic = get_wtime();
-    smooth.smooth("optimisation Linf", 20);
-    toc = get_wtime();
-    if(t>0) time_smooth += (toc-tic);
-    if(t>0) time_adapt += (toc-tic);
 
     NNodes = mesh->get_number_nodes();
     psi.resize(NNodes);
@@ -176,8 +186,12 @@ int main(int argc, char **argv){
                <<std::setw(11)<<time_smooth/t<<" "
                <<std::setw(10)<<time_adapt/t<<std::endl
                <<"NNodes, NElements = "<<mesh->get_number_nodes()<<", "<<mesh->get_number_elements()<<std::endl;
-    // sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
-    // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+
+    if(verbose){
+      mesh->print_quality();
+      // sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
+      // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+    }
   }
 
   delete mesh;
