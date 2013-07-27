@@ -95,13 +95,13 @@ template<typename treal_t> class MetricTensor2D{
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
-  void get_metric(double *metric){
+  void get_metric(double *metric) const{
     for(size_t i=0;i<3;i++)
       metric[i] = _metric[i];
   }
 
   /// Give const pointer to metric tensor.
-  const treal_t* get_metric(){
+  const treal_t* get_metric() const{
     return _metric;
   }
 
