@@ -104,9 +104,12 @@ template<typename real_t> class Refine2D{
    * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
    */
   void refine(real_t L_max){
-#pragma omp parallel
+    size_t origNElements = _mesh->get_number_elements();
+    size_t origNNodes = _mesh->get_number_nodes();
+    
+#pragma omp parallel firstprivate(origNElements, origNNodes, L_max)
     {
-      size_t origNElements = _mesh->get_number_elements();
+
 #pragma omp single nowait
       allNewVertices = new DirectedEdge<index_t>[3*origNElements];
       
@@ -125,8 +128,6 @@ template<typename real_t> class Refine2D{
       int tid = pragmatic_thread_id();
       surfaceEdges[tid].clear();
       splitCnt[tid] = 0;
-
-      size_t origNNodes = _mesh->get_number_nodes();
 
       /*
        * Average vertex degree is ~6, so there
@@ -214,7 +215,7 @@ template<typename real_t> class Refine2D{
         *it = vid;
         
         it = std::find(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end(), firstid);
-        assert(it!=_mesh->NNList[firstid].end());
+        assert(it!=_mesh->NNList[secondid].end());
         *it = vid;
         
         // Check if surface edge
@@ -236,7 +237,7 @@ template<typename real_t> class Refine2D{
       newElements[tid].clear();
       newElements[tid].reserve(4*origNElements/nthreads);
       
-#pragma omp for schedule(dynamic,16) nowait
+#pragma omp for schedule(static) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
@@ -331,74 +332,75 @@ template<typename real_t> class Refine2D{
           std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
           
           for(int i=0;i<nprocs;++i){
-          recv_cnt[i] = recv_additional[i].size();
-          for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-            _mesh->recv[i].push_back(it->id);
-            _mesh->recv_halo.insert(it->id);
-          }
+	    recv_cnt[i] = recv_additional[i].size();
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+	      _mesh->recv[i].push_back(it->id);
+	      _mesh->recv_halo.insert(it->id);
+	    }
           
-          send_cnt[i] = send_additional[i].size();
-          for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-            _mesh->send[i].push_back(it->id);
-            _mesh->send_halo.insert(it->id);
-          }
-        }
+	    send_cnt[i] = send_additional[i].size();
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+	      _mesh->send[i].push_back(it->id);
+	      _mesh->send_halo.insert(it->id);
+	    }
+	  }
         
-        // Update global numbering
-        for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-          if(_mesh->node_owner[i] == rank)
-            _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
+	  // Update global numbering
+	  for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
+	    if(_mesh->node_owner[i] == rank)
+	      _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
         
-        _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+	  _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
         
-        // Now that the global numbering has been updated, update send_map and recv_map.
-        for(int i=0;i<nprocs;++i){
-          for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
-            _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+	  // Now that the global numbering has been updated, update send_map and recv_map.
+	  for(int i=0;i<nprocs;++i){
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+	      _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
           
-          for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
-            _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-        }
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+	      _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+	  }
         
-        _mesh->clear_invisible(invisible_vertices);
-        _mesh->trim_halo();
-      }
+	  _mesh->clear_invisible(invisible_vertices);
+	  _mesh->trim_halo();
+	}
 #endif
-    }
+      }
     
 #ifndef NDEBUG
-    // Fix orientations of new elements.
-#pragma omp for schedule(dynamic, 100)
-    for(size_t i=0;i<_mesh->NElements;i++){
-      if(_mesh->_ENList[i*nloc] < 0)
-        continue;
+#pragma omp barrier
+      // Fix orientations of new elements.
+      size_t NElements = _mesh->get_number_elements();
+
+#pragma omp for
+      for(size_t i=0;i<NElements;i++){
+	index_t n0 = _mesh->_ENList[i*nloc];
+	if(n0<0)
+	  continue;
+	
+	index_t n1 = _mesh->_ENList[i*nloc + 1];
+	index_t n2 = _mesh->_ENList[i*nloc + 2];
+	
+	const real_t *x0 = &_mesh->_coords[n0*ndims];
+	const real_t *x1 = &_mesh->_coords[n1*ndims];
+	const real_t *x2 = &_mesh->_coords[n2*ndims];
       
-      index_t n0 = _mesh->_ENList[i*nloc];
-      index_t n1 = _mesh->_ENList[i*nloc + 1];
-      index_t n2 = _mesh->_ENList[i*nloc + 2];
-      
-      const real_t *x0 = &_mesh->_coords[n0*ndims];
-      const real_t *x1 = &_mesh->_coords[n1*ndims];
-      const real_t *x2 = &_mesh->_coords[n2*ndims];
-      
-      real_t av = property->area(x0, x1, x2);
-      
-      assert(av >= 0);
-      /*
-        if(av<0){
-        // Flip element
-        _mesh->_ENList[i*nloc] = n1;
-        _mesh->_ENList[i*nloc+1] = n0;
-        }
-      */
-    }
+	real_t av = property->area(x0, x1, x2);
+	
+	if(av<=0){
+#pragma omp critical
+	  std::cerr<<"ERROR: inverted element in refinement"<<std::endl
+		   <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
+	  exit(-1);
+	}
+      }
 #endif
     
 #pragma omp single
-    delete[] allNewVertices;
+      delete[] allNewVertices;
     
-    // Refine surface
-    _surface->refine(surfaceEdges);
+      // Refine surface
+      _surface->refine(surfaceEdges);
     }
   }
 
