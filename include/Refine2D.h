@@ -74,10 +74,10 @@ template<typename real_t> class Refine2D{
       break;
     }
 
-#ifdef HAVE_MPI
-    MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-    MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
-#endif
+    MPI_Comm comm = _mesh->get_mpi_comm();
+
+    nprocs = pragmatic_nprocesses(comm);
+    rank = pragmatic_process_id(comm);
 
     nthreads = pragmatic_nthreads();
 
@@ -366,7 +366,7 @@ template<typename real_t> class Refine2D{
 	}
 #endif
       }
-    
+
 #ifndef NDEBUG
 #pragma omp barrier
       // Fix orientations of new elements.

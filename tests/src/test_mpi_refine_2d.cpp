@@ -80,15 +80,22 @@ int main(int argc, char **argv){
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
   
-  metric_field.add_field(&(psi[0]), 0.01);
+  metric_field.add_field(&(psi[0]), 0.0001);
   metric_field.update_mesh();
-  
+
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
+
   Refine2D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  for(int i=0;i<10;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
+  if(!mesh->verify()){
+    std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
+  }
+  
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
