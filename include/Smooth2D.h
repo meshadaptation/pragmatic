@@ -75,7 +75,6 @@ template<typename real_t>
 
     kernels["Laplacian"]              = &Smooth2D<real_t>::laplacian_2d_kernel;
     kernels["smart Laplacian"]        = &Smooth2D<real_t>::smart_laplacian_2d_kernel;
-    kernels["smart Laplacian search"] = &Smooth2D<real_t>::smart_laplacian_search_2d_kernel;
     kernels["optimisation Linf"]      = &Smooth2D<real_t>::optimisation_linf_2d_kernel;
   }
 
@@ -85,7 +84,7 @@ template<typename real_t>
   }
 
   // Smooth the mesh using a given method. Valid methods are:
-  // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"
+  // "Laplacian", "smart Laplacian", "optimisation Linf"
   void smooth(std::string method, int max_iterations=10, double quality_tol=0.5){
     good_q = quality_tol;
 
@@ -227,95 +226,6 @@ template<typename real_t>
 
     real_t functional = functional_Linf(node, p, mp);
     real_t functional_orig = functional_Linf(node);
-
-    if(functional-functional_orig<sigma_q)
-      return false;
-
-    // Reset quality cache.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
-      quality[*ie] = -1;
-
-    _mesh->_coords[node*2  ] = p[0];
-    _mesh->_coords[node*2+1] = p[1];
-
-    for(size_t j=0;j<3;j++)
-      _mesh->metric[node*3+j] = mp[j];
-
-    return true;
-  }
-
-  bool smart_laplacian_search_2d_kernel(index_t node){
-    real_t x0 = get_x(node);
-    real_t y0 = get_y(node);
-
-    real_t p[2];
-    if(!laplacian_2d_kernel(node, p))
-      return false;
-
-    p[0] -= x0;
-    p[1] -= y0;
-
-    real_t mag = sqrt(p[0]*p[0]+p[1]*p[1]);
-    real_t hat[] = {p[0]/mag, p[1]/mag};
-
-    // This can happen if there is zero mag.
-    if(!pragmatic_isnormal(hat[0]+hat[1]))
-      return false;
-
-    double mp[3];
-
-    // Initialise alpha.
-    bool valid=false;
-    real_t alpha = mag, functional;
-    for(int rb=0;rb<5;rb++){
-      p[0] = x0 + alpha*hat[0];
-      p[1] = y0 + alpha*hat[1];
-
-      valid = generate_location_2d(node, p, mp);
-
-      if(valid){
-        functional = functional_Linf(node, p, mp);
-        break;
-      }else{
-        alpha*=0.5;
-        continue;
-      }
-    }
-    if(!valid)
-      return false;
-
-    // Recursive bisection search along line.
-    const real_t functional_orig = functional_Linf(node);
-    std::pair<real_t, real_t> alpha_lower(0, functional_orig), alpha_upper(alpha, functional);
-
-    for(int rb=0;rb<10;rb++){
-      alpha = (alpha_lower.first+alpha_upper.first)*0.5;
-      p[0] = x0 + alpha*hat[0];
-      p[1] = y0 + alpha*hat[1];
-
-      valid = generate_location_2d(node, p, mp);
-      assert(valid);
-
-      // Check if this positions improves the L-infinity norm.
-      functional = functional_Linf(node, p, mp);
-
-      if(alpha_lower.second<functional){
-        alpha_lower.first = alpha;
-        alpha_lower.second = functional;
-      }else{
-        if(alpha_upper.second<functional){
-          alpha_upper.first = alpha;
-          alpha_upper.second = functional;
-        }else{
-          alpha = alpha_upper.first;
-          functional = alpha_upper.second;
-          p[0] = x0 + alpha*hat[0];
-          p[1] = y0 + alpha*hat[1];
-          break;
-        }
-      }
-    }
-    assert(valid);
 
     if(functional-functional_orig<sigma_q)
       return false;

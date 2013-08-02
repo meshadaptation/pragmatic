@@ -63,10 +63,10 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
-  const double target_quality_mean[] = {0.4, 0.7, 0.7, 0.7};
-  const double target_quality_min[]  = {0.0, 0.1, 0.2, 0.3};
-  for(int m=0;m<4;m++){
+  const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation Linf"};
+  const double target_quality_mean[] = {0.4, 0.7, 0.7};
+  const double target_quality_min[]  = {0.0, 0.1, 0.3};
+  for(int m=0;m<3;m++){
     const char *method = methods[m];
 
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
@@ -105,10 +105,8 @@ int main(int argc, char **argv){
     
     Smooth2D<double> smooth(*mesh, surface);
     
-    int max_smooth_iter=2;
-    
     double tic = get_wtime();
-    smooth.smooth(method, max_smooth_iter);
+    smooth.smooth(method);
     double toc = get_wtime();
     
     double lmean = mesh->get_lmean();
