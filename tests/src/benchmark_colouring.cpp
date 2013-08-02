@@ -56,17 +56,23 @@
 
 #include "Colour.h"
 
-void colour_stats(std::vector< std::vector<index_t> > &graph, const int *colour, int NNodes){
-  std::map<int, int> colours;
+void colour_stats(std::vector< std::vector<index_t> > &graph, const char *colour, int NNodes){
+  std::map<int, int> colours, var;
   int max_var=0, mean_var=0; 
   bool valid=true;
   for(int i=0;i<NNodes;i++){
-    max_var = std::max(max_var, (int)graph[i].size());
-    mean_var += graph[i].size();
+    int v = (int)graph[i].size();
+    max_var = std::max(max_var, v);
+    mean_var += v;
     if(colours.count(colour[i])){
       colours[colour[i]]++;
     }else{
       colours[colour[i]]=1;
+    }
+    if(var.count(v)){
+      var[v]++;
+    }else{
+      var[v]=1;
     }
     for(std::vector<index_t>::const_iterator it=graph[i].begin();it!=graph[i].end();++it){
       valid = valid && (colour[i]!=colour[*it]);
@@ -74,7 +80,7 @@ void colour_stats(std::vector< std::vector<index_t> > &graph, const int *colour,
         std::cout<<"invalid colour "<<i<<", "<<*it<<" "<<colour[i]<<std::endl;
       }
     }
-    
+
   }
   mean_var/=NNodes;
   std::cout<<"Valid colouring: ";
@@ -83,11 +89,21 @@ void colour_stats(std::vector< std::vector<index_t> > &graph, const int *colour,
   else
     std::cout<<"fail\n";
   std::cout<<"Chromatic number: "<<colours.size()<<std::endl;
-  for(std::map<int, int>::const_iterator it=colours.begin();it!=colours.end();++it){
-    std::cout<<it->first<<"\t"<<it->second<<std::endl;
-  }
+  for(std::map<int, int>::const_iterator it=colours.begin();it!=colours.end();++it)
+    std::cout<<it->first<<"\t";
+  std::cout<<std::endl;
+   for(std::map<int, int>::const_iterator it=colours.begin();it!=colours.end();++it)
+    std::cout<<it->second<<"\t";
+  std::cout<<std::endl;
+
   std::cout<<"Max variance: "<<max_var<<std::endl;
   std::cout<<"Mean variance: "<<mean_var<<std::endl;
+  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
+    std::cout<<it->first<<"\t";
+  std::cout<<std::endl;
+  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
+    std::cout<<it->second<<"\t";
+  std::cout<<std::endl;
 }
 
 int main(int argc, char **argv){
@@ -95,11 +111,11 @@ int main(int argc, char **argv){
   int provided_thread_support;
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
-  
+
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const char filename[]="../data/test_refine_2d.vtu";
+  const char filename[]="../data/box200x200.vtu";
 
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
   reader->SetFileName(filename);
@@ -137,21 +153,30 @@ int main(int argc, char **argv){
 
   double tic, toc;
   // Colour.
-  std::cout<<"Greedy colouring\n";
-  std::vector<int> colour0(NNodes);
+  std::cout<<"################\nGreedy colouring\n";
+  std::vector<char> colour0(NNodes);
   tic = get_wtime();
-  Colour::greedy(graph, &(colour0[0]));
+  Colour::greedy(NNodes, graph, colour0);
   toc = get_wtime();
   std::cout<<"Wall time "<<toc-tic<<std::endl;
   colour_stats(graph, &(colour0[0]), NNodes);
 
-  std::cout<<"Gebremedhin-Manne colouring\n";
-  std::vector<int> colour1(NNodes);
+  std::cout<<"################\nGebremedhin-Manne colouring\n";
+  std::vector<char> colour1(NNodes);
   tic = get_wtime();
-  Colour::GebremedhinManne(graph, &(colour1[0]));
+  Colour::GebremedhinManne(NNodes, graph, colour1);
   toc = get_wtime();
   std::cout<<"Wall time "<<toc-tic<<std::endl;
   colour_stats(graph, &(colour1[0]), NNodes);
+
+  for(int i=0;i<5;i++){
+    std::cout<<"################\nRepair colouring "<<i<<"\n";
+    tic = get_wtime();
+    Colour::repair(NNodes, graph, colour1);
+    toc = get_wtime();
+    std::cout<<"Wall time "<<toc-tic<<std::endl;
+    colour_stats(graph, &(colour1[0]), NNodes);
+  }
 
   MPI_Finalize();
 

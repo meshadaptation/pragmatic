@@ -104,35 +104,39 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
   void coarsen(real_t L_low, real_t L_max){
-    _L_low = L_low;
-    _L_max = L_max;
-    
-    size_t NNodes= _mesh->get_number_nodes();
-    
-    if(nnodes_reserve<1.5*NNodes){
-      nnodes_reserve = 2*NNodes;
-      
-      if(dynamic_vertex!=NULL){
-        delete [] dynamic_vertex;
-      }
-      
-      dynamic_vertex = new index_t[nnodes_reserve];
+#pragma omp parallel
+    {
+      size_t NNodes= _mesh->get_number_nodes();
 
-      if(colouring==NULL)
-        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
-      else
-        colouring->resize(nnodes_reserve);
-    }
+#pragma omp single
+      {
+        _L_low = L_low;
+        _L_max = L_max;
+
+        total_active = 0;
+
+        if(nnodes_reserve<1.5*NNodes){
+          nnodes_reserve = 2*NNodes;
+      
+          if(dynamic_vertex!=NULL){
+            delete [] dynamic_vertex;
+          }
+      
+          dynamic_vertex = new index_t[nnodes_reserve];
+
+          if(colouring==NULL)
+            colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
+          else
+            colouring->resize(nnodes_reserve);
+        }
+      }
 
     /* dynamic_vertex[i] >= 0 :: target to collapse node i
        dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
        dynamic_vertex[i] = -2 :: recalculate collapse - this is how propagation is implemented
     */
 
-    // Total number of active vertices. Used to break the infinite loop.
-    size_t total_active;
-
-#ifdef HAVE_MPI
+#ifdef HAVE_MPI_disable
     // Global arrays used to separate all vertices of an
     // independent set into interior vertices and halo vertices.
     index_t *global_interior = new index_t[nnodes_reserve];
@@ -159,12 +163,10 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
     std::vector<size_t> sent_vertices_vec_size(nprocs, 0);
 #endif
 
-#pragma omp parallel
-    {
       const int tid = pragmatic_thread_id();
 
       // Mark all vertices for evaluation.
-#pragma omp for schedule(static)
+#pragma omp for schedule(static, 32)
       for(size_t i=0;i<NNodes;i++){
         dynamic_vertex[i] = -2;
         colouring->node_colour[i] = -1;
@@ -183,26 +185,25 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
         // Start by finding which vertices comprise the active sub-mesh.
         std::vector<index_t> active_set;
 
-#pragma omp single
-        {
-          total_active = 0;
-        }
-
         /* Initialise list of vertices to be coarsened. A dynamic
            schedule is used as previous coarsening may have introduced
            significant gaps in the node list. This could lead to
            significant load imbalance if a static schedule was used. */
-#pragma omp for schedule(dynamic, 32) reduction(+:total_active)
+#pragma omp single nowait
+        total_active = 0;
+#pragma omp for schedule(dynamic, 8) nowait
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(dynamic_vertex[i] == -2){
             dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
 
             if(dynamic_vertex[i]>=0){
               active_set.push_back(i);
-              ++total_active;
             }
           }
         }
+#pragma omp atomic
+        total_active+=active_set.size();
+#pragma omp barrier
 
 #ifdef HAVE_MPI
         if(nprocs>1){
@@ -243,6 +244,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
          * set and then discarding the other colours and looping all over again -
          * at least we make use of the existing colouring as much as possible.
          */
+#ifdef MPI_DISABLED
         if(nprocs>1){
 #ifdef HAVE_MPI
           for(int set_no=0; set_no<colouring->global_nsets; ++set_no){
@@ -262,7 +264,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
             // Local vectors storing IDs of vertices which will be sent to other processes.
             std::vector< std::vector<index_t> > local_sent(nprocs);
 
-#pragma omp for schedule(dynamic,32) nowait
+#pragma omp for schedule(static, 32) nowait
             for(size_t i=0; i<colouring->ind_set_size[set_no]; ++i){
               index_t rm_vertex = colouring->independent_sets[set_no][i];
               assert((size_t) rm_vertex < _mesh->NNodes);
@@ -349,7 +351,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
             // Wait for all threads to increment send_buffer_size[i] and then allocate
             // memory for each send_buffer[i]. Same for sent_vertices_vec.
 #pragma omp barrier
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(static, 32)
             for(int i=0; i<nprocs; ++i){
               if(send_buffer_size[i]>0){
                 // Allocate one extra int to store the length of the original message.
@@ -463,7 +465,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
             // Meanwhile, the rest of the OpenMP threads
             // can start processing interior vertices.
-#pragma omp for schedule(dynamic,32)
+#pragma omp for schedule(static, 32)
             for(size_t i=0; i<global_interior_size; ++i){
               index_t rm_vertex = global_interior[i];
               index_t target_vertex = dynamic_vertex[rm_vertex];
@@ -484,7 +486,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
             // By now, both communication and processing of the interior are done.
             // Perform coarsening on the halo.
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static, 32)
             for(size_t i=0; i<global_halo_size; ++i){
               index_t rm_vertex = global_halo[i];
               index_t target_vertex = dynamic_vertex[rm_vertex];
@@ -517,10 +519,11 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
           }
 #endif
         }else{
+#endif // disable
           for(int set_no=0; set_no<colouring->nsets; ++set_no){
             if(colouring->ind_set_size[set_no]==0)
               continue;
-#pragma omp for schedule(dynamic, 16)
+#pragma omp for schedule(dynamic, 1)
             for(size_t i=0; i<colouring->ind_set_size[set_no]; ++i){
               index_t rm_vertex = colouring->independent_sets[set_no][i];
               assert((size_t) rm_vertex < NNodes);
@@ -574,13 +577,13 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
             _surface->commit_deferred(tid);
 #pragma omp barrier
           }
-        }
+//        }
 
         colouring->destroy();
       }while(true);
     }
 
-#ifdef HAVE_MPI
+#ifdef HAVE_MPI_disable
     delete[] global_interior;
     delete[] global_halo;
 
@@ -588,7 +591,6 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
       _mesh->trim_halo();
 #endif
 
-    return;
   }
 
  private:
@@ -633,15 +635,9 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
       /* Check the properties of new elements. If the
          new properties are not acceptable then continue. */
 
-      // Find the elements what will be collapsed.
-      std::set<index_t> collapsed_elements;
-      std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
-                       _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
-                       std::inserter(collapsed_elements,collapsed_elements.begin()));
-
       // Check volume/area of new elements.
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-        if(collapsed_elements.count(*ee))
+        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
           continue;
 
         // Create a copy of the proposed element
@@ -785,7 +781,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
     std::vector<index_t> gnn;
     std::vector<int> owner;
     std::vector<real_t> coords;
-    std::vector<float> metric;
+    std::vector<double> metric;
 
     //Each element eid={v0, v1, v2} is sent using pairs (gnn, owner).
     std::vector<index_t> elements;
@@ -857,7 +853,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
         msg.coords.push_back(x[0]);
         msg.coords.push_back(x[1]);
 
-        const float *m = _mesh->get_metric(*v);
+        const double *m = _mesh->get_metric(*v);
         msg.metric.push_back(m[0]);
         msg.metric.push_back(m[1]);
         msg.metric.push_back(m[2]);
@@ -906,7 +902,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
         index_t *rgnn = (index_t *) &ivertex[0];
         int *rowner = (int *) &ivertex[idx_owner];
         real_t *rcoords = (real_t *) &ivertex[idx_coords];
-        float *rmetric = (float *) &ivertex[idx_metric];
+        double *rmetric = (double *) &ivertex[idx_metric];
 
         *rgnn = msg.gnn[i];
         *rowner = msg.owner[i];
@@ -978,7 +974,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
           // Only append this vertex to the mesh if we haven't received it before.
           if(_mesh->recv_map[owner].count(gnn) == 0){
             real_t *rcoords = (real_t *) &buffer[loc+idx_coords];
-            float *rmetric = (float *) &buffer[loc+idx_metric];
+            double *rmetric = (double *) &buffer[loc+idx_metric];
 
             index_t new_lnn = _mesh->append_vertex(rcoords, rmetric);
 
@@ -1155,6 +1151,9 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
   real_t _L_low, _L_max;
 
+  // Total number of active vertices. Used to break the infinite loop.
+  size_t total_active;
+
   const static size_t ndims=2;
   const static size_t nloc=3;
   const static size_t snloc=2;
@@ -1162,7 +1161,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
   const static size_t node_package_int_size = 1 + (sizeof(index_t) +
                                                    ndims*sizeof(real_t) +
-                                                   msize*sizeof(float)) / sizeof(int);
+                                                   msize*sizeof(double)) / sizeof(int);
   const static size_t idx_owner = sizeof(index_t) / sizeof(int);
   const static size_t idx_coords = idx_owner + 1;
   const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);

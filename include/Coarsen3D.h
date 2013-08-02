@@ -47,7 +47,6 @@
 #endif
 
 #include "ElementProperty.h"
-#include "zoltan_tools.h"
 #include "Mesh.h"
 #include "Colour.h"
 
@@ -516,33 +515,20 @@ template<typename real_t> class Coarsen3D{
     }
           
     // Colour.
-    zoltan_graph_t graph;
-    std::vector<int> colour(NNodes);
-        
-    graph.rank = rank;
-    graph.nnodes = NNodes;
-    graph.npnodes = NPNodes;
-    graph.nedges = &(nedges[0]);
-    graph.csr_edges = &(csr_edges[0]);
-        
-    graph.gid = &(lnn2gnn[0]);
-    graph.owner = &(owner[0]);
-        
-    graph.colour = &(colour[0]);
-        
-    zoltan_colour(&graph, 1,  _mesh->get_mpi_comm());
+    std::vector<char> colour(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
           
     // Given a colouring, determine the maximum independent set.
           
     // Count number of active vertices of each colour.
-    int max_colour = 0;
+    char max_colour = 0;
     for(int i=0;i<NPNodes;i++){
       max_colour = std::max(max_colour, colour[i]);
     }
        
 #ifdef HAVE_MPI
     if(nprocs>1)
-      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_CHAR, MPI_MAX, _mesh->get_mpi_comm());
 #endif
 
     std::vector<int> ncolours(max_colour+1, 0);
@@ -633,7 +619,7 @@ template<typename real_t> class Coarsen3D{
 
     // Push data to be sent onto the send_buffer.
     std::vector< std::vector<int> > send_buffer(nprocs);
-    size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(float))/sizeof(int);
+    size_t node_package_int_size = (ndims*sizeof(real_t)+msize*sizeof(double))/sizeof(int);
     for(int p=0;p<nprocs;p++){
       if(send_edges[p].size()==0)
         continue;
@@ -647,7 +633,7 @@ template<typename real_t> class Coarsen3D{
         // Stuff in coordinates and metric via int's.
         std::vector<int> ivertex(node_package_int_size);
         real_t *rcoords = (real_t *) &(ivertex[0]);
-        float *rmetric = (float *) &(rcoords[ndims]);
+        double *rmetric = (double *) &(rcoords[ndims]);
         _mesh->get_coords(*it, rcoords);
         _mesh->get_metric(*it, rmetric);
                 
@@ -734,7 +720,7 @@ template<typename real_t> class Coarsen3D{
         extra_halo_receives[lowner].insert(gnn);
                 
         real_t *coords = (real_t *) &(recv_buffer[p][loc]);
-        float *metric = (float *) &(coords[ndims]);
+        double *metric = (double *) &(coords[ndims]);
         loc+=node_package_int_size;
                 
         // Add vertex+metric if we have not already received this data.
@@ -888,8 +874,8 @@ template<typename real_t> class Coarsen3D{
   void select_max_independent_set_serial(std::vector<bool> &maximal_independent_set){
     int NNodes = _mesh->get_number_nodes();
     
-    std::vector<int> colour(NNodes);
-    Colour<index_t>::greedy(_mesh->NNList, &(colour[0]));
+    std::vector<char> colour(NNodes);
+    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
     
     std::map<int, int> ncolours;
     if(nprocs==1){

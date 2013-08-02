@@ -57,8 +57,6 @@
 #include "Mesh.h"
 #include "MetricTensor.h"
 
-#include "zoltan_tools.h"
-
 #ifdef __FUJITSU
 #define pragmatic_isnormal isnormal
 #else

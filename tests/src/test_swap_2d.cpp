@@ -45,8 +45,6 @@
 #include "VTKTools.h"
 #include "MetricField.h"
 
-#include "Coarsen.h"
-#include "Refine.h"
 #include "Swapping.h"
 #include "ticker.h"
 
@@ -91,40 +89,10 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
-  double L_up = sqrt(2.0);
-  double L_low = L_up/2;
-
-  Coarsen2D<double> coarsen(*mesh, surface);
-  Refine2D<double> refine(*mesh, surface);
-
-  if(verbose&&rank==0)
-    std::cout<<"Initial quality:\n"
-             <<"Quality mean:   "<<qmean<<std::endl
-             <<"Quality min:    "<<qmin<<std::endl
-             <<"Quality RMS:    "<<qrms<<std::endl;
-  
-  coarsen.coarsen(L_low, L_up);
-
-  double L_max = mesh->maximal_edge_length();
-  double alpha = sqrt(2.0)/2;
-
-  for(size_t i=0;i<10;i++){
-    double L_ref = std::max(alpha*L_max, L_up);
-
-    refine.refine(L_ref);
-    coarsen.coarsen(L_low, L_ref);
-
-    L_max = mesh->maximal_edge_length();
-
-    if((L_max-L_up)<0.01)
-      break;
-  }
-
   Swapping2D<double> swapping(*mesh, surface);
   
   double tic = get_wtime();
-  //for(int i=0;i<100;i++)
-    swapping.swap(0.95);
+  swapping.swap(0.95);
   double toc = get_wtime();
 
   if(!mesh->verify()){

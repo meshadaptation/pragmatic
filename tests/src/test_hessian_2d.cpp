@@ -80,7 +80,7 @@ int main(int argc, char **argv){
   
   metric_field.update_mesh();
   
-  std::vector<float> metric(NNodes*3);
+  std::vector<double> metric(NNodes*3);
   metric_field.get_metric(&(metric[0]));
   
   double rms[] = {0., 0., 0.};

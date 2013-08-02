@@ -95,34 +95,14 @@ template<typename treal_t> class MetricTensor2D{
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
-  void get_metric(float *metric){
-    for(size_t i=0;i<3;i++)
-      metric[i] = _metric[i];
-  }
-
-  /*! Copy back the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field can be copied.
-   */
-  void get_metric(double *metric){
+  void get_metric(double *metric) const{
     for(size_t i=0;i<3;i++)
       metric[i] = _metric[i];
   }
 
   /// Give const pointer to metric tensor.
-  const treal_t* get_metric(){
+  const treal_t* get_metric() const{
     return _metric;
-  }
-
-  /*! Set the metric tensor field.
-   * The upper triangle is expected, ie:
-   * m[0] m[1]
-   * .... m[2]
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   */
-  void set_metric(const float *metric){
-    for(size_t i=0;i<3;i++)
-      _metric[i] = metric[i];
-    positive_definiteness(_metric);
   }
 
   /*! Set the metric tensor field.
@@ -244,6 +224,36 @@ template<typename treal_t> class MetricTensor2D{
 
     return;
   }
+
+  /*! Limits the ratio of the edge lengths.
+   * @param max_ratio The maximum allowed ratio between edge lengths in the orthogonal
+   */
+  void limit_aspect_ratio(double max_ratio){
+    Eigen::Matrix<double, 2, 2> M1;
+    M1 <<
+      _metric[0], _metric[1],
+      _metric[1], _metric[2];
+    
+    Eigen::EigenSolver< Eigen::Matrix<double, 2, 2> > solver1(M1);
+    
+    Eigen::Matrix<double, 2, 1> evalues = solver1.eigenvalues().real().cwise().abs();
+    Eigen::Matrix<double, 2, 2> evectors = solver1.eigenvectors().real();
+    
+    if(evalues[0]<evalues[1]){
+	evalues[0] = std::max(evalues[0], evalues[1]/(max_ratio*max_ratio));
+    }else{
+	evalues[1] = std::max(evalues[1], evalues[0]/(max_ratio*max_ratio));
+    }
+    
+    Eigen::Matrix<double, 2, 2> Mc = evectors*evalues.asDiagonal()*evectors.transpose();
+    
+    _metric[0] = Mc[0];
+    _metric[1] = Mc[1];
+    _metric[2] = Mc[3];
+
+    return;
+  }
+
 
   /*! Stream operator.
    */
@@ -405,14 +415,6 @@ template<typename treal_t> class MetricTensor3D{
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
-  void get_metric(float *metric){
-    for(size_t i=0;i<6;i++)
-      metric[i] = _metric[i];
-  }
-
-  /*! Copy back the metric tensor field.
-   * @param metric is a pointer to the buffer where the metric field can be copied.
-   */
   void get_metric(double *metric){
     for(size_t i=0;i<6;i++)
       metric[i] = _metric[i];
@@ -421,19 +423,6 @@ template<typename treal_t> class MetricTensor3D{
   /// Give const pointer to metric tensor.
   const treal_t* get_metric(){
     return _metric;
-  }
-
-  /*! Set the metric tensor field.
-   * The upper triangle is expected, ie:
-   * m[0] m[1] m[2]
-   * .... m[3] m[4]
-   * .... .... m[5] 
-   * @param metric is a pointer to the buffer where the metric field is to be copied from.
-   */
-  void set_metric(const float *metric){
-    for(size_t i=0;i<6;i++)
-      _metric[i] = metric[i];
-    positive_definiteness(_metric);
   }
 
   /*! Set the metric tensor field.

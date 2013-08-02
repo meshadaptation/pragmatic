@@ -8,7 +8,7 @@ FC = @FC@
 FCFLAGS = @FCFLAGS@ @OPENMP_FCFLAGS@
 LINKER_FC = @LINKER_FC@
 
-CPPFLAGS = @CPPFLAGS@ @CPPFLAGS_ZOLTAN@ -I../include -I./include -DTIXML_USE_STL
+CPPFLAGS = @CPPFLAGS@ -I../include -I./include -DTIXML_USE_STL
 LDFLAGS = @LDFLAGS@
 
 NVCC = @NVCC@
@@ -17,7 +17,7 @@ NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
 objs = ticker.o tinystr.o tinyxml.o tinyxmlerror.o tinyxmlparser.o
 
 CUDA_LIBS = $(objs) @CUDA_LIBS@
-LIBS = $(objs) @LIBS_ZOLTAN@ @LIBS@
+LIBS = $(objs) @LIBS@
 
 LIB = ../src/libpragmatic.la
 

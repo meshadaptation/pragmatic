@@ -244,8 +244,6 @@ extern "C" {
       Refine2D<double> refine(*mesh, *surface);
       Swapping2D<double> swapping(*mesh, *surface);
 
-      surface->find_surface();
-
       double L_max = mesh->maximal_edge_length();
 
       double alpha = sqrt(2.0)/2.0;

@@ -38,13 +38,10 @@
 #ifndef COLOUR_H
 #define COLOUR_H
 
-#include <map>
-#include <set>
 #include <vector>
-#include <deque>
 
 #include "PragmaticTypes.h"
-
+#include "PragmaticMinis.h"
 /*! \brief Performs a simple first breath greedy graph colouring of a local undirected graph.
  */
 class Colour{
@@ -53,9 +50,8 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
-    int max_colour=64;
+  static void greedy(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+    char max_colour=64;
 
     // Colour first active node.
     size_t node;
@@ -74,7 +70,7 @@ class Colour{
       std::vector<bool> used_colours(max_colour, false);;
       for(std::vector<index_t>::const_iterator it=NNList[node].begin();it!=NNList[node].end();++it){
         if(*it<(int)node){
-          if(colour[*it]>=(signed)max_colour){
+          if(colour[*it]>=max_colour){
             max_colour*=2;
             used_colours.resize(max_colour, false);
           }
@@ -83,7 +79,7 @@ class Colour{
         }
       }
 
-      for(index_t i=0;;i++)
+      for(char i=0;;i++)
         if(!used_colours[i]){
           colour[node] = i;
           break;
@@ -97,9 +93,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void GebremedhinManne(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
-    std::vector<bool> conflicts(NNodes, false);
+  static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
 #pragma omp parallel firstprivate(NNodes)
     {
       // Initialize.
@@ -112,7 +106,7 @@ class Colour{
 #pragma omp for
       for(size_t i=0;i<NNodes;i++){
         unsigned long colours = 0;
-        unsigned long c;
+        char c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
 #pragma omp atomic read
           c = colour[*it];
@@ -120,9 +114,8 @@ class Colour{
         }
         colours = ~colours;
 
-        for(unsigned int j=0;j<64;j++){
-          c=1<<j;
-          if(colours&c){
+        for(size_t j=0;j<64;j++){
+          if(colours&(1<<j)){
             colour[i] = j;
             break;
           }
@@ -130,35 +123,38 @@ class Colour{
       }
 
       // Phase 2: find conflicts
+      std::vector<size_t> conflicts;
 #pragma omp for
       for(size_t i=0;i<NNodes;i++){
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          conflicts[i] = conflicts[i] || (colour[i]==colour[*it]);
+          if(colour[i]==colour[*it]){
+            conflicts.push_back(i);
+            break;
+          }
         }
       }
 
       // Phase 3: serial resolution of conflicts
-      for(size_t i=0;i<NNodes;i++){
-        if(!conflicts[i])
-          continue;
-        
-        unsigned int colours = 0;
-        int c;
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          c = colour[*it];
-          colours = colours | 1<<c;
-        }
-        colours = ~colours;
+      int tid = pragmatic_thread_id();
+      int nthreads = pragmatic_nthreads();
+      for(int i=0;i<nthreads;i++){
+        if(tid==i){  
+          for(std::vector<size_t>::const_iterator it=conflicts.begin();it!=conflicts.end();++it){
+            unsigned long colours = 0;
+            for(std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();++jt){
+              colours = colours | 1<<(colour[*jt]);
+            }
+            colours = ~colours;
 
-        for(unsigned int j=0;j<64;j++){
-          c = 1<<j;
-          if(colours&c){
-            colour[i] = j;
-            break;
-          }else{
-            c = c<<1;
+            for(size_t j=0;j<64;j++){
+              if(colours&(1<<j)){
+                colour[*it] = j;
+                break;
+              }
+            }
           }
         }
+#pragma omp barrier
       }
     }
   }
@@ -169,42 +165,84 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void repair(std::vector< std::vector<index_t> > &NNList, int *colour){
-    size_t NNodes = NNList.size();
-    std::vector<bool> conflicts(NNodes, false);
-#pragma omp parallel firstprivate(NNodes)
-    {
-      // Phase 2: find conflicts
-#pragma omp for
-      for(size_t i=0;i<NNodes;i++){
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          conflicts[i] = conflicts[i] || (colour[i]==colour[*it]);
+  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+    // Phase 2: find conflicts
+    std::vector<size_t> conflicts;
+#pragma omp for schedule(static, 64)
+    for(size_t i=0;i<NNodes;i++){
+      char c = colour[i];
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        char k = colour[*it];
+        if(c==k){
+          conflicts.push_back(i);
+          break;
         }
       }
-
-      // Phase 3: serial resolution of conflicts
-      for(size_t i=0;i<NNodes;i++){
-        if(!conflicts[i])
-          continue;
-        
-        unsigned int colours = 0;
-        int c;
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          c = colour[*it];
-          colours = colours | 1<<c;
-        }
-        colours = ~colours;
-
-        for(unsigned int j=0;j<64;j++){
-          c = 1<<j;
-          if(colours&c){
-            colour[i] = j;
-            break;
-          }else{
-            c = c<<1;
+    }
+    
+    // Phase 3: serial resolution of conflicts
+    int tid = pragmatic_thread_id();
+    int nthreads = pragmatic_nthreads();
+    for(int i=0;i<nthreads;i++){
+      if(tid==i){  
+        for(std::vector<size_t>::const_iterator it=conflicts.begin();it!=conflicts.end();++it){
+          unsigned long colours = 0;
+          for(std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();++jt){
+            colours = colours | 1<<(colour[*jt]);
+          }
+          colours = ~colours;
+          
+          for(size_t j=0;j<64;j++){
+            if(colours&(1<<j)){
+              colour[*it] = j;
+              break;
+            }
           }
         }
       }
+#pragma omp barrier
+    }
+  }
+
+  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector< std::set<index_t> > &marked_edges, std::vector<char> &colour){
+    // Phase 2: find conflicts
+    std::vector<size_t> conflicts;
+#pragma omp for schedule(static, 64)
+    for(size_t i=0;i<NNodes;i++){
+      if(marked_edges[i].empty())
+        continue;
+      
+      char c = colour[i];
+      for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        char k = colour[*it];
+        if(c==k){
+          conflicts.push_back(i);
+          break;
+        }
+      }
+    }
+    
+    // Phase 3: serial resolution of conflicts
+    int tid = pragmatic_thread_id();
+    int nthreads = pragmatic_nthreads();
+    for(int i=0;i<nthreads;i++){
+      if(tid==i){  
+        for(std::vector<size_t>::const_iterator it=conflicts.begin();it!=conflicts.end();++it){
+          unsigned long colours = 0;
+          for(std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();++jt){
+            colours = colours | 1<<(colour[*jt]);
+          }
+          colours = ~colours;
+          
+          for(size_t j=0;j<64;j++){
+            if(colours&(1<<j)){
+              colour[*it] = j;
+              break;
+            }
+          }
+        }
+      }
+#pragma omp barrier
     }
   }
 

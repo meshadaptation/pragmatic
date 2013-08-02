@@ -307,10 +307,8 @@ def adapt(metric, debug=False):
   for i in range(nfacets.value):
     facets[i * 2    ] = faces[i][0]
     facets[i * 2 + 1] = faces[i][1]
-  boundary_ids = numpy.zeros(nfacets.value, dtype = numpy.intc)
   _libpragmatic.pragmatic_set_surface(ctypes.byref(nfacets),
                                       facets.ctypes.data,
-                                      boundary_ids.ctypes.data, 
                                       colinear_ids.ctypes.data)
 
   info("Setting metric tensor field ...")
@@ -467,10 +465,10 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, max_edge_ratio=10, p=2):
   return Mp
 
 if __name__=="__main__":
-  from mpi4py import MPI
+  #  from mpi4py import MPI
   import sys
 
-  comm = MPI.COMM_WORLD
+#  comm = MPI.COMM_WORLD
 
   # mesh = Mesh("greenland.xml.gz")
   mesh = UnitSquareMesh(100, 100)

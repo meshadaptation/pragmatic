@@ -114,11 +114,10 @@ int main(int argc, char **argv){
   time_adapt = get_wtime();
 
   double L_max = mesh->maximal_edge_length();
-
   double alpha = sqrt(2.0)/2;
-  for(size_t i=0;i<10;i++){
+  for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
-
+    
     tic = get_wtime();
     coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
@@ -130,9 +129,9 @@ int main(int argc, char **argv){
     tic = get_wtime();
     refine.refine(L_ref);
     time_refine += get_wtime() - tic;
-
+    
     L_max = mesh->maximal_edge_length();
-
+    
     if((L_max-L_up)<0.01)
       break;
   }
@@ -152,7 +151,7 @@ int main(int argc, char **argv){
   }
 
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 10);
+  smooth.smooth("optimisation Linf", 20);
   time_smooth += get_wtime()-tic;
 
   time_adapt = get_wtime()-time_adapt;
@@ -173,6 +172,7 @@ int main(int argc, char **argv){
   }
 
   VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

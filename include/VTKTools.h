@@ -340,7 +340,7 @@ template<typename real_t> class VTKTools{
 
     for(size_t i=0;i<NNodes;i++){
       const real_t *r = mesh->get_coords(i);
-      const float *m = mesh->get_metric(i);
+      const double *m = mesh->get_metric(i);
 
       if(vtk_psi!=NULL)
         vtk_psi->SetTuple1(i, psi[i]);
@@ -365,8 +365,9 @@ template<typename real_t> class VTKTools{
         for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
+          
+          MetricTensor2D<double> M(m);
 
-          MetricTensor2D<float> M(m);
           max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
           min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
         }
@@ -374,8 +375,9 @@ template<typename real_t> class VTKTools{
         for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
+          
+          MetricTensor3D<double> M(m);
 
-          MetricTensor3D<float> M(m);
           max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
           min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
         }

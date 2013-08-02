@@ -194,8 +194,6 @@ if test -n "$with_parmetis" ; then
 fi
 AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_WARN([No ParMETIS support available.]))
 
-ACX_ZOLTAN()
-
 # Detect VTK
 AC_CHECK_LIB(dl, dlopen)
 

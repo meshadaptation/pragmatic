@@ -85,6 +85,10 @@ template<typename real_t> class Refine2D{
     newElements.resize(nthreads);
     newCoords.resize(nthreads);
     newMetric.resize(nthreads);
+
+    threadIdx.resize(nthreads);
+    surfaceEdges.resize(nthreads);
+    splitCnt.resize(nthreads);
   }
 
   /// Default destructor.
@@ -100,32 +104,39 @@ template<typename real_t> class Refine2D{
    * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
    */
   void refine(real_t L_max){
-    size_t origNNodes = _mesh->get_number_nodes();
     size_t origNElements = _mesh->get_number_elements();
-
-    std::vector<size_t> threadIdx(nthreads), splitCnt(nthreads, 0);
-    std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges(nthreads);
-    std::vector<char> n_marked_edges_per_element(origNElements, 0);
-    DirectedEdge<index_t> *allNewVertices = new DirectedEdge<index_t>[3*origNElements];
-
-    new_vertices_per_element.clear();
-    new_vertices_per_element.resize(3*origNElements, -1);
-
-#pragma omp parallel
+    size_t origNNodes = _mesh->get_number_nodes();
+    
+#pragma omp parallel firstprivate(origNElements, origNNodes, L_max)
     {
+
+#pragma omp single nowait
+      allNewVertices = new DirectedEdge<index_t>[3*origNElements];
+      
+#pragma omp single nowait
+      { 
+        new_vertices_per_element.resize(3*origNElements);
+        std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
+      }
+      
+#pragma omp single nowait
+      {
+        n_marked_edges_per_element.resize(origNElements);
+        std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
+      }
+      
       int tid = pragmatic_thread_id();
+      surfaceEdges[tid].clear();
+      splitCnt[tid] = 0;
 
       /*
        * Average vertex degree is ~6, so there
        * are approx. (6/2)*NNodes edges in the mesh.
        */
       size_t reserve_size = 3*origNNodes/nthreads;
-      newVertices[tid].clear();
-      newVertices[tid].reserve(reserve_size);
-      newCoords[tid].clear();
-      newCoords[tid].reserve(ndims*reserve_size);
-      newMetric[tid].clear();
-      newMetric[tid].reserve(msize*reserve_size);
+      newVertices[tid].clear(); newVertices[tid].reserve(reserve_size);
+      newCoords[tid].clear(); newCoords[tid].reserve(ndims*reserve_size);
+      newMetric[tid].clear(); newMetric[tid].reserve(msize*reserve_size);
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
@@ -134,7 +145,7 @@ template<typename real_t> class Refine2D{
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
           assert(otherVertex>=0);
-
+          
           /* Conditional statement ensures that the edge length is only calculated once.
            * By ordering the vertices according to their gnn, we ensure that all processes
            * calculate the same edge length when they fall on the halo.
@@ -148,26 +159,28 @@ template<typename real_t> class Refine2D{
           }
         }
       }
-
+      
       pragmatic_omp_atomic_capture()
-      {
-        threadIdx[tid] = _mesh->NNodes;
-        _mesh->NNodes += splitCnt[tid];
-      }
+        {
+          threadIdx[tid] = _mesh->NNodes;
+          _mesh->NNodes += splitCnt[tid];
+        }
 
+#pragma omp barrier
+      
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
-      memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(float));
-
+      memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
+      
       // Fix IDs of new vertices
       assert(newVertices[tid].size()==splitCnt[tid]);
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
-
+      
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
-
+      
       // Mark each element with its new vertices, update NNList
       // for all split edges and mark surface edges.
 #pragma omp barrier
@@ -176,18 +189,18 @@ template<typename real_t> class Refine2D{
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
         index_t secondid = allNewVertices[i].edge.second;
-
+        
         // Find which elements share this edge and mark them with their new vertices.
         std::set<index_t> intersection;
         std::set_intersection( _mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
-            _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(), std::inserter(intersection, intersection.begin()));
-
+                               _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(), std::inserter(intersection, intersection.begin()));
+        
         for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element){
           index_t eid = *element;
           size_t edgeOffset = edgeNumber(eid, firstid, secondid);
           new_vertices_per_element[3*eid+edgeOffset] = vid;
         }
-
+        
         /*
          * Update NNList for newly created vertices. This has to be done here, it cannot be
          * done during element refinement, because a split edge is shared between two elements
@@ -195,21 +208,21 @@ template<typename real_t> class Refine2D{
          */
         _mesh->NNList[vid].push_back(firstid);
         _mesh->NNList[vid].push_back(secondid);
-
+        
         typename std::vector<index_t>::iterator it;
         it = std::find(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end(), secondid);
         assert(it!=_mesh->NNList[firstid].end());
         *it = vid;
-
+        
         it = std::find(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end(), firstid);
-        assert(it!=_mesh->NNList[firstid].end());
+        assert(it!=_mesh->NNList[secondid].end());
         *it = vid;
-
+        
         // Check if surface edge
         if(_surface->contains_node(firstid) && _surface->contains_node(secondid)){
           surfaceEdges[tid].push_back(allNewVertices[i]);
         }
-
+        
         /* If we have MPI, it makes no sense to update node_owner and lnn2gnn now because
          * these values are most probably wrong. However, when we have no MPI, updating the
          * values here saves us from an OMP parallel loop which kills performance (due to a
@@ -218,39 +231,39 @@ template<typename real_t> class Refine2D{
         _mesh->node_owner[vid] = 0;
         _mesh->lnn2gnn[vid] = vid;
       }
-
+      
       // Start element refinement.
       splitCnt[tid] = 0;
       newElements[tid].clear();
       newElements[tid].reserve(4*origNElements/nthreads);
-
-#pragma omp for schedule(dynamic,16) nowait
+      
+#pragma omp for schedule(static) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
         if(n[0] < 0)
-            continue;
-
+          continue;
+        
         for(size_t j=0; j<3; ++j)
           if(new_vertices_per_element[3*eid+j] != -1){
             splitCnt[tid] += refine_element(eid, splitCnt[tid], tid);
             break;
           }
       }
-
+      
       pragmatic_omp_atomic_capture()
-      {
-        threadIdx[tid] = _mesh->NElements;
-        _mesh->NElements += splitCnt[tid];
-      }
-
+        {
+          threadIdx[tid] = _mesh->NElements;
+          _mesh->NElements += splitCnt[tid];
+        }
+      
       // Append new elements to the mesh
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-
+      
 #pragma omp barrier
       // Commit deferred operations. Every thread must have finished refinement, thus the barrier.
       _mesh->commit_deferred(tid, &threadIdx);
-
+      
       if(nprocs==1){
         // If we update lnn2gnn and node_owner here, OMP performance suffers.
       }else{
@@ -269,17 +282,17 @@ template<typename real_t> class Refine2D{
           int owner = std::min(owner0, owner1);
           _mesh->node_owner[vert->id] = owner;
         }
-
+        
         // TODO: This single section can be parallelised
 #pragma omp single
         {
           // Once the owner for all new nodes has been set, it's time to amend the halo.
           std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
           std::vector<index_t> invisible_vertices;
-
+          
           for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
             DirectedEdge<index_t> *vert = &allNewVertices[i];
-
+            
             if(_mesh->node_owner[vert->id] != rank){
               // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
               // Only update them if the vertex is actually visible by *this* MPI process,
@@ -303,9 +316,9 @@ template<typename real_t> class Refine2D{
                 std::set<int> processes;
                 for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
                   processes.insert(_mesh->node_owner[*neigh]);
-
+                
                 processes.erase(rank);
-
+                
                 for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
                   DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
                   send_additional[*proc].insert(gnn_edge);
@@ -313,82 +326,82 @@ template<typename real_t> class Refine2D{
               }
             }
           }
-
+          
           // Append vertices in recv_additional and send_additional to recv and send.
           // Mark how many vertices are added to each of these vectors.
           std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
-
+          
           for(int i=0;i<nprocs;++i){
-            recv_cnt[i] = recv_additional[i].size();
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-              _mesh->recv[i].push_back(it->id);
-              _mesh->recv_halo.insert(it->id);
-            }
-
-            send_cnt[i] = send_additional[i].size();
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-              _mesh->send[i].push_back(it->id);
-              _mesh->send_halo.insert(it->id);
-            }
-          }
-
-          // Update global numbering
-          for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-            if(_mesh->node_owner[i] == rank)
-              _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
-
-          _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
-
-          // Now that the global numbering has been updated, update send_map and recv_map.
-          for(int i=0;i<nprocs;++i){
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
-              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
-              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-          }
-
-          _mesh->clear_invisible(invisible_vertices);
-          _mesh->trim_halo();
-        }
+	    recv_cnt[i] = recv_additional[i].size();
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+	      _mesh->recv[i].push_back(it->id);
+	      _mesh->recv_halo.insert(it->id);
+	    }
+          
+	    send_cnt[i] = send_additional[i].size();
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+	      _mesh->send[i].push_back(it->id);
+	      _mesh->send_halo.insert(it->id);
+	    }
+	  }
+        
+	  // Update global numbering
+	  for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
+	    if(_mesh->node_owner[i] == rank)
+	      _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
+        
+	  _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+        
+	  // Now that the global numbering has been updated, update send_map and recv_map.
+	  for(int i=0;i<nprocs;++i){
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+	      _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          
+	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+	      _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+	  }
+        
+	  _mesh->clear_invisible(invisible_vertices);
+	  _mesh->trim_halo();
+	}
 #endif
       }
-
+    
 #ifndef NDEBUG
+#pragma omp barrier
       // Fix orientations of new elements.
-#pragma omp for schedule(dynamic, 100)
-      for(size_t i=0;i<_mesh->NElements;i++){
-        if(_mesh->_ENList[i*nloc] < 0)
-          continue;
+      size_t NElements = _mesh->get_number_elements();
 
-        index_t n0 = _mesh->_ENList[i*nloc];
-        index_t n1 = _mesh->_ENList[i*nloc + 1];
-        index_t n2 = _mesh->_ENList[i*nloc + 2];
-
-        const real_t *x0 = &_mesh->_coords[n0*ndims];
-        const real_t *x1 = &_mesh->_coords[n1*ndims];
-        const real_t *x2 = &_mesh->_coords[n2*ndims];
-
-        real_t av = property->area(x0, x1, x2);
-
-        assert(av >= 0);
-/*
-        if(av<0){
-          // Flip element
-          _mesh->_ENList[i*nloc] = n1;
-          _mesh->_ENList[i*nloc+1] = n0;
-        }
-*/
+#pragma omp for
+      for(size_t i=0;i<NElements;i++){
+	index_t n0 = _mesh->_ENList[i*nloc];
+	if(n0<0)
+	  continue;
+	
+	index_t n1 = _mesh->_ENList[i*nloc + 1];
+	index_t n2 = _mesh->_ENList[i*nloc + 2];
+	
+	const real_t *x0 = &_mesh->_coords[n0*ndims];
+	const real_t *x1 = &_mesh->_coords[n1*ndims];
+	const real_t *x2 = &_mesh->_coords[n2*ndims];
+      
+	real_t av = property->area(x0, x1, x2);
+	
+	if(av<=0){
+#pragma omp critical
+	  std::cerr<<"ERROR: inverted element in refinement"<<std::endl
+		   <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
+	  exit(-1);
+	}
       }
 #endif
+    
+#pragma omp single
+      delete[] allNewVertices;
+    
+      // Refine surface
+      _surface->refine(surfaceEdges);
     }
-
-    delete[] allNewVertices;
-
-    // Refine surface
-    _surface->refine(surfaceEdges);
-
-    return;
   }
 
  private:
@@ -406,10 +419,10 @@ template<typename real_t> class Refine2D{
     // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
     real_t x, m;
     const real_t *x0 = _mesh->get_coords(n0);
-    const float *m0 = _mesh->get_metric(n0);
+    const double *m0 = _mesh->get_metric(n0);
 
     const real_t *x1 = _mesh->get_coords(n1);
-    const float *m1 = _mesh->get_metric(n1);
+    const double *m1 = _mesh->get_metric(n1);
 
     real_t weight = 1.0/(1.0 + sqrt(property->length(x0, x1, m0)/
                                     property->length(x0, x1, m1)));
@@ -428,6 +441,8 @@ template<typename real_t> class Refine2D{
         std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                  <<"m0[i] = "<<m0[i]<<std::endl
                  <<"m1[i] = "<<m1[i]<<std::endl
+                 <<"property->length(x0, x1, m0) = "<<property->length(x0, x1, m0)<<std::endl
+                 <<"property->length(x0, x1, m1) = "<<property->length(x0, x1, m1)<<std::endl
                  <<"weight = "<<weight<<std::endl;
     }
   }
@@ -637,9 +652,14 @@ template<typename real_t> class Refine2D{
 
   std::vector< std::vector< DirectedEdge<index_t> > > newVertices;
   std::vector< std::vector<real_t> > newCoords;
-  std::vector< std::vector<float> > newMetric;
+  std::vector< std::vector<double> > newMetric;
   std::vector< std::vector<index_t> > newElements;
   std::vector<index_t> new_vertices_per_element;
+
+  std::vector<size_t> threadIdx, splitCnt;
+  std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges;
+  std::vector<char> n_marked_edges_per_element;
+  DirectedEdge<index_t> *allNewVertices;
 
   Mesh<real_t> *_mesh;
   Surface2D<real_t> *_surface;
