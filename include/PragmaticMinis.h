@@ -37,9 +37,13 @@
 
 #ifndef PRAGMATICMINIS_H
 #define PRAGMATICMINIS_H
+
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+
+#include <mpi.h>
+
 int pragmatic_nthreads(){
 #ifdef _OPENMP
   return omp_get_max_threads();
@@ -54,6 +58,18 @@ int pragmatic_thread_id(){
 #else
   return 0;
 #endif
+}
+
+int pragmatic_nprocesses(MPI_Comm comm){
+  int nprocesses;
+  MPI_Comm_size(comm, &nprocesses);
+  return nprocesses;
+}
+
+int pragmatic_process_id(MPI_Comm comm){
+  int id;
+  MPI_Comm_rank(comm, &id);
+  return id;
 }
 
 #endif

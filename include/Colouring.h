@@ -89,16 +89,10 @@ public:
       std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
 
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
-        /* Each MPI process needs to know which vertices in recv_halo are marked as
-         * dynamic by their owner in order to colour its own vertices accordingly. We
-         * could do that by exchanging halo data in terms of dynamic_vertex, i.e. call
-         * _mesh->halo_update(dynamic_vertex, 1). Instead, in order to avoid one MPI
-         * communication, we can just assume that all vertices in recv_halo are dynamic.
-         */
-        if(alg->is_dynamic(*it)>=0 || _mesh->node_owner[*it]!=_mesh->rank){
+        if(alg->is_dynamic(*it)>=0){
           dynamic_NNList->push_back(*it);
         }
-
+      
       subNNList[i] = dynamic_NNList;
       node_colour[vid] = -1; // Reset colour
     }
@@ -122,11 +116,11 @@ public:
     for(size_t i=0; i<GlobalActiveSet_size; ++i){
       index_t vid = GlobalActiveSet[i];
 
-      // Initialise hashes with the global IDs - this is important for MPI!
-      vid_hash = (uint32_t) _mesh->lnn2gnn[vid];
+      // Initialise hashes
+      vid_hash = (uint32_t) vid;
       hashes.clear();
       for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
-        hashes.push_back((uint32_t) _mesh->lnn2gnn[*it]);
+        hashes.push_back((uint32_t) *it);
       }
 
       int colour = 0;
@@ -204,16 +198,6 @@ public:
 
 #pragma omp barrier
 
-#ifdef HAVE_MPI
-    if(_mesh->num_processes>1){
-#pragma omp single nowait
-      {
-        global_nsets = nsets;
-        MPI_Allreduce(MPI_IN_PLACE, &global_nsets, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-      }
-    }
-#endif
-
     // Allocate memory for the global independent sets.
 #pragma omp for schedule(static)
     for(int set_no=0; set_no<nsets; ++set_no)
@@ -223,13 +207,9 @@ public:
     for(int set_no=0; set_no<nsets; ++set_no)
       memcpy(&independent_sets[set_no][idx[set_no]], &local_ind_sets[set_no][0],
           local_ind_sets[set_no].size() * sizeof(index_t));
-
-    // Thanks to multi-hash colouring, there is no need to exchange colours
-    // with neighbouring MPI processes. Starting with global IDs, every vertex
-    // is coloured without caring what the colour of neighbouring vertices is.
-
+    
 #pragma omp barrier
-
+    
     /********************
      * End of colouring *
      ********************/
@@ -270,7 +250,6 @@ private:
 
   int *node_colour;
 
-  // Total number of independent sets for this MPI process and for the whole MPI_COMM_WORLD
   int nsets, global_nsets;
 
   // Set of all dynamic vertices.
