@@ -301,9 +301,12 @@ template<typename real_t>
    */
   void apply_gradation(double gradation){
     // Form NNlist.
-    std::deque< std::set<index_t> > NNList( _NNodes );
+    std::vector< std::set<index_t> > NNList( _NNodes );
     for(int e=0; e<_NElements; e++){
       const index_t *n=_mesh->get_element(e);           // indices for element e start at _ENList[ nloc*e ]
+      if(n[0]<0)
+        continue;
+
       for(index_t i=0; i<3; i++){
         for(index_t j=i+1; j<3; j++){
           NNList[n[i]].insert(n[j]);
@@ -312,40 +315,36 @@ template<typename real_t>
       }
     }
 
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(size_t cnt=0; cnt<100; cnt++){
+    for(size_t cnt=0; cnt<100; cnt++){
+      
+      for(index_t p=0;p<_NNodes;p++){
         
-        for(index_t p=0;p<_NNodes;p++){
+        double Dp[2], Vp[4], hp[2];
+        
+        std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
           
-          double Dp[2], Vp[4], hp[2];
+        for(typename std::set<index_t>::const_iterator it=adjacent_nodes.begin(); it!=adjacent_nodes.end(); it++){
+          index_t q=*it;
           
-          std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
-          
-          for(typename std::set<index_t>::const_iterator it=adjacent_nodes.begin(); it!=adjacent_nodes.end(); it++){
-            index_t q=*it;
-            
-            // Resize eigenvalues if necessary
-            double dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
-            double dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
+          // Resize eigenvalues if necessary
+          double dx = _mesh->_coords[p*2] - _mesh->_coords[q*2];
+          double dy = _mesh->_coords[p*2+1] - _mesh->_coords[q*2+1];
 
-            double Lpq = sqrt(dx*dx+dy*dy);
-            double dh=Lpq*gradation;
+          double Lpq = sqrt(dx*dx+dy*dy);
+          double dh=Lpq*gradation;
 
-            MetricTensor2D<double> Mq(_metric[q]);
-            Mq.eigen_decomp(Dp, Vp);
+          MetricTensor2D<double> Mq(_metric[q]);
+          Mq.eigen_decomp(Dp, Vp);
             
-            hp[0] = 1.0/sqrt(Dp[0]) + dh;
-            hp[1] = 1.0/sqrt(Dp[1]) + dh;
+          hp[0] = 1.0/sqrt(Dp[0]) + dh;
+          hp[1] = 1.0/sqrt(Dp[1]) + dh;
             
-            Dp[0] = 1.0/(hp[0]*hp[0]); 
-            Dp[1] = 1.0/(hp[1]*hp[1]); 
+          Dp[0] = 1.0/(hp[0]*hp[0]); 
+          Dp[1] = 1.0/(hp[1]*hp[1]); 
             
-            Mq.eigen_undecomp(Dp, Vp);
+          Mq.eigen_undecomp(Dp, Vp);
             
-            _metric[p].constrain(Mq.get_metric());
-          }
+          _metric[p].constrain(Mq.get_metric());
         }
       }
     }
@@ -454,7 +453,10 @@ template<typename real_t>
    */
   real_t predict_nelements_part(){
     double predicted=0;
-    double inv3=1.0/3.0;
+    const double inv3=1.0/3.0;
+
+    // Ideal area of triangle in metric space.
+    const double ideal_area = sqrt(3.0)/4.0;
 
     if(_NElements>0){
       const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
@@ -482,9 +484,6 @@ template<typename real_t>
         real_t det = m00*m11-m01*m01;
         total_area_metric += area*sqrt(det);
       }
-
-      // Ideal area of triangle in metric space.
-      double ideal_area = sqrt(3.0)/4.0;
 
       predicted = total_area_metric/ideal_area;
     }

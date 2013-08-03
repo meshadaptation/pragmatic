@@ -90,7 +90,8 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 0.2);
 
   metric_field.apply_gradation(1.1);
-  
+  metric_field.apply_max_nelements(10000);
+
   metric_field.update_mesh();
   
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
