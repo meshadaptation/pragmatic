@@ -159,10 +159,10 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
           }
         }
         for(int i=0;i<64;i++)
-#pragma omp atomic update
-          colour_count[i]+=local_colour_count[i];
+	  pragmatic_omp_atomic_update()
+	    colour_count[i]+=local_colour_count[i];
 #pragma omp barrier
-
+	
         // Find the maximal independant set.
 #pragma omp single
         {

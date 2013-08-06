@@ -108,8 +108,8 @@ class Colour{
         unsigned long colours = 0;
         char c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-#pragma omp atomic read
-          c = colour[*it];
+	  pragmatic_omp_atomic_read()
+	    c = colour[*it];
           colours = colours | 1<<c;
         }
         colours = ~colours;

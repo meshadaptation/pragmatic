@@ -392,8 +392,14 @@ cat > include/pragmatic_config.h << EOF
 
 #if _OPENMP >= 201107
 #define pragmatic_omp_atomic_capture() _Pragma("omp atomic capture")
+#define pragmatic_omp_atomic_read() _Pragma("omp atomic read")
+#define pragmatic_omp_atomic_write() _Pragma("omp atomic write")
+#define pragmatic_omp_atomic_update() _Pragma("omp atomic update")
 #else
 #define pragmatic_omp_atomic_capture() _Pragma("omp critical")
+#define pragmatic_omp_atomic_read() _Pragma("omp critical")
+#define pragmatic_omp_atomic_write() _Pragma("omp critical")
+#define pragmatic_omp_atomic_update() _Pragma("omp critical")
 #endif
 
 EOF

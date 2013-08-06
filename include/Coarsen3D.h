@@ -38,6 +38,8 @@
 #ifndef COARSEN3D_H
 #define COARSEN3D_H
 
+#include "pragmatic_config.h"
+
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -250,14 +252,11 @@ template<typename real_t> class Coarsen3D{
           // Mark collapse decision as out of date.
           if(_mesh->is_owned_node(target_vertex))
             for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it){
-              // This is a race condition. But as all threads would
-              // write the same value it doesn't actually matter. A
-              // neater solution may be to use atomic update in OpenMP 3.1.
-              // #pragma omp atomic update
-              dynamic_vertex[*it] = -2;
-            }
+	      pragmatic_omp_atomic_write()
+		dynamic_vertex[*it] = -2;
+	    }
         }
-
+	
         // Clear vertex.
         // #pragma omp for schedule(dynamic)
         for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
