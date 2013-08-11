@@ -195,8 +195,8 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
           // Set of elements in this cavity which were modified since the last commit of deferred operations.
           std::set<index_t> modified_elements;
                 
-          for(typename std::set<index_t>::const_iterator vid=marked_edges[i].begin(); vid!=marked_edges[i].end();){
-            std::set<index_t>::const_iterator j_ref = vid; ++vid;
+          for(typename std::set<index_t>::iterator vid=marked_edges[i].begin(); vid!=marked_edges[i].end();){
+            std::set<index_t>::iterator j_ref = vid; ++vid;
             index_t j = *j_ref;
 
             // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
