@@ -243,7 +243,7 @@ int main(int argc, char **argv){
   std::cout<<"BENCHMARK: "<<time_coarsen<<" "<<time_refine<<" "<<time_swap<<" "<<time_smooth<<"\n";
 
   if(rank==0){
-    if((qmean>0.8)&&(qmin>0.3))
+    if((qmean>0.8)&&(qmin>0.25))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
