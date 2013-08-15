@@ -367,7 +367,7 @@ template<typename real_t> class Refine2D{
 #endif
       }
 
-#ifndef NDEBUG
+#if !defined NDEBUG && !defined __FUJITSU
 #pragma omp barrier
       // Fix orientations of new elements.
       size_t NElements = _mesh->get_number_elements();
