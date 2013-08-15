@@ -4,6 +4,8 @@ CXX = @CXX@
 CC = @CC@
 FC = @FC@
 
+LIBTOOL = ../libtool
+
 CPPFLAGS = @CPPFLAGS@ -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
@@ -30,23 +32,23 @@ LIBS = $(objects) @LIBS@
 %.o: %.mod
 
 .cpp.lo:
-	@libtool --mode=compile --tag=CXX $(CXX) $(CXXFLAGS) -c $<
+	@$(LIBTOOL) --mode=compile --tag=CXX $(CXX) $(CXXFLAGS) -c $<
 .c.lo:
-	@libtool --mode=compile --tag=CC $(CC) $(CFLAGS) -c $<
+	@$(LIBTOOL) --mode=compile --tag=CC $(CC) $(CFLAGS) -c $<
 .F90.lo:
-	@libtool --mode=compile --tag=FC $(FC) $(FCFLAGS) -c $<
+	@$(LIBTOOL) --mode=compile --tag=FC $(FC) $(FCFLAGS) -c $<
 
 default: lib
 
 lib: $(objects)
 	mkdir -p ../lib
-	libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
+	$(LIBTOOL) --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
 
 install:
-	libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
+	$(LIBTOOL) --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
 
 clean:
 	rm -rf *.o *.mod *.lo *.la .libs
