@@ -11,38 +11,47 @@ CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
 FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
 
 LDFLAGS = @LDFLAGS@ @OPENMP_CXXFLAGS@ -L../lib
+LIBS = @LIBS@
 
 libdir = @prefix@/lib
 libversion = 2:0:0
 
 VPATH = ./:./src
 
-ifeq (@USING_FORTRAN@,yes)
-fortran_objs = pragmatic.lo  
-endif
-objects = cpragmatic.lo $(fortran_objs)
+LIBTOOL_CXX = ../libtool --mode=compile --tag=CXX
+LIBTOOL_CC = ../libtool --mode=compile --tag=CC
+LIBTOOL_FC = ../libtool --mode=compile --tag=FC
 
-LIBS = $(objects) @LIBS@
+ifeq (@USING_FORTRAN@,yes)
+  objects = cpragmatic.o pragmatic.o
+else
+  objects = cpragmatic.o 
+endif
 
 ifneq (@enable_libtool@, no)
-  LIBTOOL_CXX = ../libtool --mode=compile --tag=CXX
-  LIBTOOL_CC = ../libtool --mode=compile --tag=CC
-  LIBTOOL_FC = ../libtool --mode=compile --tag=FC
-
-  LIBTOOL_MKLIB = ../libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
-  LIBTOOL_INSTALL = ../libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
+  ifeq (@USING_FORTRAN@,yes)
+    objects_lo = cpragmatic.lo pragmatic.lo
+  else
+    objects_lo = cpragmatic.lo  
+  endif
+  
+  LIBTOOL_MKLIB = ../libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects_lo) $(LIBS) -rpath $(libdir) -version-info $(libversion)
+  INSTALL_LIB = ../libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
 else
-  LIBTOOL_MKDIR = ar -u ../lib/libpragmatic.a $(objects)
-  LIBTOOL_INSTALL = ../install-sh ../lib/libpragmatic.a $(DESTDIR)$(libdir)/libpragmatic.a
+  INSTALL_LIB =	../install-sh ../lib/libpragmatic.a $(DESTDIR)$(libdir)/libpragmatic.a
 endif
-
-LIBTOOL = ../libtool
-
 
 .SUFFIXES: .F90 .cpp .c .o .lo
 
 # cancel implicit rule that tries to make .o from .mod with m2c:
 %.o: %.mod
+
+.cpp.o:
+	@$(CXX) $(CXXFLAGS) -c $<
+.c.o:
+	@$(CC) $(CFLAGS) -c $<
+.F90.o:
+	@$(FC) $(FCFLAGS) -c $<
 
 .cpp.lo:
 	@$(LIBTOOL_CXX) $(CXX) $(CXXFLAGS) -c $<
@@ -53,15 +62,17 @@ LIBTOOL = ../libtool
 
 default: lib
 
-lib: $(objects)
+lib: $(objects) $(objects_lo)
 	mkdir -p ../lib
-	$(LIBTOOL_MKDIR)
+	@AR@ @ARFLAGS@ ../lib/libpragmatic.a $(objects)
+	$(LIBTOOL_MKLIB)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
 
 install:
-	$(LIBTOOL_INSTALL) 
+	$(INSTALL_LIB) 
+
 clean:
 	rm -rf *.o *.mod *.lo *.la .libs
 

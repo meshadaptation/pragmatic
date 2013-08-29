@@ -11,8 +11,6 @@ LINKER_FC = @LINKER_FC@
 CPPFLAGS = @CPPFLAGS@ -I../include -I./include -DTIXML_USE_STL
 LDFLAGS = @LDFLAGS@
 
-LIBTOOL = ../libtool
-
 NVCC = @NVCC@
 NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
 
@@ -21,7 +19,7 @@ objs = ticker.o tinystr.o tinyxml.o tinyxmlerror.o tinyxmlparser.o
 CUDA_LIBS = $(objs) @CUDA_LIBS@
 LIBS = $(objs) @LIBS@
 
-LIB = ../src/libpragmatic.la
+LIB = ../lib/libpragmatic.a
 
 ifeq (@USING_FORTRAN@,yes)
 TEST2D_SRC_F90 = $(wildcard src/ftest_*2d*.F90)
@@ -103,36 +101,36 @@ test_3d: $(TEST3D_BIN)
 bin_generic/%: src/%.cpp $(objs) 
 	@mkdir -p bin_generic
 	@echo "    CXX $@"
-	@$(LIBTOOL) --mode=link --tag=CXX $(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 bin2d/%: src/%.cpp $(objs) 
 	@mkdir -p bin2d
 	@echo "    CXX $@"
-	@$(LIBTOOL) --mode=link --tag=CXX $(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 bin3d/%: src/%.cpp $(objs)
 	@mkdir -p bin3d 
 	@echo "    CXX $@"
-	@$(LIBTOOL) --mode=link --tag=CXX $(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 # Fortran
 bin_generic/%: src/%.F90 $(objs)
 	@mkdir -p bin_generic
 	@echo "    FC $@"
 	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
-	@$(LIBTOOL) --mode=link --tag=FC $(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 bin2d/%: src/%.F90 $(objs)
 	@mkdir -p bin_2d
 	@echo "    FC $@"
 	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
-	@$(LIBTOOL) --mode=link --tag=FC $(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 bin3d/%: src/%.F90 $(objs) 
 	@mkdir -p bin_3d
 	@echo "    FC $@"
 	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
-	@$(LIBTOOL) --mode=link --tag=FC $(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
 
 # Generic
 bin/%: src/%.cu
@@ -154,12 +152,12 @@ bin3d/%: src/%.cu
 bin/%: src/%.cpp $(objs) 
 	@mkdir -p bin
 	@echo "    CXX $@"
-	@$(LIBTOOL) --mode=link --tag=CXX $(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 bin/%: src/%.F90 $(objs) 
 	@mkdir -p bin
 	@echo "    FC $@"
-	@$(LIBTOOL) --mode=link --tag=FC $(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
+	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 bin/%: src/%.cu $(objs) 
 	@mkdir -p bin
@@ -168,3 +166,4 @@ bin/%: src/%.cu $(objs)
 
 clean:
 	rm -rf *.o $(TEST_BIN) bin*
+
