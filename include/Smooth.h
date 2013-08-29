@@ -40,30 +40,26 @@
 
 #include <algorithm>
 #include <cmath>
-#include <omp.h>
 #include <set>
 #include <map>
 #include <vector>
 #include <limits>
 
-#include "errno.h"
-
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <errno.h>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include "ElementProperty.h"
 #include "Surface.h"
 #include "Mesh.h"
 #include "MetricTensor.h"
 
-#ifdef __FUJITSU
-#define pragmatic_isnormal isnormal
-#else
-#define pragmatic_isnormal std::isnormal
-#endif
-
 #include "Smooth2D.h"
 #include "Smooth3D.h"
 
 #endif
+

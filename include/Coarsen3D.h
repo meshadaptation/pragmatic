@@ -167,7 +167,7 @@ template<typename real_t> class Coarsen3D{
 
         // Break if there is nothing left to coarsen.
         if(coarsen_cnt==0){
-          if((nprocs==1)){
+          if(nprocs==1){
             break;
           }else{
             /* MPI parallel. Phase one coarsens the internal

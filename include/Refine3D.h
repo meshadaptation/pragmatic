@@ -49,6 +49,7 @@
 
 #include "ElementProperty.h"
 #include "Mesh.h"
+#include "PragmaticMinis.h"
 
 /*! \brief Performs 3D mesh refinement.
  *
@@ -713,7 +714,7 @@ template<typename real_t> class Refine3D{
     for(size_t i=0;i<msize;i++){
       m = m0[i]+weight*(m1[i] - m0[i]);
       metric.push_back(m);
-      if(isnan(m))
+      if(pragmatic_isnan(m))
         std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                  <<"m0[i] = "<<m0[i]<<std::endl
                  <<"m1[i] = "<<m1[i]<<std::endl

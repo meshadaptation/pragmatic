@@ -565,7 +565,7 @@ template<typename real_t>
   inline void calculate_normal_2d(const index_t *facet, double *normal){
     normal[0] = sqrt(1 - pow((get_x(facet[1]) - get_x(facet[0]))
                              /(get_y(facet[1]) - get_y(facet[0])), 2));
-    if(isnan(normal[0])){
+    if(pragmatic_isnan(normal[0])){
       errno = 0;
       normal[0] = 0;
       normal[1] = 1;

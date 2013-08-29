@@ -941,7 +941,7 @@ template<typename real_t> class Mesh{
         real_t larea = property->area(get_coords(n[0]),
                                       get_coords(n[1]),
                                       get_coords(n[2]));
-        if(isnan(larea)){
+        if(pragmatic_isnan(larea)){
           std::cerr<<"ERROR: Bad element "<<n[0]<<", "<<n[1]<<", "<<n[2]<<std::endl;
         }
 

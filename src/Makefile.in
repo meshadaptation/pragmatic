@@ -4,8 +4,6 @@ CXX = @CXX@
 CC = @CC@
 FC = @FC@
 
-LIBTOOL = ../libtool
-
 CPPFLAGS = @CPPFLAGS@ -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
@@ -26,29 +24,44 @@ objects = cpragmatic.lo $(fortran_objs)
 
 LIBS = $(objects) @LIBS@
 
+ifneq (@enable_libtool@, no)
+  LIBTOOL_CXX = ../libtool --mode=compile --tag=CXX
+  LIBTOOL_CC = ../libtool --mode=compile --tag=CC
+  LIBTOOL_FC = ../libtool --mode=compile --tag=FC
+
+  LIBTOOL_MKLIB = ../libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
+  LIBTOOL_INSTALL = ../libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
+else
+  LIBTOOL_MKDIR = ar -u ../lib/libpragmatic.a $(objects)
+  LIBTOOL_INSTALL = ../install-sh ../lib/libpragmatic.a $(DESTDIR)$(libdir)/libpragmatic.a
+endif
+
+LIBTOOL = ../libtool
+
+
 .SUFFIXES: .F90 .cpp .c .o .lo
 
 # cancel implicit rule that tries to make .o from .mod with m2c:
 %.o: %.mod
 
 .cpp.lo:
-	@$(LIBTOOL) --mode=compile --tag=CXX $(CXX) $(CXXFLAGS) -c $<
+	@$(LIBTOOL_CXX) $(CXX) $(CXXFLAGS) -c $<
 .c.lo:
-	@$(LIBTOOL) --mode=compile --tag=CC $(CC) $(CFLAGS) -c $<
+	@$(LIBTOOL_CC) $(CC) $(CFLAGS) -c $<
 .F90.lo:
-	@$(LIBTOOL) --mode=compile --tag=FC $(FC) $(FCFLAGS) -c $<
+	@$(LIBTOOL_FC) $(FC) $(FCFLAGS) -c $<
 
 default: lib
 
 lib: $(objects)
 	mkdir -p ../lib
-	$(LIBTOOL) --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(LIBS) -rpath $(libdir) -version-info $(libversion)
+	$(LIBTOOL_MKDIR)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
 
 install:
-	$(LIBTOOL) --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
-
+	$(LIBTOOL_INSTALL) 
 clean:
 	rm -rf *.o *.mod *.lo *.la .libs
+

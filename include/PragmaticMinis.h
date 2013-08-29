@@ -72,4 +72,12 @@ int pragmatic_process_id(MPI_Comm comm){
   return id;
 }
 
+#ifdef __FUJITSU
+#define pragmatic_isnormal isnormal
+#define pragmatic_isnan isnan
+#else
+#define pragmatic_isnormal std::isnormal
+#define pragmatic_isnan std::isnan
+#endif
+
 #endif

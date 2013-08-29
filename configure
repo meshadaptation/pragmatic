@@ -640,6 +640,7 @@ CUDA_LIBS
 CUDA_CFLAGS
 NVCC
 USING_FORTRAN
+enable_libtool
 MAKE
 INSTALL_DATA
 INSTALL_SCRIPT
@@ -749,6 +750,7 @@ with_gnu_ld
 with_sysroot
 enable_libtool_lock
 enable_openmp
+enable_libtool
 enable_fortran
 enable_debugging
 with_metis
@@ -1389,6 +1391,7 @@ Optional Features:
                           optimize for fast installation [default=yes]
   --disable-libtool-lock  avoid locking (might break parallel builds)
   --disable-openmp        do not use OpenMP
+  --enable-libtool        This only exists to disable libtool completely
   --enable-fortran        enable Fortran interface (default)
   --enable-debugging      turns on debugging flags
   --enable-cuda=ARCH      Enable cuda based modules for architecture ARCH (see
@@ -18996,6 +18999,13 @@ $as_echo "$MAKE" >&6; }
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
+fi
+
+
+
+# Check whether --enable-libtool was given.
+if test "${enable_libtool+set}" = set; then :
+  enableval=$enable_libtool;
 fi
 
 

@@ -149,7 +149,7 @@ template<typename treal_t> class MetricTensor2D{
    */
   void constrain(const treal_t *M_in, bool perserved_small_edges=true){
     for(size_t i=0;i<3;i++)
-      if(isnan(M_in[i]))
+      if(pragmatic_isnan(M_in[i]))
         return;
     
     MetricTensor2D<treal_t> metric(M_in);
@@ -474,7 +474,7 @@ template<typename treal_t> class MetricTensor3D{
    */
   void constrain(const treal_t *M_in, bool perserved_small_edges=true){
     for(size_t i=0;i<6;i++)
-      if(isnan(M_in[i]))
+      if(pragmatic_isnan(M_in[i]))
         return;
     
     MetricTensor3D<treal_t> metric(M_in);
