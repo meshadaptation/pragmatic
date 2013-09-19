@@ -108,7 +108,7 @@ public:
     std::vector<size_t> idx(max_colours);
     // Local max colour
     int max_colour = 0;
-
+/*
     uint32_t vid_hash;
     std::vector<uint32_t> hashes;
 
@@ -125,6 +125,7 @@ public:
 
       int colour = 0;
 
+//      while(colour < threshold){
       while(true){
         // Calculate hashes for this round
         vid_hash = _mesh->hash(vid_hash);
@@ -171,10 +172,98 @@ public:
         }
       }
 
+      if(colour >= threshold){
+        unsigned long colours = 0;
+        int c;
+        for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+          pragmatic_omp_atomic_read()
+              c = node_colour[*it];
+          if(c>=0)
+            colours = colours | 1<<c;
+        }
+
+        colours = ~colours;
+
+        for(size_t j=0;j<64;j++){
+          if(colours&(1<<j)){
+            colour = j;
+            node_colour[vid] = j;
+            local_ind_sets[j].push_back(vid);
+            break;
+          }
+        }
+      }
+
       if(colour > max_colour)
         max_colour = colour;
 
       assert(max_colour < max_colours);
+    }
+*/
+
+#pragma omp for schedule(dynamic)
+    for(size_t i=0; i<GlobalActiveSet_size; ++i){
+      unsigned long colours = 0;
+      int c;
+      for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+        pragmatic_omp_atomic_read()
+            c = node_colour[*it];
+        if(c>=0)
+          colours = colours | 1<<c;
+      }
+
+      colours = ~colours;
+
+      for(int j=0;j<64;j++){
+        if(colours&(1<<j)){
+          pragmatic_omp_atomic_write()
+              node_colour[GlobalActiveSet[i]] = j;
+          break;
+        }
+      }
+    }
+
+#pragma omp for schedule(dynamic) nowait
+    for(size_t i=0; i<GlobalActiveSet_size; ++i){
+      index_t vid = GlobalActiveSet[i];
+      bool defective;
+      int c;
+
+      do{
+        defective = false;
+        for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+          pragmatic_omp_atomic_read()
+              c = node_colour[*it];
+          if(c == node_colour[vid]){
+            defective = true;
+            break;
+          }
+        }
+
+        if(defective){
+          unsigned long colours = 0;
+          for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+            pragmatic_omp_atomic_read()
+                c = node_colour[*it];
+            colours = colours | 1<<c;
+          }
+
+          colours = ~colours;
+
+          for(int j=0;j<64;j++){
+            if(colours&(1<<j)){
+              pragmatic_omp_atomic_write()
+                  node_colour[vid] = j;
+              break;
+            }
+          }
+        }
+      }while(defective);
+
+      local_ind_sets[node_colour[vid]].push_back(vid);
+
+      if(node_colour[vid] > max_colour)
+        max_colour = node_colour[vid];
     }
 
     ++max_colour;
@@ -267,6 +356,7 @@ private:
   AdaptiveAlgorithm<real_t> *alg;
 
   const static int max_colours = 256;
+  const static int threshold = 4;
 };
 
 

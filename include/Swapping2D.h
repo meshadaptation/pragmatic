@@ -44,7 +44,7 @@
 #include <vector>
 
 #include "AdaptiveAlgorithm.h"
-#include "Colour.h"
+#include "Colouring.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -81,42 +81,60 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     }
 
     nnodes_reserve = 0;
+    dynamic_vertex = NULL;
+    colouring = NULL;
 
     nthreads = pragmatic_nthreads();
   }
 
   /// Default destructor.
-  ~Swapping2D(){
+  virtual ~Swapping2D(){
     if(property!=NULL)
       delete property;
+
+    if(dynamic_vertex!=NULL)
+      delete[] dynamic_vertex;
+
+    if(colouring!=NULL)
+      delete colouring;
   }
 
   void swap(real_t quality_tolerance){
     size_t NNodes = _mesh->get_number_nodes();
-
     size_t NElements = _mesh->get_number_elements();
-    int active_colour;
 
     min_Q = quality_tolerance;
+
+    // Total number of active vertices. Used to break the infinite loop.
+    size_t total_active;
 
     if(nnodes_reserve<1.5*NNodes){
       nnodes_reserve = 2*NNodes;
 
+      if(dynamic_vertex!=NULL){
+        delete [] dynamic_vertex;
+      }
+
+      dynamic_vertex = new size_t[nnodes_reserve];
+
+      if(colouring==NULL)
+        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
+      else
+        colouring->resize(nnodes_reserve);
+
       quality.resize(nnodes_reserve * 2, 0.0);
       marked_edges.resize(nnodes_reserve, std::set<index_t>());
     }
-
-    std::vector<char> colouring(NNodes);
-    Colour::GebremedhinManne(NNodes, _mesh->NNList, colouring);
     
-    int colour_count[64];
-#pragma omp parallel firstprivate(NNodes, NElements)
+    size_t set_size[2];
+
+#pragma omp parallel
     {
       int tid = pragmatic_thread_id();
       
-      // Cache the element quality's. Really need to make this persistent within Mesh.
-      // Also, initialize marked_edges.
-#pragma omp for schedule(static,8)
+      // Cache the element quality's. Really need to make this
+      // persistent within Mesh. Also, initialise marked_edges.
+#pragma omp for schedule(dynamic,8)
       for(size_t i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]>=0){
@@ -133,8 +151,12 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
           quality[i] = 0.0;
         }
       }
-#pragma omp for schedule(static,8)
+
+#pragma omp for schedule(dynamic,8)
       for(size_t i=0;i<NNodes;i++){
+        colouring->node_colour[i] = -1;
+        marked_edges[i].clear();
+
         for(std::set<index_t>::const_iterator it=_mesh->NEList[i].begin();it!=_mesh->NEList[i].end();++it){
           if(quality[i]<min_Q){
             for(std::vector<index_t>::const_iterator jt=_mesh->NNList[i].begin();jt!=_mesh->NNList[i].end();++jt){
@@ -146,95 +168,123 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         }
       }
 
-      for(size_t sweep=0;sweep<100;sweep++){
-        // Find the maximal independant set.
-        std::vector<int> local_colour_count(64, 0);
-#pragma omp single nowait
-        for(size_t i=0;i<64;i++)
-          colour_count[i] = 0;
-#pragma omp for schedule(static,8)
+      do{
+        // Find which vertices comprise the active sub-mesh.
+        std::vector<index_t> active_set;
+
+#pragma omp for schedule(dynamic, 8) nowait
         for(size_t i=0;i<_mesh->NNodes;i++){
-          if(!marked_edges[i].empty()){
-            ++local_colour_count[colouring[i]];
+          if(marked_edges[i].size()>0){
+            active_set.push_back(i);
           }
+
+          dynamic_vertex[i] = marked_edges[i].size();
         }
-        for(int i=0;i<64;i++)
-	  pragmatic_omp_atomic_update()
-	    colour_count[i]+=local_colour_count[i];
-#pragma omp barrier
-	
-        // Find the maximal independant set.
-#pragma omp single
+
+        size_t pos;
+        pragmatic_omp_atomic_capture()
         {
-          active_colour = -1;
-          int cnt=-1;
-          size_t i;
-          for(i=0;i<64;i++){
-            if(colour_count[i]>0){
-              cnt=colour_count[i];
-              active_colour = i;
-              break;
-            }
-          }
-          for(;i<64;i++){
-            if(colour_count[i]>cnt){
-              cnt = colour_count[i];
-              active_colour = i;
-            }
-          }
+          pos = colouring->GlobalActiveSet_size;
+          colouring->GlobalActiveSet_size += active_set.size();
         }
-        if(active_colour<0)
+
+        if(active_set.size()>0)
+          memcpy(&colouring->GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
+
+#pragma omp barrier
+
+        if(colouring->GlobalActiveSet_size == 0)
           break;
 
-#pragma omp for schedule(static,8)
-        for(size_t i=0; i<NNodes; ++i){
-          // Only process if it is the active colour and has marked edges.
-          if(!((colouring[i]==active_colour)&&(!marked_edges[i].empty())))
-            continue;
+        colouring->multiHashJonesPlassmann();
 
-          // Set of elements in this cavity which were modified since the last commit of deferred operations.
-          std::set<index_t> modified_elements;
-                
-          for(typename std::set<index_t>::iterator vid=marked_edges[i].begin(); vid!=marked_edges[i].end();){
-            std::set<index_t>::iterator j_ref = vid; ++vid;
-            index_t j = *j_ref;
+        for(int set_no=0; set_no<colouring->nsets; ++set_no){
+          do{
+            active_set.clear();
 
-            // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
-            bool skip=false;
-            for(std::set<index_t>::const_iterator it=modified_elements.begin();it!=modified_elements.end();++it){
-              if(_mesh->NEList[j].find(*it)!=_mesh->NEList[j].end()){
-                skip=true;
-                break;
+#pragma omp for schedule(dynamic)
+            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
+              index_t i = colouring->independent_sets[set_no][idx];
+              assert(i < (index_t) NNodes);
+
+              // If the node has been un-coloured, skip it.
+              if(colouring->node_colour[i] < 0)
+                continue;
+
+              assert(colouring->node_colour[i] == set_no);
+
+              // Set of elements in this cavity which were modified since the last commit of deferred operations.
+              std::set<index_t> modified_elements;
+              std::set<index_t> marked_edges_copy = marked_edges[i];
+
+              for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
+                index_t j = *vid;
+
+                // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
+                bool skip = false;
+                for(typename std::set<index_t>::const_iterator it=modified_elements.begin(); it!=modified_elements.end(); ++it){
+                  if(_mesh->NEList[j].find(*it) != _mesh->NEList[j].end()){
+                    skip = true;
+                    break;
+                  }
+                }
+                if(skip)
+                  continue;
+
+                // Mark edge as processed, i.e. remove it from the set of marked edges
+                marked_edges[i].erase(j);
+
+                Edge<index_t> edge(i, j);
+                swap_kernel(edge, modified_elements, NULL, NULL, tid);
+
+                // If edge was swapped
+                if(edge.edge.first != i){
+                  index_t k = edge.edge.first;
+                  index_t l = edge.edge.second;
+                  // Uncolour one of the lateral vertices if their colours clash.
+                  if(colouring->node_colour[k] == colouring->node_colour[l])
+                    _mesh->deferred_reset_colour(l, tid);
+
+                  Edge<index_t> lateralEdges[] = {
+                      Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+
+                  // Propagate the operation
+                  for(size_t ee=0; ee<4; ++ee)
+                    _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
+                }
               }
+
+              // If all marked edges adjacent to i have been processed, reset i's colour.
+              if(marked_edges[i].empty())
+                colouring->node_colour[i] = -1;
+              else
+                active_set.push_back(i);
             }
-            if(skip)
-              continue;
 
-            // Mark edge as processed, i.e. remove it from the set of marked edges
-            marked_edges[i].erase(j_ref);
-
-            Edge<index_t> edge(i, j);
-            swap_kernel(edge, modified_elements, NULL, NULL, pragmatic_thread_id());
-
-            // If edge was swapped
-            if(edge.edge.first != (index_t)i){
-              index_t k = edge.edge.first;
-              index_t l = edge.edge.second;
-
-              Edge<index_t> lateralEdges[] = {
-                Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-              
-              // Propagate the operation
-              for(size_t ee=0; ee<4; ++ee)
-                _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, pragmatic_thread_id());
+#pragma omp single
+            {
+              colouring->ind_set_size[set_no] = 0;
             }
-          }
-        }
-        _mesh->commit_deferred(tid);
-        _mesh->commit_swapping_propagation(marked_edges, tid);
+
+            _mesh->commit_deferred(tid);
+            _mesh->commit_swapping_propagation(marked_edges, tid);
+            _mesh->commit_colour_reset(colouring->node_colour, tid);
+
+#pragma omp atomic capture
+            {
+              pos = colouring->ind_set_size[set_no];
+              colouring->ind_set_size[set_no] += active_set.size();
+            }
+
+            memcpy(&colouring->independent_sets[set_no][pos], &active_set[0], active_set.size() * sizeof(index_t));
 #pragma omp barrier
-        Colour::repair(NNodes, _mesh->NNList, marked_edges, colouring);
-      }
+
+          }while(colouring->ind_set_size[set_no]>0);
+        }
+
+#pragma omp barrier
+        colouring->destroy();
+      }while(true);
     }
   }
 
@@ -467,15 +517,17 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     return;
   }
 
-  inline virtual index_t is_dynamic(index_t vid){
-    return (index_t) marked_edges[vid].size();
+  inline virtual bool is_dynamic(index_t vid){
+    return (bool) marked_edges[vid].size();
   }
 
   Mesh<real_t> *_mesh;
   Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
+  Colouring<real_t> *colouring;
 
   size_t nnodes_reserve;
+  size_t *dynamic_vertex;
 
   static const size_t ndims=2;
   static const size_t nloc=3;

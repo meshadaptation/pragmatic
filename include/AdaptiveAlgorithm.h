@@ -38,10 +38,13 @@
 
 template<typename real_t>
 class AdaptiveAlgorithm{
+public:
+  virtual ~AdaptiveAlgorithm(){};
+
 private:
   template<typename _real_t> friend class Colouring;
 
-  virtual index_t is_dynamic(index_t vid) = 0;
+  virtual bool is_dynamic(index_t vid) = 0;
 };
 
 

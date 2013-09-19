@@ -57,6 +57,8 @@ template <> mpi_type_wrapper<short>::mpi_type_wrapper() : mpi_type(MPI_SHORT) {}
 template <> mpi_type_wrapper<int>::mpi_type_wrapper() : mpi_type(MPI_INT) {}
 // Explicit instantiation for `long'
 template <> mpi_type_wrapper<long>::mpi_type_wrapper() : mpi_type(MPI_LONG) {}
+// Explicit instantiation for `unsigned long'
+template <> mpi_type_wrapper<unsigned long>::mpi_type_wrapper() : mpi_type(MPI_UNSIGNED_LONG) {}
 // Explicit instantiation for `long long'
 template <> mpi_type_wrapper<long long>::mpi_type_wrapper() : mpi_type(MPI_LONG_LONG) {}
 
