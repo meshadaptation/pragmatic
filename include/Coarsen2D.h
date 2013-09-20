@@ -207,7 +207,10 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
          */
 	  
         for(int set_no=0; set_no<colouring->nsets; ++set_no){
-#pragma omp for schedule(dynamic, 1)
+          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+            continue;
+
+#pragma omp for schedule(dynamic)
           for(size_t i=0; i<colouring->ind_set_size[set_no]; ++i){
             index_t rm_vertex = colouring->independent_sets[set_no][i];
             assert((size_t) rm_vertex < NNodes);
@@ -261,7 +264,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
           _mesh->commit_colour_reset(colouring->node_colour, tid);
           _surface->commit_deferred(tid);
 #pragma omp barrier
-          }
+        }
 
         colouring->destroy();
 #pragma omp barrier

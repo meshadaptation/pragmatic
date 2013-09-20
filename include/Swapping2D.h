@@ -126,7 +126,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
       marked_edges.resize(nnodes_reserve, std::set<index_t>());
     }
     
-    size_t set_size[2];
+    int remaining;
 
 #pragma omp parallel
     {
@@ -172,7 +172,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         // Find which vertices comprise the active sub-mesh.
         std::vector<index_t> active_set;
 
-#pragma omp for schedule(dynamic, 8) nowait
+#pragma omp for schedule(dynamic,8) nowait
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(marked_edges[i].size()>0){
             active_set.push_back(i);
@@ -199,10 +199,14 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         colouring->multiHashJonesPlassmann();
 
         for(int set_no=0; set_no<colouring->nsets; ++set_no){
-          do{
-            active_set.clear();
+          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+            continue;
 
-#pragma omp for schedule(dynamic)
+//          do{
+//#pragma omp single
+//              remaining = 0;
+
+#pragma omp for schedule(dynamic) //reduction(+:remaining)
             for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
               index_t i = colouring->independent_sets[set_no][idx];
               assert(i < (index_t) NNodes);
@@ -257,33 +261,19 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
               // If all marked edges adjacent to i have been processed, reset i's colour.
               if(marked_edges[i].empty())
                 colouring->node_colour[i] = -1;
-              else
-                active_set.push_back(i);
-            }
-
-#pragma omp single
-            {
-              colouring->ind_set_size[set_no] = 0;
+//              else
+//                ++remaining;
             }
 
             _mesh->commit_deferred(tid);
             _mesh->commit_swapping_propagation(marked_edges, tid);
             _mesh->commit_colour_reset(colouring->node_colour, tid);
-
-#pragma omp atomic capture
-            {
-              pos = colouring->ind_set_size[set_no];
-              colouring->ind_set_size[set_no] += active_set.size();
-            }
-
-            memcpy(&colouring->independent_sets[set_no][pos], &active_set[0], active_set.size() * sizeof(index_t));
 #pragma omp barrier
-
-          }while(colouring->ind_set_size[set_no]>0);
+//          }while(remaining>0);
         }
 
-#pragma omp barrier
         colouring->destroy();
+#pragma omp barrier
       }while(true);
     }
   }
