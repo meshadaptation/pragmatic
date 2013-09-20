@@ -19071,7 +19071,8 @@ elif test "x$GCC" = "xyes" ; then
     fi
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for fclose in -lstdc++" >&5
+if test "x$FCC" != "xyes" ; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for fclose in -lstdc++" >&5
 $as_echo_n "checking for fclose in -lstdc++... " >&6; }
 if ${ac_cv_lib_stdcpp_fclose+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -19113,6 +19114,8 @@ if test "x$ac_cv_lib_stdcpp_fclose" = xyes; then :
 _ACEOF
 
   LIBS="-lstdc++ $LIBS"
+
+fi
 
 fi
 

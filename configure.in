@@ -178,7 +178,10 @@ elif test "x$GCC" = "xyes" ; then
     fi
 fi
 
-AC_CHECK_LIB(stdc++,fclose,,) 
+if test "x$FCC" != "xyes" ; then
+  AC_CHECK_LIB(stdc++,fclose,,) 
+fi
+
 AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 
