@@ -83,7 +83,7 @@ public:
 
   void multiHashJonesPlassmann(){
     // Construct the node adjacency list for the active sub-mesh.
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(dynamic,4)
     for(size_t i=0; i<GlobalActiveSet_size; ++i){
       index_t vid = GlobalActiveSet[i];
       std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
@@ -108,7 +108,7 @@ public:
     std::vector<size_t> idx(max_colours);
     // Local max colour
     int max_colour = 0;
-/*
+
     uint32_t vid_hash;
     std::vector<uint32_t> hashes;
 
@@ -125,7 +125,6 @@ public:
 
       int colour = 0;
 
-//      while(colour < threshold){
       while(true){
         // Calculate hashes for this round
         vid_hash = _mesh->hash(vid_hash);
@@ -172,98 +171,10 @@ public:
         }
       }
 
-      if(colour >= threshold){
-        unsigned long colours = 0;
-        int c;
-        for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
-          pragmatic_omp_atomic_read()
-              c = node_colour[*it];
-          if(c>=0)
-            colours = colours | 1<<c;
-        }
-
-        colours = ~colours;
-
-        for(size_t j=0;j<64;j++){
-          if(colours&(1<<j)){
-            colour = j;
-            node_colour[vid] = j;
-            local_ind_sets[j].push_back(vid);
-            break;
-          }
-        }
-      }
-
       if(colour > max_colour)
         max_colour = colour;
 
       assert(max_colour < max_colours);
-    }
-*/
-
-#pragma omp for schedule(dynamic)
-    for(size_t i=0; i<GlobalActiveSet_size; ++i){
-      unsigned long colours = 0;
-      int c;
-      for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
-        pragmatic_omp_atomic_read()
-            c = node_colour[*it];
-        if(c>=0)
-          colours = colours | 1<<c;
-      }
-
-      colours = ~colours;
-
-      for(int j=0;j<64;j++){
-        if(colours&(1<<j)){
-          pragmatic_omp_atomic_write()
-              node_colour[GlobalActiveSet[i]] = j;
-          break;
-        }
-      }
-    }
-
-#pragma omp for schedule(dynamic) nowait
-    for(size_t i=0; i<GlobalActiveSet_size; ++i){
-      index_t vid = GlobalActiveSet[i];
-      bool defective;
-      int c;
-
-      do{
-        defective = false;
-        for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
-          pragmatic_omp_atomic_read()
-              c = node_colour[*it];
-          if(c == node_colour[vid]){
-            defective = true;
-            break;
-          }
-        }
-
-        if(defective){
-          unsigned long colours = 0;
-          for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
-            pragmatic_omp_atomic_read()
-                c = node_colour[*it];
-            colours = colours | 1<<c;
-          }
-
-          colours = ~colours;
-
-          for(int j=0;j<64;j++){
-            if(colours&(1<<j)){
-              pragmatic_omp_atomic_write()
-                  node_colour[vid] = j;
-              break;
-            }
-          }
-        }
-      }while(defective);
-
-      local_ind_sets[node_colour[vid]].push_back(vid);
-
-      if(node_colour[vid] > max_colour)
-        max_colour = node_colour[vid];
     }
 
     ++max_colour;
@@ -302,6 +213,118 @@ public:
     /********************
      * End of colouring *
      ********************/
+  }
+
+  void GebremedhinManne(){
+    // Construct the node adjacency list for the active sub-mesh.
+#pragma omp for schedule(dynamic,4)
+    for(size_t i=0; i<GlobalActiveSet_size; ++i){
+      index_t vid = GlobalActiveSet[i];
+      std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
+
+      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
+        if(alg->is_dynamic(*it)>=0){
+          dynamic_NNList->push_back(*it);
+        }
+
+      subNNList[i] = dynamic_NNList;
+      node_colour[vid] = -1; // Reset colour
+    }
+
+    /**********************************************
+     * Active sub-mesh is ready, let's colour it. *
+     **********************************************/
+
+    // Local independent sets.
+    std::vector< std::vector<index_t> > local_ind_sets(max_colours);
+    // idx[i] stores the index in independent_sets[i] at which this thread
+    // will copy the contents of its local independent set local_ind_sets[i].
+    std::vector<size_t> idx(max_colours);
+    // Local max colour
+    int max_colour = 0;
+
+#pragma omp for schedule(dynamic,4) nowait
+    for(size_t i=0; i<GlobalActiveSet_size; ++i){
+      index_t vid = GlobalActiveSet[i];
+      bool defective = true;
+
+      while(defective){
+        unsigned long colours = 0;
+        int c;
+        defective = false;
+        for(typename std::vector<index_t>::const_iterator it=subNNList[i]->begin(); it!=subNNList[i]->end(); ++it){
+          pragmatic_omp_atomic_read()
+              c = node_colour[*it];
+          if(c>=0)
+            colours = colours | 1<<c;
+          if(c == node_colour[vid])
+            defective = true;
+        }
+
+        if(node_colour[vid] == -1)
+          defective = true;
+
+        if(defective){
+          colours = ~colours;
+
+          for(int j=0;j<64;j++){
+            if(colours&(1<<j)){
+              pragmatic_omp_atomic_write()
+                  node_colour[vid] = j;
+              break;
+            }
+          }
+        }
+      }
+
+      local_ind_sets[node_colour[vid]].push_back(vid);
+
+      if(node_colour[vid] > max_colour)
+        max_colour = node_colour[vid];
+    }
+
+    ++max_colour;
+
+    // Capture and increment the index in independent_sets[colour] at which the local independent
+    // sets will be copied later, after memory for the global independent sets will have been allocated.
+    for(int colour=0; colour < max_colour; ++colour){
+      pragmatic_omp_atomic_capture()
+      {
+        idx[colour] = ind_set_size[colour];
+        ind_set_size[colour] += local_ind_sets[colour].size();
+      }
+    }
+
+    // Total number of independent sets
+#pragma omp critical
+    {
+      if(max_colour > nsets)
+        nsets = max_colour;
+    }
+
+#pragma omp barrier
+
+    // Allocate memory for the global independent sets.
+#pragma omp for schedule(static)
+    for(int set_no=0; set_no<nsets; ++set_no)
+      independent_sets[set_no] = new index_t[ind_set_size[set_no]];
+
+    // Copy local independent sets into the global structure.
+    for(int set_no=0; set_no<nsets; ++set_no)
+      memcpy(&independent_sets[set_no][idx[set_no]], &local_ind_sets[set_no][0],
+          local_ind_sets[set_no].size() * sizeof(index_t));
+
+#pragma omp barrier
+
+    /********************
+     * End of colouring *
+     ********************/
+/*
+#pragma omp single
+    {
+      std::cout << "Using " << nsets << " colours." << std::endl;
+    }
+*/
   }
 
   void destroy(){

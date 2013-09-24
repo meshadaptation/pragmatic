@@ -84,7 +84,7 @@ int main(int argc, char **argv){
 
   if(rank==0)
     std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";  
-  for(int t=0;t<51;t+=10){
+  for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
     MetricField2D<double> metric_field(*mesh, surface);

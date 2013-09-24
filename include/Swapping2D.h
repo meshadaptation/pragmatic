@@ -128,10 +128,16 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
     
     int remaining;
 
-#pragma omp parallel
+#pragma omp parallel firstprivate(NNodes, NElements)
     {
       int tid = pragmatic_thread_id();
       
+#pragma omp for schedule(static)
+      for(size_t i=0;i<NNodes;i++){
+        colouring->node_colour[i] = -1;
+        marked_edges[i].clear();
+      }
+
       // Cache the element quality's. Really need to make this
       // persistent within Mesh. Also, initialise marked_edges.
 #pragma omp for schedule(dynamic,8)
@@ -147,26 +153,20 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
                                           _mesh->get_metric(n[1]),
                                           _mesh->get_metric(n[2]));
 
+          if(quality[i]<min_Q){
+            Edge<index_t> edge0(n[1], n[2]);
+            Edge<index_t> edge1(n[0], n[2]);
+            Edge<index_t> edge2(n[0], n[1]);
+            _mesh->deferred_propagate_swapping(edge0.edge.first, edge0.edge.second, tid);
+            _mesh->deferred_propagate_swapping(edge1.edge.first, edge1.edge.second, tid);
+            _mesh->deferred_propagate_swapping(edge2.edge.first, edge2.edge.second, tid);
+          }
         }else{
           quality[i] = 0.0;
         }
       }
 
-#pragma omp for schedule(dynamic,8)
-      for(size_t i=0;i<NNodes;i++){
-        colouring->node_colour[i] = -1;
-        marked_edges[i].clear();
-
-        for(std::set<index_t>::const_iterator it=_mesh->NEList[i].begin();it!=_mesh->NEList[i].end();++it){
-          if(quality[i]<min_Q){
-            for(std::vector<index_t>::const_iterator jt=_mesh->NNList[i].begin();jt!=_mesh->NNList[i].end();++jt){
-              if(i<(size_t)*jt)
-                marked_edges[i].insert(*jt);
-            }
-            break;
-          }
-        }
-      }
+      _mesh->commit_swapping_propagation(marked_edges, tid);
 
       do{
         // Find which vertices comprise the active sub-mesh.
@@ -178,7 +178,8 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
             active_set.push_back(i);
           }
 
-          dynamic_vertex[i] = marked_edges[i].size();
+          // This is not needed for OpenMP
+          //dynamic_vertex[i] = marked_edges[i].size();
         }
 
         size_t pos;
@@ -196,7 +197,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         if(colouring->GlobalActiveSet_size == 0)
           break;
 
-        colouring->multiHashJonesPlassmann();
+        colouring->GebremedhinManne();
 
         for(int set_no=0; set_no<colouring->nsets; ++set_no){
           if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))

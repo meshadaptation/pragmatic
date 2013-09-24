@@ -190,7 +190,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
         if(colouring->GlobalActiveSet_size == 0)
           break;
 	  
-        colouring->multiHashJonesPlassmann();
+        colouring->GebremedhinManne();
 
         /* Start processing independent sets. After processing each set, colouring
          * might be invalid. More precisely, it's the target vertices whose colours
