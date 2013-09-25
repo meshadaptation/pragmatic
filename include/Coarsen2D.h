@@ -133,7 +133,6 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 #pragma omp for schedule(static)
         for(size_t i=0;i<NNodes;i++){
           dynamic_vertex[i] = -2;
-          colouring->node_colour[i] = -1;
         }
       }else{
 #pragma omp for schedule(static, 32)
@@ -215,7 +214,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
          */
 	  
 //        for(int set_no=0; set_no<colouring->nsets; ++set_no){
-//          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+//          if((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1)
 //            continue;
 
 #pragma omp for schedule(dynamic)
@@ -227,7 +226,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 //            if(colouring->node_colour[rm_vertex] < 0)
 //              continue;
 	      
-//            assert(colouring->node_colour[rm_vertex] == set_no);
+            assert(colouring->node_colour[rm_vertex] == set_no);
 //            colouring->node_colour[rm_vertex] = -1;
 
             /* If this rm_vertex is marked for re-evaluation, it means that the

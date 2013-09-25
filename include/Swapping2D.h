@@ -170,12 +170,26 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
 
       do{
         // Find which vertices comprise the active sub-mesh.
+        // Construct the node adjacency list for the active sub-mesh.
         std::vector<index_t> active_set;
 
 #pragma omp for schedule(dynamic,8) nowait
         for(size_t i=0;i<_mesh->NNodes;i++){
           if(marked_edges[i].size()>0){
             active_set.push_back(i);
+/*
+            if(colouring->subNNList[i] == NULL)
+              colouring->subNNList[i] = new std::vector<index_t>;
+            else
+              colouring->subNNList[i]->clear();
+
+            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it)
+              if(marked_edges[*it].size()>0){
+                colouring->subNNList[i]->push_back(*it);
+              }
+
+            colouring->node_colour[i] = -1; // Reset colour
+*/
           }
 
           // This is not needed for OpenMP
@@ -197,6 +211,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         if(colouring->GlobalActiveSet_size == 0)
           break;
 
+//        colouring->GebremedhinManneForSwapping();
         colouring->GebremedhinManne();
 
         int max_set, max_set_size = 0;
@@ -208,7 +223,8 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
         }
 
 //        for(int set_no=0; set_no<colouring->nsets; ++set_no){
-//          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+//          double percentage = (double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size;
+//          if(percentage < 0.1)
 //            continue;
 
 //          do{
@@ -218,7 +234,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
 #pragma omp for schedule(dynamic) //reduction(+:remaining)
 //            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
             for(size_t idx=0; idx<colouring->ind_set_size[max_set]; ++idx){
-              //index_t i = colouring->independent_sets[set_no][idx];
+//              index_t i = colouring->independent_sets[set_no][idx];
               index_t i = colouring->independent_sets[max_set][idx];
 //              assert(i < (index_t) NNodes);
 
@@ -519,7 +535,7 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
   }
 
   inline virtual bool is_dynamic(index_t vid){
-    return (bool) marked_edges[vid].size();
+    return (marked_edges[vid].size() > 0);
   }
 
   Mesh<real_t> *_mesh;

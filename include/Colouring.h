@@ -94,7 +94,7 @@ public:
         subNNList[i]->clear();
 
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
-        if(alg->is_dynamic(*it)>=0){
+        if(alg->is_dynamic(*it)){
           subNNList[i]->push_back(*it);
         }
       
@@ -231,7 +231,7 @@ public:
         subNNList[i]->clear();
 
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
-        if(alg->is_dynamic(*it)>=0){
+        if(alg->is_dynamic(*it)){
           subNNList[i]->push_back(*it);
         }
 
