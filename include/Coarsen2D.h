@@ -192,6 +192,14 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 	  
         colouring->GebremedhinManne();
 
+        int max_set, max_set_size = 0;
+        for(int i=0; i<colouring->nsets; ++i){
+          if(colouring->ind_set_size[i] > max_set_size){
+            max_set = i;
+            max_set_size = colouring->ind_set_size[i];
+          }
+        }
+
         /* Start processing independent sets. After processing each set, colouring
          * might be invalid. More precisely, it's the target vertices whose colours
          * might clash with their neighbours' colours. To avoid hazards, we just
@@ -206,21 +214,21 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
          * at least we make use of the existing colouring as much as possible.
          */
 	  
-        for(int set_no=0; set_no<colouring->nsets; ++set_no){
-          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
-            continue;
+//        for(int set_no=0; set_no<colouring->nsets; ++set_no){
+//          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+//            continue;
 
 #pragma omp for schedule(dynamic)
-          for(size_t i=0; i<colouring->ind_set_size[set_no]; ++i){
-            index_t rm_vertex = colouring->independent_sets[set_no][i];
+          for(size_t i=0; i<colouring->ind_set_size[max_set]; ++i){
+            index_t rm_vertex = colouring->independent_sets[max_set][i];
             assert((size_t) rm_vertex < NNodes);
 	      
             // If the node has been un-coloured, skip it.
-            if(colouring->node_colour[rm_vertex] < 0)
-              continue;
+//            if(colouring->node_colour[rm_vertex] < 0)
+//              continue;
 	      
-            assert(colouring->node_colour[rm_vertex] == set_no);
-            colouring->node_colour[rm_vertex] = -1;
+//            assert(colouring->node_colour[rm_vertex] == set_no);
+//            colouring->node_colour[rm_vertex] = -1;
 
             /* If this rm_vertex is marked for re-evaluation, it means that the
              * local neighbourhood has changed since coarsen_identify_kernel was
@@ -241,16 +249,16 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
               _mesh->deferred_propagate_coarsening(*jt, tid);
 
             // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-            if(colouring->node_colour[target_vertex] >= 0){
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                if(*jt != target_vertex){
-                  if(colouring->node_colour[*jt] == colouring->node_colour[target_vertex]){
-                    _mesh->deferred_reset_colour(target_vertex, tid);
-                    break;
-                  }
-                }
-              }
-            }
+//            if(colouring->node_colour[target_vertex] >= 0){
+//              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+//                if(*jt != target_vertex){
+//                  if(colouring->node_colour[*jt] == colouring->node_colour[target_vertex]){
+//                    _mesh->deferred_reset_colour(target_vertex, tid);
+//                    break;
+//                  }
+//                }
+//              }
+//            }
 
             // Mark rm_vertex as non-active.
             dynamic_vertex[rm_vertex] = -1;
@@ -261,10 +269,10 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
           _mesh->commit_deferred(tid);
           _mesh->commit_coarsening_propagation(dynamic_vertex, tid);
-          _mesh->commit_colour_reset(colouring->node_colour, tid);
+//          _mesh->commit_colour_reset(colouring->node_colour, tid);
           _surface->commit_deferred(tid);
-#pragma omp barrier
-        }
+//#pragma omp barrier
+//        }
 
         colouring->destroy();
 #pragma omp barrier

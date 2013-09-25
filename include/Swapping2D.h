@@ -199,24 +199,34 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
 
         colouring->GebremedhinManne();
 
-        for(int set_no=0; set_no<colouring->nsets; ++set_no){
-          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
-            continue;
+        int max_set, max_set_size = 0;
+        for(int i=0; i<colouring->nsets; ++i){
+          if(colouring->ind_set_size[i] > max_set_size){
+            max_set = i;
+            max_set_size = colouring->ind_set_size[i];
+          }
+        }
+
+//        for(int set_no=0; set_no<colouring->nsets; ++set_no){
+//          if(((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1))
+//            continue;
 
 //          do{
 //#pragma omp single
 //              remaining = 0;
 
 #pragma omp for schedule(dynamic) //reduction(+:remaining)
-            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
-              index_t i = colouring->independent_sets[set_no][idx];
-              assert(i < (index_t) NNodes);
+//            for(size_t idx=0; idx<colouring->ind_set_size[set_no]; ++idx){
+            for(size_t idx=0; idx<colouring->ind_set_size[max_set]; ++idx){
+              //index_t i = colouring->independent_sets[set_no][idx];
+              index_t i = colouring->independent_sets[max_set][idx];
+//              assert(i < (index_t) NNodes);
 
               // If the node has been un-coloured, skip it.
-              if(colouring->node_colour[i] < 0)
-                continue;
+//              if(colouring->node_colour[i] < 0)
+//                continue;
 
-              assert(colouring->node_colour[i] == set_no);
+//              assert(colouring->node_colour[i] == set_no);
 
               // Set of elements in this cavity which were modified since the last commit of deferred operations.
               std::set<index_t> modified_elements;
@@ -247,8 +257,8 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
                   index_t k = edge.edge.first;
                   index_t l = edge.edge.second;
                   // Uncolour one of the lateral vertices if their colours clash.
-                  if(colouring->node_colour[k] == colouring->node_colour[l])
-                    _mesh->deferred_reset_colour(l, tid);
+//                  if(colouring->node_colour[k] == colouring->node_colour[l])
+//                    _mesh->deferred_reset_colour(l, tid);
 
                   Edge<index_t> lateralEdges[] = {
                       Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
@@ -260,18 +270,18 @@ template<typename real_t> class Swapping2D : public AdaptiveAlgorithm<real_t>{
               }
 
               // If all marked edges adjacent to i have been processed, reset i's colour.
-              if(marked_edges[i].empty())
-                colouring->node_colour[i] = -1;
+//              if(marked_edges[i].empty())
+//                colouring->node_colour[i] = -1;
 //              else
 //                ++remaining;
             }
 
             _mesh->commit_deferred(tid);
             _mesh->commit_swapping_propagation(marked_edges, tid);
-            _mesh->commit_colour_reset(colouring->node_colour, tid);
-#pragma omp barrier
+//            _mesh->commit_colour_reset(colouring->node_colour, tid);
+//#pragma omp barrier
 //          }while(remaining>0);
-        }
+//        }
 
         colouring->destroy();
 #pragma omp barrier

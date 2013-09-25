@@ -53,32 +53,33 @@ public:
     GlobalActiveSet = new index_t[nnodes_reserve];
     GlobalActiveSet_size = 0;
 
-    subNNList = new std::vector<index_t>* [nnodes_reserve];
+    subNNList.resize(nnodes_reserve, (std::vector<index_t> *) NULL);
 
     /* It's highly unlikely that more than a dozen colours will be needed, let's
      * allocate 256 just in case. They are just pointers, so there is no memory
      * footprint. The array for each independent set will be allocated on demand.
      * Independent sets contain regular vertex IDs.
      */
-    independent_sets = new index_t* [max_colours];
+    independent_sets.resize(max_colours);
     ind_set_size.resize(max_colours, 0);
   }
 
   ~Colouring(){
     delete[] node_colour;
     delete[] GlobalActiveSet;
-    delete[] subNNList;
-    delete[] independent_sets;
+
+    for(size_t i=0; i<subNNList.size(); ++i)
+      if(subNNList[i] != NULL)
+        delete subNNList[i];
   }
 
   void resize(size_t nnodes_reserve){
     delete[] node_colour;
     delete[] GlobalActiveSet;
-    delete[] subNNList;
 
     node_colour = new int[nnodes_reserve];
     GlobalActiveSet = new index_t[nnodes_reserve];
-    subNNList = new std::vector<index_t>* [nnodes_reserve];
+    subNNList.resize(nnodes_reserve, (std::vector<index_t> *) NULL);
   }
 
   void multiHashJonesPlassmann(){
@@ -86,14 +87,17 @@ public:
 #pragma omp for schedule(dynamic,4)
     for(size_t i=0; i<GlobalActiveSet_size; ++i){
       index_t vid = GlobalActiveSet[i];
-      std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
+
+      if(subNNList[i] == NULL)
+        subNNList[i] = new std::vector<index_t>;
+      else
+        subNNList[i]->clear();
 
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
         if(alg->is_dynamic(*it)>=0){
-          dynamic_NNList->push_back(*it);
+          subNNList[i]->push_back(*it);
         }
       
-      subNNList[i] = dynamic_NNList;
       node_colour[vid] = -1; // Reset colour
     }
 
@@ -201,7 +205,7 @@ public:
     // Allocate memory for the global independent sets.
 #pragma omp for schedule(static)
     for(int set_no=0; set_no<nsets; ++set_no)
-      independent_sets[set_no] = new index_t[ind_set_size[set_no]];
+      independent_sets[set_no].resize(ind_set_size[set_no]);
 
     // Copy local independent sets into the global structure.
     for(int set_no=0; set_no<nsets; ++set_no)
@@ -220,14 +224,17 @@ public:
 #pragma omp for schedule(dynamic,4)
     for(size_t i=0; i<GlobalActiveSet_size; ++i){
       index_t vid = GlobalActiveSet[i];
-      std::vector<index_t> *dynamic_NNList = new std::vector<index_t>;
+
+      if(subNNList[i] == NULL)
+        subNNList[i] = new std::vector<index_t>;
+      else
+        subNNList[i]->clear();
 
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[vid].begin(); it!=_mesh->NNList[vid].end(); ++it)
         if(alg->is_dynamic(*it)>=0){
-          dynamic_NNList->push_back(*it);
+          subNNList[i]->push_back(*it);
         }
 
-      subNNList[i] = dynamic_NNList;
       node_colour[vid] = -1; // Reset colour
     }
 
@@ -307,7 +314,7 @@ public:
     // Allocate memory for the global independent sets.
 #pragma omp for schedule(static)
     for(int set_no=0; set_no<nsets; ++set_no)
-      independent_sets[set_no] = new index_t[ind_set_size[set_no]];
+      independent_sets[set_no].resize(ind_set_size[set_no]);
 
     // Copy local independent sets into the global structure.
     for(int set_no=0; set_no<nsets; ++set_no)
@@ -330,19 +337,8 @@ public:
   void destroy(){
 #pragma omp single nowait
     {
-      std::fill(ind_set_size.begin(), ind_set_size.end(), 0);
-    }
-
-#pragma omp for schedule(auto) nowait
-    for(int set_no=0; set_no<nsets; ++set_no)
-      delete[] independent_sets[set_no];
-
-#pragma omp for schedule(auto)
-    for(size_t i=0; i<GlobalActiveSet_size; ++i)
-      delete subNNList[i];
-
-#pragma omp single nowait
-    {
+      for(int i=0; i<nsets; ++i)
+        ind_set_size[i] = 0;
       nsets = 0;
       GlobalActiveSet_size = 0;
     }
@@ -356,10 +352,6 @@ private:
   template<typename _real_t> friend class Swapping2D;
   template<typename _real_t> friend class Swapping3D;
 
-  inline int nsets_incr(int nsets, int max_colour){
-    return (max_colour > nsets ? max_colour - nsets : 0);
-  }
-
   int *node_colour;
 
   int nsets, global_nsets;
@@ -369,9 +361,9 @@ private:
   size_t GlobalActiveSet_size;
 
   // NNList of the active sub-mesh. Accessed using active sub-mesh vertex IDs. Each vector contains regular vertex IDs.
-  std::vector<index_t> **subNNList;
+  std::vector< std::vector<index_t> *> subNNList;
 
-  index_t **independent_sets;
+  std::vector< std::vector<index_t> > independent_sets;
   std::vector<size_t> ind_set_size;
 
   Mesh<real_t> *_mesh;
