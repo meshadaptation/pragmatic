@@ -142,7 +142,7 @@ template<typename real_t> class Swapping2D{
         }
       }
 
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(dynamic) nowait
       for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
         _mesh->commit_swapping_propagation(marked_edges, vtid);
       }
@@ -305,6 +305,7 @@ template<typename real_t> class Swapping2D{
             _mesh->commit_colour_reset(node_colour, vtid);
           }
         }
+#pragma omp barrier
       }while(true);
     }
   }
