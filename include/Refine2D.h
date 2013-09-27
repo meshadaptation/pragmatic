@@ -238,7 +238,10 @@ template<typename real_t> class Refine2D{
       }
       
       // Commit deferred operations.
-      _mesh->commit_deferred(tid);
+#pragma omp for schedule(dynamic)
+      for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+        _mesh->commit_deferred(vtid);
+      }
       
       if(nprocs==1){
         // If we update lnn2gnn and node_owner here, OMP performance suffers.

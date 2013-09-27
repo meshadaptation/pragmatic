@@ -142,7 +142,10 @@ template<typename real_t> class Swapping2D{
         }
       }
 
-      _mesh->commit_swapping_propagation(marked_edges, tid);
+#pragma omp for schedule(dynamic)
+      for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+        _mesh->commit_swapping_propagation(marked_edges, vtid);
+      }
 
       do{
 #pragma omp single
@@ -295,12 +298,11 @@ template<typename real_t> class Swapping2D{
             }
           }
 
-          _mesh->commit_deferred(tid);
-          _mesh->commit_swapping_propagation(marked_edges, tid);
-          _mesh->commit_colour_reset(node_colour, tid);
-
-          if((set_no+1 < max_colour) && (ind_set_size[set_no+1] > 0)){
-#pragma omp barrier
+#pragma omp for schedule(dynamic)
+          for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+            _mesh->commit_deferred(vtid);
+            _mesh->commit_swapping_propagation(marked_edges, vtid);
+            _mesh->commit_colour_reset(node_colour, vtid);
           }
         }
       }while(true);

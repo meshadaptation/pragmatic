@@ -318,13 +318,12 @@ template<typename real_t> class Coarsen2D{
             coarsen_kernel(rm_vertex, target_vertex, tid);
           }
 
-          _mesh->commit_deferred(tid);
-          _mesh->commit_coarsening_propagation(dynamic_vertex, tid);
-          _mesh->commit_colour_reset(node_colour, tid);
-          _surface->commit_deferred(tid);
-
-          if((set_no+1 < max_colour) && (ind_set_size[set_no+1] > 0)){
-#pragma omp barrier
+#pragma omp for schedule(dynamic)
+          for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+            _mesh->commit_deferred(vtid);
+            _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);
+            _mesh->commit_colour_reset(node_colour, vtid);
+            _surface->commit_deferred(vtid);
           }
         }
       }while(true);
