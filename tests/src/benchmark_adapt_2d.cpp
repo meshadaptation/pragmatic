@@ -84,7 +84,7 @@ int main(int argc, char **argv){
 
   if(rank==0)
     std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";  
-  for(int t=0;t<51;t+=10){
+  for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
     MetricField2D<double> metric_field(*mesh, surface);
@@ -127,19 +127,19 @@ int main(int argc, char **argv){
       for(size_t i=0;i<10;i++){
         double L_ref = std::max(alpha*L_max, L_up);
         
-        tic = get_wtime();std::cout << "Coarsening...";
+        tic = get_wtime();
         coarsen.coarsen(L_low, L_ref);
-        toc = get_wtime();std::cout << "done." << std::endl;
+        toc = get_wtime();
         if(t>0) time_coarsen += (toc-tic);
         
-        tic = get_wtime();std::cout << "Swapping...";
+        tic = get_wtime();
         swapping.swap(0.7);
-        toc = get_wtime();std::cout << "done." << std::endl;
+        toc = get_wtime();
         if(t>0) time_swap += (toc-tic);
         
-        tic = get_wtime();std::cout << "Refining...";
+        tic = get_wtime();
         refine.refine(L_ref);
-        toc = get_wtime();std::cout << "done." << std::endl;
+        toc = get_wtime();
         if(t>0) time_refine += (toc-tic);
         
         L_max = mesh->maximal_edge_length();
@@ -151,15 +151,15 @@ int main(int argc, char **argv){
       double T2 = get_wtime();
       if(t>0) time_adapt += (T2-T1);
       
-      std::vector<int> active_vertex_map;std::cout << "Defragmenting...";
+      std::vector<int> active_vertex_map;
       mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);std::cout << "done." << std::endl;
+      surface.defragment(&active_vertex_map);
       
-      tic = get_wtime();std::cout << "Smoothing...";
+      tic = get_wtime();
       if(I>0)
         smooth.smooth("smart Laplacian", I*10, 1.0);
       smooth.smooth("optimisation Linf", 10);
-      toc = get_wtime();std::cout << "done." << std::endl;
+      toc = get_wtime();
       if(t>0) time_smooth += (toc-tic);
       if(t>0) time_adapt += (toc-tic);
       
