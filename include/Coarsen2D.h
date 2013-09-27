@@ -46,8 +46,6 @@
 #include <boost/unordered_map.hpp>
 #endif
 
-#include "AdaptiveAlgorithm.h"
-#include "Colouring.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -55,14 +53,12 @@
  *
  */
 
-template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
+template<typename real_t> class Coarsen2D{
  public:
   /// Default constructor.
   Coarsen2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
     _mesh = &mesh;
     _surface = &surface;
-    
-    nprocs = pragmatic_nprocesses(_mesh->get_mpi_comm());    
     
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
@@ -77,46 +73,52 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
       
       break;
     }
-    
+
     nnodes_reserve = 0;
+    nthreads = pragmatic_nthreads();
+
     dynamic_vertex = NULL;
-    colouring = NULL;
+
+    node_colour = NULL;
+    GlobalActiveSet_size = 0;
+    ind_set_size.resize(max_colour, 0);
+    ind_sets.resize(nthreads, std::vector< std::vector<index_t> >(max_colour));
+    range_indexer.resize(nthreads, std::vector< std::pair<size_t,size_t> >(max_colour, std::pair<size_t,size_t>(0,0)));
   }
   
   /// Default destructor.
-  virtual ~Coarsen2D(){
+  ~Coarsen2D(){
     if(property!=NULL)
       delete property;
 
     if(dynamic_vertex!=NULL)
       delete[] dynamic_vertex;
 
-    if(colouring!=NULL)
-      delete colouring;
+    if(node_colour!=NULL)
+      delete node_colour;
   }
 
   /*! Perform coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
   void coarsen(real_t L_low, real_t L_max){
-    size_t NNodes= _mesh->get_number_nodes();
+    size_t NNodes = _mesh->get_number_nodes();
 
     _L_low = L_low;
     _L_max = L_max;
 
-    if(nnodes_reserve<1.5*NNodes){
-      nnodes_reserve = 2*NNodes;
+    if(nnodes_reserve<NNodes){
+      nnodes_reserve = NNodes;
       
-      if(dynamic_vertex!=NULL){
+      if(dynamic_vertex!=NULL)
         delete [] dynamic_vertex;
-      }
       
-      dynamic_vertex = new index_t[nnodes_reserve];
+      dynamic_vertex = new index_t[NNodes];
 
-      if(colouring==NULL)
-        colouring = new Colouring<real_t>(_mesh, this, nnodes_reserve);
-      else
-        colouring->resize(nnodes_reserve);
+      if(node_colour!=NULL)
+        delete[] node_colour;
+
+      node_colour = new int[NNodes];
     }
 
 #pragma omp parallel
@@ -129,75 +131,116 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
        */
 
       // Mark all vertices for evaluation.
-      if(nprocs==1){
-#pragma omp for schedule(static)
-        for(size_t i=0;i<NNodes;i++){
-          dynamic_vertex[i] = -2;
-        }
-      }else{
-#pragma omp for schedule(static, 32)
-        for(size_t i=0;i<NNodes;i++){
-          if(_mesh->is_halo_node(i))
-            dynamic_vertex[i] = -1; // lock halo
-          else
-            dynamic_vertex[i] = -2;
-          colouring->node_colour[i] = -1;
-        }
+#pragma omp for schedule(dynamic) nowait
+      for(size_t i=0;i<NNodes;i++){
+        dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
       }
 
+#pragma omp single
+      {
+        for(int i=0; i<max_colour; ++i)
+          ind_set_size[i] = 0;
+        GlobalActiveSet_size = 0;
+      }
+
+      bool first_time = true;
       do{
-        /* Create the active sub-mesh. This is the mesh consisting of all dynamic
-         * vertices and all edges connecting two dynamic vertices, i.e. sub_NNList[i]
-         * of active sub-mesh contains all vertices of _mesh->NNList[i] which are
-         * dynamic. The goal is to prevent two adjacent vertices from collapsing
-         * at the same time, therefore avoiding structural hazards. A nice side-effect
-         * is that we also enforce the "every other vertex" rule. Safe parallel
-         * updating of _mesh adjacency lists can be achieved later using the deferred
-         * updates mechanism.
-         */
-
-        // Start by finding which vertices comprise the active sub-mesh.
-        std::vector<index_t> active_set;
-
         /* Initialise list of vertices to be coarsened. A dynamic schedule is used as
          * previous coarsening may have introduced significant gaps in the node list.
          * This could lead to significant load imbalance if a static schedule was used.
          */
-#pragma omp for schedule(dynamic, 8) nowait
-        for(size_t i=0;i<_mesh->NNodes;i++){
-          if(dynamic_vertex[i] == -2){
-            dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
-	    
-            if(dynamic_vertex[i]>=0){
-              active_set.push_back(i);
+        if(!first_time){
+#pragma omp for schedule(dynamic, 4)
+          for(size_t i=0;i<NNodes;i++){
+            if(dynamic_vertex[i] == -2){
+              dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+            }
+          }
+
+#pragma omp single
+          {
+            for(int i=0; i<max_colour; ++i)
+              ind_set_size[i] = 0;
+            GlobalActiveSet_size = 0;
+          }
+        }else
+          first_time = false;
+
+        size_t active_set_size = 0;
+        for(int set_no=0; set_no<max_colour; ++set_no){
+          ind_sets[tid][set_no].clear();
+          range_indexer[tid][set_no].first = std::numeric_limits<size_t>::infinity();
+          range_indexer[tid][set_no].second = std::numeric_limits<size_t>::infinity();
+        }
+
+#pragma omp for schedule(dynamic,4) nowait
+        for(size_t i=0;i<NNodes;i++){
+          if(dynamic_vertex[i]>=0){
+            ++active_set_size;
+
+            std::vector<index_t> subNNList;
+            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it)
+              if(dynamic_vertex[*it]>=0){
+                subNNList.push_back(*it);
+              }
+
+            bool uncoloured = true;
+            bool defective = true;
+
+            while(defective){
+              unsigned long colours = 0;
+              int c;
+              defective = false;
+              for(typename std::vector<index_t>::const_iterator it=subNNList.begin(); it!=subNNList.end(); ++it){
+                pragmatic_omp_atomic_read()
+                    c = node_colour[*it];
+                if(c>=0)
+                  colours = colours | 1<<c;
+                if(c == node_colour[i])
+                  defective = true;
+              }
+
+              if(uncoloured){
+                defective = true;
+                uncoloured = false;
+              }
+
+              if(defective || uncoloured){
+                colours = ~colours;
+
+                for(int j=0;j<64;j++){
+                  if(colours&(1<<j)){
+                    pragmatic_omp_atomic_write()
+                        node_colour[i] = j;
+                    break;
+                  }
+                }
+              }
+            }
+            ind_sets[tid][node_colour[i]].push_back(i);
+          }
+        }
+
+        if(active_set_size>0){
+          pragmatic_omp_atomic_update()
+              GlobalActiveSet_size += active_set_size;
+
+          for(int set_no=0; set_no<max_colour; ++set_no){
+            if(ind_sets[tid][set_no].size()>0){
+              pragmatic_omp_atomic_capture()
+              {
+                range_indexer[tid][set_no].first = ind_set_size[set_no];
+                ind_set_size[set_no] += ind_sets[tid][set_no].size();
+              }
+              range_indexer[tid][set_no].second = range_indexer[tid][set_no].first + ind_sets[tid][set_no].size();
             }
           }
         }
 
-        size_t pos;
-        pragmatic_omp_atomic_capture()
-        {
-          pos = colouring->GlobalActiveSet_size;
-          colouring->GlobalActiveSet_size += active_set.size();
-        }
-
-        if(active_set.size()>0)
-          memcpy(&colouring->GlobalActiveSet[pos], &active_set[0], active_set.size() * sizeof(index_t));
-
 #pragma omp barrier
 
-        if(colouring->GlobalActiveSet_size == 0)
+        if(GlobalActiveSet_size == 0)
           break;
-	  
-        colouring->GebremedhinManne();
-
-        int max_set, max_set_size = 0;
-        for(int i=0; i<colouring->nsets; ++i){
-          if(colouring->ind_set_size[i] > max_set_size){
-            max_set = i;
-            max_set_size = colouring->ind_set_size[i];
-          }
-        }
 
         /* Start processing independent sets. After processing each set, colouring
          * might be invalid. More precisely, it's the target vertices whose colours
@@ -212,22 +255,31 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
          * set and then discarding the other colours and looping all over again -
          * at least we make use of the existing colouring as much as possible.
          */
-	  
-//        for(int set_no=0; set_no<colouring->nsets; ++set_no){
-//          if((double) colouring->ind_set_size[set_no]/colouring->GlobalActiveSet_size < 0.1)
-//            continue;
+
+        for(int set_no=0; set_no<max_colour; ++set_no){
+          if(ind_set_size[set_no] == 0)
+            continue;
+
+          if((double) ind_set_size[set_no]/GlobalActiveSet_size < 0.1)
+            continue;
 
 #pragma omp for schedule(dynamic)
-          for(size_t i=0; i<colouring->ind_set_size[max_set]; ++i){
-            index_t rm_vertex = colouring->independent_sets[max_set][i];
-            assert((size_t) rm_vertex < NNodes);
+          for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
+            // Find which vertex corresponds to idx.
+            index_t rm_vertex = -1;
+            for(int t=0; t<nthreads; ++t){
+              if(idx >= range_indexer[t][set_no].first && idx < range_indexer[t][set_no].second){
+                rm_vertex = ind_sets[t][set_no][idx - range_indexer[t][set_no].first];
+                break;
+              }
+            }
+            assert(rm_vertex>=0);
 	      
             // If the node has been un-coloured, skip it.
-//            if(colouring->node_colour[rm_vertex] < 0)
-//              continue;
+            if(node_colour[rm_vertex] < 0)
+              continue;
 	      
-            assert(colouring->node_colour[rm_vertex] == set_no);
-//            colouring->node_colour[rm_vertex] = -1;
+            assert(node_colour[rm_vertex] == set_no);
 
             /* If this rm_vertex is marked for re-evaluation, it means that the
              * local neighbourhood has changed since coarsen_identify_kernel was
@@ -248,16 +300,16 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
               _mesh->deferred_propagate_coarsening(*jt, tid);
 
             // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-//            if(colouring->node_colour[target_vertex] >= 0){
-//              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-//                if(*jt != target_vertex){
-//                  if(colouring->node_colour[*jt] == colouring->node_colour[target_vertex]){
-//                    _mesh->deferred_reset_colour(target_vertex, tid);
-//                    break;
-//                  }
-//                }
-//              }
-//            }
+            if(node_colour[target_vertex] >= 0){
+              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+                if(*jt != target_vertex){
+                  if(node_colour[*jt] == node_colour[target_vertex]){
+                    _mesh->deferred_reset_colour(target_vertex, tid);
+                    break;
+                  }
+                }
+              }
+            }
 
             // Mark rm_vertex as non-active.
             dynamic_vertex[rm_vertex] = -1;
@@ -268,13 +320,13 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
 
           _mesh->commit_deferred(tid);
           _mesh->commit_coarsening_propagation(dynamic_vertex, tid);
-//          _mesh->commit_colour_reset(colouring->node_colour, tid);
+          _mesh->commit_colour_reset(node_colour, tid);
           _surface->commit_deferred(tid);
-//#pragma omp barrier
-//        }
 
-        colouring->destroy();
+          if((set_no+1 < max_colour) && (ind_set_size[set_no+1] > 0)){
 #pragma omp barrier
+          }
+        }
       }while(true);
     }
   }
@@ -460,17 +512,19 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
     _mesh->erase_vertex(rm_vertex);
   }
 
-  virtual bool is_dynamic(index_t vid){
-    return (dynamic_vertex[vid]>=0);
-  }
-
   Mesh<real_t> *_mesh;
   Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
-  Colouring<real_t> *colouring;
 
   size_t nnodes_reserve;
   index_t *dynamic_vertex;
+
+  int *node_colour;
+  size_t GlobalActiveSet_size;
+  static const int max_colour = 16;
+  std::vector<size_t> ind_set_size;
+  std::vector< std::vector< std::vector<index_t> > > ind_sets;
+  std::vector< std::vector< std::pair<size_t,size_t> > > range_indexer;
 
   real_t _L_low, _L_max;
 
@@ -479,14 +533,7 @@ template<typename real_t> class Coarsen2D : public AdaptiveAlgorithm<real_t>{
   const static size_t snloc=2;
   const static size_t msize=3;
 
-  const static size_t node_package_int_size = 1 + (sizeof(index_t) +
-                                                   ndims*sizeof(real_t) +
-                                                   msize*sizeof(double)) / sizeof(int);
-  const static size_t idx_owner = sizeof(index_t) / sizeof(int);
-  const static size_t idx_coords = idx_owner + 1;
-  const static size_t idx_metric = idx_coords + ndims*sizeof(real_t) / sizeof(int);
-
-  int nprocs;
+  int nthreads;
 };
 
 #endif

@@ -107,7 +107,7 @@ template<typename real_t> class Refine2D{
     size_t origNElements = _mesh->get_number_elements();
     size_t origNNodes = _mesh->get_number_nodes();
     
-#pragma omp parallel firstprivate(origNElements, origNNodes, L_max)
+#pragma omp parallel
     {
 
 #pragma omp single nowait
@@ -117,12 +117,6 @@ template<typename real_t> class Refine2D{
       { 
         new_vertices_per_element.resize(3*origNElements);
         std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
-      }
-      
-#pragma omp single nowait
-      {
-        n_marked_edges_per_element.resize(origNElements);
-        std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
       }
       
       int tid = pragmatic_thread_id();
@@ -140,7 +134,7 @@ template<typename real_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(dynamic,16) nowait
+#pragma omp for schedule(dynamic) nowait
       for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
@@ -166,8 +160,6 @@ template<typename real_t> class Refine2D{
           _mesh->NNodes += splitCnt[tid];
         }
 
-#pragma omp barrier
-      
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
@@ -177,6 +169,8 @@ template<typename real_t> class Refine2D{
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
+
+#pragma omp barrier
       
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
@@ -184,7 +178,7 @@ template<typename real_t> class Refine2D{
       // Mark each element with its new vertices, update NNList
       // for all split edges and mark surface edges.
 #pragma omp barrier
-#pragma omp for schedule(dynamic,16)
+#pragma omp for schedule(dynamic)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
@@ -237,7 +231,7 @@ template<typename real_t> class Refine2D{
       newElements[tid].clear();
       newElements[tid].reserve(4*origNElements/nthreads);
       
-#pragma omp for schedule(static) nowait
+#pragma omp for schedule(dynamic) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
@@ -658,7 +652,6 @@ template<typename real_t> class Refine2D{
 
   std::vector<size_t> threadIdx, splitCnt;
   std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges;
-  std::vector<char> n_marked_edges_per_element;
   DirectedEdge<index_t> *allNewVertices;
 
   Mesh<real_t> *_mesh;

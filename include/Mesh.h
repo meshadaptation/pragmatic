@@ -1069,7 +1069,6 @@ template<typename real_t> class Mesh{
   template<typename _real_t> friend class Surface3D;
   template<typename _real_t> friend class VTKTools;
   template<typename _real_t> friend class CUDATools;
-  template<typename _real_t> friend class Colouring;
 
   struct DeferredOperations{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
