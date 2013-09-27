@@ -39,14 +39,16 @@ program test_adapt
   use iso_c_binding
   implicit none
 
+  include 'mpif.h' 
+
   integer(kind=c_int) :: NNodes, NElements, NSElements
   real(c_double), allocatable, dimension(:) :: xv, yv, psi
   real(c_double), parameter :: eta=0.002
 
-  integer :: i
+  integer :: i, ierr
   real :: x, y
 
-  call mpi_init()
+  call mpi_init(ierr)
 
   call pragmatic_init("../data/smooth_2d.vtu"//C_NULL_CHAR)
 
@@ -73,5 +75,5 @@ program test_adapt
   ! For now just be happy we get this far without dieing.
   print*, "pass"
 
-  call mpi_finalize()
+  call mpi_finalize(ierr)
 end program test_adapt
