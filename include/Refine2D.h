@@ -132,7 +132,7 @@ template<typename real_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(dynamic) nowait
+#pragma omp for schedule(static,1) nowait
       for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
@@ -170,11 +170,11 @@ template<typename real_t> class Refine2D{
 
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
-      
+
       // Mark each element with its new vertices, update NNList
       // for all split edges and mark surface edges.
 #pragma omp barrier
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static,1)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
@@ -223,7 +223,7 @@ template<typename real_t> class Refine2D{
       }
       
       // Start element refinement.
-#pragma omp for schedule(dynamic,8)
+#pragma omp for schedule(static,1)
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
@@ -238,7 +238,7 @@ template<typename real_t> class Refine2D{
       }
       
       // Commit deferred operations.
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static,1)
       for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
         _mesh->commit_deferred(vtid);
       }
@@ -311,38 +311,38 @@ template<typename real_t> class Refine2D{
           std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
           
           for(int i=0;i<nprocs;++i){
-	    recv_cnt[i] = recv_additional[i].size();
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-	      _mesh->recv[i].push_back(it->id);
-	      _mesh->recv_halo.insert(it->id);
-	    }
+            recv_cnt[i] = recv_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+              _mesh->recv[i].push_back(it->id);
+              _mesh->recv_halo.insert(it->id);
+            }
+
+            send_cnt[i] = send_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+              _mesh->send[i].push_back(it->id);
+              _mesh->send_halo.insert(it->id);
+            }
+          }
+
+          // Update global numbering
+          for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
+            if(_mesh->node_owner[i] == rank)
+              _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
           
-	    send_cnt[i] = send_additional[i].size();
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-	      _mesh->send[i].push_back(it->id);
-	      _mesh->send_halo.insert(it->id);
-	    }
-	  }
+          _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
         
-	  // Update global numbering
-	  for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-	    if(_mesh->node_owner[i] == rank)
-	      _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
-        
-	  _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
-        
-	  // Now that the global numbering has been updated, update send_map and recv_map.
-	  for(int i=0;i<nprocs;++i){
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
-	      _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          // Now that the global numbering has been updated, update send_map and recv_map.
+          for(int i=0;i<nprocs;++i){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          }
           
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
-	      _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-	  }
-        
-	  _mesh->clear_invisible(invisible_vertices);
-	  _mesh->trim_halo();
-	}
+          _mesh->clear_invisible(invisible_vertices);
+          _mesh->trim_halo();
+        }
 #endif
       }
 
@@ -353,25 +353,25 @@ template<typename real_t> class Refine2D{
 
 #pragma omp for
       for(size_t i=0;i<NElements;i++){
-	index_t n0 = _mesh->_ENList[i*nloc];
-	if(n0<0)
-	  continue;
-	
-	index_t n1 = _mesh->_ENList[i*nloc + 1];
-	index_t n2 = _mesh->_ENList[i*nloc + 2];
-	
-	const real_t *x0 = &_mesh->_coords[n0*ndims];
-	const real_t *x1 = &_mesh->_coords[n1*ndims];
-	const real_t *x2 = &_mesh->_coords[n2*ndims];
-      
-	real_t av = property->area(x0, x1, x2);
-	
-	if(av<=0){
+        index_t n0 = _mesh->_ENList[i*nloc];
+        if(n0<0)
+          continue;
+
+        index_t n1 = _mesh->_ENList[i*nloc + 1];
+        index_t n2 = _mesh->_ENList[i*nloc + 2];
+
+        const real_t *x0 = &_mesh->_coords[n0*ndims];
+        const real_t *x1 = &_mesh->_coords[n1*ndims];
+        const real_t *x2 = &_mesh->_coords[n2*ndims];
+
+        real_t av = property->area(x0, x1, x2);
+
+        if(av<=0){
 #pragma omp critical
-	  std::cerr<<"ERROR: inverted element in refinement"<<std::endl
-		   <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
-	  exit(-1);
-	}
+          std::cerr<<"ERROR: inverted element in refinement"<<std::endl
+             <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
+          exit(-1);
+        }
       }
 #endif
     
