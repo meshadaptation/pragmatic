@@ -77,7 +77,7 @@ template<typename real_t>
 
     deferred_operations.resize(nthreads);
     for(size_t i=0; i<(size_t) nthreads; ++i)
-      deferred_operations[i].resize(nthreads);
+      deferred_operations[i].resize(_mesh->defOp_scaling_factor*nthreads);
 
     private_SENList.resize(nthreads);
     private_boundary_ids.resize(nthreads);
@@ -316,13 +316,13 @@ template<typename real_t>
   };
 
   inline void deferred_addSNE(index_t i, index_t e, size_t tid){
-    deferred_operations[tid][i % nthreads].addSNE.push_back(i);
-    deferred_operations[tid][i % nthreads].addSNE.push_back(e);
+    deferred_operations[tid][_mesh->hash(i) % (_mesh->defOp_scaling_factor*nthreads)].addSNE.push_back(i);
+    deferred_operations[tid][_mesh->hash(i) % (_mesh->defOp_scaling_factor*nthreads)].addSNE.push_back(e);
   }
 
   inline void deferred_remSNE(index_t i, index_t e, size_t tid){
-    deferred_operations[tid][i % nthreads].remSNE.push_back(i);
-    deferred_operations[tid][i % nthreads].remSNE.push_back(e);
+    deferred_operations[tid][_mesh->hash(i) % (_mesh->defOp_scaling_factor*nthreads)].remSNE.push_back(i);
+    deferred_operations[tid][_mesh->hash(i) % (_mesh->defOp_scaling_factor*nthreads)].remSNE.push_back(e);
   }
 
   // SNEList is a map. Adding/removing items is not thread safe,
@@ -335,20 +335,18 @@ template<typename real_t>
     deferred_operations[tid][0].remNode.push_back(n);
   }
 
-  void commit_deferred(size_t tid){
+  void commit_deferred(size_t vtid){
     for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][tid];
+      DeferredOperations& pending = deferred_operations[i][vtid];
 
       // Commit element removals from SNEList sets.
       for(typename std::vector<index_t>::const_iterator it=pending.remSNE.begin(); it!=pending.remSNE.end(); it+=2){
-        assert(*it % nthreads == (int) tid);
         SNEList[*it].erase(*(it+1));
       }
       pending.remSNE.clear();
 
       // Commit element additions to SNEList sets.
       for(typename std::vector<index_t>::const_iterator it=pending.addSNE.begin(); it!=pending.addSNE.end(); it+=2){
-        assert(*it % nthreads == (int) tid);
         SNEList[*it].insert(*(it+1));
       }
       pending.addSNE.clear();

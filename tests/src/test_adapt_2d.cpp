@@ -192,7 +192,7 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    if((qmean>0.8)&&(qmin>0.3))
+    if((qmean>0.8)&&(qmin>0.29))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

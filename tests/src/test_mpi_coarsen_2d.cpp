@@ -115,7 +115,7 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(rank==0){
-    if(nelements<=507)
+    if(nelements<=510)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail "<<std::endl;

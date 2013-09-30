@@ -1069,14 +1069,11 @@ template<typename real_t> class Mesh{
   template<typename _real_t> friend class Surface3D;
   template<typename _real_t> friend class VTKTools;
   template<typename _real_t> friend class CUDATools;
-  template<typename _real_t> friend class Colouring;
 
   struct DeferredOperations{
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
     std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
     std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
-    std::vector<index_t> addNE_fix; // addNE_fix -> [i, n] : Fix ID of element n according to
-                                    // threadIdx[thread_which_created_n] and add it to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
     std::vector<index_t> propagation_vector; // [i] : Mark Coarseninig::dynamic_vertex[i]=-2.
     std::vector<index_t> propagation_set; // [i, n] : Mark Swapping::marked_edges[i].insert(n).
@@ -1237,7 +1234,7 @@ template<typename real_t> class Mesh{
 
       // Each thread allocates nthreads DeferredOperations
       // structs, one for each OMP thread.
-      deferred_operations[pragmatic_thread_id()].resize(nthreads);
+      deferred_operations[pragmatic_thread_id()].resize((defOp_scaling_factor*nthreads));
 
 #pragma omp single nowait
       {
@@ -1358,50 +1355,41 @@ template<typename real_t> class Mesh{
   }
 
   inline void deferred_addNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].addNN.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].addNN.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(n);
   }
 
   inline void deferred_remNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].remNN.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].remNN.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(n);
   }
 
   inline void deferred_addNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].addNE.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].addNE.push_back(n);
-  }
-
-  inline void deferred_addNE_fix(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].addNE_fix.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].addNE_fix.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(n);
   }
 
   inline void deferred_remNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].remNE.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].remNE.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(n);
   }
 
   inline void deferred_propagate_coarsening(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].propagation_vector.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_vector.push_back(i);
   }
 
   inline void deferred_propagate_swapping(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].propagation_set.push_back(i);
-    deferred_operations[tid][hash(i) % nthreads].propagation_set.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(n);
   }
 
   inline void deferred_reset_colour(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % nthreads].reset_colour.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].reset_colour.push_back(i);
   }
 
-  void commit_deferred(size_t tid){
-    commit_deferred(tid, NULL);
-  }
-
-  void commit_deferred(size_t tid, std::vector<size_t> *threadIdx){
+  void commit_deferred(size_t vtid){
     for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][tid];
+      DeferredOperations& pending = deferred_operations[i][vtid];
 
       // Commit removals from NNList
       for(typename std::vector<index_t>::const_iterator it=pending.remNN.begin(); it!=pending.remNN.end(); it+=2){
@@ -1429,22 +1417,12 @@ template<typename real_t> class Mesh{
         NEList[*it].insert(*(it+1));
       }
       pending.addNE.clear();
-
-      // Fix element IDs and commit additions to NEList
-      if(threadIdx!=NULL){
-        for(typename std::vector<index_t>::const_iterator it=pending.addNE_fix.begin(); it!=pending.addNE_fix.end(); it+=2){
-          // Element was created by thread i
-          index_t fixedId = *(it+1) + (*threadIdx)[i];
-          NEList[*it].insert(fixedId);
-        }
-        pending.addNE_fix.clear();
-      }
     }
   }
 
-  void commit_coarsening_propagation(index_t *dynamic_vertex, size_t tid){
+  void commit_coarsening_propagation(index_t *dynamic_vertex, size_t vtid){
     for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][tid];
+      DeferredOperations& pending = deferred_operations[i][vtid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.propagation_vector.begin(); it!=pending.propagation_vector.end(); ++it)
         dynamic_vertex[*it] = -2;
@@ -1453,9 +1431,9 @@ template<typename real_t> class Mesh{
     }
   }
 
-  void commit_swapping_propagation(std::vector< std::set<index_t> >&marked_edges , size_t tid){
+  void commit_swapping_propagation(std::vector< std::set<index_t> >&marked_edges , size_t vtid){
     for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][tid];
+      DeferredOperations& pending = deferred_operations[i][vtid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.propagation_set.begin(); it!=pending.propagation_set.end(); it+=2)
         marked_edges[*it].insert(*(it+1));
@@ -1464,9 +1442,9 @@ template<typename real_t> class Mesh{
     }
   }
 
-  void commit_colour_reset(int *node_colour, size_t tid){
+  void commit_colour_reset(int *node_colour, size_t vtid){
     for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][tid];
+      DeferredOperations& pending = deferred_operations[i][vtid];
 
       for(typename std::vector<index_t>::const_iterator it=pending.reset_colour.begin(); it!=pending.reset_colour.end(); ++it)
         node_colour[*it] = -1;
@@ -1819,6 +1797,7 @@ template<typename real_t> class Mesh{
   std::vector<index_t> lnn2gnn;
   //Deferred operations
   std::vector< std::vector<DeferredOperations> > deferred_operations;
+  static const int defOp_scaling_factor = 32;
 
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;

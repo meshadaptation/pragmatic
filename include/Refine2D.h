@@ -107,22 +107,14 @@ template<typename real_t> class Refine2D{
     size_t origNElements = _mesh->get_number_elements();
     size_t origNNodes = _mesh->get_number_nodes();
     
-#pragma omp parallel firstprivate(origNElements, origNNodes, L_max)
-    {
+    allNewVertices = new DirectedEdge<index_t>[3*origNElements];
 
-#pragma omp single nowait
-      allNewVertices = new DirectedEdge<index_t>[3*origNElements];
-      
+#pragma omp parallel
+    {
 #pragma omp single nowait
       { 
         new_vertices_per_element.resize(3*origNElements);
         std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
-      }
-      
-#pragma omp single nowait
-      {
-        n_marked_edges_per_element.resize(origNElements);
-        std::fill(n_marked_edges_per_element.begin(), n_marked_edges_per_element.end(), 0);
       }
       
       int tid = pragmatic_thread_id();
@@ -140,7 +132,7 @@ template<typename real_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(dynamic,16) nowait
+#pragma omp for schedule(static,1) nowait
       for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
@@ -166,8 +158,6 @@ template<typename real_t> class Refine2D{
           _mesh->NNodes += splitCnt[tid];
         }
 
-#pragma omp barrier
-      
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
@@ -177,14 +167,14 @@ template<typename real_t> class Refine2D{
       for(size_t i=0;i<splitCnt[tid];i++){
         newVertices[tid][i].id = threadIdx[tid]+i;
       }
-      
+
       // Accumulate all newVertices in a contiguous array
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
-      
+
       // Mark each element with its new vertices, update NNList
       // for all split edges and mark surface edges.
 #pragma omp barrier
-#pragma omp for schedule(dynamic,16)
+#pragma omp for schedule(static,1)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
@@ -233,11 +223,7 @@ template<typename real_t> class Refine2D{
       }
       
       // Start element refinement.
-      splitCnt[tid] = 0;
-      newElements[tid].clear();
-      newElements[tid].reserve(4*origNElements/nthreads);
-      
-#pragma omp for schedule(static) nowait
+#pragma omp for schedule(static,1)
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
@@ -246,23 +232,16 @@ template<typename real_t> class Refine2D{
         
         for(size_t j=0; j<3; ++j)
           if(new_vertices_per_element[3*eid+j] != -1){
-            splitCnt[tid] += refine_element(eid, splitCnt[tid], tid);
+            refine_element(eid, tid);
             break;
           }
       }
       
-      pragmatic_omp_atomic_capture()
-        {
-          threadIdx[tid] = _mesh->NElements;
-          _mesh->NElements += splitCnt[tid];
-        }
-      
-      // Append new elements to the mesh
-      memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-      
-#pragma omp barrier
-      // Commit deferred operations. Every thread must have finished refinement, thus the barrier.
-      _mesh->commit_deferred(tid, &threadIdx);
+      // Commit deferred operations.
+#pragma omp for schedule(static,1)
+      for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+        _mesh->commit_deferred(vtid);
+      }
       
       if(nprocs==1){
         // If we update lnn2gnn and node_owner here, OMP performance suffers.
@@ -332,38 +311,38 @@ template<typename real_t> class Refine2D{
           std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
           
           for(int i=0;i<nprocs;++i){
-	    recv_cnt[i] = recv_additional[i].size();
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-	      _mesh->recv[i].push_back(it->id);
-	      _mesh->recv_halo.insert(it->id);
-	    }
+            recv_cnt[i] = recv_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+              _mesh->recv[i].push_back(it->id);
+              _mesh->recv_halo.insert(it->id);
+            }
+
+            send_cnt[i] = send_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+              _mesh->send[i].push_back(it->id);
+              _mesh->send_halo.insert(it->id);
+            }
+          }
+
+          // Update global numbering
+          for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
+            if(_mesh->node_owner[i] == rank)
+              _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
           
-	    send_cnt[i] = send_additional[i].size();
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-	      _mesh->send[i].push_back(it->id);
-	      _mesh->send_halo.insert(it->id);
-	    }
-	  }
+          _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
         
-	  // Update global numbering
-	  for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-	    if(_mesh->node_owner[i] == rank)
-	      _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
-        
-	  _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
-        
-	  // Now that the global numbering has been updated, update send_map and recv_map.
-	  for(int i=0;i<nprocs;++i){
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
-	      _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          // Now that the global numbering has been updated, update send_map and recv_map.
+          for(int i=0;i<nprocs;++i){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+          }
           
-	    for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
-	      _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-	  }
-        
-	  _mesh->clear_invisible(invisible_vertices);
-	  _mesh->trim_halo();
-	}
+          _mesh->clear_invisible(invisible_vertices);
+          _mesh->trim_halo();
+        }
 #endif
       }
 
@@ -374,25 +353,25 @@ template<typename real_t> class Refine2D{
 
 #pragma omp for
       for(size_t i=0;i<NElements;i++){
-	index_t n0 = _mesh->_ENList[i*nloc];
-	if(n0<0)
-	  continue;
-	
-	index_t n1 = _mesh->_ENList[i*nloc + 1];
-	index_t n2 = _mesh->_ENList[i*nloc + 2];
-	
-	const real_t *x0 = &_mesh->_coords[n0*ndims];
-	const real_t *x1 = &_mesh->_coords[n1*ndims];
-	const real_t *x2 = &_mesh->_coords[n2*ndims];
-      
-	real_t av = property->area(x0, x1, x2);
-	
-	if(av<=0){
+        index_t n0 = _mesh->_ENList[i*nloc];
+        if(n0<0)
+          continue;
+
+        index_t n1 = _mesh->_ENList[i*nloc + 1];
+        index_t n2 = _mesh->_ENList[i*nloc + 2];
+
+        const real_t *x0 = &_mesh->_coords[n0*ndims];
+        const real_t *x1 = &_mesh->_coords[n1*ndims];
+        const real_t *x2 = &_mesh->_coords[n2*ndims];
+
+        real_t av = property->area(x0, x1, x2);
+
+        if(av<=0){
 #pragma omp critical
-	  std::cerr<<"ERROR: inverted element in refinement"<<std::endl
-		   <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
-	  exit(-1);
-	}
+          std::cerr<<"ERROR: inverted element in refinement"<<std::endl
+             <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
+          exit(-1);
+        }
       }
 #endif
     
@@ -447,7 +426,7 @@ template<typename real_t> class Refine2D{
     }
   }
 
-  int refine_element(index_t eid, index_t newEID, size_t tid){
+  int refine_element(index_t eid, size_t tid){
     // Check if this element has been erased - if so continue to next element.
     const int *n=_mesh->get_element(eid);
 
@@ -482,7 +461,12 @@ template<typename real_t> class Refine2D{
       const index_t ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
       const index_t ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
 
-      const index_t ele1ID = newEID;
+      index_t ele1ID;
+      pragmatic_omp_atomic_capture()
+      {
+        ele1ID = _mesh->NElements;
+        _mesh->NElements += 1;
+      }
 
       // Add rotated_ele[0] to vertexID's NNList
       _mesh->deferred_addNN(vertexID, rotated_ele[0], tid);
@@ -493,21 +477,21 @@ template<typename real_t> class Refine2D{
       // updated once each thread has calculated how many new elements
       // it created, so put ele1ID into addNE_fix instead of addNE.
       // Put ele1 in rotated_ele[0]'s NEList
-      _mesh->deferred_addNE_fix(rotated_ele[0], ele1ID, tid);
+      _mesh->deferred_addNE(rotated_ele[0], ele1ID, tid);
 
       // Put eid and ele1 in vertexID's NEList
       _mesh->deferred_addNE(vertexID, eid, tid);
-      _mesh->deferred_addNE_fix(vertexID, ele1ID, tid);
+      _mesh->deferred_addNE(vertexID, ele1ID, tid);
 
       // Replace eid with ele1 in rotated_ele[2]'s NEList
       _mesh->deferred_remNE(rotated_ele[2], eid, tid);
-      _mesh->deferred_addNE_fix(rotated_ele[2], ele1ID, tid);
+      _mesh->deferred_addNE(rotated_ele[2], ele1ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
 
       replace_element(eid, ele0);
-      append_element(ele1, tid);
+      append_element(ele1, ele1ID);
 
       return 1;
     }else if(refine_cnt==2){
@@ -535,8 +519,13 @@ template<typename real_t> class Refine2D{
       const index_t ele1[] = {vertexID[offset], rotated_ele[1], rotated_ele[2]};
       const index_t ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
 
-      index_t ele0ID = newEID;
-      index_t ele2ID = newEID+1;
+      index_t ele0ID, ele2ID;
+      pragmatic_omp_atomic_capture()
+      {
+        ele0ID = _mesh->NElements;
+        _mesh->NElements += 2;
+      }
+      ele2ID = ele0ID+1;
 
       // NNList: Connect vertexID[0] and vertexID[1] with each other
       _mesh->deferred_addNN(vertexID[0], vertexID[1], tid);
@@ -548,29 +537,29 @@ template<typename real_t> class Refine2D{
 
       // rotated_ele[offset+1] is the old vertex which is on the diagonal
       // Add ele2 in rotated_ele[offset+1]'s NEList
-      _mesh->deferred_addNE_fix(rotated_ele[offset+1], ele2ID, tid);
+      _mesh->deferred_addNE(rotated_ele[offset+1], ele2ID, tid);
 
       // Replace eid with ele0 in NEList[rotated_ele[0]]
       _mesh->deferred_remNE(rotated_ele[0], eid, tid);
-      _mesh->deferred_addNE_fix(rotated_ele[0], ele0ID, tid);
+      _mesh->deferred_addNE(rotated_ele[0], ele0ID, tid);
 
       // Put ele0, ele1 and ele2 in vertexID[offset]'s NEList
       _mesh->deferred_addNE(vertexID[offset], eid, tid);
-      _mesh->deferred_addNE_fix(vertexID[offset], ele0ID, tid);
-      _mesh->deferred_addNE_fix(vertexID[offset], ele2ID, tid);
+      _mesh->deferred_addNE(vertexID[offset], ele0ID, tid);
+      _mesh->deferred_addNE(vertexID[offset], ele2ID, tid);
 
       // vertexID[(offset+1)%2] is the new vertex which is not on the diagonal
       // Put ele0 and ele2 in vertexID[(offset+1)%2]'s NEList
-      _mesh->deferred_addNE_fix(vertexID[(offset+1)%2], ele0ID, tid);
-      _mesh->deferred_addNE_fix(vertexID[(offset+1)%2], ele2ID, tid);
+      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele0ID, tid);
+      _mesh->deferred_addNE(vertexID[(offset+1)%2], ele2ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
       assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
 
       replace_element(eid, ele1);
-      append_element(ele0, tid);
-      append_element(ele2, tid);
+      append_element(ele0, ele0ID);
+      append_element(ele2, ele2ID);
 
       return 2;
     }else{ // refine_cnt==3
@@ -579,9 +568,15 @@ template<typename real_t> class Refine2D{
       const index_t ele2[] = {n[2], newVertex[1], newVertex[0]};
       const index_t ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
 
-      index_t ele1ID = newEID;
-      index_t ele2ID = newEID+1;
-      index_t ele3ID = newEID+2;
+      index_t ele1ID, ele2ID, ele3ID;
+      pragmatic_omp_atomic_capture()
+      {
+        ele1ID = _mesh->NElements;
+        _mesh->NElements += 3;
+      }
+      ele2ID = ele1ID+1;
+      ele3ID = ele1ID+2;
+
 
       // Update NNList
       _mesh->deferred_addNN(newVertex[0], newVertex[1], tid);
@@ -593,21 +588,21 @@ template<typename real_t> class Refine2D{
 
       // Update NEList
       _mesh->deferred_remNE(n[1], eid, tid);
-      _mesh->deferred_addNE_fix(n[1], ele1ID, tid);
+      _mesh->deferred_addNE(n[1], ele1ID, tid);
       _mesh->deferred_remNE(n[2], eid, tid);
-      _mesh->deferred_addNE_fix(n[2], ele2ID, tid);
+      _mesh->deferred_addNE(n[2], ele2ID, tid);
 
-      _mesh->deferred_addNE_fix(newVertex[0], ele1ID, tid);
-      _mesh->deferred_addNE_fix(newVertex[0], ele2ID, tid);
-      _mesh->deferred_addNE_fix(newVertex[0], ele3ID, tid);
+      _mesh->deferred_addNE(newVertex[0], ele1ID, tid);
+      _mesh->deferred_addNE(newVertex[0], ele2ID, tid);
+      _mesh->deferred_addNE(newVertex[0], ele3ID, tid);
 
       _mesh->deferred_addNE(newVertex[1], eid, tid);
-      _mesh->deferred_addNE_fix(newVertex[1], ele2ID, tid);
-      _mesh->deferred_addNE_fix(newVertex[1], ele3ID, tid);
+      _mesh->deferred_addNE(newVertex[1], ele2ID, tid);
+      _mesh->deferred_addNE(newVertex[1], ele3ID, tid);
 
       _mesh->deferred_addNE(newVertex[2], eid, tid);
-      _mesh->deferred_addNE_fix(newVertex[2], ele1ID, tid);
-      _mesh->deferred_addNE_fix(newVertex[2], ele3ID, tid);
+      _mesh->deferred_addNE(newVertex[2], ele1ID, tid);
+      _mesh->deferred_addNE(newVertex[2], ele3ID, tid);
 
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -615,17 +610,17 @@ template<typename real_t> class Refine2D{
       assert(ele3[0]>=0 && ele3[1]>=0 && ele3[2]>=0);
 
       replace_element(eid, ele0);
-      append_element(ele1, tid);
-      append_element(ele2, tid);
-      append_element(ele3, tid);
+      append_element(ele1, ele1ID);
+      append_element(ele2, ele2ID);
+      append_element(ele3, ele3ID);
 
       return 3;
     }
   }
 
-  inline void append_element(const index_t *elem, size_t tid){
+  inline void append_element(const index_t *elem, const index_t eid){
     for(size_t i=0; i<nloc; ++i)
-      newElements[tid].push_back(elem[i]);
+      _mesh->_ENList[eid*nloc+i]=elem[i];
   }
 
   inline void replace_element(const index_t eid, const index_t *n){
@@ -658,7 +653,6 @@ template<typename real_t> class Refine2D{
 
   std::vector<size_t> threadIdx, splitCnt;
   std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges;
-  std::vector<char> n_marked_edges_per_element;
   DirectedEdge<index_t> *allNewVertices;
 
   Mesh<real_t> *_mesh;
