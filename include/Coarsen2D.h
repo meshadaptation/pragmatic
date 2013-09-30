@@ -239,91 +239,90 @@ template<typename real_t> class Coarsen2D{
 
 #pragma omp barrier
 
-        if(GlobalActiveSet_size == 0)
-          break;
+        if(GlobalActiveSet_size>0){
+          /* Start processing independent sets. After processing each set, colouring
+           * might be invalid. More precisely, it's the target vertices whose colours
+           * might clash with their neighbours' colours. To avoid hazards, we just
+           * un-colour these vertices if their colour clashes with the colours of
+           * their new neighbours. Being a neighbour of a removed vertex, the target
+           * vertex will be marked for re-evaluation during coarsening of rm_vertex,
+           * i.e. dynamic_vertex[target_target] == -2, so it will get a chance to be
+           * processed at the next iteration of the do...while loop, when a new
+           * colouring of the active sub-mesh will have been established. This is an
+           * optimised approach compared to only processing the maximal independent
+           * set and then discarding the other colours and looping all over again -
+           * at least we make use of the existing colouring as much as possible.
+           */
 
-        /* Start processing independent sets. After processing each set, colouring
-         * might be invalid. More precisely, it's the target vertices whose colours
-         * might clash with their neighbours' colours. To avoid hazards, we just
-         * un-colour these vertices if their colour clashes with the colours of
-         * their new neighbours. Being a neighbour of a removed vertex, the target
-         * vertex will be marked for re-evaluation during coarsening of rm_vertex,
-         * i.e. dynamic_vertex[target_target] == -2, so it will get a chance to be
-         * processed at the next iteration of the do...while loop, when a new
-         * colouring of the active sub-mesh will have been established. This is an
-         * optimised approach compared to only processing the maximal independent
-         * set and then discarding the other colours and looping all over again -
-         * at least we make use of the existing colouring as much as possible.
-         */
-
-        for(int set_no=0; set_no<max_colour; ++set_no){
-          if(ind_set_size[set_no] == 0)
-            continue;
+          for(int set_no=0; set_no<max_colour; ++set_no){
+            if(ind_set_size[set_no] == 0)
+              continue;
 
 #pragma omp for schedule(static,1)
-          for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
-            // Find which vertex corresponds to idx.
-            index_t rm_vertex = -1;
-            for(int t=0; t<nthreads; ++t){
-              if(idx >= range_indexer[t][set_no].first && idx < range_indexer[t][set_no].second){
-                rm_vertex = ind_sets[t][set_no][idx - range_indexer[t][set_no].first];
-                break;
+            for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
+              // Find which vertex corresponds to idx.
+              index_t rm_vertex = -1;
+              for(int t=0; t<nthreads; ++t){
+                if(idx >= range_indexer[t][set_no].first && idx < range_indexer[t][set_no].second){
+                  rm_vertex = ind_sets[t][set_no][idx - range_indexer[t][set_no].first];
+                  break;
+                }
               }
-            }
-            assert(rm_vertex>=0);
-	      
-            // If the node has been un-coloured, skip it.
-            if(node_colour[rm_vertex] < 0)
-              continue;
-	      
-            assert(node_colour[rm_vertex] == set_no);
+              assert(rm_vertex>=0);
 
-            /* If this rm_vertex is marked for re-evaluation, it means that the
-             * local neighbourhood has changed since coarsen_identify_kernel was
-             * called for this vertex. Call coarsen_identify_kernel again.
-             * Obviously, this check is redundant for set_no=0.
-             */
+              // If the node has been un-coloured, skip it.
+              if(node_colour[rm_vertex] < 0)
+                continue;
 
-            if(dynamic_vertex[rm_vertex] == -2)
-              dynamic_vertex[rm_vertex] = coarsen_identify_kernel(rm_vertex, L_low, L_max);
+              assert(node_colour[rm_vertex] == set_no);
 
-            if(dynamic_vertex[rm_vertex] < 0)
-              continue;
+              /* If this rm_vertex is marked for re-evaluation, it means that the
+               * local neighbourhood has changed since coarsen_identify_kernel was
+               * called for this vertex. Call coarsen_identify_kernel again.
+               * Obviously, this check is redundant for set_no=0.
+               */
 
-            index_t target_vertex = dynamic_vertex[rm_vertex];
+              if(dynamic_vertex[rm_vertex] == -2)
+                dynamic_vertex[rm_vertex] = coarsen_identify_kernel(rm_vertex, L_low, L_max);
 
-            // Mark neighbours for re-evaluation.
-            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-              _mesh->deferred_propagate_coarsening(*jt, tid);
+              if(dynamic_vertex[rm_vertex] < 0)
+                continue;
 
-            // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-            if(node_colour[target_vertex] >= 0){
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                if(*jt != target_vertex){
-                  if(node_colour[*jt] == node_colour[target_vertex]){
-                    _mesh->deferred_reset_colour(target_vertex, tid);
-                    break;
+              index_t target_vertex = dynamic_vertex[rm_vertex];
+
+              // Mark neighbours for re-evaluation.
+              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
+                _mesh->deferred_propagate_coarsening(*jt, tid);
+
+              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
+              if(node_colour[target_vertex] >= 0){
+                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
+                  if(*jt != target_vertex){
+                    if(node_colour[*jt] == node_colour[target_vertex]){
+                      _mesh->deferred_reset_colour(target_vertex, tid);
+                      break;
+                    }
                   }
                 }
               }
+
+              // Mark rm_vertex as non-active.
+              dynamic_vertex[rm_vertex] = -1;
+
+              // Coarsen the edge.
+              coarsen_kernel(rm_vertex, target_vertex, tid);
             }
 
-            // Mark rm_vertex as non-active.
-            dynamic_vertex[rm_vertex] = -1;
-
-            // Coarsen the edge.
-            coarsen_kernel(rm_vertex, target_vertex, tid);
-          }
-
 #pragma omp for schedule(static,1)
-          for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
-            _mesh->commit_deferred(vtid);
-            _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);
-            _mesh->commit_colour_reset(node_colour, vtid);
-            _surface->commit_deferred(vtid);
+            for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+              _mesh->commit_deferred(vtid);
+              _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);
+              _mesh->commit_colour_reset(node_colour, vtid);
+              _surface->commit_deferred(vtid);
+            }
           }
         }
-      }while(true);
+      }while(GlobalActiveSet_size>0);
     }
   }
 

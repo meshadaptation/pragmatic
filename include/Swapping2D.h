@@ -148,6 +148,7 @@ template<typename real_t> class Swapping2D{
       }
 
       do{
+#pragma omp barrier
 #pragma omp single
         {
           for(int i=0; i<max_colour; ++i)
@@ -228,82 +229,81 @@ template<typename real_t> class Swapping2D{
 
 #pragma omp barrier
 
-        if(GlobalActiveSet_size == 0)
-          break;
-
-        for(int set_no=0; set_no<max_colour; ++set_no){
-          if(ind_set_size[set_no] == 0)
-            continue;
-
-#pragma omp for schedule(static,1)
-          for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
-            // Find which vertex corresponds to idx.
-            index_t i = -1;
-            for(int t=0; t<nthreads; ++t){
-              if(idx >= range_indexer[t][set_no].first && idx < range_indexer[t][set_no].second){
-                i = ind_sets[t][set_no][idx - range_indexer[t][set_no].first];
-                break;
-              }
-            }
-            assert(i>=0);
-
-            // If the node has been un-coloured, skip it.
-            if(node_colour[i] < 0)
+        if(GlobalActiveSet_size>0){
+          for(int set_no=0; set_no<max_colour; ++set_no){
+            if(ind_set_size[set_no] == 0)
               continue;
 
-            assert(node_colour[i] == set_no);
-
-            // Set of elements in this cavity which were modified since the last commit of deferred operations.
-            std::set<index_t> modified_elements;
-            std::set<index_t> marked_edges_copy = marked_edges[i];
-
-            for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
-              index_t j = *vid;
-
-              // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
-              bool skip = false;
-              for(typename std::set<index_t>::const_iterator it=modified_elements.begin(); it!=modified_elements.end(); ++it){
-                if(_mesh->NEList[j].find(*it) != _mesh->NEList[j].end()){
-                  skip = true;
+#pragma omp for schedule(static,1)
+            for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
+              // Find which vertex corresponds to idx.
+              index_t i = -1;
+              for(int t=0; t<nthreads; ++t){
+                if(idx >= range_indexer[t][set_no].first && idx < range_indexer[t][set_no].second){
+                  i = ind_sets[t][set_no][idx - range_indexer[t][set_no].first];
                   break;
                 }
               }
-              if(skip)
+              assert(i>=0);
+
+              // If the node has been un-coloured, skip it.
+              if(node_colour[i] < 0)
                 continue;
 
-              // Mark edge as processed, i.e. remove it from the set of marked edges
-              marked_edges[i].erase(j);
+              assert(node_colour[i] == set_no);
 
-              Edge<index_t> edge(i, j);
-              swap_kernel(edge, modified_elements, NULL, NULL, tid);
+              // Set of elements in this cavity which were modified since the last commit of deferred operations.
+              std::set<index_t> modified_elements;
+              std::set<index_t> marked_edges_copy = marked_edges[i];
 
-              // If edge was swapped
-              if(edge.edge.first != i){
-                index_t k = edge.edge.first;
-                index_t l = edge.edge.second;
-                // Uncolour one of the lateral vertices if their colours clash.
-                if((node_colour[k] == node_colour[l]) && (node_colour[k] >= 0))
-                  _mesh->deferred_reset_colour(l, tid);
+              for(typename std::set<index_t>::const_iterator vid=marked_edges_copy.begin(); vid!=marked_edges_copy.end(); ++vid){
+                index_t j = *vid;
 
-                Edge<index_t> lateralEdges[] = {
-                    Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+                // If vertex j is adjacent to one of the modified elements, then its adjacency list is invalid.
+                bool skip = false;
+                for(typename std::set<index_t>::const_iterator it=modified_elements.begin(); it!=modified_elements.end(); ++it){
+                  if(_mesh->NEList[j].find(*it) != _mesh->NEList[j].end()){
+                    skip = true;
+                    break;
+                  }
+                }
+                if(skip)
+                  continue;
 
-                // Propagate the operation
-                for(size_t ee=0; ee<4; ++ee)
-                  _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
+                // Mark edge as processed, i.e. remove it from the set of marked edges
+                marked_edges[i].erase(j);
+
+                Edge<index_t> edge(i, j);
+                swap_kernel(edge, modified_elements, NULL, NULL, tid);
+
+                // If edge was swapped
+                if(edge.edge.first != i){
+                  index_t k = edge.edge.first;
+                  index_t l = edge.edge.second;
+                  // Uncolour one of the lateral vertices if their colours clash.
+                  if((node_colour[k] == node_colour[l]) && (node_colour[k] >= 0))
+                    _mesh->deferred_reset_colour(l, tid);
+
+                  Edge<index_t> lateralEdges[] = {
+                      Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
+
+                  // Propagate the operation
+                  for(size_t ee=0; ee<4; ++ee)
+                    _mesh->deferred_propagate_swapping(lateralEdges[ee].edge.first, lateralEdges[ee].edge.second, tid);
+                }
               }
             }
-          }
 
 #pragma omp for schedule(static,1)
-          for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
-            _mesh->commit_deferred(vtid);
-            _mesh->commit_swapping_propagation(marked_edges, vtid);
-            _mesh->commit_colour_reset(node_colour, vtid);
+            for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+              _mesh->commit_deferred(vtid);
+              _mesh->commit_swapping_propagation(marked_edges, vtid);
+              _mesh->commit_colour_reset(node_colour, vtid);
+            }
           }
-        }
 #pragma omp barrier
-      }while(true);
+        }
+      }while(GlobalActiveSet_size>0);
     }
   }
 
