@@ -38,6 +38,7 @@
 #ifndef COLOUR_H
 #define COLOUR_H
 
+#include <limits>
 #include <vector>
 
 #include "PragmaticTypes.h"
@@ -246,5 +247,143 @@ class Colour{
     }
   }
 
+  static void RokosGorman(std::vector< std::vector<index_t>* > NNList, size_t NNodes,
+      int node_colour[], std::vector< std::vector< std::vector<index_t> > >& ind_sets,
+      int max_colour, size_t* worklist[], size_t worklist_size[], int tid){
+#pragma omp single nowait
+    {
+      for(int i=0; i<3; ++i)
+        worklist_size[i] = 0;
+    }
+
+    // Thread-private array of forbidden colours
+    std::vector<uint32_t> forbiddenColours(max_colour, std::numeric_limits<uint32_t>::max());
+
+    // Phase 1: pseudo-colouring.
+#pragma omp for schedule(guided)
+    for(size_t i=0; i<NNodes; ++i){
+      index_t n = *NNList[i]->begin();
+      for(typename std::vector<index_t>::const_iterator it=NNList[i]->begin()+1; it!=NNList[i]->end(); ++it){
+        int c = node_colour[*it];
+        if(c>=0)
+          forbiddenColours[c] = n;
+      }
+
+      for(size_t j=0; j<forbiddenColours.size(); ++j){
+        if(forbiddenColours[j] != n){
+          node_colour[n] = j;
+          break;
+        }
+      }
+    }
+
+    // Phase 2: find conflicts and create new worklist
+    std::vector<size_t> conflicts;
+
+#pragma omp for schedule(guided) nowait
+    for(size_t i=0; i<NNodes; ++i){
+      bool defective = false;
+      index_t n = *NNList[i]->begin();
+      for(typename std::vector<index_t>::const_iterator it=NNList[i]->begin()+1; it!=NNList[i]->end(); ++it){
+        if(node_colour[n] == node_colour[*it]){
+          // No need to mark both vertices as defectively coloured.
+          // Just mark the one with the lesser ID.
+          if(n < *it){
+            defective = true;
+            break;
+          }
+        }
+      }
+
+      if(defective){
+        conflicts.push_back(i);
+
+        for(typename std::vector<index_t>::const_iterator it=NNList[i]->begin()+1; it!=NNList[i]->end(); ++it){
+          int c = node_colour[*it];
+          forbiddenColours[c] = n;
+        }
+
+        for(size_t j=0; j<forbiddenColours.size(); j++){
+          if(forbiddenColours[j] != n){
+            node_colour[n] = j;
+            break;
+          }
+        }
+      }else{
+        ind_sets[tid][node_colour[n]].push_back(n);
+      }
+    }
+
+    size_t pos;
+#pragma omp atomic capture
+    {
+      pos = worklist_size[0];
+      worklist_size[0] += conflicts.size();
+    }
+
+    memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
+
+    conflicts.clear();
+#pragma omp barrier
+
+    // Private variable indicating which worklist we are currently using.
+    int wl = 0;
+
+    while(worklist_size[wl]){
+#pragma omp for schedule(guided) nowait
+      for(size_t item=0; item<worklist_size[wl]; ++item){
+        size_t i = worklist[wl][item];
+        bool defective = false;
+        index_t n = *NNList[i]->begin();
+        for(typename std::vector<index_t>::const_iterator it=NNList[i]->begin()+1; it!=NNList[i]->end(); ++it){
+          if(node_colour[n] == node_colour[*it]){
+            // No need to mark both vertices as defectively coloured.
+            // Just mark the one with the lesser ID.
+            if(n < *it){
+              defective = true;
+              break;
+            }
+          }
+        }
+
+        if(defective){
+          conflicts.push_back(i);
+
+          for(typename std::vector<index_t>::const_iterator it=NNList[i]->begin()+1; it!=NNList[i]->end(); ++it){
+            int c = node_colour[*it];
+            forbiddenColours[c] = n;
+          }
+
+          for(size_t j=0; j<forbiddenColours.size(); j++){
+            if(forbiddenColours[j] != n){
+              node_colour[n] = j;
+              break;
+            }
+          }
+        }else{
+          ind_sets[tid][node_colour[n]].push_back(n);
+        }
+      }
+
+      // Switch worklist
+      wl = (wl+1)%3;
+
+#pragma omp atomic capture
+      {
+        pos = worklist_size[wl];
+        worklist_size[wl] += conflicts.size();
+      }
+
+      memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
+
+      conflicts.clear();
+
+      // Clear the next worklist
+#pragma omp single
+      {
+        worklist_size[(wl+1)%3] = 0;
+      }
+    }
+  }
 };
 #endif

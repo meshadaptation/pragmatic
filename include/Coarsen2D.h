@@ -39,6 +39,8 @@
 #define COARSEN2D_H
 
 #include <algorithm>
+#include <cstring>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -46,6 +48,7 @@
 #include <boost/unordered_map.hpp>
 #endif
 
+#include "Colour.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -79,6 +82,10 @@ template<typename real_t> class Coarsen2D{
 
     dynamic_vertex = NULL;
 
+    for(int i=0; i<3; ++i){
+      worklist[i] = NULL;
+    }
+
     node_colour = NULL;
     GlobalActiveSet_size = 0;
     ind_set_size.resize(max_colour, 0);
@@ -94,8 +101,17 @@ template<typename real_t> class Coarsen2D{
     if(dynamic_vertex!=NULL)
       delete[] dynamic_vertex;
 
+    for(size_t i=0; i<subNNList.size(); ++i)
+      if(subNNList[i]!=NULL)
+        delete subNNList[i];
+
     if(node_colour!=NULL)
       delete node_colour;
+
+    for(int i=0; i<3; ++i){
+      if(worklist[i] != NULL)
+        delete[] worklist[i];
+    }
   }
 
   /*! Perform coarsening.
@@ -114,6 +130,14 @@ template<typename real_t> class Coarsen2D{
         delete [] dynamic_vertex;
       
       dynamic_vertex = new index_t[NNodes];
+
+      subNNList.resize(NNodes, NULL);
+
+      for(int i=0; i<3; ++i){
+        if(worklist[i] != NULL)
+          delete[] worklist[i];
+        worklist[i] = new size_t[NNodes];
+      }
 
       if(node_colour!=NULL)
         delete[] node_colour;
@@ -140,6 +164,7 @@ template<typename real_t> class Coarsen2D{
       {
         for(int i=0; i<max_colour; ++i)
           ind_set_size[i] = 0;
+
         GlobalActiveSet_size = 0;
       }
 
@@ -161,69 +186,55 @@ template<typename real_t> class Coarsen2D{
           {
             for(int i=0; i<max_colour; ++i)
               ind_set_size[i] = 0;
+
             GlobalActiveSet_size = 0;
           }
         }else
           first_time = false;
 
-        size_t active_set_size = 0;
         for(int set_no=0; set_no<max_colour; ++set_no){
           ind_sets[tid][set_no].clear();
           range_indexer[tid][set_no].first = std::numeric_limits<size_t>::infinity();
           range_indexer[tid][set_no].second = std::numeric_limits<size_t>::infinity();
         }
 
+        // Construct active sub-mesh
+        std::vector<index_t> subSet;
 #pragma omp for schedule(static,1) nowait
-        for(size_t i=0;i<NNodes;i++){
+        for(size_t i=0; i<NNodes; ++i){
           if(dynamic_vertex[i]>=0){
-            ++active_set_size;
-
-            std::vector<index_t> subNNList;
-            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it)
-              if(dynamic_vertex[*it]>=0){
-                subNNList.push_back(*it);
-              }
-
-            bool uncoloured = true;
-            bool defective = true;
-
-            while(defective){
-              unsigned long colours = 0;
-              int c;
-              defective = false;
-              for(typename std::vector<index_t>::const_iterator it=subNNList.begin(); it!=subNNList.end(); ++it){
-                pragmatic_omp_atomic_read()
-                    c = node_colour[*it];
-                if(c>=0)
-                  colours = colours | 1<<c;
-                if(c == node_colour[i])
-                  defective = true;
-              }
-
-              if(uncoloured){
-                defective = true;
-                uncoloured = false;
-              }
-
-              if(defective || uncoloured){
-                colours = ~colours;
-
-                for(int j=0;j<64;j++){
-                  if(colours&(1<<j)){
-                    pragmatic_omp_atomic_write()
-                        node_colour[i] = j;
-                    break;
-                  }
-                }
-              }
-            }
-            ind_sets[tid][node_colour[i]].push_back(i);
+            subSet.push_back(i);
+            // Reset the colour of all dynamic vertices
+            // It doesn't make sense to reset the colour of any other vertex.
+            node_colour[i] = -1;
           }
         }
 
-        if(active_set_size>0){
-          pragmatic_omp_atomic_update()
-              GlobalActiveSet_size += active_set_size;
+        if(subSet.size()>0){
+          size_t pos;
+          pragmatic_omp_atomic_capture()
+              {
+                pos = GlobalActiveSet_size;
+                GlobalActiveSet_size += subSet.size();
+              }
+
+          for(typename std::vector<index_t>::const_iterator it=subSet.begin(); it!=subSet.end(); ++it, ++pos){
+            if(subNNList[pos]==NULL)
+              subNNList[pos] = new std::vector<index_t>;
+            else
+              subNNList[pos]->clear();
+
+            subNNList[pos]->push_back(*it);
+            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[*it].begin(); jt!=_mesh->NNList[*it].end(); ++jt)
+              if(dynamic_vertex[*jt]>=0)
+                subNNList[pos]->push_back(*jt);
+          }
+        }
+
+#pragma omp barrier
+        if(GlobalActiveSet_size>0){
+          Colour::RokosGorman(subNNList, GlobalActiveSet_size,
+              node_colour, ind_sets, max_colour, worklist, worklist_size, tid);
 
           for(int set_no=0; set_no<max_colour; ++set_no){
             if(ind_sets[tid][set_no].size()>0){
@@ -235,11 +246,8 @@ template<typename real_t> class Coarsen2D{
               range_indexer[tid][set_no].second = range_indexer[tid][set_no].first + ind_sets[tid][set_no].size();
             }
           }
-        }
 
 #pragma omp barrier
-
-        if(GlobalActiveSet_size>0){
           /* Start processing independent sets. After processing each set, colouring
            * might be invalid. More precisely, it's the target vertices whose colours
            * might clash with their neighbours' colours. To avoid hazards, we just
@@ -514,12 +522,16 @@ template<typename real_t> class Coarsen2D{
   size_t nnodes_reserve;
   index_t *dynamic_vertex;
 
+  // Colouring
   int *node_colour;
   size_t GlobalActiveSet_size;
+  std::vector< std::vector<index_t>* > subNNList;
   static const int max_colour = 16;
   std::vector<size_t> ind_set_size;
   std::vector< std::vector< std::vector<index_t> > > ind_sets;
   std::vector< std::vector< std::pair<size_t,size_t> > > range_indexer;
+  size_t* worklist[3];
+  size_t worklist_size[3];
 
   real_t _L_low, _L_max;
 

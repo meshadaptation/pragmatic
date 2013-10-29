@@ -44,6 +44,7 @@
 #include <set>
 #include <vector>
 
+#include "Colour.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -75,6 +76,10 @@ template<typename real_t> class Swapping2D{
     nnodes_reserve = 0;
     nthreads = pragmatic_nthreads();
 
+    for(int i=0; i<3; ++i){
+      worklist[i] = NULL;
+    }
+
     // We pre-allocate the maximum capacity that may be needed.
     node_colour = NULL;
     GlobalActiveSet_size = 0;
@@ -88,8 +93,17 @@ template<typename real_t> class Swapping2D{
     if(property!=NULL)
       delete property;
 
+    for(size_t i=0; i<subNNList.size(); ++i)
+      if(subNNList[i]!=NULL)
+        delete subNNList[i];
+
     if(node_colour!=NULL)
       delete node_colour;
+
+    for(int i=0; i<3; ++i){
+      if(worklist[i] != NULL)
+        delete[] worklist[i];
+    }
   }
 
   void swap(real_t quality_tolerance){
@@ -100,6 +114,14 @@ template<typename real_t> class Swapping2D{
 
     if(nnodes_reserve<NNodes){
       nnodes_reserve = NNodes;
+
+      subNNList.resize(NNodes, NULL);
+
+      for(int i=0; i<3; ++i){
+        if(worklist[i] != NULL)
+          delete[] worklist[i];
+        worklist[i] = new size_t[NNodes];
+      }
 
       if(node_colour!=NULL)
         delete[] node_colour;
@@ -156,64 +178,49 @@ template<typename real_t> class Swapping2D{
           GlobalActiveSet_size = 0;
         }
 
-        size_t active_set_size = 0;
         for(int set_no=0; set_no<max_colour; ++set_no){
           ind_sets[tid][set_no].clear();
           range_indexer[tid][set_no].first = std::numeric_limits<size_t>::infinity();
           range_indexer[tid][set_no].second = std::numeric_limits<size_t>::infinity();
         }
 
+        // Construct active sub-mesh
+        std::vector<index_t> subSet;
 #pragma omp for schedule(static,1) nowait
-        for(size_t i=0;i<_mesh->NNodes;i++){
+        for(size_t i=0; i<NNodes; ++i){
           if(marked_edges[i].size()>0){
-            ++active_set_size;
-
-            std::vector<index_t> subNNList;
-            for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[i].begin(); it!=_mesh->NNList[i].end(); ++it)
-              if(marked_edges[*it].size()>0){
-                subNNList.push_back(*it);
-              }
-
-            bool uncoloured = true;
-            bool defective = true;
-
-            while(defective){
-              unsigned long colours = 0;
-              int c;
-              defective = false;
-              for(typename std::vector<index_t>::const_iterator it=subNNList.begin(); it!=subNNList.end(); ++it){
-                pragmatic_omp_atomic_read()
-                    c = node_colour[*it];
-                if(c>=0)
-                  colours = colours | 1<<c;
-                if(c == node_colour[i])
-                  defective = true;
-              }
-
-              if(uncoloured){
-                defective = true;
-                uncoloured = false;
-              }
-
-              if(defective){
-                colours = ~colours;
-
-                for(int j=0;j<64;j++){
-                  if(colours&(1<<j)){
-                    pragmatic_omp_atomic_write()
-                        node_colour[i] = j;
-                    break;
-                  }
-                }
-              }
-            }
-            ind_sets[tid][node_colour[i]].push_back(i);
+            subSet.push_back(i);
+            // Reset the colour of all dynamic vertices
+            // It doesn't make sense to reset the colour of any other vertex.
+            node_colour[i] = -1;
           }
         }
 
-        if(active_set_size>0){
-          pragmatic_omp_atomic_update()
-              GlobalActiveSet_size += active_set_size;
+        if(subSet.size()>0){
+          size_t pos;
+          pragmatic_omp_atomic_capture()
+              {
+                pos = GlobalActiveSet_size;
+                GlobalActiveSet_size += subSet.size();
+              }
+
+          for(typename std::vector<index_t>::const_iterator it=subSet.begin(); it!=subSet.end(); ++it, ++pos){
+            if(subNNList[pos]==NULL)
+              subNNList[pos] = new std::vector<index_t>;
+            else
+              subNNList[pos]->clear();
+
+            subNNList[pos]->push_back(*it);
+            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[*it].begin(); jt!=_mesh->NNList[*it].end(); ++jt)
+              if(marked_edges[*jt].size()>0)
+                subNNList[pos]->push_back(*jt);
+          }
+        }
+
+#pragma omp barrier
+        if(GlobalActiveSet_size>0){
+          Colour::RokosGorman(subNNList, GlobalActiveSet_size,
+              node_colour, ind_sets, max_colour, worklist, worklist_size, tid);
 
           for(int set_no=0; set_no<max_colour; ++set_no){
             if(ind_sets[tid][set_no].size()>0){
@@ -225,11 +232,9 @@ template<typename real_t> class Swapping2D{
               range_indexer[tid][set_no].second = range_indexer[tid][set_no].first + ind_sets[tid][set_no].size();
             }
           }
-        }
 
 #pragma omp barrier
 
-        if(GlobalActiveSet_size>0){
           for(int set_no=0; set_no<max_colour; ++set_no){
             if(ind_set_size[set_no] == 0)
               continue;
@@ -432,10 +437,13 @@ template<typename real_t> class Swapping2D{
 
   int *node_colour;
   size_t GlobalActiveSet_size;
+  std::vector< std::vector<index_t>* > subNNList;
   static const int max_colour = 16;
   std::vector<size_t> ind_set_size;
   std::vector< std::vector< std::vector<index_t> > > ind_sets;
   std::vector< std::vector< std::pair<size_t,size_t> > > range_indexer;
+  size_t* worklist[3];
+  size_t worklist_size[3];
 
   static const size_t ndims=2;
   static const size_t nloc=3;
