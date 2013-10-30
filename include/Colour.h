@@ -315,7 +315,7 @@ class Colour{
     }
 
     size_t pos;
-#pragma omp atomic capture
+    pragmatic_omp_atomic_capture()
     {
       pos = worklist_size[0];
       worklist_size[0] += conflicts.size();
@@ -368,7 +368,7 @@ class Colour{
       // Switch worklist
       wl = (wl+1)%3;
 
-#pragma omp atomic capture
+      pragmatic_omp_atomic_capture()
       {
         pos = worklist_size[wl];
         worklist_size[wl] += conflicts.size();
