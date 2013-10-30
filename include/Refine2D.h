@@ -239,7 +239,7 @@ template<typename real_t> class Refine2D{
       
       // Commit deferred operations.
 #pragma omp for schedule(guided)
-      for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+      for(int vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
         _mesh->commit_deferred(vtid);
       }
       
