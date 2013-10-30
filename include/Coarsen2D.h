@@ -155,7 +155,7 @@ template<typename real_t> class Coarsen2D{
        */
 
       // Mark all vertices for evaluation.
-#pragma omp for schedule(static,1) nowait
+#pragma omp for schedule(guided) nowait
       for(size_t i=0;i<NNodes;i++){
         dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
       }
@@ -175,7 +175,7 @@ template<typename real_t> class Coarsen2D{
          * This could lead to significant load imbalance if a static schedule was used.
          */
         if(!first_time){
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
           for(size_t i=0;i<NNodes;i++){
             if(dynamic_vertex[i] == -2){
               dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
@@ -200,7 +200,7 @@ template<typename real_t> class Coarsen2D{
 
         // Construct active sub-mesh
         std::vector<index_t> subSet;
-#pragma omp for schedule(static,1) nowait
+#pragma omp for schedule(guided) nowait
         for(size_t i=0; i<NNodes; ++i){
           if(dynamic_vertex[i]>=0){
             subSet.push_back(i);
@@ -266,7 +266,7 @@ template<typename real_t> class Coarsen2D{
             if(ind_set_size[set_no] == 0)
               continue;
 
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
             for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
               // Find which vertex corresponds to idx.
               index_t rm_vertex = -1;
@@ -321,7 +321,7 @@ template<typename real_t> class Coarsen2D{
               coarsen_kernel(rm_vertex, target_vertex, tid);
             }
 
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
             for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
               _mesh->commit_deferred(vtid);
               _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);

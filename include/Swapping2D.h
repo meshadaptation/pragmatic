@@ -138,7 +138,7 @@ template<typename real_t> class Swapping2D{
 
       // Cache the element quality's. Really need to make this
       // persistent within Mesh. Also, initialise marked_edges.
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
       for(size_t i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]>=0){
@@ -164,7 +164,7 @@ template<typename real_t> class Swapping2D{
         }
       }
 
-#pragma omp for schedule(static,1) nowait
+#pragma omp for schedule(guided) nowait
       for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
         _mesh->commit_swapping_propagation(marked_edges, vtid);
       }
@@ -186,7 +186,7 @@ template<typename real_t> class Swapping2D{
 
         // Construct active sub-mesh
         std::vector<index_t> subSet;
-#pragma omp for schedule(static,1) nowait
+#pragma omp for schedule(guided) nowait
         for(size_t i=0; i<NNodes; ++i){
           if(marked_edges[i].size()>0){
             subSet.push_back(i);
@@ -239,7 +239,7 @@ template<typename real_t> class Swapping2D{
             if(ind_set_size[set_no] == 0)
               continue;
 
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
             for(size_t idx=0; idx<ind_set_size[set_no]; ++idx){
               // Find which vertex corresponds to idx.
               index_t i = -1;
@@ -299,7 +299,7 @@ template<typename real_t> class Swapping2D{
               }
             }
 
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
             for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
               _mesh->commit_deferred(vtid);
               _mesh->commit_swapping_propagation(marked_edges, vtid);
