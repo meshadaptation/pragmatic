@@ -316,10 +316,10 @@ class Colour{
 
     size_t pos;
     pragmatic_omp_atomic_capture()
-        {
-          pos = worklist_size[0];
-          worklist_size[0] += conflicts.size();
-        }
+    {
+      pos = worklist_size[0];
+      worklist_size[0] += conflicts.size();
+    }
 
     memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
@@ -369,10 +369,10 @@ class Colour{
       wl = (wl+1)%3;
 
       pragmatic_omp_atomic_capture()
-          {
-            pos = worklist_size[wl];
-            worklist_size[wl] += conflicts.size();
-          }
+      {
+        pos = worklist_size[wl];
+        worklist_size[wl] += conflicts.size();
+      }
 
       memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
