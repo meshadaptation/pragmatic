@@ -322,7 +322,7 @@ template<typename real_t> class Coarsen2D{
             }
 
 #pragma omp for schedule(guided)
-            for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+            for(int vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
               _mesh->commit_deferred(vtid);
               _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);
               _mesh->commit_colour_reset(node_colour, vtid);
