@@ -132,7 +132,7 @@ template<typename real_t> class Refine2D{
 
       /* Loop through all edges and select them for refinement if
          its length is greater than L_max in transformed space. */
-#pragma omp for schedule(static,1) nowait
+#pragma omp for schedule(guided) nowait
       for(size_t i=0;i<origNNodes;++i){
         for(size_t it=0;it<_mesh->NNList[i].size();++it){
           index_t otherVertex = _mesh->NNList[i][it];
@@ -174,7 +174,7 @@ template<typename real_t> class Refine2D{
       // Mark each element with its new vertices, update NNList
       // for all split edges and mark surface edges.
 #pragma omp barrier
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
@@ -223,7 +223,7 @@ template<typename real_t> class Refine2D{
       }
       
       // Start element refinement.
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(guided)
       for(size_t eid=0; eid<origNElements; ++eid){
         //If the element has been deleted, continue.
         const index_t *n = _mesh->get_element(eid);
@@ -238,8 +238,8 @@ template<typename real_t> class Refine2D{
       }
       
       // Commit deferred operations.
-#pragma omp for schedule(static,1)
-      for(size_t vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
+#pragma omp for schedule(guided)
+      for(int vtid=0; vtid<_mesh->defOp_scaling_factor*nthreads; ++vtid){
         _mesh->commit_deferred(vtid);
       }
       
