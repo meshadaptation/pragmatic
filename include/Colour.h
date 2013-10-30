@@ -315,11 +315,11 @@ class Colour{
     }
 
     size_t pos;
-#pragma omp atomic capture
-    {
-      pos = worklist_size[0];
-      worklist_size[0] += conflicts.size();
-    }
+    pragmatic_omp_atomic_capture()
+        {
+          pos = worklist_size[0];
+          worklist_size[0] += conflicts.size();
+        }
 
     memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
@@ -368,11 +368,11 @@ class Colour{
       // Switch worklist
       wl = (wl+1)%3;
 
-#pragma omp atomic capture
-      {
-        pos = worklist_size[wl];
-        worklist_size[wl] += conflicts.size();
-      }
+      pragmatic_omp_atomic_capture()
+          {
+            pos = worklist_size[wl];
+            worklist_size[wl] += conflicts.size();
+          }
 
       memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
