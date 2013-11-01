@@ -22610,7 +22610,7 @@ cat > include/pragmatic_config.h << EOF
 #define PRAGMATIC_CONFIG_H
 
 #if FCC
-#define pragmatic_omp_atomic_capture() (void (0));
+#define pragmatic_omp_atomic_capture() ((void) 0);
 #define pragmatic_sync_fetch_and_add(SHARED,INC,OLD) \
 asm volatile(\
 "retry:;"\
@@ -22634,7 +22634,7 @@ asm volatile(\
 #define pragmatic_omp_atomic_write() _Pragma("omp atomic write")
 #define pragmatic_omp_atomic_update() _Pragma("omp atomic update")
 #else
-#define pragmatic_omp_atomic_capture() (void (0));
+#define pragmatic_omp_atomic_capture() ((void) 0);
 #define pragmatic_sync_fetch_and_add(SHARED,INC,OLD) OLD = __sync_fetch_and_add(&(SHARED), (INC));
 #define pragmatic_omp_atomic_read() _Pragma("omp atomic read")
 #define pragmatic_omp_atomic_write() _Pragma("omp atomic write")
