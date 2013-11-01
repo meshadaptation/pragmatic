@@ -438,7 +438,7 @@ template<typename real_t> class Coarsen3D{
           continue;
         
         // Find all entries pointing back to rm_vertex and update them to target_vertex.
-        typename std::vector<index_t>::iterator back_reference = find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
+        typename std::vector<index_t>::iterator back_reference = std::find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
         assert(back_reference!=_mesh->NNList[*nn].end());
         
         if(new_patch.count(*nn))
