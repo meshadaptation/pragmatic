@@ -315,8 +315,7 @@ class Colour{
     }
 
     size_t pos;
-    pragmatic_omp_atomic_capture()
-    pragmatic_sync_fetch_and_add(worklist_size[0], conflicts.size(), pos)
+    pragmatic_omp_atomic_capture(worklist_size[0], conflicts.size(), pos)
 
     memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
@@ -365,8 +364,7 @@ class Colour{
       // Switch worklist
       wl = (wl+1)%3;
 
-      pragmatic_omp_atomic_capture()
-      pragmatic_sync_fetch_and_add(worklist_size[wl], conflicts.size(), pos)
+      pragmatic_omp_atomic_capture(worklist_size[wl], conflicts.size(), pos)
 
       memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
