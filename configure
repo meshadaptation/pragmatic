@@ -22609,7 +22609,7 @@ cat > include/pragmatic_config.h << EOF
 #ifndef PRAGMATIC_CONFIG_H
 #define PRAGMATIC_CONFIG_H
 
-#if FCC
+#if __FUJITSU
 #define pragmatic_omp_atomic_capture(SHARED,INC,OLD) \
 asm volatile(\
 "retry:;"\
