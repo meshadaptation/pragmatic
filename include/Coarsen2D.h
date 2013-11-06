@@ -106,7 +106,7 @@ template<typename real_t> class Coarsen2D{
         delete subNNList[i];
 
     if(node_colour!=NULL)
-      delete node_colour;
+      delete[] node_colour;
 
     for(int i=0; i<3; ++i){
       if(worklist[i] != NULL)
