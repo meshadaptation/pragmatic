@@ -109,7 +109,7 @@ class Colour{
         unsigned long colours = 0;
         char c;
         for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-	    c = colour[*it];
+	      c = colour[*it];
           colours = colours | 1<<c;
         }
         colours = ~colours;
@@ -314,8 +314,7 @@ class Colour{
     }
 
     size_t pos;
-    pragmatic_omp_atomic_capture()
-    pragmatic_sync_fetch_and_add(worklist_size[0], conflicts.size(), pos)
+    pos = pragmatic_omp_atomic_capture(&worklist_size[0], conflicts.size());
 
     memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 
@@ -364,8 +363,7 @@ class Colour{
       // Switch worklist
       wl = (wl+1)%3;
 
-      pragmatic_omp_atomic_capture()
-      pragmatic_sync_fetch_and_add(worklist_size[wl], conflicts.size(), pos)
+      pos = pragmatic_omp_atomic_capture(&worklist_size[wl], conflicts.size());
 
       memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
 

@@ -252,9 +252,8 @@ template<typename real_t> class Coarsen3D{
           // Mark collapse decision as out of date.
           if(_mesh->is_owned_node(target_vertex))
             for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it){
-	      pragmatic_omp_atomic_write()
-		dynamic_vertex[*it] = -2;
-	    }
+              dynamic_vertex[*it] = -2;
+	        }
         }
 	
         // Clear vertex.
