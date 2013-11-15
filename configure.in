@@ -398,36 +398,6 @@ cat > include/pragmatic_config.h << EOF
 #ifndef PRAGMATIC_CONFIG_H
 #define PRAGMATIC_CONFIG_H
 
-#if __FUJITSU
-#define pragmatic_omp_atomic_capture(SHARED,INC,OLD) \
-asm volatile(\
-"retry:;"\
-"ld [%1], %%l0;"\
-"add %%l0, %2, %%l1;"\
-"cas [%1], %%l0, %%l1;"\
-"cmp %%l0, %%l1;"\
-"bne retry;"\
-"mov %%l1, %0;"\
-:"=r"((OLD))\
-:"r"(&(SHARED)), "r"((INC))\
-:"l0", "l1"\
-);
-#elif _OPENMP >= 201107
-#define pragmatic_omp_atomic_capture(SHARED,INC,OLD) _Pragma("omp atomic capture") /*
-*/ {(OLD)=(SHARED); (SHARED)+=(INC);}
-#else
-#define pragmatic_omp_atomic_capture(SHARED,INC,OLD) \
-OLD = __sync_fetch_and_add(&(SHARED), (INC));
-#endif
-
-#if FCC
-#define pragmatic_omp_atomic_read() _Pragma("omp critical")
-#define pragmatic_omp_atomic_write() _Pragma("omp critical")
-#else
-#define pragmatic_omp_atomic_read() _Pragma("omp atomic read")
-#define pragmatic_omp_atomic_write() _Pragma("omp atomic write")
-#endif
-
 EOF
 
 cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h

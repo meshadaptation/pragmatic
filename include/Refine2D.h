@@ -152,7 +152,7 @@ template<typename real_t> class Refine2D{
         }
       }
       
-      pragmatic_omp_atomic_capture(_mesh->NNodes, splitCnt[tid], threadIdx[tid])
+      threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
 
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
@@ -458,7 +458,7 @@ template<typename real_t> class Refine2D{
       const index_t ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
 
       index_t ele1ID;
-      pragmatic_omp_atomic_capture(_mesh->NElements, 1, ele1ID)
+      ele1ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 1);
 
       // Add rotated_ele[0] to vertexID's NNList
       _mesh->deferred_addNN(vertexID, rotated_ele[0], tid);
@@ -512,7 +512,7 @@ template<typename real_t> class Refine2D{
       const index_t ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
 
       index_t ele0ID, ele2ID;
-      pragmatic_omp_atomic_capture(_mesh->NElements, 2, ele0ID)
+      ele0ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 2);
       ele2ID = ele0ID+1;
 
       // NNList: Connect vertexID[0] and vertexID[1] with each other
@@ -557,7 +557,7 @@ template<typename real_t> class Refine2D{
       const index_t ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
 
       index_t ele1ID, ele2ID, ele3ID;
-      pragmatic_omp_atomic_capture(_mesh->NElements, 3, ele1ID)
+      ele1ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 3);
       ele2ID = ele1ID+1;
       ele3ID = ele1ID+2;
 

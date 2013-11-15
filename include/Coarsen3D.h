@@ -252,9 +252,8 @@ template<typename real_t> class Coarsen3D{
           // Mark collapse decision as out of date.
           if(_mesh->is_owned_node(target_vertex))
             for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[rm_vertex].begin();it!=_mesh->NNList[rm_vertex].end();++it){
-	      pragmatic_omp_atomic_write()
-		dynamic_vertex[*it] = -2;
-	    }
+              dynamic_vertex[*it] = -2;
+	        }
         }
 	
         // Clear vertex.
@@ -438,7 +437,7 @@ template<typename real_t> class Coarsen3D{
           continue;
         
         // Find all entries pointing back to rm_vertex and update them to target_vertex.
-        typename std::vector<index_t>::iterator back_reference = find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
+        typename std::vector<index_t>::iterator back_reference = std::find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
         assert(back_reference!=_mesh->NNList[*nn].end());
         
         if(new_patch.count(*nn))

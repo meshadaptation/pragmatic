@@ -198,7 +198,7 @@ template<typename real_t> class Swapping2D{
 
         if(subSet.size()>0){
           size_t pos;
-          pragmatic_omp_atomic_capture(GlobalActiveSet_size, subSet.size(), pos)
+          pos = pragmatic_omp_atomic_capture(&GlobalActiveSet_size, subSet.size());
 
           for(typename std::vector<index_t>::const_iterator it=subSet.begin(); it!=subSet.end(); ++it, ++pos){
             if(subNNList[pos]==NULL)
@@ -220,7 +220,7 @@ template<typename real_t> class Swapping2D{
 
           for(int set_no=0; set_no<max_colour; ++set_no){
             if(ind_sets[tid][set_no].size()>0){
-              pragmatic_omp_atomic_capture(ind_set_size[set_no], ind_sets[tid][set_no].size(), range_indexer[tid][set_no].first)
+              range_indexer[tid][set_no].first = pragmatic_omp_atomic_capture(&ind_set_size[set_no], ind_sets[tid][set_no].size());
               range_indexer[tid][set_no].second = range_indexer[tid][set_no].first + ind_sets[tid][set_no].size();
             }
           }
