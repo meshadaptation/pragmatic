@@ -80,7 +80,7 @@ class ParameterException(Exception):
   pass
 
 try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/scaling_optimisation/src/.libs/libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
@@ -317,10 +317,10 @@ def adapt(metric, debug=False):
   # |dyx dxx|
   metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
   for i in range(0, metric.vector().array().size, 4):
-    metric_arr[i  ] = metric.vector().array()[i+3]
+    metric_arr[i  ] = metric.vector().array()[i]
     metric_arr[i+1] = metric.vector().array()[i+2]
     metric_arr[i+2] = metric.vector().array()[i+2]
-    metric_arr[i+3] = metric.vector().array()[i]
+    metric_arr[i+3] = metric.vector().array()[i+3]
 
   #from IPython import embed
   #embed()
