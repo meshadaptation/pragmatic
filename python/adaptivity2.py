@@ -60,7 +60,6 @@ import ctypes.util
 
 import numpy, scipy.sparse, scipy.sparse.linalg
 from numpy import array, zeros, ones, matrix, linalg, any
-
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -83,10 +82,11 @@ class ParameterException(Exception):
   pass
 
 try:
+#  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so") 
   _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/scaling_optimisation/src/.libs/libpragmatic.so")
-  #_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic2d.so")
+  #_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
-  raise LibraryException("Failed to load libpragmatic2d.so")
+  raise LibraryException("Failed to load libpragmatic.so")
 
 def c_cell_dofs(mesh,V):
   code = """
@@ -378,7 +378,25 @@ def analyt_rot(H11,H12,H22,v1x,v1y):
   A12 = v1x*v1y*(H11-H22) + H12*(v1x**2-v1y**2)
   A22 = v1y**2*H11 + v1x**2*H22 + 2*v1x*v1y*H12
   return [A11,A12,A22]
-  
+
+def fix_CG1_metric(Mp):
+ H11 = Mp.vector().array()[range(0,Mp.vector().array().size,4)]
+ H12 = Mp.vector().array()[range(1,Mp.vector().array().size,4)]
+ H22 = Mp.vector().array()[range(3,Mp.vector().array().size,4)]
+ [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
+# if any(lambda1<zeros(len(lambda2))) or any(lambda2<zeros(len(lambda2))):
+#  warning('negative eigenvalue in metric fixed')
+ lambda1 = numpy.abs(lambda1)
+ lambda2 = numpy.abs(lambda2)
+ [H11,H12,H22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
+ out = zeros(Mp.vector().array().size)
+ out[range(0,Mp.vector().array().size,4)] = H11
+ out[range(1,Mp.vector().array().size,4)] = H12
+ out[range(2,Mp.vector().array().size,4)] = H12
+ out[range(3,Mp.vector().array().size,4)] = H22
+ Mp.vector().set_local(out)
+ return Mp
+ 
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
 def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2):
@@ -411,17 +429,17 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_e
 #    H = Function(S)
 #    H.vector()[:] = b * A_diag*4
 #    startTime = time()
-    S = TensorFunctionSpace(mesh,'DG',0)
-#    print("space definition took %0.1fs" % (time()-startTime))
-    A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
-    b = assemble(inner(grad(grad(f)), TestFunction(S))*dx)
-    ones_ = Function(S)
-    ones_.vector()[:] = 1
-    A_diag = A * ones_.vector()
-    A_diag.set_local(1.0/A_diag.array())
-    H = Function(S)
-    H.vector()[:] = b * A_diag
-#    H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
+#    S = TensorFunctionSpace(mesh,'DG',0)
+##    print("space definition took %0.1fs" % (time()-startTime))
+#    A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
+#    b = assemble(inner(grad(grad(f)), TestFunction(S))*dx)
+#    ones_ = Function(S)
+#    ones_.vector()[:] = 1
+#    A_diag = A * ones_.vector()
+#    A_diag.set_local(1.0/A_diag.array())
+#    H = Function(S)
+#    H.vector()[:] = b * A_diag
+    H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
   else:
     gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
     H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
@@ -525,6 +543,8 @@ if __name__=="__main__":
    from play_metric_adapt import test_mesh_metric
    test_mesh_metric()
  elif testcase == 4:
+   from circle_convergence import circle_convergence
+   circle_convergence()
+ elif testcase == 5:
    from maximal_example import maximal_example
    maximal_example()
-

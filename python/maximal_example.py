@@ -1,6 +1,5 @@
 from dolfin import *
-from adaptivity2 import *
-from adaptivity2 import metric_pnorm
+from adaptivity2 import metric_pnorm, adapt
 from pylab import hold, show, figure, tricontourf, triplot, colorbar, savefig
 from pylab import plot as pyplot
 from numpy import array
@@ -12,8 +11,7 @@ set_log_level(WARNING)
 def maximal_example():
     ### CONSTANTS
     meshsz = 40
-    hd = Constant(1e-2)
-    ### SETUP MESH
+        ### SETUP MESH
     mesh = RectangleMesh(-0.75,-0.25,0.,0.75,1*meshsz,1*meshsz,"left/right")
     ### SETUP SOLUTION
     #testsol = '0.1*sin(50*x+2*pi*t/T)+atan(-0.1/(2*x - sin(5*y+2*pi*t/T)))';

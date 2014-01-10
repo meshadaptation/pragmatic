@@ -1,6 +1,5 @@
 from dolfin import *
-from adaptivity2 import *
-from adaptivity2 import metric_pnorm, metric_ellipse
+from adaptivity2 import metric_pnorm, metric_ellipse, adapt
 from pylab import hold, show, figure, triplot, rand, tricontourf, axis, box
 from pylab import plot as pyplot
 from numpy import array, ones

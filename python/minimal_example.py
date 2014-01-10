@@ -1,11 +1,14 @@
 from dolfin import *
-from adaptivity2 import *
-from adaptivity2 import metric_pnorm
+from adaptivity2 import metric_pnorm, adapt
 from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap
 from pylab import plot as pyplot
 from numpy import array, ones
 import numpy
 set_log_level(WARNING)
+from sympy import Symbol, diff
+from sympy import tanh as pytanh
+from sympy import cos as pysin
+from sympy import sin as pycos
 
 def minimal_example(width=5e-2):
     ### CONSTANTS
@@ -16,19 +19,18 @@ def minimal_example(width=5e-2):
     ### SETUP SOLUTION
     angle = pi/8 #rand*pi/2
     #testsol = 'tanh(x[0]/' + str(float(hd)) + ')' #tanh(x[0]/hd)
+    #sx = Symbol('sx'); sy = Symbol('sy'); width_ = Symbol('ww'); angle_ = Symbol('aa')
+    #testsol = pytanh((pycos(angle_)*sx+pysin(angle_)*sy)/width_)    
     testsol = 'tanh((' + str(cos(angle)) + '*x[0]+'+ str(sin(angle)) + '*x[1])/' + str(float(hd)) + ')' #tanh(x[0]/hd)
     ddtestsol = str(cos(angle)+sin(angle))+'*2*'+testsol+'*(1-pow('+testsol+',2))/'+str(float(hd)**2)
     
     # PERFORM TEN ADAPTATION ITERATIONS
     for iii in range(10):
-     V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V); u2 = Function(V)
+     V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
      R = interpolate(Expression(ddtestsol),V)
-     R2 = interpolate(Expression(ddtestsol),V)
      a = inner(grad(dis), grad(dus))*dx
      L = R*dus*dx
-     L2 = R2*dus*dx
      solve(a == L, u, [])
-     solve(a == L2, u2, [])
      startTime = time()
      eta = 0.01; H = metric_pnorm(u, mesh, eta, max_edge_ratio=50);   Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
      mesh = adapt(Mp) 
