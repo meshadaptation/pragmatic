@@ -1,10 +1,20 @@
+### this a testcase for use with DOLFIN/FEniCS and PRAgMaTIc 
+### by Kristian Ejlebjerg Jensen, January 2014, Imperial College London
+### the purpose of the test case is to
+### 1. derive two forcing terms that give orthogonal a step function solutions
+### 2. solve a two poisson equations with the forcing terms using 2D anisotropic adaptivity
+### (on the same mesh) using the inner ellipse method for combining the metrics
+### 3. plot the resulting mesh and one of solutions.
+### the width of the step, the number of solition<->adaptation iterations as well as the
+### error level (eta) are optional input parameters
+
 from dolfin import *
 from adaptivity2 import metric_pnorm, metric_ellipse, adapt
 from pylab import hold, show, figure, triplot, rand, tricontourf, axis, box
 from pylab import plot as pyplot
 from numpy import array, ones
 
-def check_metric_ellipse(width=2e-2):
+def check_metric_ellipse(width=2e-2, eta = 0.02, Nadapt=6):
     set_log_level(WARNING)
     parameters["allow_extrapolation"] = True
     
@@ -21,21 +31,25 @@ def check_metric_ellipse(width=2e-2):
     #testsol2 = 'tanh(x[1]/' + str(float(hd)) + ')' #tanh(x[0]/hd)
     testsol2 = 'tanh((' + str(cos(angle)) + '*x[1]-'+ str(sin(angle)) + '*x[0])/' + str(float(hd)) + ')' #tanh(x[0]/hd)
     ddtestsol2 = str(cos(angle)-sin(angle))+'*2*'+testsol2+'*(1-pow('+testsol2+',2))/'+str(float(hd)**2)
-    
+    def boundary(x):
+          return x[0]-mesh.coordinates()[:,0].min() < DOLFIN_EPS or mesh.coordinates()[:,0].max()-x[0] < DOLFIN_EPS \
+          or mesh.coordinates()[:,1].min()+0.5 < DOLFIN_EPS or mesh.coordinates()[:,1].max()-x[1] < DOLFIN_EPS  
     # PERFORM ONE ADAPTATION ITERATION
-    for iii in range(6):
+    for iii in range(Nadapt):
      V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V); u2 = Function(V)
+     bc = DirichletBC(V, Expression(testsol), boundary)
+     bc2 = DirichletBC(V, Expression(testsol2), boundary)
      R = interpolate(Expression(ddtestsol),V)
      R2 = interpolate(Expression(ddtestsol2),V)
      a = inner(grad(dis), grad(dus))*dx
      L = R*dus*dx
      L2 = R2*dus*dx
-     solve(a == L, u, [])
-     solve(a == L2, u2, [])
+     solve(a == L, u, bc)
+     solve(a == L2, u2, bc2)
      
-     eta = 0.02; H = metric_pnorm(u, mesh, eta, max_edge_ratio=50);   Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
-     eta = 0.02; H2 = metric_pnorm(u2, mesh, eta, max_edge_ratio=50); Mp2 = project(H2, TensorFunctionSpace(mesh, "CG", 1))
-     H3 = metric_ellipse(H,H2,mesh); Mp3 = project(H3, TensorFunctionSpace(mesh, "CG", 1))
+     H  = metric_pnorm(u , eta, max_edge_length=1., max_edge_ratio=50); #Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
+     H2 = metric_pnorm(u2, eta, max_edge_length=1., max_edge_ratio=50); #Mp2 = project(H2, TensorFunctionSpace(mesh, "CG", 1))
+     H3 = metric_ellipse(H,H2); Mp3 = project(H3, TensorFunctionSpace(mesh, "CG", 1))
      print("H11: %0.0f, H22: %0.0f, V: %0.0f,E: %0.0f" % (assemble(abs(H3[0,0])*dx),assemble(abs(H3[1,1])*dx),mesh.num_vertices(),mesh.num_cells()))
      startTime = time()
      if iii != 6:

@@ -53,8 +53,6 @@ mesh and a metric tensor field which encodes desired mesh element size
 anisotropically.
 """
 
-
-
 import ctypes
 import ctypes.util
 
@@ -82,13 +80,12 @@ class ParameterException(Exception):
   pass
 
 try:
-#  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so") 
-  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/scaling_optimisation/src/.libs/libpragmatic.so")
-  #_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
 def c_cell_dofs(mesh,V):
+  #this function returns the degrees of freedom numbers in a cell
   code = """
   void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
                  const std::vector<std::size_t>& cell_indices,
@@ -105,8 +102,10 @@ def c_cell_dofs(mesh,V):
   """
   module = compile_extension_module(code)
   return module.cell_dofs(V.dofmap(), array(range(mesh.num_cells()), dtype=numpy.uintp))
-  
+
+
 def mesh_metric(mesh):
+  # this function calculates a mesh metric (or perhaps an inverse of that, see mesh_metric2...)
   cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
   cells = mesh.cells()
   coords = mesh.coordinates()
@@ -131,7 +130,24 @@ def mesh_metric(mesh):
   M = Function(TensorFunctionSpace(mesh,"DG", 0))
   M.vector().set_local(array([X11,X12,X12,X22]).transpose().flatten()[cell2dof])
   return M
-  
+
+def mesh_metric2(mesh):
+  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
+  #ellipse for the individual elements, see the test case mesh_metric2_example
+  M = mesh_metric(mesh)
+  cell2dof = c_cell_dofs(mesh,M.function_space())
+  cell2dof_ = cell2dof.reshape([mesh.num_cells(),4])
+  M11 = M.vector().array()[cell2dof_[:,0]]
+  M12 = M.vector().array()[cell2dof_[:,1]] 
+  M22 = M.vector().array()[cell2dof_[:,3]]
+  # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
+  [lambda1,lambda2,v1xn,v1yn] = analytic_eig(M11,M12,M22)
+  lambda1 = numpy.sqrt(1/lambda1)
+  lambda2 = numpy.sqrt(1/lambda2)
+  [M11,M12,M22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
+  M.vector().set_local(array([M11,M12,M12,M22]).transpose().flatten()[cell2dof])
+  return M
+
 def refine_metric(M, factor):
   class RefineExpression(Expression):
     def eval(self, value, x):
@@ -164,8 +180,12 @@ def edge_lengths(M):
   return e
 
 def gen_polygon_surfmesh(cells,coords):
+    #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
+    #curved geometries and the output will have to be modified for problems colinear faces.
+    #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
+    #is provided by the user, but the user can load this function herself, use it, modify the output
+    #and provide the modified surface mesh to adapt()
     ntri = len(cells)
-    
     v1 = coords[cells[:,1],:]-coords[cells[:,0],:]
     v2 = coords[cells[:,2],:]-coords[cells[:,0],:]
     badcells = v1[:,0]*v2[:,1]-v1[:,1]*v2[:,0]>0
@@ -216,6 +236,9 @@ def gen_polygon_surfmesh(cells,coords):
     return [bfaces,IDs]
 
 def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
+  #this function generates a mesh 2D DOLFIN mesh given coordinates(nx,ny) and cells(n_enlist).
+  #it is used in the adaptation, but can also be used in the context of debugging, i.e. if one
+  #one saves the mesh coordinates and cells using pickle between iterations.
   startTime = time()
   n_mesh = Mesh()
   ed = MeshEditor()
@@ -227,7 +250,7 @@ def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
   for i in range(len(n_enlist)/3): #n_NElements.value
     ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
   ed.close()
-  info("mesh definition took %0.1fs" % (time()-startTime))
+  info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
   if debug and dx is not None:
     # Sanity check to be deleted or made optional
     n_space = FunctionSpace(n_mesh, "CG", 1)
@@ -243,7 +266,17 @@ def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
   return n_mesh
   
 def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
+  #this is the actual adapt function. It currently works with vertex 
+  #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
+  targetN = assemble(sqrt(det(metric))*dx)
+  if targetN < 1e6:
+    info("target mesh has %0.0f nodes" % targetN)  
+  else:
+    warning("target mesh has %0.0f nodes" % targetN)  
+  
+  metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1))
+  metric = fix_CG1_metric(metric) #fixes negative eigenvalues
   space = FunctionSpace(mesh, "CG", 1)
   element = space.ufl_element()
 
@@ -264,10 +297,12 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
     
   x = coords[nodes,0]
   y = coords[nodes,1]
+  cells = array(cells,dtype=numpy.intc)
     
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
+  
   NElements = ctypes.c_int(cells.shape[0])
   _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
@@ -362,6 +397,9 @@ def consistent_interpolation(mesh, fields=[]):
     return n_mesh
 
 def analytic_eig(H11,H12,H22):
+  #this function calculates the eigenvalues and eigenvectors using explicit analytical
+  #expression for a 2x2 symmetric matrix. 
+  # numpy._version__>1.8.0 can do this more elegantly
   onesC = ones(len(H11))
   lambda1 = 0.5*(H11+H22-numpy.sqrt((H11-H22)**2+4*H12**2))
   lambda2 = 0.5*(H11+H22+numpy.sqrt((H11-H22)**2+4*H12**2))
@@ -374,12 +412,15 @@ def analytic_eig(H11,H12,H22):
   return [lambda1,lambda2,v1xn,v1yn]
 
 def analyt_rot(H11,H12,H22,v1x,v1y):
+  #this function calculates rotates a 2x2 symmetric matrix
   A11 = v1x**2*H11 + v1y**2*H22 - 2*v1x*v1y*H12
   A12 = v1x*v1y*(H11-H22) + H12*(v1x**2-v1y**2)
   A22 = v1y**2*H11 + v1x**2*H22 + 2*v1x*v1y*H12
   return [A11,A12,A22]
 
 def fix_CG1_metric(Mp):
+ #this function makes the eigenvalues of a metric positive (this property is
+ #lost during the projection step)
  H11 = Mp.vector().array()[range(0,Mp.vector().array().size,4)]
  H12 = Mp.vector().array()[range(1,Mp.vector().array().size,4)]
  H22 = Mp.vector().array()[range(3,Mp.vector().array().size,4)]
@@ -399,7 +440,9 @@ def fix_CG1_metric(Mp):
  
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
-def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2):
+# the DG0 hessian can be extracted in three different ways (controlled CG0H option)
+def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2, CG0H=3):
+  mesh = f.function_space().mesh()
   # Sanity checks
   if max_edge_ratio < 1.0:
     raise InvalidArgumentException("The maximum edge ratio must be greater greater or equal to 1")
@@ -409,37 +452,36 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_e
   n = mesh.geometry().dim()
  
   if f.function_space().ufl_element().degree() == 2 and f.function_space().ufl_element().family() == 'Lagrange':
-#    S = VectorFunctionSpace(mesh,'DG',1) #False and 
-#    A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
-#    b = assemble(inner(grad(f), TestFunction(S))*dx)
-#    ones_ = Function(S)
-#    ones_.vector()[:] = 1
-#    A_diag = A * ones_.vector()
-#    A_diag.set_local(1.0/A_diag.array())
-#    gradf = Function(S)
-#    gradf.vector()[:] = b * A_diag
-##    
-#    S = TensorFunctionSpace(mesh,'DG',0)
-#    A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
-#    b = assemble(inner(grad(gradf), TestFunction(S))*dx)
-#    ones_ = Function(S)
-#    ones_.vector()[:] = 1
-#    A_diag = A * ones_.vector()
-#    A_diag.set_local(1.0/A_diag.array())
-#    H = Function(S)
-#    H.vector()[:] = b * A_diag*4
-#    startTime = time()
-#    S = TensorFunctionSpace(mesh,'DG',0)
-##    print("space definition took %0.1fs" % (time()-startTime))
-#    A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
-#    b = assemble(inner(grad(grad(f)), TestFunction(S))*dx)
-#    ones_ = Function(S)
-#    ones_.vector()[:] = 1
-#    A_diag = A * ones_.vector()
-#    A_diag.set_local(1.0/A_diag.array())
-#    H = Function(S)
-#    H.vector()[:] = b * A_diag
-    H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
+     if CG0H == 0:
+        S = VectorFunctionSpace(mesh,'DG',1) #False and 
+        A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
+        b = assemble(inner(grad(f), TestFunction(S))*dx)
+        ones_ = Function(S)
+        ones_.vector()[:] = 1
+        A_diag = A * ones_.vector()
+        A_diag.set_local(1.0/A_diag.array())
+        gradf = Function(S)
+        gradf.vector()[:] = b * A_diag
+        
+        S = TensorFunctionSpace(mesh,'DG',0)
+        A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
+        b = assemble(inner(grad(gradf), TestFunction(S))*dx)
+        ones_ = Function(S)
+        ones_.vector()[:] = 1
+        A_diag = A * ones_.vector()
+        A_diag.set_local(1.0/A_diag.array())
+     elif CG0H == 1:
+        S = TensorFunctionSpace(mesh,'DG',0)
+        A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
+        b = assemble(inner(grad(grad(f)), TestFunction(S))*dx)
+        ones_ = Function(S)
+        ones_.vector()[:] = 1
+        A_diag = A * ones_.vector()
+        A_diag.set_local(1.0/A_diag.array())
+        H = Function(S)
+        H.vector()[:] = b * A_diag
+     else:
+        H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
   else:
     gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
     H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
@@ -459,7 +501,7 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_e
   H11 = H.vector().array()[cell2dof[:,0]]
   H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,2]]
   H22 = H.vector().array()[cell2dof[:,3]]
-  # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
+  # CALCULATE EIGENVALUES 
   [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
   
   #enforce contraints
@@ -487,8 +529,10 @@ def metric_pnorm(f, mesh, eta, max_edge_length=None, min_edge_length=None, max_e
   H.vector().set_local(cbig)
   return H
 
-
-def metric_ellipse(H1, H2, mesh, method='in'):
+def metric_ellipse(H1, H2, method='in'):
+  #this function calculates the inner or outer ellipse (depending on the value of the method input)
+  #of two the two input metrics.
+  mesh = H1.function_space().mesh()
   # Sanity checks
   cell2dof = c_cell_dofs(mesh,H1.function_space())
   cell2dof = cell2dof.reshape([mesh.num_cells(),4])

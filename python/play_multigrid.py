@@ -1,3 +1,8 @@
+### this a testcase for use with DOLFIN/FEniCS and PRAgMaTIc 
+### by Gerard Gorman, Imperial College London
+### the purpose of the test case is to illustrate the use of the refine_metric function.
+### The idea is to use the functionality in a multigrid algorithm.
+
 from dolfin import *
 from adaptivity2 import refine_metric, adapt, metric_pnorm
 set_log_level(WARNING)
