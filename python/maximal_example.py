@@ -80,8 +80,7 @@ def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
     
     figure() #analytical solution
     testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
-    vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-    zz = testf.vector().array()[vtx2dof]
+    zz = testfe.vector().array()[vtx2dof]
     hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
     colorbar(hh)
     #savefig('analyt.png',dpi=300) #savefig('analyt.eps');

@@ -9,7 +9,7 @@
 
 from dolfin import *
 from adaptivity2 import metric_pnorm, adapt
-from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap, title
+from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap, title, figure
 from pylab import plot as pyplot
 from numpy import array, ones
 import numpy
@@ -55,16 +55,35 @@ def minimal_example(width=5e-2, Nadapt=10, eta = 0.01):
       L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')
       log(INFO+1,"total (adapt+metric) time was %0.1fs, L2error=%0.0e, nodes: %0.0f" % (time()-startTime,L2error,mesh.num_vertices()))
     
-    # PLOT MESH
-    testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
-    testf = interpolate(Expression(testsol),FunctionSpace(mesh,'CG',1))
-    vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-    zz = testf.vector().array()[vtx2dof]-testfe.vector().array()[vtx2dof]; zz[zz==1] -= 1e-16
-    hh=tricontourf(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),zz,100,cmap=get_cmap('binary'))
-    colorbar(hh)
+    #    # PLOT MESH
+#    figure()
+     coords = mesh.coordinates().transpose()
+#    triplot(coords[0],coords[1],mesh.cells(),linewidth=0.1)
+#    #savefig('mesh.png',dpi=300) #savefig('mesh.eps'); 
+            
+     figure() #solution
+     testf = interpolate(Expression(testsol),FunctionSpace(mesh,'CG',1))
+     vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
+     zz = testf.vector().array()[vtx2dof]
+     hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
+     colorbar(hh)
+    #savefig('solution.png',dpi=300) #savefig('solution.eps'); 
     
-    hold('on'); triplot(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),color='r',linewidth=0.5); hold('off')
-    axis('equal'); box('off'); title('error'); show()
+     figure() #analytical solution
+     testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
+     zz = testfe.vector().array()[vtx2dof]
+     hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
+     colorbar(hh)
+    #savefig('analyt.png',dpi=300) #savefig('analyt.eps');
+    
+     figure() #error
+     zz -= testf.vector().array()[vtx2dof]; zz[zz==1] -= 1e-16
+     hh=tricontourf(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),zz,100,cmap=get_cmap('binary'))
+     colorbar(hh)
+    
+     hold('on'); triplot(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),color='r',linewidth=0.5); hold('off')
+     axis('equal'); box('off'); title('error')
+     show()
 
 if __name__=="__main__":
  minimal_example()
