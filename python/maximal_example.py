@@ -14,7 +14,7 @@ from pylab import plot as pyplot
 from numpy import array
 from sympy import Symbol, diff, Subs
 from sympy import sin as pysin
-from sympy import atan as pyatan
+from sympy import atan2 as pyatan
 set_log_level(INFO+1)
 #parameters["allow_extrapolation"] = True
 
@@ -22,17 +22,19 @@ def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
     ### CONSTANTS
     meshsz = 40
         ### SETUP MESH
-    mesh = RectangleMesh(-0.75,-0.25,0.,0.75,1*meshsz,1*meshsz,"left/right")
+#    mesh = RectangleMesh(0.4,-0.1,0.6,0.3,1*meshsz,1*meshsz,"left/right") #shock
+#    mesh = RectangleMesh(-0.75,-0.3,-0.3,0.5,1*meshsz,1*meshsz,"left/right") #waves
+    mesh = RectangleMesh(-1.5,-0.25,0.5,0.75,1*meshsz,1*meshsz,"left/right") #shock+waves
     ### SETUP SOLUTION
     #testsol = '0.1*sin(50*x+2*pi*t/T)+atan(-0.1/(2*x - sin(5*y+2*pi*t/T)))';
     sx = Symbol('sx'); sy = Symbol('sy'); sT = Symbol('sT'); st = Symbol('st');  spi = Symbol('spi')
-    testsol = 0.1*pysin(50*sx+2*spi*st/sT)+pyatan(-0.1/(2*sx - pysin(5*sy+2*spi*st/sT)))
+    testsol = 0.1*pysin(50*sx+2*spi*st/sT)+pyatan(-0.1,2*sx - pysin(5*sy+2*spi*st/sT))
     ddtestsol = str(diff(testsol,sx,sx)+diff(testsol,sy,sy)).replace('sx','x[0]').replace('sy','x[1]').replace('spi','pi')
     
     # replacing **P with pow(,P)
     ddtestsol = ddtestsol.replace("(2*x[0] - sin(5*x[1] + 2*pi*st/sT))**2","pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),2.)")
     ddtestsol = ddtestsol.replace("cos(5*x[1] + 2*pi*st/sT)**2","pow(cos(5*x[1] + 2*pi*st/sT),2.)")
-    ddtestsol = ddtestsol.replace("(2*x[0] - sin(5*x[1] + 2*pi*st/sT))**3","pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),3.)")
+    ddtestsol = ddtestsol.replace("(pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),2.) + 0.01)**2","pow((pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),2.) + 0.01),2.)")
     ddtestsol = ddtestsol.replace("(1 + 0.01/pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),2.))**2","pow(1 + 0.01/pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),2.),2.)")
     ddtestsol = ddtestsol.replace("(2*x[0] - sin(5*x[1] + 2*pi*st/sT))**5","pow(2*x[0] - sin(5*x[1] + 2*pi*st/sT),5.)")
     #insert values
@@ -55,7 +57,7 @@ def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
      soltime = time()-startTime
      
      startTime = time()
-     H = metric_pnorm(u, eta, max_edge_ratio=50, CG0H=3)
+     H = metric_pnorm(u, eta, max_edge_ratio=50, CG0H=3, p=4)
      metricTime = time()-startTime
      if iii != Nadapt-1:
       mesh = adapt(H) 
