@@ -140,28 +140,33 @@ template<typename real_t>
   void relax_mesh(double omega){
     assert(_metric!=NULL);
     
-    size_t pNElements = (size_t) 3*predict_nelements_part();
+    size_t pNElements = (size_t)predict_nelements_part();
+
+    // We don't really know how much addition space we'll need so this was set after some experimentation.
+    size_t fudge = 5;
 
     if(pNElements > _mesh->NElements){
       // Let's leave a safety margin.
-      pNElements *= 3;
+      pNElements *= fudge;
     }else{
       /* The mesh can contain more elements than the predicted number, however
        * some elements may still need to be refined, therefore until the mesh
        * is coarsened and defraged we need extra space for the new vertices and
        * elements that will be created during refinement.
        */
-      pNElements = _mesh->NElements * 3;
+      pNElements = _mesh->NElements * fudge;
     }
-
+    
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
+    size_t pNNodes = 0.5*pNElements;
+
     _mesh->_ENList.resize(pNElements*3);
-    _mesh->_coords.resize(pNElements);
-    _mesh->metric.resize(pNElements*1.5);
-    _mesh->NNList.resize(pNElements/2);
-    _mesh->NEList.resize(pNElements/2);
-    _mesh->node_owner.resize(pNElements/2, -1);
-    _mesh->lnn2gnn.resize(pNElements/2, -1);
+    _mesh->_coords.resize(pNNodes*2);
+    _mesh->metric.resize(pNNodes*4);
+    _mesh->NNList.resize(pNNodes);
+    _mesh->NEList.resize(pNNodes);
+    _mesh->node_owner.resize(pNNodes, -1);
+    _mesh->lnn2gnn.resize(pNNodes, -1);
 
 #ifdef HAVE_MPI
     // At this point we can establish a new, gappy global numbering system
@@ -452,41 +457,46 @@ template<typename real_t>
   /*! Predict the number of elements in this partition when mesh satisfies metric tensor field.
    */
   real_t predict_nelements_part(){
-    double predicted=0;
-    const double inv3=1.0/3.0;
-
-    // Ideal area of triangle in metric space.
-    const double ideal_area = sqrt(3.0)/4.0;
-
-    if(_NElements>0){
+    real_t total_area_metric = 0.0;
+#pragma omp parallel
+    {
+      const double inv3=1.0/3.0;
+      
       const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
       ElementProperty<real_t> property(refx0, refx1, refx2);
-
-      real_t total_area_metric = 0.0;
+      
+#pragma omp for reduction(+:total_area_metric)
       for(int i=0;i<_NElements;i++){
-        const index_t *n=_mesh->get_element(i);
-
-        const real_t *x0 = _mesh->get_coords(n[0]);
-        const real_t *x1 = _mesh->get_coords(n[1]);
-        const real_t *x2 = _mesh->get_coords(n[2]);
-        real_t area = property.area(x0, x1, x2);
-
-        const double *m0=_metric[n[0]].get_metric();
-        const double *m1=_metric[n[1]].get_metric();
-        const double *m2=_metric[n[2]].get_metric();
-
-        real_t m00 = (m0[0]+m1[0]+m2[0])*inv3;
-        real_t m01 = (m0[1]+m1[1]+m2[1])*inv3;
-        real_t m11 = (m0[2]+m1[2]+m2[2])*inv3;
-
-        real_t det = m00*m11-m01*m01;
-        total_area_metric += area*sqrt(det);
+	const index_t *n=_mesh->get_element(i);
+	
+	const real_t *x0 = _mesh->get_coords(n[0]);
+	const real_t *x1 = _mesh->get_coords(n[1]);
+	const real_t *x2 = _mesh->get_coords(n[2]);
+	real_t area = property.area(x0, x1, x2);
+	
+	const double *m0=_metric[n[0]].get_metric();
+	const double *m1=_metric[n[1]].get_metric();
+	const double *m2=_metric[n[2]].get_metric();
+	
+	real_t m00 = (m0[0]+m1[0]+m2[0])*inv3;
+	real_t m01 = (m0[1]+m1[1]+m2[1])*inv3;
+	real_t m11 = (m0[2]+m1[2]+m2[2])*inv3;
+	
+	real_t det = m00*m11-m01*m01;
+	
+	total_area_metric += area*sqrt(det);
       }
-
-      predicted = total_area_metric/ideal_area;
     }
+    
+    /* Ideal area of equilateral triangle in metric space:
+       s^2*sqrt(3)/4 where s is the length of the side. However, algorithm
+       allows lengths from 1/sqrt(2) up to sqrt(2) in metric
+       space. Therefore:*/
+    const double smallest_ideal_area = 0.5*(sqrt(3.0)/4.0);
+    
+    double predicted = total_area_metric/smallest_ideal_area;
 
     return predicted;
   }
