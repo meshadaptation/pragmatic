@@ -107,7 +107,7 @@ template<typename real_t> class Refine2D{
     size_t origNElements = _mesh->get_number_elements();
     size_t origNNodes = _mesh->get_number_nodes();
     
-    allNewVertices = new DirectedEdge<index_t>[3*origNElements];
+    allNewVertices = new DirectedEdge<index_t>[100*origNElements];
 
 #pragma omp parallel
     {
@@ -154,6 +154,20 @@ template<typename real_t> class Refine2D{
       
       threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
 
+#pragma omp barrier
+
+#pragma omp single
+      {      
+	if(_mesh->_coords.size()<_mesh->NNodes*3){ 
+	  _mesh->_coords.resize(_mesh->NNodes*ndims);
+	  _mesh->metric.resize(_mesh->NNodes*msize);
+	  _mesh->NNList.resize(_mesh->NNodes);
+	  _mesh->NEList.resize(_mesh->NNodes);
+	  _mesh->node_owner.resize(_mesh->NNodes);
+	  _mesh->lnn2gnn.resize(_mesh->NNodes);
+	}
+      }
+
       // Append new coords and metric to the mesh.
       memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
@@ -175,7 +189,7 @@ template<typename real_t> class Refine2D{
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
         index_t secondid = allNewVertices[i].edge.second;
-        
+
         // Find which elements share this edge and mark them with their new vertices.
         std::set<index_t> intersection;
         std::set_intersection( _mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
