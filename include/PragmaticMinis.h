@@ -75,6 +75,7 @@ int pragmatic_process_id(MPI_Comm comm){
   return id;
 }
 
+// Returns the original value of shared, while incrementing *shared by inc.
 size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc){
   size_t old;
 
