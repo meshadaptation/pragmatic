@@ -63,10 +63,10 @@ int main(int argc, char **argv){
   size_t NElements = mesh->get_number_elements();
 
   for(size_t i=0;i<NNodes;i++){
-    float hx=0.025 + 0.09*mesh->get_coords(i)[0];
-    float hy=0.025 + 0.09*mesh->get_coords(i)[1];
-    float hz=0.025 + 0.09*mesh->get_coords(i)[2];
-    float m[] =
+    double hx=0.025 + 0.09*mesh->get_coords(i)[0];
+    double hy=0.025 + 0.09*mesh->get_coords(i)[1];
+    double hz=0.025 + 0.09*mesh->get_coords(i)[2];
+    double m[] =
       {1.0f/powf(hx, 2),
        0.0f,           
        0.0f,
