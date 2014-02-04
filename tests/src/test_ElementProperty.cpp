@@ -42,27 +42,27 @@
 int main(){
   // Check triangles
   {
-    float fx0[] = {0.0, 0.0};
-    float fx1[] = {1.0, 0.0};
-    float fx2[] = {0.0, 1.0};
-    float fm[] = {1.0, 0.0, 1.0};
+    double fx0[] = {0.0, 0.0};
+    double fx1[] = {1.0, 0.0};
+    double fx2[] = {0.0, 1.0};
+    double fm[] = {1.0, 0.0, 1.0};
 
-    ElementProperty<float> ftriangle(fx0, fx1, fx2);
+    ElementProperty<double> ftriangle(fx0, fx1, fx2);
 
-    std::cout<<"Test ElementProperty<float>::area:"<<std::endl;
-    if(fabs((float)0.5-ftriangle.area(fx0, fx1, fx2))==0)
+    std::cout<<"Test ElementProperty<double>::area:"<<std::endl;
+    if(fabs((double)0.5-ftriangle.area(fx0, fx1, fx2))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
     
-    std::cout<<"Test ElementProperty<float>::length:"<<std::endl;
-    if((sqrtf(2.0)-ftriangle.length(fx1, fx2, fm))==0)
+    std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
+    if((sqrt(2.0)-ftriangle.length(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<float>::length2d:"<<std::endl;
-    if((sqrtf(2.0)-ftriangle.length2d(fx1, fx2, fm))==0)
+    std::cout<<"Test ElementProperty<double>::length2d:"<<std::endl;
+    if((sqrt(2.0)-ftriangle.length2d(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
@@ -79,25 +79,19 @@ int main(){
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<double> single precision area:"<<std::endl;
-    if(fabs((float)0.5-triangle.farea(x0, x1, x2))==0)
-      std::cout<<"pass\n";
-    else
-      std::cout<<"fail\n";
-
     std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
-    if((sqrtf(2.0)-triangle.length(x1, x2, fm))==0)
+    if((sqrt(2.0)-triangle.length(x1, x2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length2d:"<<std::endl;
-    if((sqrtf(2.0)-triangle.length2d(x1, x2, fm))==0)
+    if((sqrt(2.0)-triangle.length2d(x1, x2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<float>::lipnikov/ElementProperty<double>::lipnikov 2D:"<<std::endl;
+    std::cout<<"Test ElementProperty<double>::lipnikov/ElementProperty<double>::lipnikov 2D:"<<std::endl;
     if(ftriangle.lipnikov(fx0, fx1, fx2, fm[0], fm[1], fm[2])==
        triangle.lipnikov(x0, x1, x2, fm[0], fm[1], fm[2]))
       std::cout<<"pass\n";
@@ -107,27 +101,27 @@ int main(){
 
   // Check tetrahedra
   {
-    float fx0[] = {0.0, 0.0, 0.0};
-    float fx1[] = {1.0, 0.0, 0.0};
-    float fx2[] = {0.0, 1.0, 0.0};
-    float fx3[] = {0.0, 1.0, 1.0};
-    float fm[] = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0};
+    double fx0[] = {0.0, 0.0, 0.0};
+    double fx1[] = {1.0, 0.0, 0.0};
+    double fx2[] = {0.0, 1.0, 0.0};
+    double fx3[] = {0.0, 1.0, 1.0};
+    double fm[] = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0};
     
-    ElementProperty<float> ftetrahedron(fx0, fx1, fx2, fx3);
+    ElementProperty<double> ftetrahedron(fx0, fx1, fx2, fx3);
 
-    std::cout<<"Test ElementProperty<float> single precision volume:"<<std::endl;
-    if(fabs((float)(1.0/6.0)-ftetrahedron.volume(fx0, fx1, fx2, fx3))==0)
+    std::cout<<"Test ElementProperty<double> single precision volume:"<<std::endl;
+    if(fabs((double)(1.0/6.0)-ftetrahedron.volume(fx0, fx1, fx2, fx3))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<float>::length:"<<std::endl;
+    std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
     if((sqrtf(2.0)-ftetrahedron.length(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<float>::length3d:"<<std::endl;
+    std::cout<<"Test ElementProperty<double>::length3d:"<<std::endl;
     if((sqrtf(2.0)-ftetrahedron.length3d(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
@@ -147,7 +141,7 @@ int main(){
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double> single precision volume:"<<std::endl;
-    if(fabs((float)(1.0/6.0)-tetrahedron.fvolume(x0, x1, x2, x3))==0)
+    if(fabs((double)(1.0/6.0)-tetrahedron.volume(x0, x1, x2, x3))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
@@ -164,7 +158,7 @@ int main(){
     else
       std::cout<<"fail\n";
 
-    std::cout<<"Test ElementProperty<float>::lipnikov/ElementProperty<double>::lipnikov 3D:"<<std::endl;
+    std::cout<<"Test ElementProperty<double>::lipnikov/ElementProperty<double>::lipnikov 3D:"<<std::endl;
     if(ftetrahedron.lipnikov(fx0, fx1, fx2, fx3, fm, fm, fm, fm)==
        tetrahedron.lipnikov(x0, x1, x2, x3, fm, fm, fm, fm))
       std::cout<<"pass\n";
