@@ -43,6 +43,8 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+#include "PragmaticMinis.h"
+
 // 2D version
 template<typename treal_t> class MetricTensor2D;
 
