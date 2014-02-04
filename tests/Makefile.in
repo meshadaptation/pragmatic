@@ -54,7 +54,7 @@ TEST_CUDA_SRC = test_cuda.cu
 TEST_CUDA_BIN = $(patsubst src/%.cu,bin_generic/%,$(TEST_CUDA_SRC))
 endif
 
-TEST_CXX_SRC = src/test_colour.cpp src/test_eigen.cpp src/test_ElementProperty.cpp src/test_page_faults.cpp
+TEST_CXX_SRC = src/test_eigen.cpp src/test_ElementProperty.cpp src/test_page_faults.cpp
 TEST_CXX_BIN = $(patsubst src/%.cpp,bin_generic/%,$(TEST_CXX_SRC))
 
 TEST_GENERIC = $(TEST_CUDA_BIN) $(TEST_CXX_BIN)
