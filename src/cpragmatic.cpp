@@ -219,12 +219,14 @@ extern "C" {
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       ((MetricField2D<double> *)_pragmatic_metric_field)->set_metric(metric);
       ((MetricField2D<double> *)_pragmatic_metric_field)->update_mesh();
+      
+      ((MetricField2D<double> *)_pragmatic_metric_field)->relax_mesh(1.0);
     }else{
       ((MetricField3D<double> *)_pragmatic_metric_field)->set_metric(metric);
       ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
     }
   }
-
+  
   /** Adapt the mesh.
    */
   void pragmatic_adapt(){
@@ -253,8 +255,6 @@ extern "C" {
         coarsen.coarsen(L_low, L_ref);
         swapping.swap(0.7);
         refine.refine(L_ref);
-
-        // smooth.smooth("optimisation Linf", 1);
 
         L_max = mesh->maximal_edge_length();
 
