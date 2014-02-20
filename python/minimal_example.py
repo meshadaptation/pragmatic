@@ -8,7 +8,7 @@
 ### error level (eta) are optional input parameters
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, adapt
+from adaptivity2 import metric_pnorm, logproject, adapt
 from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap, title, figure, savefig
 from pylab import plot as pyplot
 from numpy import array, ones
@@ -50,6 +50,7 @@ def minimal_example(width=5e-2, Nadapt=10, eta = 0.01):
      solve(a == L, u, bc)
      startTime = time()
      H = metric_pnorm(u, eta, max_edge_length=1., max_edge_ratio=50)
+     H = logproject(H)
      if iii != Nadapt-1:
       mesh = adapt(H)
       L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')

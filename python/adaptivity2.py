@@ -57,7 +57,7 @@ import ctypes
 import ctypes.util
 
 import numpy, scipy.sparse, scipy.sparse.linalg
-from numpy import array, zeros, ones, matrix, linalg, any
+from numpy import array, zeros, ones, any
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -117,10 +117,16 @@ def mesh_metric(mesh):
   A21 = r2[:,0]**2; A22 = 2.*r2[:,0]*r2[:,1]; A23 = r2[:,1]**2
   A31 = r3[:,0]**2; A32 = 2.*r3[:,0]*r3[:,1]; A33 = r3[:,1]**2
   #DEFINE AND SOLVE MANY SMALL PROBLEMS AS SINGLE SPARSE (BIG) PROBLEM numpy 1.8.0 allows a better implementation
-  R = array(range(mesh.num_cells()*3)).repeat(3)
-  C = array(range(mesh.num_cells()*3)).repeat(3).reshape([mesh.num_cells(),3,3]).transpose([0,2,1]).flatten()
-  RCdata = array([[A11,A12,A13],[A21,A22,A23],[A31,A32,A33]]).transpose([2,0,1]).flatten()
-  A = scipy.sparse.csr_matrix((RCdata,(R,C)),shape=(3*mesh.num_cells(),3*mesh.num_cells()))
+  #R = array(range(mesh.num_cells()*3)).repeat(3)
+  #C = array(range(mesh.num_cells()*3)).repeat(3).reshape([mesh.num_cells(),3,3]).transpose([0,2,1]).flatten()
+  #RCdata = array([[A11,A12,A13],[A21,A22,A23],[A31,A32,A33]]).transpose([2,0,1]).flatten()
+  #A = scipy.sparse.csr_matrix((RCdata,(R,C)),shape=(3*mesh.num_cells(),3*mesh.num_cells()))
+  A11 = array([A11,A22,A33]).T.flatten()
+  A12_ = A12; A12 = zeros(3*len(A33)); A12[array(range(1,len(A12),3))] = A12_;  A12[array(range(2,len(A12),3))] = A23
+  A13_ = A13; A13 = zeros(3*len(A33)); A13[array(range(2,len(A13),3))] = A13_
+  A21_ = A21; A21 = zeros(3*len(A33)); A21[array(range(0,len(A21),3))] = A21_; A21[array(range(1,len(A21),3))] = A32
+  A31_ = A31; A31 = zeros(3*len(A33)); A31[array(range(0,len(A31),3))] = A31_
+  A = scipy.sparse.spdiags(array([A11, A12, A13, A21, A31]), array([0, 1, 2, -1, -2]), 3*len(A33), 3*len(A33)).tocsr()
   b = ones(3*mesh.num_cells())
   X = scipy.sparse.linalg.spsolve(A,b)
   #set solution
@@ -129,6 +135,23 @@ def mesh_metric(mesh):
   X22 = X[range(2,mesh.num_cells()*3,3)]
   M = Function(TensorFunctionSpace(mesh,"DG", 0))
   M.vector().set_local(array([X11,X12,X12,X22]).transpose().flatten()[cell2dof])
+  return M
+
+def mesh_metric1(mesh):
+  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
+  #ellipse for the individual elements, see the test case mesh_metric2_example
+  M = mesh_metric(mesh)
+  cell2dof = c_cell_dofs(mesh,M.function_space())
+  cell2dof_ = cell2dof.reshape([mesh.num_cells(),4])
+  M11 = M.vector().array()[cell2dof_[:,0]]
+  M12 = M.vector().array()[cell2dof_[:,1]] 
+  M22 = M.vector().array()[cell2dof_[:,3]]
+  # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
+  [lambda1,lambda2,v1xn,v1yn] = analytic_eig(M11,M12,M22)
+  lambda1 = numpy.sqrt(lambda1)
+  lambda2 = numpy.sqrt(lambda2)
+  [M11,M12,M22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
+  M.vector().set_local(array([M11,M12,M12,M22]).transpose().flatten()[cell2dof])
   return M
 
 def mesh_metric2(mesh):
@@ -199,7 +222,8 @@ def gen_polygon_surfmesh(cells,coords):
     edg = edg.transpose().flatten()
     edg = array([edg[R*2+C[0,:]].tolist(),edg[R*2+C[1,:]].tolist()])
     #sort according to first node number
-    I2 = (edg[0,:]*(2+edg.max())+edg[1,:]).argsort()
+    #I2 = (edg[0,:]*(2+edg.max())+edg[1,:]).argsort()
+    I2 = numpy.argsort(array(zip(edg[0,:],edg[1,:]),dtype=[('e1',int),('e2',int)]),order=['e1','e2'])
     edg = edg[:,I2] 
     #find unique edges
     d = array([any(edg[:,0] != edg[:,1])] +\
@@ -265,7 +289,7 @@ def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
     assert(err < 2.0e-11 * area)
   return n_mesh
   
-def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
+def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
@@ -275,9 +299,10 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
   else:
     warning("target mesh has %0.0f nodes" % targetN)  
   
-  metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1))
+  if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
+   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
   metric = fix_CG1_metric(metric) #fixes negative eigenvalues
-  space = FunctionSpace(mesh, "CG", 1)
+  space = metric.function_space() #FunctionSpace(mesh, "CG", 1)
   element = space.ufl_element()
 
   # Sanity checks
@@ -298,7 +323,22 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
   x = coords[nodes,0]
   y = coords[nodes,1]
   cells = array(cells,dtype=numpy.intc)
-    
+  
+  # Dolfin stores the tensor as:
+  # |dxx dxy|
+  # |dyx dyy|
+    ## THE (CG1-)DOF NUMBERS ARE DIFFERENT FROM THE VERTEX NUMBERS (and we wish to work with the former)
+  if dolfin.__version__ != '1.2.0':
+      dof2vtx = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
+  else:
+      dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
+  
+  metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
+  metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[array(range(0,metric.vector().array().size,4))[dof2vtx]]
+  metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
+  metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
+  metric_arr[range(3,metric.vector().array().size,4)] = metric.vector().array()[array(range(3,metric.vector().array().size,4))[dof2vtx]]
+  
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
@@ -318,24 +358,6 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debug=True):
                                       bfaces_IDs.ctypes.data)
   
   info("Setting metric tensor field ...")
-  # Dolfin stores the tensor as:
-  # |dxx dxy|
-  # |dyx dyy|
-    ## THE (CG1-)DOF NUMBERS ARE DIFFERENT FROM THE VERTEX NUMBERS (and we wish to work with the former)
-  if dolfin.__version__ != '1.2.0':
-      dof2vtx = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-  else:
-      dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
-  
-  metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
-  metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[array(range(0,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(3,metric.vector().array().size,4)] = metric.vector().array()[array(range(3,metric.vector().array().size,4))[dof2vtx]]
-  
-  #from IPython import embed
-  #embed()
-
   _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data)
   
   info("Entering adapt ...")
@@ -438,6 +460,32 @@ def fix_CG1_metric(Mp):
  Mp.vector().set_local(out)
  return Mp
  
+def logexpmetric(Mp,logexp='log'):
+    H11 = Mp.vector().array()[range(0,Mp.vector().array().size,4)]
+    H12 = Mp.vector().array()[range(1,Mp.vector().array().size,4)]
+    H22 = Mp.vector().array()[range(3,Mp.vector().array().size,4)]
+    [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
+    if logexp=='log':
+     lambda1 = numpy.log(lambda1)
+     lambda2 = numpy.log(lambda2)
+    else:
+     lambda1 = numpy.exp(lambda1)
+     lambda2 = numpy.exp(lambda2)
+    [H11,H12,H22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
+    out = zeros(Mp.vector().array().size)
+    out[range(0,Mp.vector().array().size,4)] = H11
+    out[range(1,Mp.vector().array().size,4)] = H12
+    out[range(2,Mp.vector().array().size,4)] = H12
+    out[range(3,Mp.vector().array().size,4)] = H22
+    Mp.vector().set_local(out)
+    return Mp
+
+def logproject(Mp):
+    mesh = Mp.function_space().mesh()
+    logMp = project(logexpmetric(Mp),TensorFunctionSpace(mesh,'CG',1))
+    return logexpmetric(logMp,logexp='exp')
+    
+ 
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
 # the DG0 hessian can be extracted in three different ways (controlled CG0H option)
@@ -533,9 +581,12 @@ def metric_ellipse(H1, H2, method='in'):
   #this function calculates the inner or outer ellipse (depending on the value of the method input)
   #of two the two input metrics.
   mesh = H1.function_space().mesh()
-  # Sanity checks
-  cell2dof = c_cell_dofs(mesh,H1.function_space())
-  cell2dof = cell2dof.reshape([mesh.num_cells(),4])
+  if H1.function_space().ufl_element().degree() == 0 and H1.function_space().ufl_element().family()[0] == 'D':
+      # Sanity checks
+      cell2dof = c_cell_dofs(mesh,H1.function_space())
+      cell2dof = cell2dof.reshape([mesh.num_cells(),4])
+  else: #CG1 metric
+      cell2dof = array(range(mesh.num_vertices()*4)).reshape([mesh.num_vertices(),4])
   H1aa = H1.vector().array()[cell2dof[:,0]]
   H1ab = H1.vector().array()[cell2dof[:,1]] #;H1ba = H1.vector().array()[cell2dof[:,2]]
   H1bb = H1.vector().array()[cell2dof[:,3]] 

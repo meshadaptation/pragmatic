@@ -31,9 +31,10 @@ def test_mesh_metric():
     a = inner(grad(dis), grad(dus))*dx
     L = R*dus*dx
     solve(a == L, u, [])
-    eta = 0.01; H = metric_pnorm(u, mesh, eta, max_edge_ratio=50);   Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
-    mesh = adapt(Mp) 
-     
+    eta = 0.01; H = metric_pnorm(u, eta, max_edge_ratio=50)
+    #Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
+    mesh = adapt(H)
+
     #extract mesh metric
     MpH = mesh_metric2(mesh)
     # Plot element i

@@ -9,22 +9,20 @@
 
 from dolfin import *
 from adaptivity2 import metric_pnorm, adapt
-from pylab import hold, show, axis, box, figure, tricontourf, triplot, colorbar, savefig, title, get_cmap
+from pylab import loglog, hold, show, axis, box, figure, tricontourf, triplot, colorbar, savefig, title, get_cmap, xlabel, ylabel
 from pylab import plot as pyplot
 from numpy import array
 from sympy import Symbol, diff, Subs
 from sympy import sin as pysin
 from sympy import atan2 as pyatan
+from numpy import log as pylog
+from numpy import exp as pyexp2
 set_log_level(INFO+1)
 #parameters["allow_extrapolation"] = True
 
-def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
+def maximal_example(eta_list = array([0.001]), Nadapt=5, timet=1., period=2*pi):
     ### CONSTANTS
-    meshsz = 40
-        ### SETUP MESH
-#    mesh = RectangleMesh(0.4,-0.1,0.6,0.3,1*meshsz,1*meshsz,"left/right") #shock
-#    mesh = RectangleMesh(-0.75,-0.3,-0.3,0.5,1*meshsz,1*meshsz,"left/right") #waves
-    mesh = RectangleMesh(-1.5,-0.25,0.5,0.75,1*meshsz,1*meshsz,"left/right") #shock+waves
+
     ### SETUP SOLUTION
     #testsol = '0.1*sin(50*x+2*pi*t/T)+atan(-0.1/(2*x - sin(5*y+2*pi*t/T)))';
     sx = Symbol('sx'); sy = Symbol('sy'); sT = Symbol('sT'); st = Symbol('st');  spi = Symbol('spi')
@@ -42,30 +40,47 @@ def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
     testsol = str(testsol).replace('sx','x[0]').replace('sy','x[1]').replace('spi','pi').replace('sT',str(period)).replace('st',str(timet))
     ddtestsol = "-("+ddtestsol+")"
     
-    def boundary(x):
-          return near(x[0],mesh.coordinates()[:,0].min()) or near(x[0],mesh.coordinates()[:,0].max()) \
-          or near(x[1],mesh.coordinates()[:,1].min()) or near(x[1],mesh.coordinates()[:,1].max())
-    # PERFORM ONE ADAPTATION ITERATION
-    for iii in range(Nadapt):
-     startTime = time()
-     V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
-#     R = interpolate(Expression(ddtestsol),V)
-     a = inner(grad(dis), grad(dus))*dx
-     L = Expression(ddtestsol)*dus*dx #
-     bc = DirichletBC(V, Expression(testsol), boundary)
-     solve(a == L, u, bc)
-     soltime = time()-startTime
-     
-     startTime = time()
-     H = metric_pnorm(u, eta, max_edge_ratio=50, CG0H=3, p=4)
-     metricTime = time()-startTime
-     if iii != Nadapt-1:
-      mesh = adapt(H) 
-      TadaptTime = time()-startTime
-      L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')
-      print("%5.0f elements, %0.0e L2error, adapt took %0.0f %% of the total time, (%0.0f %% of which was the metric calculation)" \
-      % (mesh.num_cells(),L2error,TadaptTime/(TadaptTime+soltime)*100,metricTime/TadaptTime*100))
+    error_list = []; dof_list = []
+    for eta in eta_list:
+        meshsz = 40
+        ### SETUP MESH
+    #   mesh = RectangleMesh(0.4,-0.1,0.6,0.3,1*meshsz,1*meshsz,"left/right") #shock
+    #   mesh = RectangleMesh(-0.75,-0.3,-0.3,0.5,1*meshsz,1*meshsz,"left/right") #waves
+        mesh = RectangleMesh(-1.5,-0.25,0.5,0.75,1*meshsz,1*meshsz,"left/right") #shock+waves
+        
+        def boundary(x):
+              return near(x[0],mesh.coordinates()[:,0].min()) or near(x[0],mesh.coordinates()[:,0].max()) \
+              or near(x[1],mesh.coordinates()[:,1].min()) or near(x[1],mesh.coordinates()[:,1].max())
+        # PERFORM ONE ADAPTATION ITERATION
+        for iii in range(Nadapt):
+         startTime = time()
+         V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
+    #     R = interpolate(Expression(ddtestsol),V)
+         a = inner(grad(dis), grad(dus))*dx
+         L = Expression(ddtestsol)*dus*dx #
+         bc = DirichletBC(V, Expression(testsol), boundary)
+         solve(a == L, u, bc)
+         soltime = time()-startTime
+         
+         startTime = time()
+         H = metric_pnorm(u, eta, max_edge_ratio=50, CG0H=3, p=4)
+         metricTime = time()-startTime
+         if iii != Nadapt-1:
+          mesh = adapt(H) 
+          TadaptTime = time()-startTime
+          L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')
+          printstr = "%5.0f elements, %0.0e L2error, adapt took %0.0f %% of the total time, (%0.0f %% of which was the metric calculation)" \
+           % (mesh.num_cells(),L2error,TadaptTime/(TadaptTime+soltime)*100,metricTime/TadaptTime*100)
+          if len(eta_list) == 1:
+           print(printstr)
+         else:
+          error_list.append(L2error); dof_list.append(len(u.vector().array()))
+          print(printstr)
     
+    if len(dof_list) > 1:
+        dof_list = array(dof_list); error_list = array(error_list)
+        figure()
+        loglog(dof_list,error_list,'.b-',linewidth=2,markersize=16); xlabel('Degree of freedoms'); ylabel('L2 error')
 #    # PLOT MESH
 #    figure()
     coords = mesh.coordinates().transpose()
@@ -97,4 +112,5 @@ def maximal_example(eta = 0.001, Nadapt=5, timet=1., period=2*pi):
     show()
 
 if __name__=="__main__":
- maximal_example()
+# maximal_example()
+ maximal_example(eta_list=0.02*pyexp2(-array(range(9))*pylog(2)/2))
