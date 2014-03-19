@@ -276,7 +276,7 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
     assert(err < 2.0e-11 * area)
   return n_mesh
   
-def adapt(metric, bfaces=None, bfaces_IDs=None, octaveimpl=False, debugon=True, eta=1e-2):
+def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
