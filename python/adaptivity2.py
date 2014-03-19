@@ -57,7 +57,7 @@ import ctypes
 import ctypes.util
 
 import numpy, scipy.sparse, scipy.sparse.linalg
-from numpy import array, zeros, ones, any
+from numpy import array, zeros, ones, any, arange
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -83,93 +83,6 @@ try:
   _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
-
-def c_cell_dofs(mesh,V):
-  #this function returns the degrees of freedom numbers in a cell
-  code = """
-  void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
-                 const std::vector<std::size_t>& cell_indices,
-                 std::vector<std::size_t>& dofs)
-  {
-    assert(dofmap);
-    std::size_t local_dof_size = dofmap->cell_dofs(0).size();
-    const std::size_t size = cell_indices.size()*local_dof_size;
-    dofs.resize(size);
-    for (std::size_t i=0; i<cell_indices.size(); i++)
-       for (std::size_t j=0; j<local_dof_size;j++)
-           dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
-  }
-  """
-  module = compile_extension_module(code)
-  return module.cell_dofs(V.dofmap(), array(range(mesh.num_cells()), dtype=numpy.uintp))
-
-
-def mesh_metric(mesh):
-  # this function calculates a mesh metric (or perhaps an inverse of that, see mesh_metric2...)
-  cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
-  cells = mesh.cells()
-  coords = mesh.coordinates()
-  p1 = coords[cells[:,0],:];
-  p2 = coords[cells[:,1],:];
-  p3 = coords[cells[:,2],:];
-  r1 = p1-p2; r2 = p1-p3; r3 = p2-p3
-  A11 = r1[:,0]**2; A12 = 2.*r1[:,0]*r1[:,1]; A13 = r1[:,1]**2
-  A21 = r2[:,0]**2; A22 = 2.*r2[:,0]*r2[:,1]; A23 = r2[:,1]**2
-  A31 = r3[:,0]**2; A32 = 2.*r3[:,0]*r3[:,1]; A33 = r3[:,1]**2
-  #DEFINE AND SOLVE MANY SMALL PROBLEMS AS SINGLE SPARSE (BIG) PROBLEM numpy 1.8.0 allows a better implementation
-  #R = array(range(mesh.num_cells()*3)).repeat(3)
-  #C = array(range(mesh.num_cells()*3)).repeat(3).reshape([mesh.num_cells(),3,3]).transpose([0,2,1]).flatten()
-  #RCdata = array([[A11,A12,A13],[A21,A22,A23],[A31,A32,A33]]).transpose([2,0,1]).flatten()
-  #A = scipy.sparse.csr_matrix((RCdata,(R,C)),shape=(3*mesh.num_cells(),3*mesh.num_cells()))
-  A11 = array([A11,A22,A33]).T.flatten()
-  A12_ = A12; A12 = zeros(3*len(A33)); A12[array(range(1,len(A12),3))] = A12_;  A12[array(range(2,len(A12),3))] = A23
-  A13_ = A13; A13 = zeros(3*len(A33)); A13[array(range(2,len(A13),3))] = A13_
-  A21_ = A21; A21 = zeros(3*len(A33)); A21[array(range(0,len(A21),3))] = A21_; A21[array(range(1,len(A21),3))] = A32
-  A31_ = A31; A31 = zeros(3*len(A33)); A31[array(range(0,len(A31),3))] = A31_
-  A = scipy.sparse.spdiags(array([A11, A12, A13, A21, A31]), array([0, 1, 2, -1, -2]), 3*len(A33), 3*len(A33)).tocsr()
-  b = ones(3*mesh.num_cells())
-  X = scipy.sparse.linalg.spsolve(A,b)
-  #set solution
-  X11 = X[range(0,mesh.num_cells()*3,3)]
-  X12 = X[range(1,mesh.num_cells()*3,3)]
-  X22 = X[range(2,mesh.num_cells()*3,3)]
-  M = Function(TensorFunctionSpace(mesh,"DG", 0))
-  M.vector().set_local(array([X11,X12,X12,X22]).transpose().flatten()[cell2dof])
-  return M
-
-def mesh_metric1(mesh):
-  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
-  #ellipse for the individual elements, see the test case mesh_metric2_example
-  M = mesh_metric(mesh)
-  cell2dof = c_cell_dofs(mesh,M.function_space())
-  cell2dof_ = cell2dof.reshape([mesh.num_cells(),4])
-  M11 = M.vector().array()[cell2dof_[:,0]]
-  M12 = M.vector().array()[cell2dof_[:,1]] 
-  M22 = M.vector().array()[cell2dof_[:,3]]
-  # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
-  [lambda1,lambda2,v1xn,v1yn] = analytic_eig(M11,M12,M22)
-  lambda1 = numpy.sqrt(lambda1)
-  lambda2 = numpy.sqrt(lambda2)
-  [M11,M12,M22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
-  M.vector().set_local(array([M11,M12,M12,M22]).transpose().flatten()[cell2dof])
-  return M
-
-def mesh_metric2(mesh):
-  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
-  #ellipse for the individual elements, see the test case mesh_metric2_example
-  M = mesh_metric(mesh)
-  cell2dof = c_cell_dofs(mesh,M.function_space())
-  cell2dof_ = cell2dof.reshape([mesh.num_cells(),4])
-  M11 = M.vector().array()[cell2dof_[:,0]]
-  M12 = M.vector().array()[cell2dof_[:,1]] 
-  M22 = M.vector().array()[cell2dof_[:,3]]
-  # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
-  [lambda1,lambda2,v1xn,v1yn] = analytic_eig(M11,M12,M22)
-  lambda1 = numpy.sqrt(1/lambda1)
-  lambda2 = numpy.sqrt(1/lambda2)
-  [M11,M12,M22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
-  M.vector().set_local(array([M11,M12,M12,M22]).transpose().flatten()[cell2dof])
-  return M
 
 def refine_metric(M, factor):
   class RefineExpression(Expression):
@@ -202,6 +115,74 @@ def edge_lengths(M):
 
   return e
 
+def gen_polyhedron_surfmesh(cells,coords):
+    #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
+    #curved geometries and the output will have to be modified for problems colinear faces.
+    #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
+    #is provided by the user, but the user can load this function herself, use it, modify the output
+    #and provide the modified surface mesh to adapt()
+    ntri = len(cells)
+    v1 = coords[cells[:,1],:]-coords[cells[:,0],:]
+    v2 = coords[cells[:,2],:]-coords[cells[:,0],:]
+    v3 = coords[cells[:,3],:]-(coords[cells[:,0],:]+coords[cells[:,1],:]+coords[cells[:,2],:])/3.
+    crossprod = array([v1[:,1]*v2[:,2]-v1[:,2]*v2[:,1], \
+                       v1[:,2]*v2[:,0]-v1[:,0]*v2[:,2], \
+                       v1[:,0]*v2[:,1]-v1[:,1]*v2[:,0]]).T
+    badcells = (crossprod*v3).sum(1)>0
+    tri = cells.flatten()
+    R = range(0,4*ntri,4); m1 = ones(ntri,dtype=numpy.int64)
+    tri = array([tri[R+badcells],tri[R+m1-badcells],tri[R+2*m1],tri[R+3*m1]])
+    fac = array([tri[0],tri[1],tri[2],tri[3],\
+                 tri[1],tri[0],tri[3],tri[2],\
+                 tri[3],tri[2],tri[1],tri[0]]).reshape([3,ntri*4])
+    #putting large node number in later row, smaller in first
+    C = fac.argsort(0)
+    Cgood = (C[0,:] == 0)*(C[0,:] == 1)+(C[1,:] == 1)*(C[0,:] == 2)+(C[1,:] == 2)*(C[0,:] == 0)
+    Cinv  = Cgood==False
+    R = arange(ntri*4)
+    fac = fac.transpose().flatten()
+    fac = array([fac[R*3+C[0,:]],fac[R*3+C[1,:]],fac[R*3+C[2,:]]])
+    #sort according to first node number (with fall back to second node number)
+    I2 = numpy.argsort(array(zip(fac[0,:],fac[1,:],fac[2,:]),dtype=[('e1',int),('e2',int),('e3',int)]),order=['e1','e2','e3'])
+    fac = fac[:,I2]
+    #find unique faces
+    d = array([any(fac[:,0] != fac[:,1])] +\
+         (any((fac[:,range(1,ntri*4-1)] != fac[:,range(2,ntri*4)]),0) *\
+          any((fac[:,range(1,ntri*4-1)] != fac[:,range(0,ntri*4-2)]),0)).tolist() +\
+              [any(fac[:,ntri*4-1] != fac[:,ntri*4-2])])
+    fac = fac[:,d]
+    #rearrange face to correct orientation
+    R = arange(sum(d))
+    fac = fac.transpose().flatten()
+    bfaces = array([fac[R*3+Cgood[I2[d]]],fac[R*3+Cinv[I2[d]]],fac[R*3+2]]).transpose()
+    # compute normal vector (n)
+    v1 = coords[bfaces[:,1],:]-coords[bfaces[:,0],:]
+    v2 = coords[bfaces[:,2],:]-coords[bfaces[:,0],:]
+    n = array([v1[:,1]*v2[:,2]-v1[:,2]*v2[:,1], \
+               v1[:,2]*v2[:,0]-v1[:,0]*v2[:,2], \
+               v1[:,0]*v2[:,1]-v1[:,1]*v2[:,0]]).T
+    n = n/numpy.sqrt(n[:,0]**2+n[:,1]**2+n[:,2]**2).repeat(3).reshape([len(n),3])
+    # compute sets of co-linear faces (this is specific to polyhedral geometries)
+    IDs = zeros(len(n), dtype = numpy.intc)
+    while True:
+        nn = IDs.argmin()
+        IDs[nn] = IDs.max() + 1
+        I = arange(0,len(IDs))
+        notnset = I != nn * ones(len(I),dtype=numpy.int64)
+        dists = abs(n[notnset,0]*(coords[bfaces[notnset,0],0] - ones(sum(notnset))*coords[bfaces[nn,0],0])+\
+                    n[notnset,1]*(coords[bfaces[notnset,0],1] - ones(sum(notnset))*coords[bfaces[nn,0],1])+\
+                    n[notnset,2]*(coords[bfaces[notnset,0],2] - ones(sum(notnset))*coords[bfaces[nn,0],2])) < 1e-12
+        angles = ones(sum(notnset))-abs(n[notnset,0]*n[nn,0]+n[notnset,1]*n[nn,1]+n[notnset,2]*n[nn,2])<1e-12 # angles = arccos(abs(t[notnset,0]*t[n,0]+t[notnset,1]*t[n,1]))<1e-12
+        IDs[I[notnset][angles*dists]] = IDs[nn]
+        if all(IDs != zeros(len(IDs),dtype=numpy.int64)):
+            info("Found %i co-linear faces" % IDs.max())
+            break
+    
+    #compatibility fixes
+    IDs += 1
+    bfaces_pair = zip(bfaces[:,0],bfaces[:,1],bfaces[:,2])
+    return [bfaces,IDs]
+
 def gen_polygon_surfmesh(cells,coords):
     #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
@@ -214,15 +195,15 @@ def gen_polygon_surfmesh(cells,coords):
     badcells = v1[:,0]*v2[:,1]-v1[:,1]*v2[:,0]>0
     tri = cells.flatten()
     R = range(0,3*ntri,3); m1 = ones(ntri,dtype=numpy.int64)
-    tri = array([tri[R+badcells].tolist(),tri[R+m1-badcells].tolist(),tri[R+2*m1].tolist()])
-    edg = array([tri[0],tri[1],tri[2],tri[1],tri[2],tri[0]]).reshape([2,ntri*3])
+    tri = array([tri[R+badcells],tri[R+m1-badcells],tri[R+2*m1]])
+    edg = array([tri[0],tri[1],tri[2],\
+                 tri[1],tri[2],tri[0]]).reshape([2,ntri*3])
     #putting large node number in later row
     C = edg.argsort(0)
-    R = array(range(ntri*3))
+    R = arange(ntri*3)
     edg = edg.transpose().flatten()
-    edg = array([edg[R*2+C[0,:]].tolist(),edg[R*2+C[1,:]].tolist()])
-    #sort according to first node number
-    #I2 = (edg[0,:]*(2+edg.max())+edg[1,:]).argsort()
+    edg = array([edg[R*2+C[0,:]],edg[R*2+C[1,:]]])
+    #sort according to first node number (with fall back to second node number)
     I2 = numpy.argsort(array(zip(edg[0,:],edg[1,:]),dtype=[('e1',int),('e2',int)]),order=['e1','e2'])
     edg = edg[:,I2] 
     #find unique edges
@@ -232,19 +213,18 @@ def gen_polygon_surfmesh(cells,coords):
               [any(edg[:,ntri*3-1] != edg[:,ntri*3-2])])
     edg = edg[:,d]
     #put correct node number back in later row
-    R = array(range(sum(d)))
+    R = arange(sum(d))
     edg = edg.transpose().flatten()
-    bfaces = array([edg[R*2+C[0,I2[d]]].tolist(),edg[R*2+C[1,I2[d]]].tolist()]).transpose()
-    # compute normalized tangent (t) and normal vector (n)
+    bfaces = array([edg[R*2+C[0,I2[d]]],edg[R*2+C[1,I2[d]]]]).transpose()
+    # compute normalized tangent (t)
     t = coords[bfaces[:,0],:]-coords[bfaces[:,1],:]
     t = t/numpy.sqrt(t[:,0]**2+t[:,1]**2).repeat(2).reshape([len(t),2])
-#    normals = array([t[:,1].tolist(),(-t[:,0]).tolist()]).transpose()
     # compute sets of co-linear edges (this is specific to polygonal geometries)
     IDs = zeros(len(t), dtype = numpy.intc)
     while True:
         n = IDs.argmin()
         IDs[n] = IDs.max() + 1
-        I = array(range(0,len(IDs)))
+        I = arange(0,len(IDs))
         notnset = I != n * ones(len(I),dtype=numpy.int64)
         dists = abs(t[notnset,1]*(coords[bfaces[notnset,0],0] - ones(sum(notnset))*coords[bfaces[n,0],0])-\
                     t[notnset,0]*(coords[bfaces[notnset,0],1] - ones(sum(notnset))*coords[bfaces[n,0],1])) < 1e-12
@@ -255,27 +235,34 @@ def gen_polygon_surfmesh(cells,coords):
             break
     #compatibility fixes
     IDs += 1
-#    IDs = IDs.tolist()
     bfaces_pair = zip(bfaces[:,0],bfaces[:,1])
     return [bfaces,IDs]
 
-def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
+def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   #this function generates a mesh 2D DOLFIN mesh given coordinates(nx,ny) and cells(n_enlist).
   #it is used in the adaptation, but can also be used in the context of debugging, i.e. if one
   #one saves the mesh coordinates and cells using pickle between iterations.
   startTime = time()
+  nvtx = n_xy.shape[1]
   n_mesh = Mesh()
   ed = MeshEditor()
-  ed.open(n_mesh, 2, 2)
-  ed.init_vertices(len(n_x)) #n_NNodes.value
-  for i in range(len(n_x)): #n_NNodes.value
-    ed.add_vertex(i, n_x[i], n_y[i])
-  ed.init_cells(len(n_enlist)/3) #n_NElements.value
-  for i in range(len(n_enlist)/3): #n_NElements.value
-    ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
+  ed.open(n_mesh, len(n_xy), len(n_xy))
+  ed.init_vertices(nvtx) #n_NNodes.value
+  if len(n_xy) == 2:
+   for i in range(nvtx): #n_NNodes.value  
+     ed.add_vertex(i, n_xy[0,i], n_xy[1,i])
+   ed.init_cells(len(n_enlist)/3) #n_NElements.value
+   for i in range(len(n_enlist)/3): #n_NElements.value
+     ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
+  else: #3D
+   for i in range(nvtx): #n_NNodes.value  
+     ed.add_vertex(i, n_xy[0,i], n_xy[1,i], n_xy[2,i])
+   ed.init_cells(len(n_enlist)/4) #n_NElements.value
+   for i in range(len(n_enlist)/4): #n_NElements.value
+     ed.add_cell(i, n_enlist[i * 4], n_enlist[i * 4 + 1], n_enlist[i * 4 + 2], n_enlist[i * 4 + 3])
   ed.close()
   info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
-  if debug and dx is not None:
+  if debugon and dx is not None:
     # Sanity check to be deleted or made optional
     n_space = FunctionSpace(n_mesh, "CG", 1)
 
@@ -289,26 +276,35 @@ def set_mesh(n_x,n_y,n_enlist,mesh=None,dx=None, debug=False):
     assert(err < 2.0e-11 * area)
   return n_mesh
   
-def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True):
+def adapt(metric, bfaces=None, bfaces_IDs=None, octaveimpl=False, debugon=True, eta=1e-2):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
+  
+  #check if input is not a metric
+  if metric.function_space().ufl_element().num_sub_elements() == 1:
+     metric = metric_pnorm(metric, eta=eta)
+  
+  if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
+   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
+  metric = fix_CG1_metric(metric) #fixes negative eigenvalues
+  
+  # warn before generating huge mesh
   targetN = assemble(sqrt(det(metric))*dx)
   if targetN < 1e6:
     info("target mesh has %0.0f nodes" % targetN)  
   else:
     warning("target mesh has %0.0f nodes" % targetN)  
-  
-  if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
-   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
-  metric = fix_CG1_metric(metric) #fixes negative eigenvalues
+    
   space = metric.function_space() #FunctionSpace(mesh, "CG", 1)
   element = space.ufl_element()
 
   # Sanity checks
   if not mesh.geometry().dim() == 2 \
-        or not element.cell().geometric_dimension() == 2 \
-        or not element.cell().topological_dimension() == 2 \
+        or not (element.cell().geometric_dimension() == 2 \
+        or element.cell().geometric_dimension() == 3) \
+        or not (element.cell().topological_dimension() == 2 \
+        or element.cell().topological_dimension() == 3) \
         or not element.family() == "Lagrange" \
         or not element.degree() == 1:
     raise InvalidArgumentException("Require 2D P1 function space for metric tensor field")
@@ -318,10 +314,15 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True):
   coords = mesh.coordinates()
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
-    [bfaces,bfaces_IDs] = gen_polygon_surfmesh(cells,coords)
+    if element.cell().geometric_dimension() == 2:
+      [bfaces,bfaces_IDs] = gen_polygon_surfmesh(cells,coords)
+    else:
+      [bfaces,bfaces_IDs] = gen_polyhedron_surfmesh(cells,coords)
     
   x = coords[nodes,0]
   y = coords[nodes,1]
+  if element.cell().geometric_dimension() == 3:
+    z = coords[nodes,2]
   cells = array(cells,dtype=numpy.intc)
   
   # Dolfin stores the tensor as:
@@ -334,21 +335,41 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True):
       dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
   
   metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
-  metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[array(range(0,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[array(range(2,metric.vector().array().size,4))[dof2vtx]]
-  metric_arr[range(3,metric.vector().array().size,4)] = metric.vector().array()[array(range(3,metric.vector().array().size,4))[dof2vtx]]
+  if element.cell().geometric_dimension() == 2:
+    metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[arange(0,metric.vector().array().size,4)[dof2vtx]]
+    metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
+    metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
+    metric_arr[range(3,metric.vector().array().size,4)] = metric.vector().array()[arange(3,metric.vector().array().size,4)[dof2vtx]]
+  else:
+    metric_arr[range(0,metric.vector().array().size,9)] = metric.vector().array()[arange(0,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(1,metric.vector().array().size,9)] = metric.vector().array()[arange(3,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(2,metric.vector().array().size,9)] = metric.vector().array()[arange(6,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(3,metric.vector().array().size,9)] = metric.vector().array()[arange(3,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(4,metric.vector().array().size,9)] = metric.vector().array()[arange(4,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(5,metric.vector().array().size,9)] = metric.vector().array()[arange(7,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(6,metric.vector().array().size,9)] = metric.vector().array()[arange(6,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(7,metric.vector().array().size,9)] = metric.vector().array()[arange(7,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(8,metric.vector().array().size,9)] = metric.vector().array()[arange(8,metric.vector().array().size,9)[dof2vtx]]
   
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
   
   NElements = ctypes.c_int(cells.shape[0])
-  _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
+  
+  if element.cell().geometric_dimension() == 2:
+      _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
                                   cells.ctypes.data, 
                                   x.ctypes.data, 
                                   y.ctypes.data)
+  else:
+      _libpragmatic.pragmatic_3d_init(ctypes.byref(NNodes), 
+                                  ctypes.byref(NElements), 
+                                  cells.ctypes.data, 
+                                  x.ctypes.data, 
+                                  y.ctypes.data, 
+                                  z.ctypes.data)
   info("Setting surface ...")
   nfacets = ctypes.c_int(len(bfaces))
   facets = array(bfaces.flatten(),dtype=numpy.intc)
@@ -373,20 +394,34 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True):
   _libpragmatic.pragmatic_get_info(ctypes.byref(n_NNodes), 
                                    ctypes.byref(n_NElements),
                                    ctypes.byref(n_NSElements))
-
-  n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
+  
+  if element.cell().geometric_dimension() == 2:
+      n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
+  else:
+      n_enlist = numpy.empty(4 * n_NElements.value, numpy.intc)
+  
+  info("Extracting output ...")
   n_x = numpy.empty(n_NNodes.value)
   n_y = numpy.empty(n_NNodes.value)
-  info("Extracting output ...")
-  _libpragmatic.pragmatic_get_coords_2d(n_x.ctypes.data,
+  if element.cell().geometric_dimension() == 3:
+      n_z = numpy.empty(n_NNodes.value)    
+      _libpragmatic.pragmatic_get_coords_3d(n_x.ctypes.data,
+                                            n_y.ctypes.data,
+                                            n_z.ctypes.data)
+  else:
+      _libpragmatic.pragmatic_get_coords_2d(n_x.ctypes.data,
                                         n_y.ctypes.data)
+                                        
   _libpragmatic.pragmatic_get_elements(n_enlist.ctypes.data)
 
   info("Finalising PRAgMaTIc ...")
   _libpragmatic.pragmatic_finalize()
   info("PRAgMaTIc adapt complete")
-  
-  n_mesh = set_mesh(n_x,n_y,n_enlist,mesh=mesh,dx=dx,debug=debug)
+    
+  if element.cell().geometric_dimension() == 2:
+      n_mesh = set_mesh(array([n_x,n_y]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
+  else:
+      n_mesh = set_mesh(array([n_x,n_y,n_z]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   
   return n_mesh
 
@@ -418,74 +453,19 @@ def consistent_interpolation(mesh, fields=[]):
   else:
     return n_mesh
 
-def analytic_eig(H11,H12,H22):
-  #this function calculates the eigenvalues and eigenvectors using explicit analytical
-  #expression for a 2x2 symmetric matrix. 
-  # numpy._version__>1.8.0 can do this more elegantly
-  onesC = ones(len(H11))
-  lambda1 = 0.5*(H11+H22-numpy.sqrt((H11-H22)**2+4*H12**2))
-  lambda2 = 0.5*(H11+H22+numpy.sqrt((H11-H22)**2+4*H12**2))
-  I = numpy.abs(H12)<onesC*1e-12; nI = I==False #myeps
-  v1x = zeros(len(H11)); v1y = zeros(len(H11))
-  v1x[I] = 1; v1y[I] = 0; lambda1[I] = H11[I]; lambda2[I] = H22[I]
-  v1x[nI] = -H12[nI]; v1y[nI] = H11[nI]-lambda1[nI]
-  v1xn = v1x/numpy.sqrt(v1x**2+v1y**2)
-  v1yn = v1y/numpy.sqrt(v1x**2+v1y**2)
-  return [lambda1,lambda2,v1xn,v1yn]
-
-def analyt_rot(H11,H12,H22,v1x,v1y):
-  #this function calculates rotates a 2x2 symmetric matrix
-  A11 = v1x**2*H11 + v1y**2*H22 - 2*v1x*v1y*H12
-  A12 = v1x*v1y*(H11-H22) + H12*(v1x**2-v1y**2)
-  A22 = v1y**2*H11 + v1x**2*H22 + 2*v1x*v1y*H12
-  return [A11,A12,A22]
-
 def fix_CG1_metric(Mp):
  #this function makes the eigenvalues of a metric positive (this property is
  #lost during the projection step)
- H11 = Mp.vector().array()[range(0,Mp.vector().array().size,4)]
- H12 = Mp.vector().array()[range(1,Mp.vector().array().size,4)]
- H22 = Mp.vector().array()[range(3,Mp.vector().array().size,4)]
- [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
+ [H,cell2dof] = get_dofs(Mp)
+ [eigL,eigR] = analytic_eig(H)
 # if any(lambda1<zeros(len(lambda2))) or any(lambda2<zeros(len(lambda2))):
 #  warning('negative eigenvalue in metric fixed')
- lambda1 = numpy.abs(lambda1)
- lambda2 = numpy.abs(lambda2)
- [H11,H12,H22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
- out = zeros(Mp.vector().array().size)
- out[range(0,Mp.vector().array().size,4)] = H11
- out[range(1,Mp.vector().array().size,4)] = H12
- out[range(2,Mp.vector().array().size,4)] = H12
- out[range(3,Mp.vector().array().size,4)] = H22
+ eigL = numpy.abs(eigL)
+ H = analyt_rot(fulleig(eigL),eigR)
+ out = sym2asym(H).transpose().flatten()
  Mp.vector().set_local(out)
- return Mp
- 
-def logexpmetric(Mp,logexp='log'):
-    H11 = Mp.vector().array()[range(0,Mp.vector().array().size,4)]
-    H12 = Mp.vector().array()[range(1,Mp.vector().array().size,4)]
-    H22 = Mp.vector().array()[range(3,Mp.vector().array().size,4)]
-    [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
-    if logexp=='log':
-     lambda1 = numpy.log(lambda1)
-     lambda2 = numpy.log(lambda2)
-    else:
-     lambda1 = numpy.exp(lambda1)
-     lambda2 = numpy.exp(lambda2)
-    [H11,H12,H22] = analyt_rot(lambda1,zeros(len(lambda1)),lambda2,v1xn,v1yn)
-    out = zeros(Mp.vector().array().size)
-    out[range(0,Mp.vector().array().size,4)] = H11
-    out[range(1,Mp.vector().array().size,4)] = H12
-    out[range(2,Mp.vector().array().size,4)] = H12
-    out[range(3,Mp.vector().array().size,4)] = H22
-    Mp.vector().set_local(out)
-    return Mp
+ return Mp   
 
-def logproject(Mp):
-    mesh = Mp.function_space().mesh()
-    logMp = project(logexpmetric(Mp),TensorFunctionSpace(mesh,'CG',1))
-    return logexpmetric(logMp,logexp='exp')
-    
- 
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
 # the DG0 hessian can be extracted in three different ways (controlled CG0H option)
@@ -531,7 +511,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
      else:
         H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
   else:
-    gradf = project(grad(f), VectorFunctionSpace(mesh, "DG", 1))
+    gradf = project(grad(f), VectorFunctionSpace(mesh, "CG", 1))
     H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
   # Make H positive definite and calculate the p-norm.
   cbig=zeros((H.vector().array()).size)
@@ -544,84 +524,346 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
     max_eigenvalue = 1.0/min_edge_length**2
   
   # EXTRACT HESSIAN
-  cell2dof = c_cell_dofs(mesh,H.function_space())
-  cell2dof = cell2dof.reshape([mesh.num_cells(),4])
-  H11 = H.vector().array()[cell2dof[:,0]]
-  H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,2]]
-  H22 = H.vector().array()[cell2dof[:,3]]
+  [HH,cell2dof] = get_dofs(H)
   # CALCULATE EIGENVALUES 
-  [lambda1,lambda2,v1xn,v1yn] = analytic_eig(H11,H12,H22)
+  [eigL,eigR] = analytic_eig(HH)
   
-  #enforce contraints
-  onesC = ones(mesh.num_cells())
-  lambda1 = array([numpy.abs(lambda1),onesC*min_eigenvalue]).max(0)
-  lambda2 = array([numpy.abs(lambda2),onesC*min_eigenvalue]).max(0)
-  lambda1 = array([lambda1,onesC*max_eigenvalue]).min(0)
-  lambda2 = array([lambda2,onesC*max_eigenvalue]).min(0)
-  L1b = lambda1 > lambda2; nL1b = L1b == True
-  lambda1[nL1b] = array([lambda1[nL1b],lambda2[nL1b]/max_edge_ratio]).max(0)
-  lambda2[L1b]  = array([lambda2[L1b] ,lambda1[L1b] /max_edge_ratio]).max(0)
+  #enforce min and max contraints
+  onesC = ones(eigL.shape)
+  eigL = array([numpy.abs(eigL),onesC*min_eigenvalue]).max(0)
+  eigL = array([numpy.abs(eigL),onesC*max_eigenvalue]).min(0)
+  #enforce constraint on aspect ratio 
+  L1b = eigL[0,:] > eigL[1,:]; nL1b = L1b == False
+  eigL[0,nL1b] = array([eigL[0,nL1b],eigL[1,nL1b] /max_edge_ratio]).max(0)
+  eigL[1, L1b] = array([eigL[1, L1b],eigL[0, L1b] /max_edge_ratio]).max(0)
+#  I = (eigL==eigL.max(0).repeat(onesC.shape[0])).reshape(onesC.shape).transpose(); nI = I==False
+#  eigL = eigL.transpose()
+#  Nrep = 1*(onesC.shape[0]==2) + 2*(onesC.shape[0]==3)
+#  eigL[nI] = array(eigL[nI],eigL[I].repeat(Nrep)/max_edge_ratio).max(0)
+# eigL = eigL.transpose()
   
   #check (will not trigger with min_eigenvalue > 0)
-  det = lambda1*lambda2
+  det = eigL.prod(0)
   if any(det==0):
     raise FloatingPointError("Eigenvalues are zero")
   
   #compute metric
-  [H11,H12,H22] = analyt_rot(lambda1,zeros(len(H11)),lambda2,v1xn,v1yn)
-  H11 *= 1./eta*det**exponent
-  H12 *= 1./eta*det**exponent
-  H22 *= 1./eta*det**exponent
-  
-  cbig[cell2dof.flatten()] = array([H11,H12,H12,H22]).transpose().flatten()
+  HH = analyt_rot(fulleig(eigL),eigR)
+  HH *= 1./eta*det**exponent
+  Hfinal = sym2asym(HH) 
+  cbig[cell2dof.flatten()] = Hfinal.transpose().flatten()
   H.vector().set_local(cbig)
   return H
 
 def metric_ellipse(H1, H2, method='in'):
   #this function calculates the inner or outer ellipse (depending on the value of the method input)
   #of two the two input metrics.
-  mesh = H1.function_space().mesh()
-  if H1.function_space().ufl_element().degree() == 0 and H1.function_space().ufl_element().family()[0] == 'D':
-      # Sanity checks
-      cell2dof = c_cell_dofs(mesh,H1.function_space())
-      cell2dof = cell2dof.reshape([mesh.num_cells(),4])
-  else: #CG1 metric
-      cell2dof = array(range(mesh.num_vertices()*4)).reshape([mesh.num_vertices(),4])
-  H1aa = H1.vector().array()[cell2dof[:,0]]
-  H1ab = H1.vector().array()[cell2dof[:,1]] #;H1ba = H1.vector().array()[cell2dof[:,2]]
-  H1bb = H1.vector().array()[cell2dof[:,3]] 
-  H2aa = H2.vector().array()[cell2dof[:,0]]
-  H2ab = H2.vector().array()[cell2dof[:,1]] #;H2ba = H2.vector().array()[cell2dof[:,2]]
-  H2bb = H2.vector().array()[cell2dof[:,3]]
-
+  [HH1,cell2dof] = get_dofs(H1)
+  [HH2,cell2dof] = get_dofs(H2)
   cbig = zeros((H1.vector().array()).size)
   
   # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
-  [lambda1a,lambda1b,v1xn,v1yn] = analytic_eig(H1aa,H1ab,H1bb)
+  [eigL1,eigR1] = analytic_eig(HH1)
   # convert metric2 to metric1 space  
-  [tmp11,tmp12,tmp22] = analyt_rot(H2aa,H2ab,H2bb,v1xn,-v1yn)
-  tmp11 /= lambda1a
-  tmp12 /= numpy.sqrt(lambda1a*lambda1b)
-  tmp22 /= lambda1b
-  [lambda2a,lambda2b,v2xn,v2yn] = analytic_eig(tmp11,tmp12,tmp22)
+  tmp = analyt_rot(HH2, transpose_eigR(eigR1))
+  tmp = prod_eig(tmp, 1/eigL1)
+  [eigL2,eigR2] = analytic_eig(tmp)
   # enforce inner or outer ellipse
   if method == 'in':
-    lambda2a = array([lambda2a,ones(len(lambda2a))]).max(0)
-    lambda2b = array([lambda2b,ones(len(lambda2b))]).max(0)
+    eigL2 = array([eigL2 ,ones(eigL2.shape)]).max(0)
   else:
-    lambda2a = array([lambda2a,ones(len(lambda2a))]).min(0)
-    lambda2b = array([lambda2b,ones(len(lambda2b))]).min(0)
+    eigL2 = array([eigL2, ones(eigL2.shape)]).min(0)
 
   #convert metric2 back to original space
-  [tmp11,tmp12,tmp22] = analyt_rot(lambda2a,zeros(len(lambda2a)),lambda2b,v2xn,v2yn)
-  tmp11 *= lambda1a
-  tmp12 *= numpy.sqrt(lambda1a*lambda1b)
-  tmp22 *= lambda1b
-  [H11,H12,H22] = analyt_rot(tmp11,tmp12,tmp22,v1xn,v1yn)
+  tmp = analyt_rot(fulleig(eigL2), eigR2)
+  tmp = prod_eig(tmp, eigL1)
+  HH = analyt_rot(tmp,eigR1)
+  HH = sym2asym(HH)
   #set metric
-  cbig[cell2dof.flatten()] = array([H11,H12,H12,H22]).transpose().flatten()
+  cbig[cell2dof.flatten()] = HH.transpose().flatten()
   H1.vector().set_local(cbig)
   return H1
+
+def get_dofs(H):
+  mesh = H.function_space().mesh()
+  n = mesh.geometry().dim()
+  if H.function_space().ufl_element().degree() == 0 and H.function_space().ufl_element().family()[0] == 'D':
+      cell2dof = c_cell_dofs(mesh,H.function_space())
+      cell2dof = cell2dof.reshape([mesh.num_cells(),n**2])
+  else: #CG1 metric
+      cell2dof = arange(mesh.num_vertices()*n**2)
+      cell2dof = cell2dof.reshape([mesh.num_vertices(),n**2])
+  if n == 2:   
+   H11 = H.vector().array()[cell2dof[:,0]]
+   H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,2]]
+   H22 = H.vector().array()[cell2dof[:,3]]
+   return [array([H11,H12,H22]),cell2dof]
+  else: #n==3
+   H11 = H.vector().array()[cell2dof[:,0]]
+   H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,3]]
+   H13 = H.vector().array()[cell2dof[:,2]] #;H31 = H.vector().array()[cell2dof[:,6]]
+   H22 = H.vector().array()[cell2dof[:,4]]
+   H23 = H.vector().array()[cell2dof[:,5]] #H32 = H.vector().array()[cell2dof[:,7]]
+   H33 = H.vector().array()[cell2dof[:,8]]
+   return [array([H11,H12,H22,H13,H23,H33]),cell2dof]
+
+def transpose_eigR(eigR):
+    if eigR.shape[0] == 4:
+     return array([eigR[0,:],eigR[2,:],\
+                   eigR[1,:],eigR[3,:]])
+    else: #3D
+     return array([eigR[0,:],eigR[3,:],eigR[6,:],\
+                   eigR[1,:],eigR[4,:],eigR[7,:],\
+                   eigR[2,:],eigR[5,:],eigR[8,:]])
+
+def sym2asym(HH):
+    if HH.shape[0] == 3:
+        return array([HH[0,:],HH[1,:],\
+                      HH[1,:],HH[2,:]])
+    else:
+        return array([HH[0,:],HH[1,:],HH[3,:],\
+                      HH[1,:],HH[2,:],HH[4,:],\
+                      HH[3,:],HH[4,:],HH[5,:]])
+
+def fulleig(eigL):
+    zeron = zeros(eigL.shape[1])
+    if eigL.shape[0] == 2:
+        return array([eigL[0,:],zeron,eigL[1,:]])
+    else: #3D
+        return array([eigL[0,:],zeron,eigL[1,:],zeron,zeron,eigL[2,:]])
+        
+def analyt_rot(H,eigR):
+  #this function rotates a 2x2 symmetric matrix
+  if H.shape[0] == 3: #2D
+   inds  = array([[0,1],[1,2]])
+   indA = array([[0,1],[2,3]])
+  else: #3D
+   inds  = array([[0,1,3],[1,2,4],[3,4,5]])
+   indA = array([[0,1,2],[3,4,5],[6,7,8]])
+  indB = indA.T
+  A = zeros(H.shape)
+  for i in range(len(inds)):
+    for j in range(len(inds)):
+      for m in range(len(inds)):
+        for n in range(len(inds)):
+          if i<n:
+           continue
+          A[inds[i,n],:] += eigR[indB[i,j],:]*H[inds[j,m],:]*eigR[indA[m,n],:]
+  return A
+
+def prod_eig(H, eigL):
+    if H.shape[0] == 3:
+        return array([H[0,:]*eigL[0,:], H[1,:]*numpy.sqrt(eigL[0,:]*eigL[1,:]), \
+                                        H[2,:]*eigL[1,:]])
+    else:
+        return array([H[0,:]*eigL[0,:], H[1,:]*numpy.sqrt(eigL[0,:]*eigL[1,:]), H[2,:]*eigL[1,:], \
+                                        H[3,:]*numpy.sqrt(eigL[0,:]*eigL[2,:]), H[4,:]*numpy.sqrt(eigL[2,:]*eigL[1,:]),\
+                                        H[5,:]*eigL[2,:]])
+
+def analytic_eig(H, tol=1e-12):
+  #this function calculates the eigenvalues and eigenvectors using explicit analytical
+  #expression for a 2x2 symmetric matrix. 
+  # numpy._version__>1.8.0 can do this more elegantly
+  H11 = H[0,:]
+  H12 = H[1,:]
+  H22 = H[2,:]
+  onesC = ones(len(H11))
+  if H.shape[0] == 3:
+      lambda1 = 0.5*(H11+H22-numpy.sqrt((H11-H22)**2+4*H12**2))
+      lambda2 = 0.5*(H11+H22+numpy.sqrt((H11-H22)**2+4*H12**2))        
+      v1x = ones(len(H11)); v1y = zeros(len(H11))
+      #identical eigenvalues
+      I2 = numpy.abs(lambda1-lambda2)<onesC*tol;
+      #diagonal matrix
+      I1 = numpy.abs(H12)<onesC*tol
+      lambda1[I1] = H11[I1]
+      lambda2[I1] = H22[I1]
+      #general case
+      nI = (I1==False)*(I2==False)
+      v1x[nI] = -H12[nI]
+      v1y[nI] = H11[nI]-lambda1[nI]
+      L1 = numpy.sqrt(v1x**2+v1y**2)
+      v1x /= L1
+      v1y /= L1
+      eigL = array([lambda1,lambda2])
+      eigR = array([v1x,v1y,-v1y,v1x])
+  else: #3D
+      H13 = H[3,:]
+      H23 = H[4,:]
+      H33 = H[5,:]
+      p1 = H12**2 + H13**2 + H23**2
+      zeroC = zeros(len(H11))
+      eig1 = array(H11); eig2 = array(H22); eig3 = array(H33) #do not modify input
+      v1 = array([onesC, zeroC, zeroC])
+      v2 = array([zeroC, onesC, zeroC])
+      v3 = array([zeroC, zeroC, onesC])
+      # A is not diagonal.                       
+      nI = p1 != 0
+      p1 = p1[nI]
+      H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
+      H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
+      q = (H11+H22+H33)/3.
+      p2 = (H11-q)**2 + (H22-q)**2 + (H33-q)**2 + 2.*p1
+      p = numpy.sqrt(p2 / 6.)
+      I = array([onesC,zeroC,onesC,zeroC,zeroC,onesC])#I = array([1., 0., 1., 0., 0., 1.]).repeat(len(H11)).reshape(6,len(H11)) #identity matrix
+      HH = array([H11,H12,H22,H13,H23,H33])
+      B = (1./p) * (HH-q.repeat(6).reshape(len(H11),6).T*I[:,nI]) 
+      #detB = B11*B22*B33+2*(B12*B23*B13)-B13*B22*B13-B12*B12*B33-B11*B23*B23
+      detB = B[0,:]*B[2,:]*B[5,:]+2*(B[1,:]*B[4,:]*B[3,:])-B[3,:]*B[2,:]*B[3,:]-B[1,:]*B[1,:]*B[5,:]-B[0,:]*B[4,:]*B[4,:]
+      
+      #calc r
+      r = detB / 2. 
+      rsmall = r<=-1.
+      rbig   = r>= 1.
+      rgood = (rsmall==False)*(rbig==False)
+      phi = zeros(len(H11))
+      phi[rsmall] = pi / 3. 
+      phi[rbig]   = 0. 
+      phi[rgood]  = numpy.arccos(r[rgood]) / 3.
+      
+      eig1[nI] = q + 2.*p*numpy.cos(phi)
+      eig3[nI] = q + 2.*p*numpy.cos(phi + (2.*pi/3.))
+      eig2[nI] = 3.*q - eig1[nI] - eig3[nI]
+      v1[0,nI] = H22*H33 - H23**2 + eig1[nI]*(eig1[nI]-H33-H22)
+      v1[1,nI] = H12*(eig1[nI]-H33)+H13*H23
+      v1[2,nI] = H13*(eig1[nI]-H22)+H12*H23
+      v2[0,nI] = H12*(eig2[nI]-H33)+H23*H13
+      v2[1,nI] = H11*H33 - H13**2 + eig2[nI]*(eig2[nI]-H11-H33)
+      v2[2,nI] = H23*(eig2[nI]-H11)+H12*H13
+      v3[0,nI] = H13*(eig3[nI]-H22)+H23*H12
+      v3[1,nI] = H23*(eig3[nI]-H11)+H13*H12
+      v3[2,nI] = H11*H22 - H12**2 + eig3[nI]*(eig3[nI]-H11-H22)
+      L1 = numpy.sqrt((v1[:,nI]**2).sum(0))
+      L2 = numpy.sqrt((v2[:,nI]**2).sum(0))
+      L3 = numpy.sqrt((v3[:,nI]**2).sum(0))
+      v1[:,nI] /= L1.repeat(3).reshape(len(L1),3).T
+      v2[:,nI] /= L2.repeat(3).reshape(len(L1),3).T
+      v3[:,nI] /= L3.repeat(3).reshape(len(L1),3).T
+      eigL = array([eig1,eig2,eig3])
+      eigR = array([v1[0,:],v1[1,:],v1[2,:],\
+                    v2[0,:],v2[1,:],v2[2,:],\
+                    v3[0,:],v3[1,:],v3[2,:]])
+  return [eigL,eigR]
+    
+def logexpmetric(Mp,logexp='log'):
+    [H,cell2dof] = get_dofs(Mp)
+    [eigL,eigR] = analytic_eig(H)
+    if logexp=='log':
+      eigL = numpy.log(eigL)
+    elif logexp=='sqrt':
+      eigL = numpy.sqrt(eigL)
+    else:
+      eigL = numpy.exp(eigL)
+    HH = analyt_rot(fulleig(eigL),eigR)
+    out = sym2asym(HH).transpose().flatten()
+    Mp.vector().set_local(out)
+    return Mp
+
+def minimum_eig(Mp):
+    mesh = Mp.function_space().mesh()
+    element = Mp.function_space().ufl_element()
+    [H,cell2dof] = get_dofs(Mp)
+    [eigL,eigR] = analytic_eig(H)
+    out = Function(FunctionSpace(mesh,element.family(),element.degree()))
+    out.vector().set_local(eigL.min(0))
+    return out
+
+def logproject(Mp):
+    mesh = Mp.function_space().mesh()
+    logMp = project(logexpmetric(Mp),TensorFunctionSpace(mesh,'CG',1))
+    return logexpmetric(logMp,logexp='exp')
+
+def mesh_metric(mesh):
+  # this function calculates a mesh metric (or perhaps a square inverse of that, see mesh_metric2...)
+  cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
+  cells = mesh.cells()
+  coords = mesh.coordinates()
+  p1 = coords[cells[:,0],:];
+  p2 = coords[cells[:,1],:];
+  p3 = coords[cells[:,2],:];
+  r1 = p1-p2; r2 = p1-p3; r3 = p2-p3
+  Nedg = 3
+  if mesh.geometry().dim() == 3:
+      Nedg = 6
+      p4 = coords[cells[:,3],:];
+      r4 = p1-p4; r5 = p2-p4; r6 = p3-p4
+  rall = zeros([p1.shape[0],p1.shape[1],Nedg])
+  rall[:,:,0] = r1; rall[:,:,1] = r2; rall[:,:,2] = r3;
+  if mesh.geometry().dim() == 3:
+      rall[:,:,3] = r4; rall[:,:,4] = r5; rall[:,:,5] = r6
+  All = zeros([p1.shape[0],Nedg**2])
+  inds = arange(Nedg**2).reshape([Nedg,Nedg])
+  for i in range(Nedg):
+    All[:,inds[i,0]] = rall[:,0,i]**2; All[:,inds[i,1]] = 2.*rall[:,0,i]*rall[:,1,i]; All[:,inds[i,2]] = rall[:,1,i]**2
+    if mesh.geometry().dim() == 3:
+      All[:,inds[i,3]] = 2.*rall[:,0,i]*rall[:,2,i]; All[:,inds[i,4]] = 2.*rall[:,1,i]*rall[:,2,i]; All[:,inds[i,5]] = rall[:,2,i]**2
+  Ain = zeros([Nedg*2-1,Nedg*p1.shape[0]])
+  ndia = zeros(Nedg*2-1)
+  for i in range(Nedg):
+      for j in range(i,Nedg):
+          iks1 = arange(j,Ain.shape[1],Nedg)
+          if i==0:
+              Ain[i,iks1] = All[:,inds[j,j]]
+          else:
+              iks2 = arange(j-i,Ain.shape[1],Nedg)
+              Ain[2*i-1,iks1] = All[:,inds[j-i,j]]
+              Ain[2*i,iks2]   = All[:,inds[j,j-i]]
+              ndia[2*i-1] = i
+              ndia[2*i]   = -i
+    
+  A = scipy.sparse.spdiags(Ain, ndia, Ain.shape[1], Ain.shape[1]).tocsr()
+  b = ones(Ain.shape[1])
+  X = scipy.sparse.linalg.spsolve(A,b)
+  #set solution
+  XX = sym2asym(X.reshape([mesh.num_cells(),Nedg]).transpose())
+  M = Function(TensorFunctionSpace(mesh,"DG", 0))
+  M.vector().set_local(XX.transpose().flatten()[cell2dof])
+  return M
+
+def mesh_metric1(mesh):
+  #this is just the inverse of mesh_metric2, and it is useful for projecting the ellipse
+  #in a certain (velocity) direction, which is usefull for stabilization terms.
+  M = mesh_metric(mesh)
+  [MM,cell2dof] = get_dofs(M)
+  [eigL,eigR] = analytic_eig(MM)
+  eigL = numpy.sqrt(eigL)
+  MM = analyt_rot(fulleig(eigL),eigR)
+  MM = sym2asym(MM).transpose().flatten()
+  M.vector().set_local(MM[cell2dof.flatten()])
+  return M
+
+def mesh_metric2(mesh):
+  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
+  #ellipse for the individual elements, see the test case mesh_metric2_example
+  #the sqrt(3) ensures that the unit element maps to the identity tensor
+  M = mesh_metric(mesh)
+  [MM,cell2dof] = get_dofs(M)
+  [eigL,eigR] = analytic_eig(MM)
+  eigL = numpy.sqrt(1./eigL)
+  MM = analyt_rot(fulleig(eigL),eigR)
+  MM = sym2asym(MM).transpose().flatten()
+  M.vector().set_local(MM[cell2dof.flatten()])
+  return M
+
+def c_cell_dofs(mesh,V):
+  #this function returns the degrees of freedom numbers in a cell
+  code = """
+  void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
+                 const std::vector<std::size_t>& cell_indices,
+                 std::vector<std::size_t>& dofs)
+  {
+    assert(dofmap);
+    std::size_t local_dof_size = dofmap->cell_dofs(0).size();
+    const std::size_t size = cell_indices.size()*local_dof_size;
+    dofs.resize(size);
+    for (std::size_t i=0; i<cell_indices.size(); i++)
+       for (std::size_t j=0; j<local_dof_size;j++)
+           dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
+  }
+  """
+  module = compile_extension_module(code)
+  return module.cell_dofs(V.dofmap(), arange(mesh.num_cells(), dtype=numpy.uintp))
+
 
 if __name__=="__main__":
  testcase = 1
@@ -635,7 +877,7 @@ if __name__=="__main__":
    from play_multigrid import test_refine_metric
    test_refine_metric()
  elif testcase == 3:
-   from play_metric_adapt import test_mesh_metric
+   from mesh_metric2_example import test_mesh_metric
    test_mesh_metric()
  elif testcase == 4:
    from circle_convergence import circle_convergence
