@@ -80,7 +80,8 @@ class ParameterException(Exception):
   pass
 
 try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/scaling_optimisation/src/.libs/libpragmatic.so")
+  #_libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
@@ -115,7 +116,7 @@ def edge_lengths(M):
 
   return e
 
-def gen_polyhedron_surfmesh(cells,coords):
+def polyhedron_surfmesh(cells,coords):
     #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
@@ -183,7 +184,7 @@ def gen_polyhedron_surfmesh(cells,coords):
     bfaces_pair = zip(bfaces[:,0],bfaces[:,1],bfaces[:,2])
     return [bfaces,IDs]
 
-def gen_polygon_surfmesh(cells,coords):
+def polygon_surfmesh(cells,coords):
     #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
@@ -262,7 +263,7 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
      ed.add_cell(i, n_enlist[i * 4], n_enlist[i * 4 + 1], n_enlist[i * 4 + 2], n_enlist[i * 4 + 3])
   ed.close()
   info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
-  if debugon and dx is not None:
+  if debugon==True and dx is not None:
     # Sanity check to be deleted or made optional
     n_space = FunctionSpace(n_mesh, "CG", 1)
 
@@ -273,6 +274,7 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
     info("Target mesh area: %.17e" % n_area)
     info("Change          : %.17e" % err)
     info("Relative change : %.17e" % (err / area))
+    
     assert(err < 2.0e-11 * area)
   return n_mesh
   
@@ -315,9 +317,9 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
     if element.cell().geometric_dimension() == 2:
-      [bfaces,bfaces_IDs] = gen_polygon_surfmesh(cells,coords)
+      [bfaces,bfaces_IDs] = polygon_surfmesh(cells,coords)
     else:
-      [bfaces,bfaces_IDs] = gen_polyhedron_surfmesh(cells,coords)
+      [bfaces,bfaces_IDs] = polyhedron_surfmesh(cells,coords)
     
   x = coords[nodes,0]
   y = coords[nodes,1]
@@ -417,7 +419,7 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
   info("Finalising PRAgMaTIc ...")
   _libpragmatic.pragmatic_finalize()
   info("PRAgMaTIc adapt complete")
-    
+  
   if element.cell().geometric_dimension() == 2:
       n_mesh = set_mesh(array([n_x,n_y]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   else:
@@ -512,23 +514,16 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
         H = project(grad(grad(f)), TensorFunctionSpace(mesh, "DG", 0))
   else:
     gradf = project(grad(f), VectorFunctionSpace(mesh, "CG", 1))
-    H = project(grad(gradf), TensorFunctionSpace(mesh, "DG", 0))
-  # Make H positive definite and calculate the p-norm.
-  cbig=zeros((H.vector().array()).size)
-  exponent = -1.0/(2*p + n)
-
-  min_eigenvalue = 1e-8; max_eigenvalue = 1e8
-  if max_edge_length is not None:
-    min_eigenvalue = 1.0/max_edge_length**2
-  if min_edge_length is not None:
-    max_eigenvalue = 1.0/min_edge_length**2
+    H = project(sym(grad(gradf)), TensorFunctionSpace(mesh, "DG", 0))
   
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
   # CALCULATE EIGENVALUES 
   [eigL,eigR] = analytic_eig(HH)
   
-  #enforce min and max contraints
+  # Make H positive definite and calculate the p-norm.
+  #enforce hardcoded min and max contraints
+  min_eigenvalue = 1e-20; max_eigenvalue = 1e20
   onesC = ones(eigL.shape)
   eigL = array([numpy.abs(eigL),onesC*min_eigenvalue]).max(0)
   eigL = array([numpy.abs(eigL),onesC*max_eigenvalue]).min(0)
@@ -536,11 +531,6 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   L1b = eigL[0,:] > eigL[1,:]; nL1b = L1b == False
   eigL[0,nL1b] = array([eigL[0,nL1b],eigL[1,nL1b] /max_edge_ratio]).max(0)
   eigL[1, L1b] = array([eigL[1, L1b],eigL[0, L1b] /max_edge_ratio]).max(0)
-#  I = (eigL==eigL.max(0).repeat(onesC.shape[0])).reshape(onesC.shape).transpose(); nI = I==False
-#  eigL = eigL.transpose()
-#  Nrep = 1*(onesC.shape[0]==2) + 2*(onesC.shape[0]==3)
-#  eigL[nI] = array(eigL[nI],eigL[I].repeat(Nrep)/max_edge_ratio).max(0)
-# eigL = eigL.transpose()
   
   #check (will not trigger with min_eigenvalue > 0)
   det = eigL.prod(0)
@@ -549,8 +539,25 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   
   #compute metric
   HH = analyt_rot(fulleig(eigL),eigR)
-  HH *= 1./eta*det**exponent
+  exponent = -1.0/(2*p + n)
+  HH *= 1./eta*det**exponent 
+  
+  #enforce min and max contraints
+  if max_edge_length is not None:
+    min_eigenvalue = 1.0/max_edge_length**2
+    if eigL.flatten().min()<min_eigenvalue:
+     info('upper bound on element edge length is active')
+  if min_edge_length is not None:
+    max_eigenvalue = 1.0/min_edge_length**2
+    if eigL.flatten().max()>max_eigenvalue:
+     info('lower bound on element edge length is active')
+  [eigL,eigR] = analytic_eig(HH)
+  eigL = array([eigL,onesC*min_eigenvalue]).max(0)
+  eigL = array([eigL,onesC*max_eigenvalue]).min(0)
+  HH = analyt_rot(fulleig(eigL),eigR)
+  
   Hfinal = sym2asym(HH) 
+  cbig=zeros((H.vector().array()).size)
   cbig[cell2dof.flatten()] = Hfinal.transpose().flatten()
   H.vector().set_local(cbig)
   return H
@@ -752,8 +759,18 @@ def logexpmetric(Mp,logexp='log'):
       eigL = numpy.log(eigL)
     elif logexp=='sqrt':
       eigL = numpy.sqrt(eigL)
-    else:
+    elif logexp=='inv':
+      eigL = 1./eigL
+    elif logexp=='sqr':
+      eigL = eigL**2
+    elif logexp=='sqrtinv':
+      eigL = numpy.sqrt(1./eigL)
+    elif logexp=='sqrinv':
+      eigL = 1./eigL**2
+    elif logexp=='exp':
       eigL = numpy.exp(eigL)
+    else:
+      error('logexp='+logexp+' is an invalid value')
     HH = analyt_rot(fulleig(eigL),eigR)
     out = sym2asym(HH).transpose().flatten()
     Mp.vector().set_local(out)
@@ -766,6 +783,15 @@ def minimum_eig(Mp):
     [eigL,eigR] = analytic_eig(H)
     out = Function(FunctionSpace(mesh,element.family(),element.degree()))
     out.vector().set_local(eigL.min(0))
+    return out
+    
+def get_rot(Mp):
+    mesh = Mp.function_space().mesh()
+    element = Mp.function_space().ufl_element()
+    [H,cell2dof] = get_dofs(Mp)
+    [eigL,eigR] = analytic_eig(H)
+    out = Function(TensorFunctionSpace(mesh,element.family(),element.degree()))
+    out.vector().set_local(eigR.transpose().flatten())
     return out
 
 def logproject(Mp):
@@ -824,6 +850,7 @@ def mesh_metric1(mesh):
   #this is just the inverse of mesh_metric2, and it is useful for projecting the ellipse
   #in a certain (velocity) direction, which is usefull for stabilization terms.
   M = mesh_metric(mesh)
+  #M = logexpmetric(M,logexp='sqrt')
   [MM,cell2dof] = get_dofs(M)
   [eigL,eigR] = analytic_eig(MM)
   eigL = numpy.sqrt(eigL)
@@ -837,6 +864,7 @@ def mesh_metric2(mesh):
   #ellipse for the individual elements, see the test case mesh_metric2_example
   #the sqrt(3) ensures that the unit element maps to the identity tensor
   M = mesh_metric(mesh)
+  #M = logexpmetric(M,logexp='sqrtinv')
   [MM,cell2dof] = get_dofs(M)
   [eigL,eigR] = analytic_eig(MM)
   eigL = numpy.sqrt(1./eigL)
@@ -866,7 +894,7 @@ def c_cell_dofs(mesh,V):
 
 
 if __name__=="__main__":
- testcase = 1
+ testcase = 3
  if testcase == 0:
    from minimal_example import minimal_example
    minimal_example(width=5e-2)
