@@ -20,7 +20,7 @@ from sympy import sin as pycos
 set_log_level(INFO+1)
 #parameters["allow_extrapolation"] = True
 
-def minimal_example(width=5e-2, Nadapt=10, eta = 0.01):
+def minimal_example(width=2e-2, Nadapt=10, eta = 0.01):
     ### CONSTANTS
     meshsz = 40
     hd = Constant(width)
