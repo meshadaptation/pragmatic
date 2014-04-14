@@ -542,6 +542,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   HH *= 1./eta*det**exponent 
   
   #enforce min and max contraints
+  [eigL,eigR] = analytic_eig(HH)
   if max_edge_length is not None:
     min_eigenvalue = 1.0/max_edge_length**2
     if eigL.flatten().min()<min_eigenvalue:
@@ -550,7 +551,6 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
     max_eigenvalue = 1.0/min_edge_length**2
     if eigL.flatten().max()>max_eigenvalue:
      info('lower bound on element edge length is active')
-  [eigL,eigR] = analytic_eig(HH)
   eigL = array([eigL,onesC*min_eigenvalue]).max(0)
   eigL = array([eigL,onesC*max_eigenvalue]).min(0)
   HH = analyt_rot(fulleig(eigL),eigR)
