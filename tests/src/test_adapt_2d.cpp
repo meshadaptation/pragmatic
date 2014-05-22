@@ -83,8 +83,8 @@ int main(int argc, char **argv){
 
   std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0];
-    double y = 2*mesh->get_coords(i)[1];
+    double x = 2*mesh->get_coords(i)[0]-1;
+    double y = 2*mesh->get_coords(i)[1]-1;
 
     psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
   }
@@ -100,6 +100,7 @@ int main(int argc, char **argv){
                                     <<"Quality mean:  "<<qmean<<std::endl
                                     <<"Quality min:   "<<qmin<<std::endl
                                     <<"Quality RMS:   "<<qrms<<std::endl;
+  //VTKTools<double>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -116,42 +117,10 @@ int main(int argc, char **argv){
   double alpha = sqrt(2.0)/2;
   for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
-
+    
     tic = get_wtime();
-    refine.refine(L_ref);
-    time_refine += get_wtime() - tic;
-
-    if(verbose){
-      if(rank==0)
-        std::cout<<"INFO: Verify quality after refine.\n";
-      
-      if(!mesh->verify()){    
-        std::map<int, int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
-
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-refine", mesh);
-        exit(-1);
-      }
-    }
-
-    tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref, 1);
+    coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
-
-    if(verbose){
-      if(rank==0)
-        std::cout<<"INFO: Verify quality after coarsen.\n";
-
-      if(!mesh->verify()){
-        std::map<int, int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
-
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
-        exit(-1);
-      }
-    }
 
     tic = get_wtime();
     swapping.swap(0.7);
