@@ -229,7 +229,7 @@ template<typename T, bool Align> inline void ei_conditional_aligned_delete(T *pt
 template<typename Scalar, typename Integer>
 inline static Integer ei_alignmentOffset(const Scalar* array, Integer size)
 {
-  typedef typename ei_packet_traits<Scalar>::type Packet;
+  // typedef typename ei_packet_traits<Scalar>::type Packet;
   enum { PacketSize = ei_packet_traits<Scalar>::size,
          PacketAlignedMask = PacketSize-1
   };
@@ -386,7 +386,7 @@ public:
         return std::numeric_limits<size_type>::max();
     }
 
-    pointer allocate( size_type num, const_pointer* hint = 0 )
+    pointer allocate( size_type num, const void* hint = 0 )
     {
         static_cast<void>( hint ); // suppress unused variable warning
         return static_cast<pointer>( ei_aligned_malloc( num * sizeof(T) ) );

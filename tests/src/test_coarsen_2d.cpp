@@ -51,33 +51,35 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
-    double m[] =
-      {1.0, 0.0,
-       0.0, 1.0};
+    double m[] = {0.5, 0.0, 0.5};
     metric_field.set_metric(m, i);
   }
   metric_field.update_mesh();
 
-  Coarsen<double, int> adapt(*mesh, surface);
+  Coarsen2D<double> adapt(*mesh, surface);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -86,7 +88,7 @@ int main(int argc, char **argv){
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
@@ -95,24 +97,27 @@ int main(int argc, char **argv){
   if(verbose){
     double lrms = mesh->get_lrms();
     double qrms = mesh->get_qrms();
-    
-    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl
-             <<"Edge length RMS:      "<<lrms<<std::endl
-             <<"Quality RMS:          "<<qrms<<std::endl;
+
+    if(rank==0)
+      std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+               <<"Number elements:      "<<nelements<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_coarsen_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 
-  if(nelements==2)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    if(nelements==2)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

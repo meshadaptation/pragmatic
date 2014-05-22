@@ -58,51 +58,59 @@
 #include "Refine.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
-#ifdef HAVE_MPI
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
   
-  metric_field.add_field(&(psi[0]), 0.01);
+  metric_field.add_field(&(psi[0]), 0.0001);
   metric_field.update_mesh();
-  
-  Refine<double, int> adapt(*mesh, surface);
+
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
+
+  Refine2D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  for(int i=0;i<10;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  std::map<int, int> active_vertex_map;
+  if(!mesh->verify()){
+    std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
+  }
+  
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
-  VTKTools<double, int>::export_vtu("../data/test_mpi_refine_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_refine_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_surface", &surface);
 
   delete mesh;
 
-  if(MPI::COMM_WORLD.Get_rank()==0){
+  if(rank==0){
     std::cout<<"Refine time = "<<toc-tic<<std::endl;
     std::cout<<"pass"<<std::endl;
   }
   
-  MPI::Finalize();
-#else
-  std::cout<<"warning - no MPI compiled"<<std::endl;
-#endif
+  MPI_Finalize();
+
   return 0;
 }

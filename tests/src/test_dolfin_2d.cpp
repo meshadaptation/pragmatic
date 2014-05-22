@@ -55,21 +55,22 @@
 #include "tinyxml.h"
 
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank, nprocs;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
-  int rank = MPI::COMM_WORLD.Get_rank();
-
   // For now only support a single process.
-#ifndef NDEBUG
-  int nprocs = MPI::COMM_WORLD.Get_size();
-  assert(nprocs==1);
-#endif
 
   int NNodes, NElements;
-  Mesh<double, int> *mesh;
+  Mesh<double> *mesh;
   {
     char pFilename[] = "../data/doughnut.xml\0";
 
@@ -137,26 +138,25 @@ int main(int argc, char **argv){
       std::istringstream(xmlnode->ToElement()->Attribute("v2"))>>n[2];
     }
 
-    mesh = new Mesh<double, int>(NNodes, NElements, &(Triangles[0]), &(x[0]), &(y[0]));
+    mesh = new Mesh<double>(NNodes, NElements, &(Triangles[0]), &(x[0]), &(y[0]));
   }
 
   // Stuff this into a pragmatic mesh.
-  Surface<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
   // Need to get the metric from the xml file - but for now just add this dummy.
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   // Begin dummy...
-  double I[] = {1.0, 0, 0, 1.0};
+  double I[] = {1.0, 0.0, 1.0};
   for(int i=0;i<NNodes;i++){
     double x = mesh->get_coords(i)[0];
     double y = mesh->get_coords(i)[1];
 
     I[0] = 10000.0*(x*x)/((x*x) + (y*y)) + 50.000*(y*y)/((x*x) + (y*y));
     I[1] = 9950.00*x*y/((x*x) + (y*y));
-    I[2] = 9950.00*x*y/((x*x) + (y*y));
-    I[3] = 50.000*(x*x)/((x*x) + (y*y)) + 10000.0*(y*y)/((x*x) + (y*y));
+    I[2] = 50.000*(x*x)/((x*x) + (y*y)) + 10000.0*(y*y)/((x*x) + (y*y));
 
     metric_field.set_metric(I, i);
   }
@@ -173,16 +173,16 @@ int main(int argc, char **argv){
                        <<"Quality mean:  "<<qmean<<std::endl
                        <<"Quality min:   "<<qmin<<std::endl
                        <<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_dolfin_2d-initial", mesh);
+  VTKTools<double>::export_vtu("../data/test_dolfin_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen<double, int> coarsen(*mesh, surface);  
-  Smooth<double, int> smooth(*mesh, surface);
-  Refine<double, int> refine(*mesh, surface);
-  Swapping<double, int> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);  
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
 
@@ -220,7 +220,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
@@ -233,7 +233,7 @@ int main(int argc, char **argv){
   if(rank==0) std::cout<<"After optimisation based smoothing:\n";
   mesh->verify();
 
-  VTKTools<double, int>::export_vtu("../data/test_dolfin_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_dolfin_2d", mesh);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
@@ -243,7 +243,7 @@ int main(int argc, char **argv){
   std::cout<<"BENCHMARK: "<<time_coarsen<<" "<<time_refine<<" "<<time_swap<<" "<<time_smooth<<"\n";
 
   if(rank==0){
-    if((qmean>0.8)&&(qmin>0.3))
+    if((qmean>0.8)&&(qmin>0.25))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
@@ -299,6 +299,7 @@ int main(int argc, char **argv){
   }
 
   delete mesh;
-  MPI::Finalize();
+
+  MPI_Finalize();
 }
 

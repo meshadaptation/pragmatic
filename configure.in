@@ -35,7 +35,13 @@
 #  SUCH DAMAGE.
 
 dnl Process this file with autoconf to produce a configure script.
+
 AC_INIT(Makefile.in)
+
+LT_INIT
+AC_SUBST([LIBTOOL_DEPS])
+
+AC_CONFIG_MACRO_DIR([m4])
 
 # Check system type
 AC_CANONICAL_HOST
@@ -43,10 +49,10 @@ AC_CANONICAL_HOST
 AC_LANG_PUSH([C++])
 
 # Override autoconf defaults for ...FLAGS before searching for compiler
-FCFLAGS="${FCFLAGS:''}"
-CXXFLAGS="${CXXFLAGS:''}"
-CFLAGS="${CFLAGS:''}"
-CPPFLAGS="${CPPFLAGS:''}"
+FCFLAGS="${FCFLAGS:-}"
+CXXFLAGS="${CXXFLAGS:-}"
+CFLAGS="${CFLAGS:-}"
+CPPFLAGS="${CPPFLAGS:-}"
 
 if test -z "$FC" && test -n "$MPIFC"; then
     FC="$MPIFC"
@@ -66,6 +72,8 @@ LX_FIND_MPI
 CXX="$MPICXX"
 LIBS="$LIBS $MPI_CXXLDFLAGS"
 
+LINKER_CXX=$CXX
+
 AC_LANG_PUSH([C])
 AC_PROG_FC([icc fc gcc])
 AX_MPI
@@ -79,6 +87,8 @@ AX_MPI
 FC="$MPIFC"
 LIBS="$MPILIBS $LIBS"
 AC_LANG_POP()
+
+LINKER_FC=$FC
 
 # autoconf sets GCC=yes for icc/icpc. Therefore we need an additional
 # check to determine if this is the intel compiler.
@@ -104,8 +114,13 @@ AC_SUBST(OPENMP_CXXFLAGS)
 AC_PROG_INSTALL
 AC_CHECK_PROG(AR, ar, ar, ,$PATH)
 test -n "$ARFLAGS" || ARFLAGS="cr"
-AC_PROG_RANLIB
+
 AC_CHECK_PROG(MAKE, gmake, gmake, make, $PATH)
+
+AC_ARG_ENABLE(libtool,
+    [AC_HELP_STRING([--enable-libtool],
+	    [This only exists to disable libtool completely])])
+AC_SUBST(enable_libtool)
 
 AC_ARG_ENABLE(fortran,
     [AC_HELP_STRING([--enable-fortran],
@@ -133,9 +148,12 @@ if test "x$ICPC" = "xyes" ; then
         CPPFLAGS="$CPPFLAGS -DNDEBUG"
     fi
 elif test "x$FCC" = "xyes" ; then
+    AC_DEFINE([COMPILER_FUJITSU])
+
     CXXFLAGS="$CXXFLAGS -w"
     CFLAGS="$CFLAGS -w"
-    FCFLAGS="$FCFLAGS -w"
+    FCFLAGS="$FCFLAGS"
+    LINKER_FC="$LINKER_CXX --linkfortran"
     if test "$enable_debugging" = "yes" ; then
         CXXFLAGS="-g -O0 $CXXFLAGS"
         CFLAGS="-g -O0 $CFLAGS"
@@ -160,9 +178,15 @@ elif test "x$GCC" = "xyes" ; then
     fi
 fi
 
-AC_CHECK_LIB(stdc++,fclose,,) 
+if test "x$FCC" != "xyes" ; then
+  AC_CHECK_LIB(stdc++,fclose,,) 
+fi
+
 AC_CHECK_LIB(m,sin,,)
 AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
+
+AC_CHECK_LIB(tcmalloc,malloc,,AC_MSG_WARN([No tcmalloc support available.]))
+# AC_CHECK_LIB(tbbmalloc,malloc,,AC_MSG_WARN([No TBB malloc support available.]))
 
 AC_ARG_WITH(metis, [AS_HELP_STRING([--with-metis=METIS_ROOT], [root installation of METIS])])
 if test -n "$with_metis" ; then
@@ -177,8 +201,6 @@ if test -n "$with_parmetis" ; then
   CPPFLAGS="$CPPFLAGS -I$with_parmetis/include"
 fi
 AC_CHECK_LIB(parmetis,ParMETIS_V3_PartKway,,AC_MSG_WARN([No ParMETIS support available.]))
-
-ACX_ZOLTAN()
 
 # Detect VTK
 AC_CHECK_LIB(dl, dlopen)
@@ -351,7 +373,19 @@ AS_IF([test -n "$with_cuda"],[
 # Make NVCCFLAGS available in Makefile.am
 AC_SUBST(NVCCFLAGS)
 
+AC_SUBST(LINKER_CXX)
+AC_SUBST(LINKER_FC)
+
 AC_SUBST(ARFLAGS)
+
+AC_CHECK_HEADERS(boost/unordered_map.hpp)
+
+AC_CHECK_HEADERS(metis.h, [], [
+AC_CHECK_HEADERS(metis/metis.h)
+])
+
+AC_CHECK_HEADERS(parmetis.h)
+
 AC_C_CONST
 AC_C_INLINE
 
@@ -363,7 +397,9 @@ AC_OUTPUT(Makefile
 cat > include/pragmatic_config.h << EOF
 #ifndef PRAGMATIC_CONFIG_H
 #define PRAGMATIC_CONFIG_H
+
 EOF
+
 cat confdefs.h | grep "^#[dua][enl][fdl][ieo][nfw]" >> include/pragmatic_config.h
 cat >> include/pragmatic_config.h << EOF
 #endif

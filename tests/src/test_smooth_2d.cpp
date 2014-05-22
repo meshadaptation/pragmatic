@@ -54,30 +54,32 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  int rank = MPI::COMM_WORLD.Get_rank();
-
-  const char *methods[] = {"Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"};
-  const double target_quality_mean[] = {0.4, 0.7, 0.7, 0.7};
-  const double target_quality_min[]  = {0.0, 0.1, 0.2, 0.3};
-  for(int m=0;m<4;m++){
+  const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation Linf"};
+  const double target_quality_mean[] = {0.4, 0.7, 0.7};
+  const double target_quality_min[]  = {0.0, 0.1, 0.3};
+  for(int m=0;m<3;m++){
     const char *method = methods[m];
 
-    Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
-    Surface<double, int> surface(*mesh);
-    surface.find_surface(true);
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
+    Surface2D<double> surface(*mesh);
+    surface.find_surface();
 
-    MetricField<double, int> metric_field(*mesh, surface);
+    MetricField2D<double> metric_field(*mesh, surface);
 
     size_t NNodes = mesh->get_number_nodes();
 
     double eta=0.002;
 
-    vector<double> psi(NNodes);
+    std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
@@ -89,7 +91,7 @@ int main(int argc, char **argv){
     metric_field.update_mesh();
     
     if(m==0){
-      VTKTools<double, int>::export_vtu("../data/test_smooth_2d_init", mesh);
+      VTKTools<double>::export_vtu("../data/test_smooth_2d_init", mesh);
       double qmean = mesh->get_qmean();
       double qrms = mesh->get_qrms();
       double qmin = mesh->get_qmin();
@@ -101,12 +103,10 @@ int main(int argc, char **argv){
                  <<"Quality RMS:     "<<qrms<<std::endl;
     }
     
-    Smooth<double, int> smooth(*mesh, surface);
-    
-    int max_smooth_iter=2;
+    Smooth2D<double> smooth(*mesh, surface);
     
     double tic = get_wtime();
-    smooth.smooth(method, max_smooth_iter);
+    smooth.smooth(method);
     double toc = get_wtime();
     
     double lmean = mesh->get_lmean();
@@ -124,8 +124,8 @@ int main(int argc, char **argv){
                <<"Quality min:          "<<qmin<<std::endl
                <<"Quality RMS:          "<<qrms<<std::endl;
     
-    string vtu_filename = string("../data/test_smooth_2d_")+string(method);
-    VTKTools<double, int>::export_vtu(vtu_filename.c_str(), mesh);
+    std::string vtu_filename = std::string("../data/test_smooth_2d_")+std::string(method);
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
     delete mesh;
     
     if(rank==0){
@@ -137,7 +137,7 @@ int main(int argc, char **argv){
     }
   }
   
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

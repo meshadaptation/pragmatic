@@ -38,6 +38,8 @@
 #ifndef METIS_H
 #define METIS_H
 
+#include "pragmatic_config.h"
+
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
@@ -46,28 +48,27 @@
 #include <set>
 
 extern "C" {
-  // Declarations needed from METIS
-  typedef int idxtype;
-  void METIS_NodeND(int *, idxtype *, idxtype *, int *, int *, idxtype *, idxtype *);
-  void METIS_PartMeshNodal(int *ne, int *nn, idxtype *elmnts, int *etype, 
-                           int *numflag, int *nparts, int *edgecut, idxtype *epart, idxtype *npart);
-  void METIS_PartGraphRecursive(int *n, idxtype *xadj, idxtype *adjncy,
-                                idxtype *vwgt, idxtype *adjwgt, int *wgtflag,
-                                int *numflag, int *nparts, int *options, int *edgecut, idxtype *part);
+#ifdef HAVE_METIS_H
+#include <metis.h>
+#else
+#ifdef HAVE_METIS_METIS_H
+#include <metis/metis.h>
+#endif
+#endif
 
+typedef int idxtype;
+void METIS_PartMeshNodal(int *, int *, idxtype *, int *, int *, int *, int *, idxtype *, idxtype *);
 }
 
 /*! \brief Class provides a specialised interface to some METIS
  *   functionality.
  */
-template<typename index_t>
-class Metis{
- public:
+namespace metis{
   /*! Calculate a node renumbering.
    * @param graph is the undirected graph to be partitioned.
    * @param norder is an array storing the partition each node in the graph is assigned to.
    */
-  static int reorder(const std::vector< std::set<index_t> > &graph, std::vector<int> &norder){
+  void reorder(const std::vector< std::set<int> > &graph, std::vector<int> &norder){
     int nnodes = graph.size();
     
     // Compress graph
@@ -75,7 +76,7 @@ class Metis{
     int pos=0;
     xadj[0]=0;
     for(int i=0;i<nnodes;i++){
-      for(typename std::set<index_t>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
+      for(typename std::set<int>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
         assert((*jt)>=0);
         assert((*jt)<nnodes);
         adjncy.push_back(*jt);
@@ -89,8 +90,6 @@ class Metis{
     int numflag=0, options[] = {0};
     
     METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
-    
-    return 0;
   }
 };
 #endif

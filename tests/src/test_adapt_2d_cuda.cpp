@@ -54,13 +54,13 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
-  int rank = MPI::COMM_WORLD.Get_rank();
-
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/smooth_2d.vtu");
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
 
   Surface<double, int> surface(*mesh);
   surface.find_surface(true);
@@ -89,7 +89,7 @@ int main(int argc, char **argv){
            	<<"Quality mean:  "<<qmean<<std::endl
            	<<"Quality min:   "<<qmin<<std::endl
            	<<"Quality RMS:   "<<qrms<<std::endl;
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_cuda-initial", mesh);
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_cuda-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -125,14 +125,14 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
   if(rank==0) std::cout<<"Basic quality:\n";
   mesh->verify();
   
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_cuda-basic", mesh);
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_cuda-basic", mesh);
 
   smooth.smooth("cuda optimisation Linf", 200);
   
@@ -148,8 +148,8 @@ int main(int argc, char **argv){
     psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_cuda", mesh, &(psi[0]));
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface_cuda", &surface);
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_cuda", mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_surface_cuda", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
@@ -164,7 +164,7 @@ int main(int argc, char **argv){
       std::cout<<"fail"<<std::endl;
   }
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

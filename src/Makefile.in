@@ -4,25 +4,44 @@ CXX = @CXX@
 CC = @CC@
 FC = @FC@
 
-CPPFLAGS = @CPPFLAGS@ @CPPFLAGS_ZOLTAN@ -I../include
+CPPFLAGS = @CPPFLAGS@ -I../include
 
 CXXFLAGS = $(CPPFLAGS) @CXXFLAGS@ @OPENMP_CXXFLAGS@
 CFLAGS = $(CPPFLAGS) @CFLAGS@ @OPENMP_CFLAGS@
 FCFLAGS = $(CPPFLAGS) @FCFLAGS@ @OPENMP_FCFLAGS@
 
-AR = @AR@
-ARFLAGS = @ARFLAGS@
+LDFLAGS = @LDFLAGS@ @OPENMP_CXXFLAGS@ -L../lib
+LIBS = @LIBS@
 
-LIB = ../lib/libpragmatic.a
+libdir = @prefix@/lib
+libversion = 2:0:0
 
 VPATH = ./:./src
 
-ifeq (@USING_FORTRAN@,yes)
-fortran_objs = pragmatic.o  pragmatic_Fortran.o
-endif
-objects = zoltan_tools.o $(fortran_objs)
+LIBTOOL_CXX = ../libtool --mode=compile --tag=CXX
+LIBTOOL_CC = ../libtool --mode=compile --tag=CC
+LIBTOOL_FC = ../libtool --mode=compile --tag=FC
 
-.SUFFIXES: .F90 .cpp .c .o
+ifeq (@USING_FORTRAN@,yes)
+  objects = cpragmatic.o pragmatic.o
+else
+  objects = cpragmatic.o 
+endif
+
+ifneq (@enable_libtool@, no)
+  ifeq (@USING_FORTRAN@,yes)
+    objects_lo = cpragmatic.lo pragmatic.lo
+  else
+    objects_lo = cpragmatic.lo  
+  endif
+  
+  LIBTOOL_MKLIB = ../libtool --mode=link --tag=CXX  $(CXX) $(LDFLAGS) -o libpragmatic.la $(objects_lo) $(LIBS) -rpath $(libdir) -version-info $(libversion)
+  INSTALL_LIB = ../libtool --mode=install ../install-sh libpragmatic.la $(DESTDIR)$(libdir)/libpragmatic.la
+else
+  INSTALL_LIB =	../install-sh ../lib/libpragmatic.a $(DESTDIR)$(libdir)/libpragmatic.a
+endif
+
+.SUFFIXES: .F90 .cpp .c .o .lo
 
 # cancel implicit rule that tries to make .o from .mod with m2c:
 %.o: %.mod
@@ -34,14 +53,26 @@ objects = zoltan_tools.o $(fortran_objs)
 .F90.o:
 	@$(FC) $(FCFLAGS) -c $<
 
+.cpp.lo:
+	@$(LIBTOOL_CXX) $(CXX) $(CXXFLAGS) -c $<
+.c.lo:
+	@$(LIBTOOL_CC) $(CC) $(CFLAGS) -c $<
+.F90.lo:
+	@$(LIBTOOL_FC) $(FC) $(FCFLAGS) -c $<
+
 default: lib
 
-lib: $(objects)
+lib: $(objects) $(objects_lo)
 	mkdir -p ../lib
-	$(AR) $(ARFLAGS) $(LIB) $(objects)
+	@AR@ @ARFLAGS@ ../lib/libpragmatic.a $(objects)
+	$(LIBTOOL_MKLIB)
 ifeq (@USING_FORTRAN@,yes)
 	cp *.mod ../include/
 endif
 
+install:
+	$(INSTALL_LIB) 
+
 clean:
-	rm -rf *.o *.mod
+	rm -rf *.o *.mod *.lo *.la .libs
+

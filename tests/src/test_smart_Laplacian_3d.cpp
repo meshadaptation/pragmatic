@@ -48,19 +48,17 @@
 #include "Smooth.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = pow(mesh->get_coords(i)[0], 3) +
       pow(mesh->get_coords(i)[1], 3) + pow(mesh->get_coords(i)[2], 3);
@@ -72,7 +70,7 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
-  Smooth<double, int> smooth(*mesh, surface);
+  Smooth3D<double> smooth(*mesh, surface);
 
   double tic = get_wtime();
   smooth.smooth("smart Laplacian");
@@ -85,7 +83,7 @@ int main(int argc, char **argv){
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
 
-  VTKTools<double, int>::export_vtu("../data/test_smart_Laplacian_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_smart_Laplacian_3d", mesh);
   delete mesh;
 
   if((lrms<0.45)&&(qrms<2.0))

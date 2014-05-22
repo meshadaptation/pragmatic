@@ -50,62 +50,82 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc, argv);
-
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
+  double eta=0.0001;
 
-  vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
-  
-  metric_field.add_field(&(psi[0]), 0.001);
+  std::vector<double> psi(NNodes);
+  for(size_t i=0;i<NNodes;i++){
+    double x = 2*mesh->get_coords(i)[0]-1;
+    double y = 2*mesh->get_coords(i)[1]-1;
+
+    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+  }
+
+  metric_field.add_field(&(psi[0]), eta, 1);
   metric_field.update_mesh();
-  
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d-initial", mesh);
 
-  Refine<double, int> adapt(*mesh, surface);
+  VTKTools<double>::export_vtu("../data/test_refine_2d-initial", mesh);
+
+  Refine2D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
-  for(int i=0;i<5;i++)
+  for(int i=0;i<10;i++)
     adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_refine_2d_surface", &surface);
+
+  if(verbose)
+    mesh->verify();
+
+  std::vector<int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
+
+  VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
+  VTKTools<double>::export_vtu("../data/test_refine_2d_surface", &surface);
   
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
   if(verbose){
     int nelements = mesh->get_number_elements();      
-    std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl
-             <<"Edge length RMS:      "<<lrms<<std::endl
-             <<"Quality RMS:          "<<qrms<<std::endl;
+    if(rank==0)
+      std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
+               <<"Number elements:      "<<nelements<<std::endl
+               <<"Edge length RMS:      "<<lrms<<std::endl
+               <<"Quality RMS:          "<<qrms<<std::endl;
   }
 
-  if((lrms<0.8)&&(qrms<0.3))
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    if((lrms<0.8)&&(qrms<0.3))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+  }
 
   delete mesh;
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

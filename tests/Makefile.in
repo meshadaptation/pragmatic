@@ -2,11 +2,13 @@ SHELL = /bin/bash
 
 CXX = @CXX@
 CXXFLAGS = @CXXFLAGS@ @OPENMP_CXXFLAGS@
+LINKER_CXX = @LINKER_CXX@
 
 FC = @FC@
 FCFLAGS = @FCFLAGS@ @OPENMP_FCFLAGS@
+LINKER_FC = @LINKER_FC@
 
-CPPFLAGS = @CPPFLAGS@ @CPPFLAGS_ZOLTAN@ -I../include -I./include -DTIXML_USE_STL
+CPPFLAGS = @CPPFLAGS@ -I../include -I./include -DTIXML_USE_STL
 LDFLAGS = @LDFLAGS@
 
 NVCC = @NVCC@
@@ -15,29 +17,51 @@ NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
 objs = ticker.o tinystr.o tinyxml.o tinyxmlerror.o tinyxmlparser.o
 
 CUDA_LIBS = $(objs) @CUDA_LIBS@
-LIBS = $(objs) @LIBS_ZOLTAN@ @LIBS@
+LIBS = $(objs) @LIBS@
 
 LIB = ../lib/libpragmatic.a
 
 ifeq (@USING_FORTRAN@,yes)
-TEST_SRC_F90 = $(wildcard src/ftest_*.F90)
-TEST_BIN_F90 = $(patsubst src/%.F90,bin/%,$(TEST_SRC_F90))
+TEST2D_SRC_F90 = $(wildcard src/ftest_*2d*.F90)
+TEST2D_BIN_F90 = $(patsubst src/%.F90,bin2d/%,$(TEST2D_SRC_F90))
+
+TEST3D_SRC_F90 = $(wildcard src/ftest_*3d*.F90)
+TEST3D_BIN_F90 = $(patsubst src/%.F90,bin3d/%,$(TEST3D_SRC_F90))
 endif
 
 ifeq (@ENABLE_CUDA@,yes)
-TEST_SRC_CUDA = $(wildcard src/test_*.cu)
-TEST_BIN_CUDA = $(patsubst src/%.cu,bin/%,$(TEST_SRC_CUDA))
+TEST2D_SRC_CUDA = $(wildcard src/test_*2d*.cu)
+TEST2D_BIN_CUDA = $(patsubst src/%.cu,bin2d/%,$(TEST2D_SRC_CUDA))
+
+TEST3D_SRC_CUDA = $(wildcard src/test_*3d*.cu)
+TEST3D_BIN_CUDA = $(patsubst src/%.cu,bin3d/%,$(TEST3D_SRC_CUDA))
 endif
 
-TEST_SRC_CXX = $(filter-out $(wildcard src/*cuda.cpp), $(wildcard src/test_*.cpp))
-TEST_BIN_CXX = $(patsubst src/%.cpp,bin/%,$(TEST_SRC_CXX))
+TEST2D_SRC_CXX = $(filter-out $(wildcard src/*cuda.cpp), $(wildcard src/test_*2d*.cpp))
+TEST2D_BIN_CXX = $(patsubst src/%.cpp,bin2d/%,$(TEST2D_SRC_CXX))
 
-TEST_SRC = $(TEST_SRC_CXX) $(TEST_SRC_F90) $(TEST_SRC_CUDA)
-TEST_BIN = $(TEST_BIN_CXX) $(TEST_BIN_F90) $(TEST_BIN_CUDA)
+TEST3D_SRC_CXX = $(filter-out $(wildcard src/*cuda.cpp), $(wildcard src/test_*3d*.cpp))
+TEST3D_BIN_CXX = $(patsubst src/%.cpp,bin3d/%,$(TEST3D_SRC_CXX))
+
+TEST2D_SRC = $(TEST2D_SRC_CXX) $(TEST2D_SRC_F90) $(TEST2D_SRC_CUDA)
+TEST2D_BIN = $(TEST2D_BIN_CXX) $(TEST2D_BIN_F90) $(TEST2D_BIN_CUDA)
+
+TEST3D_SRC = $(TEST3D_SRC_CXX) $(TEST3D_SRC_F90) $(TEST3D_SRC_CUDA)
+TEST3D_BIN = $(TEST3D_BIN_CXX) $(TEST3D_BIN_F90) $(TEST3D_BIN_CUDA)
+
+ifeq (@ENABLE_CUDA@,yes)
+TEST_CUDA_SRC = test_cuda.cu
+TEST_CUDA_BIN = $(patsubst src/%.cu,bin_generic/%,$(TEST_CUDA_SRC))
+endif
+
+TEST_CXX_SRC = src/test_eigen.cpp src/test_ElementProperty.cpp src/test_page_faults.cpp
+TEST_CXX_BIN = $(patsubst src/%.cpp,bin_generic/%,$(TEST_CXX_SRC))
+
+TEST_GENERIC = $(TEST_CUDA_BIN) $(TEST_CXX_BIN)
 
 VPATH = ./:./src
 
-.SUFFIXES: .cpp .F90 .o
+.SUFFIXES: .cpp .F90 .o .lo
 
 .cpp.o:
 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $<
@@ -46,25 +70,100 @@ VPATH = ./:./src
 .cu.o:
 	@$(NVCC) $(NVCCFLAGS) -c $<
 
+.SECONDARY: $(objs)
+
 default: test
 
-test: binaries
+test: $(TEST_GENERIC) $(TEST2D_BIN) $(TEST3D_BIN)
+	@echo Testing everything.
+	@mkdir -p bin
 	@cp src/*.mpi bin/
+	@cp $(TEST_CUDA_BIN) $(TEST_CXX_BIN) $(TEST2D_BIN) $(TEST3D_BIN) bin/
 	python ./unittest bin
 
-binaries: $(TEST_BIN)
+test_generic: $(TEST_GENERIC)
+	@echo Test generic functionality.
+	@mkdir -p bin_generic
+	@cp src/*.mpi bin_generic/
+	python ./unittest bin_generic
 
+test_2d: $(TEST2D_BIN)
+	@echo Test 2D mesh adaptivity.
+	@cp src/*.mpi bin2d/
+	python ./unittest bin2d
+
+test_3d: $(TEST3D_BIN)
+	@echo Test 3D mesh adaptivity.
+	@cp src/*.mpi bin3d/
+	python ./unittest bin3d
+
+# C++
+bin_generic/%: src/%.cpp $(objs) 
+	@mkdir -p bin_generic
+	@echo "    CXX $@"
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+
+bin2d/%: src/%.cpp $(objs) 
+	@mkdir -p bin2d
+	@echo "    CXX $@"
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+
+bin3d/%: src/%.cpp $(objs)
+	@mkdir -p bin3d 
+	@echo "    CXX $@"
+	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
+
+# Fortran
+bin_generic/%: src/%.F90 $(objs)
+	@mkdir -p bin_generic
+	@echo "    FC $@"
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+
+bin2d/%: src/%.F90 $(objs)
+	@mkdir -p bin_2d
+	@echo "    FC $@"
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+
+bin3d/%: src/%.F90 $(objs) 
+	@mkdir -p bin_3d
+	@echo "    FC $@"
+	@$(FC) $(CPPFLAGS) $(FCFLAGS) -c $<
+	@$(LINKER_FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $(basename $(notdir $<)).o $(LIB) $(LIBS)
+
+# Generic
+bin/%: src/%.cu
+	@mkdir -p bin_generic
+	@echo "    NVCC $@"
+	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
+
+bin2d/%: src/%.cu
+	@mkdir -p bin_2d
+	@echo "    NVCC $@"
+	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
+
+bin3d/%: src/%.cu
+	@mkdir -p bin_3d
+	@echo "    NVCC $@"
+	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
+
+# For user specified targets in bin/
 bin/%: src/%.cpp $(objs) 
+	@mkdir -p bin
 	@echo "    CXX $@"
 	@$(CXX) $(LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $@ $< $(LIB) $(LIBS)
 
 bin/%: src/%.F90 $(objs) 
+	@mkdir -p bin
 	@echo "    FC $@"
 	@$(FC) $(LDFLAGS) $(CPPFLAGS) $(FCFLAGS) -o $@ $< $(LIB) $(LIBS)
 
-bin/%: src/%.cu
+bin/%: src/%.cu $(objs) 
+	@mkdir -p bin
 	@echo "    NVCC $@"
 	@$(NVCC) $(NVCCFLAGS) -o $@ $< $(CUDA_LIBS)
 
 clean:
-	rm -rf *.o $(TEST_BIN) bin/test* bin/benchmark*
+	rm -rf *.o $(TEST_BIN) bin*
+

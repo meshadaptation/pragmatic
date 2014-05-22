@@ -36,6 +36,8 @@
 #ifndef DEFS_H
 #define DEFS_H
 
+#include <cuda.h>
+
 extern "C" {
 
 #define true 1

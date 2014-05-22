@@ -50,36 +50,37 @@
 
 #include <mpi.h>
 
-using namespace std;
-
 int main(int argc, char **argv){
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
 
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   for(size_t i=0;i<NNodes;i++)
     psi[i] = 
       pow(mesh->get_coords(i)[0], 4) +
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.02);
+  metric_field.add_field(&(psi[0]), 0.1);
   metric_field.update_mesh();
   
-  Refine<double, int> adapt(*mesh, surface);
+  Refine3D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
   adapt.refine(sqrt(2.0));
@@ -88,12 +89,12 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  VTKTools<double, int>::export_vtu("../data/test_refine_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_refine_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_refine_3d_surface", &surface);
    
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms(); 
@@ -112,7 +113,7 @@ int main(int argc, char **argv){
 
   delete mesh;
 
-  MPI::Finalize();
+  MPI_Finalize();
 
   return 0;
 }

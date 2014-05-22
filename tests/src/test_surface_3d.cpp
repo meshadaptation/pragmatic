@@ -51,19 +51,17 @@
 #include "Mesh.h"
 #include "VTKTools.h"
 
-using namespace std;
-
 /* Tests
    1. Assert number of coplanar id's is 6.
  */
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface();
 
-  VTKTools<double, int>::export_vtu("../data/test_surface_2d", &surface);
+  VTKTools<double>::export_vtu("../data/test_surface_2d", &surface);
 
   std::set<int> unique_ids;
   for(int i=0;i<surface.get_number_facets();i++){

@@ -35,6 +35,7 @@
  *  SUCH DAMAGE.
  */
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -44,129 +45,159 @@
 #include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
-#include "MetricTensor.h"
+
+#include "Coarsen.h"
+#include "Refine.h"
+#include "Smooth.h"
+#include "Swapping.h"
 #include "ticker.h"
 
-using namespace std;
+#include <mpi.h>
 
 int main(int argc, char **argv){
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20.vtu");
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  Surface<double, int> surface(*mesh);
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+  
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
+
+  Surface2D<double> surface(*mesh);
   surface.find_surface();
-
-  MetricField<double, int> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-  {
-    if ( mesh->get_coords(i)[0] < 1e-4 && mesh->get_coords(i)[1] < 1e-4 )
-    {
-      psi[i] = 2.42;
-    }
+  // Set up field - use first touch policy
+  std::vector<double> psi(NNodes);
+  for(size_t i=0;i<NNodes;i++){
+    if(mesh->get_coords(i)[0]>0.25 && mesh->get_coords(i)[0]<0.75 &&
+       mesh->get_coords(i)[1]>0.25 && mesh->get_coords(i)[1]<0.75)
+      psi[i] = 1.0;
     else
-    {
-      psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
-    }
+      psi[i] = -1.0;
   }
+  
+  MetricField2D<double> metric_field(*mesh, surface);
+  
+  metric_field.add_field(&(psi[0]), 0.2);
 
-  double start_tic = get_wtime();
-  metric_field.add_field(&(psi[0]), 1.0);
+  metric_field.apply_gradation(1.1);
+  metric_field.apply_max_nelements(10000);
 
-  double gradation = 1.3;
-  metric_field.apply_gradation(gradation);
   metric_field.update_mesh();
+  
+  // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+  double L_up = sqrt(2.0);
+  double L_low = L_up/2;
 
-  std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
+  Coarsen2D<double> coarsen(*mesh, surface);  
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
-  vector<double> metric(NNodes*4);
-  metric_field.get_metric(&(metric[0]));
+  coarsen.coarsen(L_low, L_up);
 
-  bool eigenvalues_ok = true;
-
-  // loop over nodes and measure distance to each neighbour in turn
-  for( int nid0=0; nid0 < (int) NNodes; nid0++ )
-  {
-    std::set<int> adjacent_nodes = mesh->get_node_patch(nid0);
-
-    MetricTensor<double> metric_tensor_0(2,&(metric[4*nid0]));
-    std::vector<double> D0(2), V0(4);
-    metric_tensor_0.eigen_decomp(D0, V0);
-
-    for (std::set<int>::iterator it = adjacent_nodes.begin(); it != adjacent_nodes.end(); it++)
-    {
-      int nid1 = *it;
+  if(verbose)
+    if(!mesh->verify()){
+      std::vector<int> active_vertex_map;
+      mesh->defragment(&active_vertex_map);
+      surface.defragment(&active_vertex_map);
       
-      MetricTensor<double> metric_tensor_1(2,&(metric[4*nid1]));
-      std::vector<double> D1(2), V1(4);
-      metric_tensor_1.eigen_decomp(D1, V1);
+      VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
+      exit(-1);
+    }
 
-      // Pair the eigenvectors by minimising the angle between them.
-      std::vector<int> pairs(2, -1);
-      std::vector<bool> paired(2, false);
-      for(int d=0; d<2; d++)
-      {
-        std::vector<double> angle(2);
-        for(int k=0; k<2; k++)
-        {
-          if(paired[k])
-            continue;
-          angle[k] = V0[d*2]*V1[k*2];
-          for(int l=1; l<2; l++)
-            angle[k] += V0[d*2+l]*V1[k*2+l];
-          angle[k] = acos(fabs(angle[k]));
-        }
+  double L_max = mesh->maximal_edge_length();
+  
+  double alpha = sqrt(2.0)/2;  
+  for(size_t i=0;i<10;i++){
+    double L_ref = std::max(alpha*L_max, L_up);
+    
+    refine.refine(L_ref);
+    
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after refine.\n";
+      
+      if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
 
-        int r=0;
-        for(;r<2;r++)
-        {
-          if(!paired[r])
-          {
-            pairs[d] = r;
-            break;
-          }
-        }
-        r++;
-
-        for(;r<2;r++)
-        {
-          if(angle[pairs[d]]<angle[r])
-          {
-            pairs[d] = r;
-          }
-        }
-
-        paired[pairs[d]] = true;
-
-        assert(pairs[d]!=-1);
-      }
-
-      // Check that no eigenvalues need resizing
-      double L01=mesh->calc_edge_length(nid0, nid1);
-      for(int k=0; k<2; k++)
-      {
-        double h0 = 1.0/sqrt(D0[k]);
-        double h1 = 1.0/sqrt(D1[pairs[k]]);
-        double gamma = exp(fabs(h0 - h1)/L01);
+        std::vector<int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
         
-        if (gamma > 1.05*gradation)
-        {
-          eigenvalues_ok = false;
-        }
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-refine", mesh);
+        exit(-1);
       }
     }
+
+    coarsen.coarsen(L_low, L_ref);
+
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after coarsen.\n";
+      
+      if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
+
+        std::vector<int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
+        
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
+        exit(-1);
+      }
+    }
+
+    swapping.swap(0.7);
+
+    if(verbose){
+      if(rank==0)
+        std::cout<<"INFO: Verify quality after swapping.\n";
+      
+      if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after swapping.\n";
+
+        std::vector<int> active_vertex_map;
+        mesh->defragment(&active_vertex_map);
+        surface.defragment(&active_vertex_map);
+        
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+        exit(-1);
+      }
+    }
+
+    L_max = mesh->maximal_edge_length();
+    
+    if((L_max-L_up)<0.01)
+      break;
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_gradation_2d", mesh, &(psi[0]));
+  std::vector<int> active_vertex_map;
+  mesh->defragment(&active_vertex_map);
+  surface.defragment(&active_vertex_map);
 
+  if(verbose){
+    if(rank==0)
+      std::cout<<"Basic quality:\n";
+    mesh->verify();
+  }
+
+  VTKTools<double>::export_vtu("../data/test_gradation_2d", mesh);
+
+  std::cout<<"pass\n";
+  
   delete mesh;
 
-  if(eigenvalues_ok)
-    std::cout<<"pass\n";
-  else
-    std::cout<<"fail\n";
+  MPI_Finalize();
 
   return 0;
 }

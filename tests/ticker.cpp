@@ -34,14 +34,14 @@
 double get_wtime(){
     struct timeval tic;
 
-    long seconds, useconds;    
+    long seconds, useconds;
 
     gettimeofday(&tic, NULL);
 
     seconds  = tic.tv_sec;
     useconds = tic.tv_usec;
 
-    return seconds + useconds/1000000.0;
+    return seconds + useconds*1e-06;
 }
 
 

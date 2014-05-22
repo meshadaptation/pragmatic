@@ -60,23 +60,23 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
-  
+
   // Benchmark times.
-  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
+  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
 
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box200x200.vtu");
+  Surface2D<double> surface(*mesh);
+  surface.find_surface();
 
-  Surface<double, int> surface(*mesh);
-  surface.find_surface(true);
-
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.001;
@@ -86,16 +86,16 @@ int main(int argc, char **argv){
     double x = 2*mesh->get_coords(i)[0];
     double y = 2*mesh->get_coords(i)[1];
 
-    psi[i] = sin(x*20)+sin(y*20);
+    psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
   }
 
-  metric_field.add_field(&(psi[0]), eta, 1);
+  metric_field.add_field(&(psi[0]), eta, 2);
   metric_field.update_mesh();
 
   double qmean = mesh->get_qmean();
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
-  
+
   if((rank==0)&&(verbose)) std::cout<<"Initial quality:\n"
                                     <<"Quality mean:  "<<qmean<<std::endl
                                     <<"Quality min:   "<<qmin<<std::endl
@@ -105,31 +105,16 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen<double, int> coarsen(*mesh, surface);  
-  Smooth<double, int> smooth(*mesh, surface);
-  Refine<double, int> refine(*mesh, surface);
-  Swapping<double, int> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh, surface);
+  Smooth2D<double> smooth(*mesh, surface);
+  Refine2D<double> refine(*mesh, surface);
+  Swapping2D<double> swapping(*mesh, surface);
 
   time_adapt = get_wtime();
 
-  double tic = get_wtime();
-  coarsen.coarsen(L_low, L_up);
-  time_coarsen += get_wtime()-tic;
-
-  if(verbose)
-    if(!mesh->verify()){
-      std::map<int, int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
-
-      VTKTools<double, int>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
-      exit(-1);
-    }
-
   double L_max = mesh->maximal_edge_length();
-
-  double alpha = sqrt(2.0)/2;  
-  for(size_t i=0;i<10;i++){
+  double alpha = sqrt(2.0)/2;
+  for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
 
     tic = get_wtime();
@@ -172,42 +157,34 @@ int main(int argc, char **argv){
     swapping.swap(0.7);
     time_swap += get_wtime() - tic;
 
-    if(verbose){
-      if(rank==0)
-        std::cout<<"INFO: Verify quality after swapping.\n";
-      
-      if(!mesh->verify()){
-        std::map<int, int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
-        
-        VTKTools<double, int>::export_vtu("../data/test_adapt_2d-swapping", mesh);
-        exit(-1);
-      }
-    }
-
+    tic = get_wtime();
+    refine.refine(L_ref);
+    time_refine += get_wtime() - tic;
+    
     L_max = mesh->maximal_edge_length();
     
     if((L_max-L_up)<0.01)
       break;
   }
 
-  std::map<int, int> active_vertex_map;
+  double time_defrag = get_wtime();
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
+  time_defrag = get_wtime()-time_defrag;
 
   if(verbose){
     if(rank==0)
       std::cout<<"Basic quality:\n";
     mesh->verify();
-    
-    VTKTools<double, int>::export_vtu("../data/test_adapt_2d-basic", mesh);
+
+    VTKTools<double>::export_vtu("../data/test_adapt_2d-basic", mesh);
   }
-  
+
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 50);
+  smooth.smooth("optimisation Linf", 20);
   time_smooth += get_wtime()-tic;
-  
+
   time_adapt = get_wtime()-time_adapt;
 
   if(verbose){
@@ -219,14 +196,14 @@ int main(int argc, char **argv){
   NNodes = mesh->get_number_nodes();
   psi.resize(NNodes);
   for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0];
-    double y = 2*mesh->get_coords(i)[1];
+    double x = 2*mesh->get_coords(i)[0]-1;
+    double y = 2*mesh->get_coords(i)[1]-1;
 
-    psi[i] = sin(x*20)+sin(y*20);
+    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
   }
 
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
-  VTKTools<double, int>::export_vtu("../data/test_adapt_2d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
@@ -235,15 +212,18 @@ int main(int argc, char **argv){
   delete mesh;
 
   if(rank==0){
-    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_adapt\n";
+    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
+    double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
     std::cout<<"BENCHMARK: "
              <<std::setw(12)<<time_coarsen<<" "
              <<std::setw(11)<<time_refine<<" "
              <<std::setw(9)<<time_swap<<" "
              <<std::setw(11)<<time_smooth<<" "
-             <<std::setw(10)<<time_adapt<<"\n";
+             <<std::setw(11)<<time_defrag<<" "
+             <<std::setw(10)<<time_adapt<<" "
+             <<std::setw(10)<<time_other<<"\n";
 
-    if((qmean>0.8)&&(qmin>0.4))
+    if((qmean>0.8)&&(qmin>0.29))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

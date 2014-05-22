@@ -39,15 +39,19 @@ program test_adapt
   use iso_c_binding
   implicit none
 
+  include 'mpif.h' 
+
   integer(kind=c_int) :: NNodes, NElements, NSElements
   real(c_double), allocatable, dimension(:) :: xv, yv, psi
   real(c_double), parameter :: eta=0.002
-  
-  integer :: i
+
+  integer :: i, ierr
   real :: x, y
 
-  call pragmatic_begin("../data/smooth_2d.vtu"//C_NULL_CHAR)
-  
+  call mpi_init(ierr)
+
+  call pragmatic_init("../data/smooth_2d.vtu"//C_NULL_CHAR)
+
   call pragmatic_get_info(NNodes, NElements, NSElements)
 
   allocate(xv(NNodes), yv(NNodes))
@@ -57,17 +61,19 @@ program test_adapt
   do i=1, NNodes
      x = 2*xv(i)-1
      y = 2*yv(i)-1
-     
+
      psi(i) = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, 2*x - sin(5*y))
-  end do  
+  end do
   call pragmatic_add_field(psi, eta, 1);
 
   call pragmatic_adapt()
 
   call pragmatic_dump("../data/ftest_adapt_2d"//C_NULL_CHAR)
 
-  call pragmatic_end()
+  call pragmatic_finalize()
 
   ! For now just be happy we get this far without dieing.
   print*, "pass"
+
+  call mpi_finalize(ierr)
 end program test_adapt

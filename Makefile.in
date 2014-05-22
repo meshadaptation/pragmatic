@@ -2,12 +2,10 @@ SHELL = /bin/bash
 
 MAKE = make -s
 
-PREFIX = @prefix@
-includedir = $(PREFIX)/include
-libdir = $(PREFIX)/lib
-docdir = $(PREFIX)/share/doc/pragmatic
-
-LIB = lib/libpragmatic.a
+prefix = @prefix@
+includedir = $(prefix)/include
+libdir = $(prefix)/lib
+docdir = $(prefix)/share/doc/pragmatic
 
 .PHONY: lib test bin docs
 
@@ -30,8 +28,6 @@ basic_test:
 	@(cd tests && $(MAKE) test)
 
 clean:
-	@echo "  CLEAN lib"
-	@rm -rf lib/lib*
 	@echo "  CLEAN docs"
 	@(cd docs && $(MAKE) clean)
 	@echo "  CLEAN src"
@@ -46,10 +42,9 @@ distclean: clean
 	@rm -rf config.status config.log Makefile src/Makefile tests/Makefile docs/Makefile
 
 install:
-	mkdir -p $(DESTDIR)$(includedir)
-	cp -r include/* $(DESTDIR)$(includedir)/
-	mkdir -p $(DESTDIR)$(libdir)
-	cp -r $(LIB) $(DESTDIR)$(libdir)/
-	mkdir -p $(DESTDIR)$(docdir)
-	cp docs/pragmatic.pdf $(DESTDIR)$(docdir)/
-	cp -r docs/html $(DESTDIR)$(docdir)/
+	@(cd src/ && $(MAKE) install)
+	@mkdir -p $(DESTDIR)$(includedir)
+	@cp -r include/* $(DESTDIR)$(includedir)/
+	@mkdir -p $(DESTDIR)$(docdir)
+	@cp docs/pragmatic.pdf $(DESTDIR)$(docdir)/
+	@cp -r docs/html $(DESTDIR)$(docdir)/

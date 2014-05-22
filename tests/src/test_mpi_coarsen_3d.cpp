@@ -58,48 +58,49 @@
 #include "Coarsen.h"
 #include "ticker.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
-#ifdef HAVE_MPI
-  MPI::Init(argc,argv);
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+  
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  Mesh<double, int> *mesh=VTKTools<double, int>::import_vtu("../data/box20x20x20.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
 
-  Surface<double, int> surface(*mesh);
+  Surface3D<double> surface(*mesh);
   surface.find_surface(true);
 
-  MetricField<double, int> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh, surface);
 
   size_t NNodes = mesh->get_number_nodes();
 
-  vector<double> psi(NNodes, 0);
+  std::vector<double> psi(NNodes, 0);
   metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
   
-  Coarsen<double, int> adapt(*mesh, surface);
+  Coarsen3D<double> adapt(*mesh, surface);
 
   double tic = get_wtime();
   adapt.coarsen(0.4, sqrt(2.0));
   double toc = get_wtime();
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
   
-  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_3d", mesh);
-  VTKTools<double, int>::export_vtu("../data/test_mpi_coarsen_3d_surface", &surface);
+  VTKTools<double>::export_vtu("../data/test_mpi_coarsen_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_mpi_coarsen_3d_surface", &surface);
 
   delete mesh;
 
-  if(MPI::COMM_WORLD.Get_rank()==0){
+  if(rank==0){
     std::cout<<"Coarsen time = "<<toc-tic<<std::endl;
     std::cout<<"pass"<<std::endl;
   }
 
-  MPI::Finalize();
-#else
-  std::cout<<"warning - no MPI compiled"<<std::endl;
-#endif
+  MPI_Finalize();
+
   return 0;
 }

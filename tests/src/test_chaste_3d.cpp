@@ -53,8 +53,6 @@
 #include "Surface.h"
 #include "VTKTools.h"
 
-using namespace std;
-
 int main(int argc, char **argv){
   vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
   reader->SetFileName("../data/coarse_slab0003.vtu");
@@ -65,7 +63,7 @@ int main(int argc, char **argv){
   int NNodes = ug->GetNumberOfPoints();
   int NElements = ug->GetNumberOfCells();
 
-  vector<double> x(NNodes),  y(NNodes), z(NNodes);
+  std::vector<double> x(NNodes),  y(NNodes), z(NNodes);
   for(int i=0;i<NNodes;i++){
     double r[3];
     ug->GetPoints()->GetPoint(i, r);
@@ -74,7 +72,7 @@ int main(int argc, char **argv){
     z[i] = r[2];
   }
 
-  vector<int> ENList;
+  std::vector<int> ENList;
   for(int i=0;i<NElements;i++){
     vtkCell *cell = ug->GetCell(i);
     for(size_t j=0;j<4;j++){
@@ -82,14 +80,14 @@ int main(int argc, char **argv){
     }
   }
 
-  Mesh<double, int> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+  Mesh<double> mesh(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
 
-  Surface<double, int> surface(mesh);
+  Surface3D<double> surface(mesh);
   surface.find_surface();
 
-  MetricField<double, int> metric_field(mesh, surface);
+  MetricField3D<double> metric_field(mesh, surface);
   
-  vector<double> psi(NNodes);
+  std::vector<double> psi(NNodes);
   
   vtkPointData *p_point_data = ug->GetPointData();
   vtkDataArray *p_scalars = p_point_data->GetArray("Vm");
@@ -104,21 +102,21 @@ int main(int argc, char **argv){
   // metric_field.apply_gradation(1.3);
   metric_field.update_mesh();
 
-  VTKTools<double, int>::export_vtu("../data/test_chaste_metric", &mesh, &(psi[0]));
+  VTKTools<double>::export_vtu("../data/test_chaste_metric", &mesh, &(psi[0]));
   
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
     
-  Coarsen<double, int> coarsen(mesh, surface);
+  Coarsen3D<double> coarsen(mesh, surface);
   coarsen.coarsen(L_low, L_up);
   
-  Smooth<double, int> smooth(mesh, surface);
+  Smooth3D<double> smooth(mesh, surface);
   double L_max = mesh.maximal_edge_length();
   
   int adapt_iter=0;
   double alpha = 0.95; //sqrt(2)/2;
-  Refine<double, int> refine(mesh, surface);
+  Refine3D<double> refine(mesh, surface);
   do{
     double L_ref = std::max(alpha*L_max, L_up);
       
@@ -131,7 +129,7 @@ int main(int argc, char **argv){
   double lrms = mesh.get_lrms();
   double qrms = mesh.get_qrms();
   
-  std::map<int, int> active_vertex_map;
+  std::vector<int> active_vertex_map;
   mesh.defragment(&active_vertex_map);
   surface.defragment(&active_vertex_map);
 
@@ -143,7 +141,7 @@ int main(int argc, char **argv){
            <<"Edge length RMS:      "<<lrms<<std::endl
            <<"Quality RMS:          "<<qrms<<std::endl;
   
-  VTKTools<double, int>::export_vtu("../data/test_chaste_mesh", &mesh);
+  VTKTools<double>::export_vtu("../data/test_chaste_mesh", &mesh);
     
   if((lrms<0.8)&&(qrms<2.2))
     std::cout<<"pass"<<std::endl;

@@ -41,7 +41,7 @@ module pragmatic
   
   private
   public :: &
-       pragmatic_begin, &
+       pragmatic_init, &
        pragmatic_add_field, &
        pragmatic_set_surface, &
        pragmatic_set_metric, &
@@ -53,7 +53,7 @@ module pragmatic
        pragmatic_get_lnn2gnn, &
        pragmatic_get_metric, &
        pragmatic_dump, &
-       pragmatic_end
+       pragmatic_finalize
   
    !> Initialises metric calculation. This must be called first.
    !
@@ -62,8 +62,8 @@ module pragmatic
    !> @param[in] enlists Element-node list.
    !> @param[in] x X-cooardinates.
    !> @param[in] y Y-cooardinates.
-  interface pragmatic_begin
-     subroutine pragmatic_2d_begin(NNodes, NElements, enlist, x, y) bind(c,name="pragmatic_2d_begin")
+  interface pragmatic_init
+     subroutine pragmatic_2d_init(NNodes, NElements, enlist, x, y) bind(c,name="pragmatic_2d_init")
        use iso_c_binding
        implicit none
        integer(kind=c_int) :: NNodes
@@ -71,8 +71,8 @@ module pragmatic
        integer(kind=c_int) :: enlist(*)
        real(c_double) :: x(*)
        real(c_double) :: y(*)
-     end subroutine pragmatic_2d_begin
-     subroutine pragmatic_3d_begin(NNodes, NElements, enlist, x, y, z) bind(c,name="pragmatic_3d_begin")
+     end subroutine pragmatic_2d_init
+     subroutine pragmatic_3d_init(NNodes, NElements, enlist, x, y, z) bind(c,name="pragmatic_3d_init")
        use iso_c_binding
        implicit none
        integer(kind=c_int) :: NNodes
@@ -81,13 +81,13 @@ module pragmatic
        real(c_double) :: x(*)
        real(c_double) :: y(*)
        real(c_double) :: z(*)
-     end subroutine pragmatic_3d_begin
-     subroutine pragmatic_vtk_begin(filename) bind(c,name="pragmatic_vtk_begin")
+     end subroutine pragmatic_3d_init
+     subroutine pragmatic_vtk_init(filename) bind(c,name="pragmatic_vtk_init")
        use iso_c_binding
        implicit none
        character(kind=c_char), intent(in) :: filename
-     end subroutine pragmatic_vtk_begin
-  end interface pragmatic_begin
+     end subroutine pragmatic_vtk_init
+  end interface pragmatic_init
   
    !> Add field to be included in the metric.
    !
@@ -109,15 +109,13 @@ module pragmatic
   !> @param[in] nfacets Number of surface elements.
   !> @param[in] facets Surface elements.
   !> @param[in] boundary_ids Boundary ID's.
-  !> @param[in] coplanar_ids Co-planar ID's.
   interface pragmatic_set_surface
-     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_set_surface")
+     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids) bind(c,name="pragmatic_set_surface")
        use iso_c_binding
        implicit none
        integer(c_int) :: nfacets
        integer(c_int) :: facets(*)
        integer(c_int) :: boundary_ids(*)
-       integer(c_int) :: coplanar_ids(*)
      end subroutine pragmatic_set_surface
   end interface pragmatic_set_surface
   
@@ -189,14 +187,12 @@ module pragmatic
   !
   !> @param[out] facets Surface elements.
   !> @param[out] boundary_ids Boundary ID's.
-  !> @param[out] coplanar_ids Co-planar ID's.
   interface pragmatic_get_surface
-     subroutine pragmatic_get_surface(facets, boundary_ids, coplanar_ids) bind(c,name="pragmatic_get_surface")
+     subroutine pragmatic_get_surface(facets, boundary_ids) bind(c,name="pragmatic_get_surface")
        use iso_c_binding
        implicit none
        integer(c_int) :: facets(*)
        integer(c_int) :: boundary_ids(*)
-       integer(c_int) :: coplanar_ids(*)
      end subroutine pragmatic_get_surface
   end interface pragmatic_get_surface
 
@@ -236,10 +232,10 @@ module pragmatic
   end interface pragmatic_dump
 
   !> Free internal data structures.
-  interface pragmatic_end
-     subroutine pragmatic_end() bind(c,name="pragmatic_end")
+  interface pragmatic_finalize
+     subroutine pragmatic_finalize() bind(c,name="pragmatic_finalize")
        use iso_c_binding
-     end subroutine pragmatic_end
-  end interface pragmatic_end
+     end subroutine pragmatic_finalize
+  end interface pragmatic_finalize
 
 end module pragmatic
