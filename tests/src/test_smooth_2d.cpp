@@ -46,7 +46,6 @@
 #endif
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "Smooth.h"
@@ -70,10 +69,9 @@ int main(int argc, char **argv){
     const char *method = methods[m];
 
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
-    Surface2D<double> surface(*mesh);
-    surface.find_surface();
+    mesh->create_boundary();
 
-    MetricField2D<double> metric_field(*mesh, surface);
+    MetricField2D<double> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
 
@@ -103,7 +101,7 @@ int main(int argc, char **argv){
                  <<"Quality RMS:     "<<qrms<<std::endl;
     }
     
-    Smooth2D<double> smooth(*mesh, surface);
+    Smooth2D<double> smooth(*mesh);
     
     double tic = get_wtime();
     smooth.smooth(method);

@@ -43,7 +43,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "ticker.h"
@@ -57,9 +56,7 @@ int main(int argc, char **argv){
   assert(required_thread_support==provided_thread_support);
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
+  mesh->create_boundary();
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -72,7 +69,7 @@ int main(int argc, char **argv){
       psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
   }
   
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
   
   double tic = get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);

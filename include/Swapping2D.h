@@ -44,6 +44,7 @@
 #include <set>
 #include <vector>
 
+#include "Edge.h"
 #include "Colour.h"
 #include "ElementProperty.h"
 #include "Mesh.h"

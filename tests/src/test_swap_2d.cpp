@@ -41,7 +41,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -65,11 +64,9 @@ int main(int argc, char **argv){
   }
   
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
+  mesh->create_boundary();
   
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
-  
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
   
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.0001;
@@ -89,7 +86,7 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
-  Swapping2D<double> swapping(*mesh, surface);
+  Swapping2D<double> swapping(*mesh);
   
   double tic = get_wtime();
   swapping.swap(0.95);
@@ -98,14 +95,12 @@ int main(int argc, char **argv){
   if(!mesh->verify()){
     std::vector<int> active_vertex_map;
     mesh->defragment(&active_vertex_map);
-    surface.defragment(&active_vertex_map);
     
     VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
     exit(-1);
   }
 
   VTKTools<double>::export_vtu("../data/test_swap_2d", mesh);
-  VTKTools<double>::export_vtu("../data/test_swap_2d_surface", &surface);
   
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();

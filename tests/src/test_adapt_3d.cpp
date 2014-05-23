@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -53,11 +52,9 @@
 
 int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+  mesh->create_boundary();
 
-  Surface3D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField3D<double> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   size_t NElements = mesh->get_number_elements();
@@ -93,10 +90,10 @@ int main(int argc, char **argv){
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
 
-  Coarsen3D<double> coarsen(*mesh, surface);
-  Smooth3D<double> smooth(*mesh, surface);
-  Refine3D<double> refine(*mesh, surface);
-  Swapping3D<double> swapping(*mesh, surface);
+  Coarsen3D<double> coarsen(*mesh);
+  Smooth3D<double> smooth(*mesh);
+  Refine3D<double> refine(*mesh);
+  Swapping3D<double> swapping(*mesh);
   
   coarsen.coarsen(L_low, L_up);
   
@@ -126,7 +123,6 @@ int main(int argc, char **argv){
   
   std::vector<int> active_vertex_map;
   mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
 
   smooth.smooth("smart Laplacian");
   
@@ -137,7 +133,6 @@ int main(int argc, char **argv){
   mesh->verify();
   
   VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
-  VTKTools<double>::export_vtu("../data/test_adapt_3d_surface", &surface);
   
   delete mesh;
   

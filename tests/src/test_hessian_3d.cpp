@@ -41,18 +41,15 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "ticker.h"
 
 int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
+  mesh->create_boundary();
 
-  Surface3D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField3D<double> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -74,16 +71,14 @@ int main(int argc, char **argv){
   double rms[] = {0., 0., 0., 0., 0., 0.};
   int ncnt=0;
   for(size_t i=0;i<NNodes;i++){
-    if(!surface.contains_node(i)){
-      rms[0] += pow(2.0-metric[i*6  ], 2);
-      rms[1] += pow(metric[i*6+1], 2);
-      rms[2] += pow(metric[i*6+2], 2);
-      rms[3] += pow(2.0-metric[i*6+3], 2);
-      rms[4] += pow(metric[i*6+4], 2);    
-      rms[5] += pow(2.0-metric[i*6+5], 2);
-   
-      ncnt++;
-    }
+    rms[0] += pow(2.0-metric[i*6  ], 2);
+    rms[1] += pow(metric[i*6+1], 2);
+    rms[2] += pow(metric[i*6+2], 2);
+    rms[3] += pow(2.0-metric[i*6+3], 2);
+    rms[4] += pow(metric[i*6+4], 2);    
+    rms[5] += pow(2.0-metric[i*6+5], 2);
+ 
+    ncnt++;
   }
 
   double max_rms = 0;
