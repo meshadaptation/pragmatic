@@ -298,7 +298,7 @@ template<typename real_t> class Coarsen3D{
                        inserter(collapsed_elements,collapsed_elements.begin()));
       
       // Check volume of new elements.
-      double total_old_volume=0, total_new_volume;
+      double total_old_volume=0, total_new_volume=0;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
         const int *old_n=_mesh->get_element(*ee);
 

@@ -247,15 +247,12 @@ extern "C" {
 
       @param [out] NNodes
       @param [out] NElements
-      @param [out] NSElements
    */
   void pragmatic_get_info(int *NNodes, int *NElements){
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     *NNodes = mesh->get_number_nodes();
     *NElements = mesh->get_number_elements();
-
-    const size_t ndims = mesh->get_number_dimensions();
   }
 
   void pragmatic_get_coords_2d(double *x, double *y){

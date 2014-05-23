@@ -46,9 +46,8 @@ template<typename real_t>
   class Smooth2D{
  public:
   /// Default constructor.
-  Smooth2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
+  Smooth2D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     mpi_nparts = 1;
     rank=0;
@@ -134,10 +133,10 @@ template<typename real_t>
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
           int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(dynamic, 4)
+#pragma omp for schedule(guided)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
-
+            
             if((this->*smooth_kernel)(node)){
               for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                 active_vertices[*it] = 1;
@@ -244,30 +243,7 @@ template<typename real_t>
   }
 
   bool laplacian_2d_kernel(index_t node, real_t *p){
-    std::set<index_t> patch;
-    if(_surface->contains_node(node)){
-      // Check how many different planes intersect at this node.
-      std::set<int> bids;
-      std::set<index_t> epatch = _surface->get_surface_patch(node);
-      for(typename std::set<index_t>::const_iterator e=epatch.begin();e!=epatch.end();++e)
-        bids.insert(_surface->get_boundary_id(*e));
-
-      if(bids.size()==1){
-        // Find the adjacent nodes that are on this surface.
-        for(typename std::set<index_t>::const_iterator e=epatch.begin();e!=epatch.end();++e){
-          const index_t *facet = _surface->get_facet(*e);
-          patch.insert(facet[0]);
-          patch.insert(facet[1]);
-        }
-        patch.erase(node);
-        assert(patch.size()==2);
-      }else{
-        // Corner node, in which case it cannot be moved.
-        return false;
-      }
-    }else{
-      patch = _mesh->get_node_patch(node);
-    }
+    std::set<index_t> patch(_mesh->get_node_patch(node));
 
     real_t x0 = get_x(node);
     real_t y0 = get_y(node);
@@ -303,9 +279,6 @@ template<typename real_t>
 
   bool optimisation_linf_2d_kernel(index_t node){
     bool update = smart_laplacian_2d_kernel(node);
-
-    if(_surface->contains_node(node))
-      return update;
 
     for(int hill_climb_iteration=0;hill_climb_iteration<5;hill_climb_iteration++){
       // As soon as the tolerance quality is reached, break.
@@ -484,13 +457,26 @@ template<typename real_t>
     std::vector<char> colour(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
+    int NElements = _mesh->get_number_nodes();
+    std::vector<bool> is_boundary(NNodes, false);
+    for(int i=0;i<NElements;i++){
+      if(_mesh->_ENList[i*3]==-1)
+        continue;
+  
+      for(int j=0;j<3;j++){
+        if(_mesh->boundary[i*3+j]>0){
+          for(int k=0;k<3;k++)
+            is_boundary[_mesh->_ENList[i*3+(j+k)%3]] = true;
+        }
+      }
+    }
+
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty()))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||(is_boundary[i]))
         continue;
       colour_sets[colour[i]].push_back(i);
     }
 
-    int NElements = _mesh->get_number_elements();
     quality.resize(NElements);
 #pragma omp parallel
     {
@@ -757,7 +743,6 @@ template<typename real_t>
   }
 
   Mesh<real_t> *_mesh;
-  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   const static size_t ndims=2;

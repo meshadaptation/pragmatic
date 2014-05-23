@@ -54,9 +54,8 @@
 template<typename real_t> class Swapping2D{
  public:
   /// Default constructor.
-  Swapping2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
+  Swapping2D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     size_t NElements = _mesh->get_number_elements();
 
@@ -422,7 +421,6 @@ template<typename real_t> class Swapping2D{
   }
 
   Mesh<real_t> *_mesh;
-  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;

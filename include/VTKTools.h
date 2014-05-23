@@ -62,7 +62,6 @@ typedef float vtkFloatingPointType;
 
 #include "Mesh.h"
 #include "MetricTensor.h"
-#include "Surface.h"
 #include "Metis.h"
 #include "ElementProperty.h"
 
@@ -416,6 +415,14 @@ template<typename real_t> class VTKTools{
     vtk_cell_numbering->SetNumberOfTuples(NElements);
     vtk_cell_numbering->SetName("eid");
 
+    vtkIntArray *vtk_boundary = vtkIntArray::New();
+    if(ndims==2)
+      vtk_node_numbering->SetNumberOfComponents(3);
+    else
+      vtk_node_numbering->SetNumberOfComponents(4);
+    vtk_node_numbering->SetNumberOfTuples(NElements);
+    vtk_node_numbering->SetName("Boundary");
+
     vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
     vtk_quality->SetNumberOfComponents(1);
     vtk_quality->SetNumberOfTuples(NElements);
@@ -438,12 +445,14 @@ template<typename real_t> class VTKTools{
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
         ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
+	vtk_boundary->SetTuple3(i, mesh->boundary[i*3], mesh->boundary[i*3+1], mesh->boundary[i*3+2]);
 
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]),
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2])));
       }else{
         vtkIdType pts[] = {n[0], n[1], n[2], n[3]};
         ug->InsertNextCell(VTK_TETRA, 4, pts);
+        vtk_boundary->SetTuple4(i, mesh->boundary[i*4], mesh->boundary[i*4+1], mesh->boundary[i*4+2], mesh->boundary[i*4+3]);
 
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]),
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
@@ -461,6 +470,9 @@ template<typename real_t> class VTKTools{
 
     ug->GetCellData()->AddArray(vtk_quality);
     vtk_quality->Delete();
+
+    ug->GetCellData()->AddArray(vtk_boundary);
+    vtk_boundary->Delete();
 
     if(vtk_sliver){
       ug->GetCellData()->AddArray(vtk_sliver);
@@ -501,133 +513,6 @@ template<typename real_t> class VTKTools{
     delete property;
 
     return;
-  }
-
-  static void export_vtu(const char *basename, const Surface2D<real_t> *surface){
-    vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
-
-    vtkPoints *vtk_points = vtkPoints::New();
-    size_t NNodes = surface->get_number_nodes();
-    vtk_points->SetNumberOfPoints(NNodes);
-
-    for(size_t i=0;i<NNodes;i++){
-      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), 0.0);
-    }
-    ug->SetPoints(vtk_points);
-    vtk_points->Delete();
-
-    // Need to get out the facets
-    int NSElements = surface->get_number_facets();
-    for(int i=0;i<NSElements;i++){
-      const int *facet = surface->get_facet(i);
-
-      vtkIdType pts[] = {facet[0], facet[1]};
-      ug->InsertNextCell(VTK_LINE, 2, pts);
-    }
-
-    // Need the boundary ID's
-    vtkIntArray *scalar = vtkIntArray::New();
-    scalar->SetNumberOfComponents(1);
-    scalar->SetNumberOfTuples(NSElements);
-    scalar->SetName("boundary_ids");
-    for(int i=0;i<NSElements;i++){
-      scalar->SetTuple1(i, surface->get_boundary_id(i));
-    }
-    ug->GetCellData()->AddArray(scalar);
-    scalar->Delete();
-
-    int rank=0, nparts=1;
-#ifdef HAVE_MPI
-    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
-    if(nparts==1){
-      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-      std::string filename = std::string(basename)+std::string(".vtu");
-      writer->SetFileName(filename.c_str());
-      writer->SetInput(ug);
-      writer->Write();
-
-      writer->Delete();
-    }else{
-#ifdef HAVE_MPI
-      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
-      std::string filename = std::string(basename)+std::string(".pvtu");
-      writer->SetFileName(filename.c_str());
-      writer->SetNumberOfPieces(nparts);
-      writer->SetGhostLevel(1);
-      writer->SetStartPiece(rank);
-      writer->SetEndPiece(rank);
-      writer->SetInput(ug);
-      writer->Write();
-      writer->Delete();
-#endif
-    }
-
-    ug->Delete();
-  }
-
-  static void export_vtu(const char *basename, const Surface3D<real_t> *surface){
-    vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
-
-    vtkPoints *vtk_points = vtkPoints::New();
-    size_t NNodes = surface->get_number_nodes();
-    vtk_points->SetNumberOfPoints(NNodes);
-
-    for(size_t i=0;i<NNodes;i++){
-      vtk_points->SetPoint(i, surface->get_x(i), surface->get_y(i), surface->get_z(i));
-    }
-    ug->SetPoints(vtk_points);
-    vtk_points->Delete();
-
-    // Need to get out the facets
-    int NSElements = surface->get_number_facets();
-    for(int i=0;i<NSElements;i++){
-      const int *facet = surface->get_facet(i);
-      vtkIdType pts[] = {facet[0], facet[1], facet[2]};
-      ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
-    }
-
-    // Need the facet ID's
-    vtkIntArray *scalar = vtkIntArray::New();
-    scalar->SetNumberOfComponents(1);
-    scalar->SetNumberOfTuples(NSElements);
-    scalar->SetName("boundary_ids");
-    for(int i=0;i<NSElements;i++){
-      scalar->SetTuple1(i, surface->get_boundary_id(i));
-    }
-    ug->GetCellData()->AddArray(scalar);
-    scalar->Delete();
-
-    int rank=0, nparts=1;
-#ifdef HAVE_MPI
-    MPI_Comm_size(MPI_COMM_WORLD, &nparts);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
-    if(nparts==1){
-      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
-      std::string filename = std::string(basename)+std::string(".vtu");
-      writer->SetFileName(filename.c_str());
-      writer->SetInput(ug);
-      writer->Write();
-
-      writer->Delete();
-    }else{
-#ifdef HAVE_MPI
-      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
-      std::string filename = std::string(basename)+std::string(".pvtu");
-      writer->SetFileName(filename.c_str());
-      writer->SetNumberOfPieces(nparts);
-      writer->SetGhostLevel(1);
-      writer->SetStartPiece(rank);
-      writer->SetEndPiece(rank);
-      writer->SetInput(ug);
-      writer->Write();
-      writer->Delete();
-#endif
-    }
-
-    ug->Delete();
   }
 
 };
