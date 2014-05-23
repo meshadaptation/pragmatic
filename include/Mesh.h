@@ -183,6 +183,88 @@ template<typename real_t> class Mesh{
     return get_number_elements()-1;
   }
 
+  void create_boundary(){
+    assert(boundary.size()==0);
+    
+    size_t NNodes = get_number_nodes();
+    size_t NElements = get_number_elements();
+    
+    if(ndims==2){
+      // Initialise the boundary array
+      boundary.resize(NElements*3);
+      std::fill(boundary.begin(), boundary.end(), -1);
+      
+      // Create node-element adjancy list.      
+      std::vector< std::set<int> > NEList(NNodes);
+      for(size_t i=0;i<NElements;i++){
+	if(_ENList[i*3]==-1)
+	  continue;
+	
+	for(size_t j=0;j<3;j++)
+	  NEList[_ENList[i*3+j]].insert(i);
+      }
+      
+      // Check neighbourhood of each element
+      for(int i=0;i<NElements;i++){
+	if(_ENList[i*3]==-1)
+	  continue;
+	
+	for(int j=0;j<3;j++){  
+	  std::set<int> neighbours;
+	  set_intersection(NEList[_ENList[i*3+(j+1)%3]].begin(), NEList[_ENList[i*3+(j+1)%3]].end(),
+			   NEList[_ENList[i*3+(j+2)%3]].begin(), NEList[_ENList[i*3+(j+2)%3]].end(),
+			   inserter(neighbours, neighbours.begin()));
+	  
+	  if(neighbours.size()==2){
+	    if(*neighbours.begin()==i)
+	      boundary[i*3+j] = *neighbours.rbegin();
+	    else
+	      boundary[i*3+j] = *neighbours.begin();
+	  }
+	}
+      }
+    }else{ // ndims==3
+      // Initialise the boundary array
+      boundary.resize(NElements*4);
+      std::fill(boundary.begin(), boundary.end(), -1);
+      
+      // Create node-element adjancy list.      
+      std::vector< std::set<int> > NEList(NNodes);
+      for(size_t i=0;i<NElements;i++){
+	if(_ENList[i*4]==-1)
+	  continue;
+	
+	for(size_t j=0;j<4;j++)
+	  NEList[_ENList[i*4+j]].insert(i);
+      }
+      
+      // Check neighbourhood of each element
+      for(int i=0;i<NElements;i++){
+	if(_ENList[i*4]==-1)
+	  continue;
+	
+	for(int j=0;j<4;j++){  
+	  std::set<int> edge_neighbours;
+	  set_intersection(NEList[_ENList[i*4+(j+1)%4]].begin(), NEList[_ENList[i*4+(j+1)%4]].end(),
+			   NEList[_ENList[i*4+(j+2)%4]].begin(), NEList[_ENList[i*4+(j+2)%4]].end(),
+			   inserter(edge_neighbours, edge_neighbours.begin()));
+	  
+	  std::set<int> neighbours;
+	  set_intersection(NEList[_ENList[i*4+(j+3)%4]].begin(), NEList[_ENList[i*4+(j+4)%4]].end(),
+			   edge_neighbours.begin(), edge_neighbours.end(),
+			   inserter(neighbours, neighbours.begin()));
+	  
+	  if(neighbours.size()==2){
+	    if(*neighbours.begin()==i)
+	      boundary[i*4+j] = *neighbours.rbegin();
+	    else
+	      boundary[i*4+j] = *neighbours.begin();
+	  }
+	}
+      }
+    }
+  }
+
   /// Erase an element
   void erase_element(const index_t eid){
     const index_t *n = get_element(eid);
@@ -1065,8 +1147,6 @@ template<typename real_t> class Mesh{
   template<typename _real_t> friend class Coarsen3D;
   template<typename _real_t> friend class Refine2D;
   template<typename _real_t> friend class Refine3D;
-  template<typename _real_t> friend class Surface2D;
-  template<typename _real_t> friend class Surface3D;
   template<typename _real_t> friend class VTKTools;
   template<typename _real_t> friend class CUDATools;
 
@@ -1774,6 +1854,9 @@ template<typename real_t> class Mesh{
   std::vector<real_t> _coords;
 
   size_t NNodes, NElements;
+
+  // Boundary Label
+  std::vector<int> boundary;
 
   // Adjacency lists
   std::vector< std::set<index_t> > NEList;

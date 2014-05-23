@@ -44,6 +44,8 @@
 #include <set>
 #include <vector>
 
+#include <cfloat>
+
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
 #endif
@@ -59,9 +61,8 @@
 template<typename real_t> class Coarsen3D{
  public:
   /// Default constructor.
-  Coarsen3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
+  Coarsen3D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     nprocs = 1;
     rank = 0;
@@ -192,27 +193,6 @@ template<typename real_t> class Coarsen3D{
         }
         //#pragma omp barrier
 
-        // Perform collapse operations.
-          //#pragma omp single nowait
-        {
-          // Perform surface coarsening.
-          for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
-            
-            // Vertex to be removed: rm_vertex
-            if(!maximal_independent_set[rm_vertex])
-              continue;
-            
-            int target_vertex=dynamic_vertex[rm_vertex];
-            if(target_vertex==-2)
-              continue;
-            assert(target_vertex>=0);
-            
-            if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
-              _surface->collapse(rm_vertex, target_vertex);
-            }
-          }
-        }
-
         //#pragma omp for schedule(dynamic)
         for(size_t rm_vertex=0;rm_vertex<NNodes;rm_vertex++){
           // Vertex to be removed: rm_vertex
@@ -280,10 +260,6 @@ template<typename real_t> class Coarsen3D{
     if(_mesh->NNList[rm_vertex].empty())
       return -1;
 
-    // If this is a corner-vertex then cannot collapse;
-    if(_surface->is_corner_vertex(rm_vertex))
-      return -2;
-    
     // If this is not owned then return -1.
     if(!_mesh->is_owned_node(rm_vertex))
       return -3;
@@ -295,10 +271,6 @@ template<typename real_t> class Coarsen3D{
     for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
       // For now impose the restriction that we will not coarsen across partition boundaries.
       if(_mesh->recv_halo.count(*nn))
-        continue;
-      
-      // First check if this edge can be collapsed
-      if(!_surface->is_collapsible(rm_vertex, *nn))
         continue;
       
       double length = _mesh->calc_edge_length(rm_vertex, *nn);
@@ -325,51 +297,61 @@ template<typename real_t> class Coarsen3D{
                        _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                        inserter(collapsed_elements,collapsed_elements.begin()));
       
-      // Check volume/area of new elements.
+      // Check volume of new elements.
+      double total_old_volume=0, total_new_volume;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+        const int *old_n=_mesh->get_element(*ee);
+
+        // Check the volume of this new element.
+        double old_volume = property->volume(_mesh->get_coords(old_n[0]),
+                                             _mesh->get_coords(old_n[1]),
+                                             _mesh->get_coords(old_n[2]),
+                                             _mesh->get_coords(old_n[3]));
+        total_old_volume+=old_volume;
+ 
         if(collapsed_elements.count(*ee))
           continue;
         
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
-        const int *orig_n=_mesh->get_element(*ee);
         for(size_t i=0;i<nloc;i++){
-          int nid = orig_n[i];
+          int nid = old_n[i];
           if(nid==rm_vertex)
             n[i] = target_vertex;
           else
             n[i] = nid;
         }
         
-        // Check the volume of this new element.
-        double orig_volume = property->volume(_mesh->get_coords(orig_n[0]),
-                                              _mesh->get_coords(orig_n[1]),
-                                              _mesh->get_coords(orig_n[2]),
-                                              _mesh->get_coords(orig_n[3]));
+       
+        double new_volume = property->volume(_mesh->get_coords(n[0]),
+                                             _mesh->get_coords(n[1]),
+                                             _mesh->get_coords(n[2]),
+                                             _mesh->get_coords(n[3]));
         
-        double volume = property->volume(_mesh->get_coords(n[0]),
-                                         _mesh->get_coords(n[1]),
-                                         _mesh->get_coords(n[2]),
-                                         _mesh->get_coords(n[3]));
-        
-        // Not very satisfactory - requires more thought.
-        if(volume/orig_volume<=1.0e-3){
+        total_new_volume+=new_volume;
+        if(new_volume<0){
           reject_collapse=true;
           break;
         }
       }
 
-      // Check of any of the new edges are longer than L_max.
-      for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-        if(target_vertex==*nn)
-          continue;
-        
-        if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
-          reject_collapse=true;
-          break;
+      if(fabs(total_new_volume-total_old_volume)>DBL_EPSILON){
+        reject_collapse=true;
+      }
+
+      if(!reject_collapse){
+        // Check of any of the new edges are longer than L_max.
+        for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+          if(target_vertex==*nn)
+            continue;
+          
+          if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
+            reject_collapse=true;
+            break;
+          }
         }
       }
-      
+
       // If this edge is ok to collapse then jump out.
       if(!reject_collapse)
         break;
@@ -391,11 +373,6 @@ template<typename real_t> class Coarsen3D{
     set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                      inserter(deleted_elements, deleted_elements.begin()));
-    
-    // Perform coarsening on surface if necessary.
-    if(_surface->contains_node(rm_vertex)&&_surface->contains_node(target_vertex)){
-      _surface->collapse(rm_vertex, target_vertex);
-    }
     
     // Remove deleted elements from node-element adjacency list.
     for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
@@ -649,20 +626,6 @@ template<typename real_t> class Coarsen3D{
         const int *n=_mesh->get_element(*it);
         for(size_t j=0;j<nloc;j++)
           send_buffer[p].push_back(lnn2gnn[n[j]]);
-                
-        std::vector<int> lfacets;
-        _surface->find_facets(n, lfacets);
-        send_facets.insert(lfacets.begin(), lfacets.end());
-      }
-              
-      // Push on facets that need to be communicated.
-      send_buffer[p].push_back(send_facets.size());
-      for(std::set<int>::iterator it=send_facets.begin();it!=send_facets.end();++it){
-        const int *n=_surface->get_facet(*it);
-        for(size_t i=0;i<snloc;i++)
-          send_buffer[p].push_back(lnn2gnn[n[i]]);
-        send_buffer[p].push_back(_surface->get_boundary_id(*it));
-        send_buffer[p].push_back(_surface->get_coplanar_id(*it));
       }
     }
             
@@ -798,22 +761,6 @@ template<typename real_t> class Coarsen3D{
           }
         }
       }
-              
-      // Unpack facets.
-      int num_extra_facets = recv_buffer[p][loc++];
-      for(int i=0;i<num_extra_facets;i++){
-        std::vector<int> facet(snloc);
-        for(size_t j=0;j<snloc;j++){
-          index_t gnn = recv_buffer[p][loc++];
-          assert(gnn2lnn.find(gnn)!=gnn2lnn.end());
-          facet[j] = gnn2lnn[gnn];
-        }
-                
-        int boundary_id = recv_buffer[p][loc++];
-        int coplanar_id = recv_buffer[p][loc++];
-                
-        _surface->append_facet(&(facet[0]), boundary_id, coplanar_id, true);
-      }
     }
             
     assert(gnn2lnn.size()==lnn2gnn.size());
@@ -916,7 +863,6 @@ template<typename real_t> class Coarsen3D{
 
  private:
   Mesh<real_t> *_mesh;
-  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
   
   size_t nnodes_reserve;

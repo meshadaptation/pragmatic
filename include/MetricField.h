@@ -49,7 +49,6 @@
 #include <Eigen/Dense>
 
 #include "MetricTensor.h"
-#include "Surface.h"
 #include "Mesh.h"
 #include "ElementProperty.h"
 
@@ -75,10 +74,9 @@ template<typename real_t>
   
   /*! Default constructor.
    */
-  MetricField2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
+  MetricField2D(Mesh<real_t> &mesh){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
-    _surface = &surface;
     _mesh = &mesh;
     
     rank = 0;
@@ -561,7 +559,6 @@ template<typename real_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor2D<real_t> *_metric;
-  Surface2D<real_t> *_surface;
   Mesh<real_t> *_mesh;
 };
 
@@ -581,10 +578,9 @@ template<typename real_t>
 
   /*! Default constructor.
    */
-  MetricField3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
+  MetricField3D(Mesh<real_t> &mesh){
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
-    _surface = &surface;
     _mesh = &mesh;
     
     rank = 0;
@@ -885,12 +881,9 @@ template<typename real_t>
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, double *Hessian){
     size_t min_patch_size=10;
-
+    
     std::set<index_t> patch;
-    if(_surface->contains_node(i))
-      patch = _mesh->get_node_patch(i, 2*min_patch_size);
-    else
-      patch = _mesh->get_node_patch(i, min_patch_size);
+    patch = _mesh->get_node_patch(i, min_patch_size);
     patch.insert(i);
 
     // Form quadratic system to be solved. The quadratic fit is:
@@ -951,7 +944,6 @@ template<typename real_t>
   int rank, nprocs;
   int _NNodes, _NElements;
   MetricTensor3D<real_t> *_metric;
-  Surface3D<real_t> *_surface;
   Mesh<real_t> *_mesh;
 };
 

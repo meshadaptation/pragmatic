@@ -45,6 +45,7 @@
 #include <string.h>
 #include <inttypes.h>
 
+#include "Edge.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -54,9 +55,8 @@
 template<typename real_t> class Refine2D{
  public:
   /// Default constructor.
-  Refine2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
+  Refine2D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     size_t NElements = _mesh->get_number_elements();
 
@@ -87,7 +87,6 @@ template<typename real_t> class Refine2D{
     newMetric.resize(nthreads);
 
     threadIdx.resize(nthreads);
-    surfaceEdges.resize(nthreads);
     splitCnt.resize(nthreads);
   }
 
@@ -118,7 +117,6 @@ template<typename real_t> class Refine2D{
       }
       
       int tid = pragmatic_thread_id();
-      surfaceEdges[tid].clear();
       splitCnt[tid] = 0;
 
       /*
@@ -182,7 +180,7 @@ template<typename real_t> class Refine2D{
       memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
 
       // Mark each element with its new vertices, update NNList
-      // for all split edges and mark surface edges.
+      // for all split edges.
 #pragma omp barrier
 #pragma omp for schedule(guided)
       for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
@@ -217,11 +215,6 @@ template<typename real_t> class Refine2D{
         it = std::find(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end(), firstid);
         assert(it!=_mesh->NNList[secondid].end());
         *it = vid;
-        
-        // Check if surface edge
-        if(_surface->contains_node(firstid) && _surface->contains_node(secondid)){
-          surfaceEdges[tid].push_back(allNewVertices[i]);
-        }
         
         /* If we have MPI, it makes no sense to update node_owner and lnn2gnn now because
          * these values are most probably wrong. However, when we have no MPI, updating the
@@ -387,9 +380,6 @@ template<typename real_t> class Refine2D{
     
 #pragma omp single
       delete[] allNewVertices;
-    
-      // Refine surface
-      _surface->refine(surfaceEdges);
     }
   }
 
@@ -650,11 +640,9 @@ template<typename real_t> class Refine2D{
   std::vector<index_t> new_vertices_per_element;
 
   std::vector<size_t> threadIdx, splitCnt;
-  std::vector< std::vector< DirectedEdge<index_t> > > surfaceEdges;
   DirectedEdge<index_t> *allNewVertices;
 
   Mesh<real_t> *_mesh;
-  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   static const size_t ndims=2, nloc=3, msize=3;

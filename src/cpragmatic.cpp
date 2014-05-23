@@ -38,7 +38,6 @@
 #include <cassert>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "MetricField.h"
 #include "Coarsen.h"
 #include "Refine.h"
@@ -48,7 +47,6 @@
 #include "VTKTools.h"
 
 static void *_pragmatic_mesh=NULL;
-static void *_pragmatic_surface=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
@@ -93,7 +91,6 @@ extern "C" {
    */
   void pragmatic_3d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
     assert(_pragmatic_mesh==NULL);
-    assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
 
     Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z);
@@ -105,23 +102,12 @@ extern "C" {
   */
   void pragmatic_vtk_init(const char *filename){
     assert(_pragmatic_mesh==NULL);
-    assert(_pragmatic_surface==NULL);
     assert(_pragmatic_metric_field==NULL);
 
     Mesh<double> *mesh=VTKTools<double>::import_vtu(filename);
+    mesh->create_boundary();
+
     _pragmatic_mesh = mesh;
-
-    if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      Surface2D<double> *surface = new Surface2D<double>(*mesh);
-      _pragmatic_surface = surface;
-
-      surface->find_surface();
-    }else{
-      Surface3D<double> *surface = new Surface3D<double>(*mesh);
-      _pragmatic_surface = surface;
-
-      surface->find_surface();
-    }
   }
 
   /** Add field which should be adapted to.
@@ -135,21 +121,16 @@ extern "C" {
    */
   void pragmatic_add_field(const double *psi, const double *error, int *pnorm){
     assert(_pragmatic_mesh!=NULL);
-    assert(_pragmatic_surface!=NULL);
 
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     if(_pragmatic_metric_field==NULL){
 
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        Surface2D<double> *surface = (Surface2D<double> *)_pragmatic_surface;
-
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh, *surface);
+        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
         _pragmatic_metric_field = metric_field;
       }else{
-        Surface3D<double> *surface = (Surface3D<double> *)_pragmatic_surface;
-
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh, *surface);
+        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
         _pragmatic_metric_field = metric_field;
       }
     }
@@ -163,55 +144,22 @@ extern "C" {
     }
   }
 
-  /** Set the surface boundary.
-
-      @param [in] nfacets
-      @param [in] facets
-      @param [in] boundary_ids
-  */
-  void pragmatic_set_surface(const int *nfacets, const int *facets, const int *boundary_ids){
-    assert(_pragmatic_mesh!=NULL);
-    assert(_pragmatic_surface==NULL);
-
-    Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
-
-    if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      Surface2D<double> *surface = new Surface2D<double>(*mesh);
-      _pragmatic_surface = surface;
-
-      size_t NSElements = *nfacets;
-      surface->set_surface(NSElements, facets, boundary_ids);
-    }else{
-      Surface3D<double> *surface = new Surface3D<double>(*mesh);
-      _pragmatic_surface = surface;
-
-      size_t NSElements = *nfacets;
-
-      surface->set_surface(NSElements, facets, boundary_ids, NULL);
-    }
-  }
-
   /** Set the node centred metric field
 
       @param [in] metric Metric tensor field.
    */
   void pragmatic_set_metric(const double *metric){
     assert(_pragmatic_mesh!=NULL);
-    assert(_pragmatic_surface!=NULL);
     assert(_pragmatic_metric_field==NULL);
 
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     if(_pragmatic_metric_field==NULL){
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        Surface2D<double> *surface = (Surface2D<double> *)_pragmatic_surface;
-
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh, *surface);
+        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
         _pragmatic_metric_field = metric_field;
       }else{
-        Surface3D<double> *surface = (Surface3D<double> *)_pragmatic_surface;
-
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh, *surface);
+        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
         _pragmatic_metric_field = metric_field;
       }
     }
@@ -239,12 +187,10 @@ extern "C" {
     double L_low = L_up*0.5;
 
     if(ndims==2){
-      Surface2D<double> *surface = (Surface2D<double> *)_pragmatic_surface;
-
-      Coarsen2D<double> coarsen(*mesh, *surface);
-      Smooth2D<double> smooth(*mesh, *surface);
-      Refine2D<double> refine(*mesh, *surface);
-      Swapping2D<double> swapping(*mesh, *surface);
+      Coarsen2D<double> coarsen(*mesh);
+      Smooth2D<double> smooth(*mesh);
+      Refine2D<double> refine(*mesh);
+      Swapping2D<double> swapping(*mesh);
 
       double L_max = mesh->maximal_edge_length();
 
@@ -264,16 +210,13 @@ extern "C" {
 
       std::vector<int> active_vertex_map;
       mesh->defragment(&active_vertex_map);
-      surface->defragment(&active_vertex_map);
 
       smooth.smooth("optimisation Linf", 10);
     }else{
-      Surface3D<double> *surface = (Surface3D<double> *)_pragmatic_surface;
-
-      Coarsen3D<double> coarsen(*mesh, *surface);
-      Smooth3D<double> smooth(*mesh, *surface);
-      Refine3D<double> refine(*mesh, *surface);
-      Swapping3D<double> swapping(*mesh, *surface);
+      Coarsen3D<double> coarsen(*mesh);
+      Smooth3D<double> smooth(*mesh);
+      Refine3D<double> refine(*mesh);
+      Swapping3D<double> swapping(*mesh);
 
       coarsen.coarsen(L_low, L_up);
 
@@ -295,7 +238,6 @@ extern "C" {
 
       std::vector<int> active_vertex_map;
       mesh->defragment(&active_vertex_map);
-      surface->defragment(&active_vertex_map);
 
       smooth.smooth("optimisation Linf", 10);
     }
@@ -307,23 +249,13 @@ extern "C" {
       @param [out] NElements
       @param [out] NSElements
    */
-  void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements){
+  void pragmatic_get_info(int *NNodes, int *NElements){
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     *NNodes = mesh->get_number_nodes();
     *NElements = mesh->get_number_elements();
 
     const size_t ndims = mesh->get_number_dimensions();
-
-    if(_pragmatic_surface!=NULL){
-      if(ndims==2){
-        Surface2D<double> *surface = (Surface2D<double> *)_pragmatic_surface;
-        *NSElements = surface->get_number_facets();
-      }else{
-        Surface3D<double> *surface = (Surface3D<double> *)_pragmatic_surface;
-        *NSElements = surface->get_number_facets();
-      }
-    }
   }
 
   void pragmatic_get_coords_2d(double *x, double *y){
@@ -358,45 +290,6 @@ extern "C" {
     }
   }
 
-  void pragmatic_get_surface(int *facets, int *boundary_ids){
-    Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
-    const size_t ndims = mesh->get_number_dimensions();
-
-    if(ndims==2){
-      Surface2D<double> *surface = (Surface2D<double> *)_pragmatic_surface;
-
-      size_t NSElements = surface->get_number_facets();
-      const size_t snloc = 2;
-
-      for(size_t i=0;i<NSElements;i++){
-        const int *n=surface->get_facet(i);
-
-        for(size_t j=0;j<snloc;j++){
-          assert(n[j]>=0);
-          facets[i*snloc+j] = n[j];
-        }
-
-        boundary_ids[i] = surface->get_boundary_id(i);
-      }
-    }else{
-      Surface3D<double> *surface = (Surface3D<double> *)_pragmatic_surface;
-
-      size_t NSElements = surface->get_number_facets();
-      const size_t snloc = 3;
-
-      for(size_t i=0;i<NSElements;i++){
-        const int *n=surface->get_facet(i);
-
-        for(size_t j=0;j<snloc;j++){
-          assert(n[j]>=0);
-          facets[i*snloc+j] = n[j];
-        }
-
-        boundary_ids[i] = surface->get_boundary_id(i);
-      }
-    }
-  }
-
   void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn){
     std::vector<int> _NPNodes, _lnn2gnn;
     ((Mesh<double> *)_pragmatic_mesh)->get_global_node_numbering(_NPNodes, _lnn2gnn);
@@ -421,16 +314,11 @@ extern "C" {
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       if(_pragmatic_metric_field!=NULL)
         delete (MetricField2D<double> *)_pragmatic_metric_field;
-      if(_pragmatic_surface!=NULL)
-        delete (Surface2D<double> *)_pragmatic_surface;
     }else{
       if(_pragmatic_metric_field!=NULL)
         delete (MetricField3D<double> *)_pragmatic_metric_field;
-      if(_pragmatic_surface!=NULL)
-        delete (Surface3D<double> *)_pragmatic_surface;
     }
     _pragmatic_metric_field=NULL;
-    _pragmatic_surface=NULL;
 
     delete (Mesh<double> *)_pragmatic_mesh;
     _pragmatic_mesh=NULL;

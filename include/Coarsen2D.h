@@ -44,6 +44,8 @@
 #include <set>
 #include <vector>
 
+#include <cfloat>
+
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
 #endif
@@ -59,9 +61,8 @@
 template<typename real_t> class Coarsen2D{
  public:
   /// Default constructor.
-  Coarsen2D(Mesh<real_t> &mesh, Surface2D<real_t> &surface){
+  Coarsen2D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
     
     property = NULL;
     size_t NElements = _mesh->get_number_elements();
@@ -318,7 +319,6 @@ template<typename real_t> class Coarsen2D{
               _mesh->commit_deferred(vtid);
               _mesh->commit_coarsening_propagation(dynamic_vertex, vtid);
               _mesh->commit_colour_reset(node_colour, vtid);
-              _surface->commit_deferred(vtid);
             }
           }
         }
@@ -346,10 +346,6 @@ template<typename real_t> class Coarsen2D{
        onto the next shortest.*/
     std::multimap<real_t, index_t> short_edges;
     for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      // First check if this edge can be collapsed
-      if(!_surface->is_collapsible(rm_vertex, *nn))
-        continue;
-
       double length = _mesh->calc_edge_length(rm_vertex, *nn);
       if(length<L_low)
         short_edges.insert(std::pair<real_t, index_t>(length, *nn));
@@ -369,48 +365,58 @@ template<typename real_t> class Coarsen2D{
          new properties are not acceptable then continue. */
 
       // Check volume/area of new elements.
+      double total_old_area=0;
+      double total_new_area=0;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+        const int *old_n=_mesh->get_element(*ee);
+        double old_area = property->area(_mesh->get_coords(old_n[0]),
+					 _mesh->get_coords(old_n[1]),
+					 _mesh->get_coords(old_n[2]));
+	total_old_area+=old_area;
+	
+	// Skip if this element would be deleted under the operation.
         if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
           continue;
-
+	
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
-        const int *orig_n=_mesh->get_element(*ee);
         for(size_t i=0;i<nloc;i++){
-          int nid = orig_n[i];
+          int nid = old_n[i];
           if(nid==rm_vertex)
             n[i] = target_vertex;
           else
             n[i] = nid;
         }
 
-        // Check the area of this new element.
-        double orig_area = property->area(_mesh->get_coords(orig_n[0]),
-                                          _mesh->get_coords(orig_n[1]),
-                                          _mesh->get_coords(orig_n[2]));
-
-        double area = property->area(_mesh->get_coords(n[0]),
-                                     _mesh->get_coords(n[1]),
-                                     _mesh->get_coords(n[2]));
-
-        // Not very satisfactory - requires more thought.
-        if(area/orig_area<=1.0e-3){
+        // Check the area of proposed element.
+        double new_area = property->area(_mesh->get_coords(n[0]),
+					 _mesh->get_coords(n[1]),
+					 _mesh->get_coords(n[2]));
+	
+	total_new_area+=new_area;
+	
+        // Reject inverted elements.
+        if(new_area<0.0){
           reject_collapse=true;
-          break;
+	  break;
         }
       }
-
+      if(fabs(total_new_area-total_old_area)>DBL_EPSILON)
+	reject_collapse=true;
+      
       // Check of any of the new edges are longer than L_max.
-      for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-        if(target_vertex==*nn)
-          continue;
-
-        if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
-          reject_collapse=true;
-          break;
-        }
+      if(!reject_collapse){
+	for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+	  if(target_vertex==*nn)
+	    continue;
+	  
+	  if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
+	    reject_collapse=true;
+	    break;
+	  }
+	}
       }
-
+      
       // If this edge is ok to collapse then jump out.
       if(!reject_collapse)
         break;
@@ -460,7 +466,6 @@ template<typename real_t> class Coarsen2D{
     }
 
     assert(common_patch.size() == deleted_elements.size());
-    assert(common_patch.size() == 2 || (common_patch.size()==1 && _surface->contains_node(rm_vertex)));
 
     // For all adjacent elements, replace rm_vertex with target_vertex in ENList.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
@@ -497,18 +502,11 @@ template<typename real_t> class Coarsen2D{
     for(typename std::set<index_t>::const_iterator it=additional_patch.begin();it!=additional_patch.end();++it){
       _mesh->deferred_addNN(target_vertex, *it, tid);
     }
-    
-    // Perform coarsening on surface if necessary.
-    if(_surface->contains_node(rm_vertex)){
-      assert(_surface->contains_node(target_vertex));
-      _surface->collapse(rm_vertex, target_vertex, tid);
-    }
 
     _mesh->erase_vertex(rm_vertex);
   }
 
   Mesh<real_t> *_mesh;
-  Surface2D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;
