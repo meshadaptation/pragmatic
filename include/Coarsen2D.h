@@ -396,7 +396,7 @@ template<typename real_t> class Coarsen2D{
 	total_new_area+=new_area;
 	
         // Reject inverted elements.
-        if(new_area<0.0){
+        if(new_area<DBL_EPSILON){
           reject_collapse=true;
 	  break;
         }
@@ -436,8 +436,8 @@ template<typename real_t> class Coarsen2D{
   void coarsen_kernel(index_t rm_vertex, index_t target_vertex, size_t tid){
     std::set<index_t> deleted_elements;
     std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
-                     _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
-                     std::inserter(deleted_elements, deleted_elements.begin()));
+                          _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
+                          std::inserter(deleted_elements, deleted_elements.begin()));
 
     // This is the set of vertices which are common neighbours between rm_vertex and target_vertex.
     std::set<index_t> common_patch;
@@ -450,14 +450,40 @@ template<typename real_t> class Coarsen2D{
       _mesh->NEList[rm_vertex].erase(eid);
 
       // Remove element from NEList of the other two vertices.
+      size_t lrm_vertex;
+      index_t other_vertex;
       for(size_t i=0; i<nloc; ++i){
         index_t vid = _mesh->_ENList[eid*nloc+i];
-        if(vid != rm_vertex){
+        if(vid==rm_vertex){
+          lrm_vertex = i;
+        }else{
           _mesh->deferred_remNE(vid, eid, tid);
 
           // If this vertex is neither rm_vertex nor target_vertex, it is one of the 2 common neighbours.
-          if(vid != target_vertex)
+          if(vid != target_vertex){
+            other_vertex = vid;
             common_patch.insert(vid);
+          }
+        }
+      }
+
+      // Handle vertex being collaped onto boundary.
+      if(_mesh->boundary[eid*nloc+lrm_vertex]>0){
+        // Find element whose internal edge will be pulled into an external edge.
+        std::set<index_t> new_boundary_eid;
+        std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+                              _mesh->NEList[other_vertex].begin(), _mesh->NEList[other_vertex].end(),
+                              std::inserter(new_boundary_eid, new_boundary_eid.begin()));
+        if(!new_boundary_eid.empty()){
+          assert(new_boundary_eid.size()==1);
+          index_t target_eid = *new_boundary_eid.begin(); 
+          for(int i=0;i<3;i++){
+            int nid=_mesh->_ENList[target_eid*nloc+i];
+            if(nid!=rm_vertex && nid!=other_vertex){
+              _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
+              break;
+            }
+          }
         }
       }
 

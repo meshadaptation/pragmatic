@@ -774,6 +774,7 @@ template<typename real_t> class Mesh{
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<double> defrag_metric(NNodes*msize);
+    std::vector<int> defrag_boundary(NElements*nloc);
 
     assert(NElements==(size_t)metis_nelements);
 
@@ -782,17 +783,14 @@ template<typename real_t> class Mesh{
     {
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
-        for(size_t j=0;j<nloc;j++){
-          defrag_ENList[i*nloc+j] = 0;
-        }
+        defrag_ENList[i*nloc] = 0;
+        defrag_boundary[i*nloc] = 0;
       }
 
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NNodes;i++){
-        for(size_t j=0;j<ndims;j++)
-          defrag_coords[i*ndims+j] = 0.0;
-        for(size_t j=0;j<msize;j++)
-          defrag_metric[i*msize+j] = 0.0;
+        defrag_coords[i*ndims] = 0.0;
+        defrag_metric[i*msize] = 0.0;
       }
     }
 
@@ -804,6 +802,7 @@ template<typename real_t> class Mesh{
         index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
         assert(new_nid<(index_t)NNodes);
         defrag_ENList[new_eid*nloc+j] = new_nid;
+        defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
       }
     }
 
@@ -820,6 +819,7 @@ template<typename real_t> class Mesh{
     }
 
     memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
+    memcpy(&boundary[0], &defrag_boundary[0], NElements*nloc*sizeof(int));
     memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
     memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));
 
