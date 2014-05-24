@@ -383,6 +383,43 @@ template<typename real_t> class Mesh{
     return mean;
   }
 
+  /// Calculate perimeter (2D only)
+  double calculate_perimeter(){
+    assert(ndims==2);
+    int NElements = get_number_elements();
+    double total_length=0;
+    
+    if(num_processes>1){
+     for(int i=0;i<NElements;i++){
+        for(int j=0;j<3;j++){
+          int n1 = _ENList[i*nloc+(j+1)%3];
+          int n2 = _ENList[i*nloc+(j+2)%3];
+
+          if(boundary[i*nloc+j]>0 || (std::min(node_owner[n1], node_owner[n2])==rank)){
+            total_length += sqrt((_coords[n1*2  ]-_coords[n2*2  ])*(_coords[n1*2  ]-_coords[n2*2  ])+
+                                 (_coords[n1*2+1]-_coords[n2*2+1])*(_coords[n1*2+1]-_coords[n2*2+1]));
+          }
+        }
+      }
+
+      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+    }else{
+      for(int i=0;i<NElements;i++){
+        for(int j=0;j<3;j++){
+          int n1 = _ENList[i*nloc+(j+1)%3];
+          int n2 = _ENList[i*nloc+(j+2)%3];
+
+          if(boundary[i*nloc+j]>0){
+            total_length += sqrt((_coords[n1*2  ]-_coords[n2*2  ])*(_coords[n1*2  ]-_coords[n2*2  ])+
+                                 (_coords[n1*2+1]-_coords[n2*2+1])*(_coords[n1*2+1]-_coords[n2*2+1]));
+          }
+        }
+      }
+    }
+
+    return total_length;
+  }
+
   /// Get the edge length RMS value in metric space.
   double get_lrms(){
     double mean = get_lmean();

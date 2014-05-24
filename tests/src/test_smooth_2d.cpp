@@ -40,10 +40,9 @@
 #include <iostream>
 #include <vector>
 #include <errno.h>
+#include <cfloat>
 
-#ifdef _OPENMP
 #include <omp.h>
-#endif
 
 #include "Mesh.h"
 #include "VTKTools.h"
@@ -114,6 +113,8 @@ int main(int argc, char **argv){
     double qrms = mesh->get_qrms();
     double qmin = mesh->get_qmin();
     
+    double perimeter = mesh->calculate_perimeter();
+
     if(rank==0)
       std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
                <<"Edge length mean:      "<<lmean<<std::endl
@@ -127,8 +128,14 @@ int main(int argc, char **argv){
     delete mesh;
     
     if(rank==0){
-      std::cout<<"Smooth - "<<methods[m]<<" ("<<qmean<<", "<<qmin<<"): ";
+      std::cout<<"Checking quality between bounds - "<<methods[m]<<" ("<<qmean<<", "<<qmin<<"): ";
       if((qmean>target_quality_mean[m])&&(qmin>target_quality_min[m]))
+        std::cout<<"pass"<<std::endl;
+      else
+        std::cout<<"fail"<<std::endl;
+      
+      std::cout<<"Checking perimeter = 4: ";
+      if(fabs(perimeter-4)<DBL_EPSILON)
         std::cout<<"pass"<<std::endl;
       else
         std::cout<<"fail"<<std::endl;
