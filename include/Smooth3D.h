@@ -464,7 +464,7 @@ template<typename real_t>
     std::vector<char> colour(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
-    int NElements = _mesh->get_number_nodes();
+    int NElements = _mesh->get_number_elements();
     std::vector<bool> is_boundary(NNodes, false);
     for(int i=0;i<NElements;i++){
       if(_mesh->_ENList[i*4]==-1)
@@ -472,14 +472,14 @@ template<typename real_t>
 
       for(int j=0;j<4;j++){
         if(_mesh->boundary[i*4+j]>0){
-          for(int k=0;k<4;k++)
+          for(int k=1;k<4;k++)
             is_boundary[_mesh->_ENList[i*4+(j+k)%4]] = true;
         }
       }
     }
 
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(is_boundary[i]))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||is_boundary[i])
         continue;
       colour_sets[colour[i]].push_back(i);
     }

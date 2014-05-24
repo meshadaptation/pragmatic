@@ -159,7 +159,7 @@ template<typename real_t>
         for(int ic=1;ic<=max_colour;ic++){
           if(colour_sets.count(ic)){
             int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(dynamic, 1)
+#pragma omp for schedule(guided)
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
 
@@ -457,30 +457,32 @@ template<typename real_t>
     std::vector<char> colour(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
-    int NElements = _mesh->get_number_nodes();
+    int NElements = _mesh->get_number_elements();
     std::vector<bool> is_boundary(NNodes, false);
     for(int i=0;i<NElements;i++){
-      if(_mesh->_ENList[i*3]==-1)
+      const int *n=_mesh->get_element(i);
+      if(n[0]==-1)
         continue;
   
       for(int j=0;j<3;j++){
         if(_mesh->boundary[i*3+j]>0){
-          for(int k=0;k<3;k++)
-            is_boundary[_mesh->_ENList[i*3+(j+k)%3]] = true;
+          is_boundary[n[(j+1)%3]] = true;
+          is_boundary[n[(j+2)%3]] = true;
         }
       }
     }
 
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||(is_boundary[i]))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||is_boundary[i])
         continue;
+
       colour_sets[colour[i]].push_back(i);
     }
 
     quality.resize(NElements);
 #pragma omp parallel
     {
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(guided)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){

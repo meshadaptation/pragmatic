@@ -410,6 +410,39 @@ template<typename real_t> class VTKTools{
     ug->GetPointData()->AddArray(vtk_min_desired_length);
     vtk_min_desired_length->Delete();
 
+    // Create a point data array to illustrate the boundary nodes.
+    vtkIntArray *vtk_boundary_nodes = vtkIntArray::New();
+    vtk_boundary_nodes->SetNumberOfComponents(1);
+    vtk_boundary_nodes->SetNumberOfTuples(NNodes);
+    vtk_boundary_nodes->SetName("BoundaryNodes");
+    for(int i=0;i<NNodes;i++)
+      vtk_boundary_nodes->SetTuple1(i, -1);
+
+    for(int i=0;i<NElements;i++){
+      const int *n=mesh->get_element(i);
+      if(n[0]==-1)
+        continue;
+
+      if(ndims==2){
+        for(int j=0;j<3;j++){
+          if(mesh->boundary[i*3+j]>0){
+            vtk_boundary_nodes->SetTuple1(n[(j+1)%3], mesh->boundary[i*3+j]);
+            vtk_boundary_nodes->SetTuple1(n[(j+2)%3], mesh->boundary[i*3+j]);
+          }
+        }
+      }else{
+        for(int j=0;j<4;j++){
+          if(mesh->boundary[i*4+j]>0){
+            vtk_boundary_nodes->SetTuple1(n[(j+1)%4], mesh->boundary[i*4+j]);
+            vtk_boundary_nodes->SetTuple1(n[(j+2)%4], mesh->boundary[i*4+j]);
+            vtk_boundary_nodes->SetTuple1(n[(j+3)%4], mesh->boundary[i*4+j]);
+          }
+        }
+      }
+    }
+    ug->GetPointData()->AddArray(vtk_boundary_nodes);
+    vtk_boundary_nodes->Delete();
+
     vtkIntArray *vtk_cell_numbering = vtkIntArray::New();
     vtk_cell_numbering->SetNumberOfComponents(1);
     vtk_cell_numbering->SetNumberOfTuples(NElements);
@@ -417,11 +450,11 @@ template<typename real_t> class VTKTools{
 
     vtkIntArray *vtk_boundary = vtkIntArray::New();
     if(ndims==2)
-      vtk_node_numbering->SetNumberOfComponents(3);
+      vtk_boundary->SetNumberOfComponents(3);
     else
-      vtk_node_numbering->SetNumberOfComponents(4);
-    vtk_node_numbering->SetNumberOfTuples(NElements);
-    vtk_node_numbering->SetName("Boundary");
+      vtk_boundary->SetNumberOfComponents(4);
+    vtk_boundary->SetNumberOfTuples(NElements);
+    vtk_boundary->SetName("Boundary");
 
     vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
     vtk_quality->SetNumberOfComponents(1);
