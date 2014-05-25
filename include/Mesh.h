@@ -387,7 +387,7 @@ template<typename real_t> class Mesh{
   double calculate_perimeter(){
     assert(ndims==2);
     int NElements = get_number_elements();
-    double total_length=0;
+    long double total_length=0;
     
     if(num_processes>1){
      for(int i=0;i<NElements;i++){

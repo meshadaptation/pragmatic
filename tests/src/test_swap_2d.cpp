@@ -37,7 +37,7 @@
 
 #include <iostream>
 #include <vector>
-
+#include <cfloat>
 #include <omp.h>
 
 #include "Mesh.h"
@@ -105,12 +105,20 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
+  double perimeter = mesh->calculate_perimeter();
   if(verbose&&rank==0){
     std::cout<<"Swap loop time: "<<toc-tic<<std::endl
              <<"Quality mean:   "<<qmean<<std::endl
              <<"Quality min:    "<<qmin<<std::endl
-             <<"Quality RMS:    "<<qrms<<std::endl;
+             <<"Quality RMS:    "<<qrms<<std::endl
+             <<"Perimeter:      "<<perimeter<<std::endl;;
   }
+
+  std::cout<<"Checking perimeter = 4: ";
+  if(fabs(perimeter-4)<DBL_EPSILON)
+    std::cout<<"pass\n";
+  else
+    std::cout<<"false ("<<fabs(perimeter-4)<<", epsilon="<<DBL_EPSILON<<")\n";
   
   delete mesh;
   

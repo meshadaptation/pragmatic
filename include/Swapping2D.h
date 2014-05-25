@@ -306,8 +306,7 @@ template<typename real_t> class Swapping2D{
 
  private:
 
-  void swap_kernel(Edge<index_t>& edge, std::set<index_t>& modified_elements,
-      std::vector<index_t>* ele0, std::vector<index_t>* ele1, size_t tid){
+  void swap_kernel(Edge<index_t>& edge, std::set<index_t>& modified_elements, std::vector<index_t>* ele0, std::vector<index_t>* ele1, size_t tid){
     index_t i = edge.edge.first;
     index_t j = edge.edge.second;
 
@@ -335,21 +334,27 @@ template<typename real_t> class Swapping2D{
     index_t eid1 = intersection[1];
 
     const index_t *n = _mesh->get_element(eid0);
-    int n_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((n[k]!=i) && (n[k]!=j)){
-        n_off = k;
-        break;
+    int bi0, bj0, n_off=-1;
+    for(size_t I=0;I<3;I++){
+      if(n[I]==i){
+        bi0 = _mesh->boundary[eid0*3+I];
+      }else if(n[I]==j){
+        bj0 = _mesh->boundary[eid0*3+I];
+      }else{
+        n_off = I;
       }
     }
     assert(n[n_off]>=0);
 
     const index_t *m = _mesh->get_element(eid1);
-    int m_off=-1;
-    for(size_t k=0;k<3;k++){
-      if((m[k]!=i) && (m[k]!=j)){
-        m_off = k;
-        break;
+    int bi1, bj1, m_off=-1;
+    for(size_t I=0;I<3;I++){
+      if(m[I]==i){
+        bi1 = _mesh->boundary[eid1*3+I];
+      }else if(m[I]==j){
+        bj1 = _mesh->boundary[eid1*3+I];
+      }else{
+        m_off = I;
       }
     }
     assert(m[m_off]>=0);
@@ -406,11 +411,30 @@ template<typename real_t> class Swapping2D{
           ele1->at(k) = m[k];
         }
 
+      // Update boundary information.
+      if(n[(n_off+2)%3]==j){
+        int boundary0[] = {bi1, bi0, 0};
+        int boundary1[] = {bj1, 0,   bj0};
+        for(int I=0;I<3;I++){
+          _mesh->boundary[eid0*3+I] = boundary0[I];
+          _mesh->boundary[eid1*3+I] = boundary1[I];
+        }
+      }else{
+        assert(n[(n_off+2)%3]==i);
+        int boundary0[] = {bj1, bj0, 0};
+        int boundary1[] = {bi1, 0,   bi0};
+        for(int I=0;I<3;I++){
+          _mesh->boundary[eid0*3+I] = boundary0[I];
+          _mesh->boundary[eid1*3+I] = boundary1[I];
+        }
+      }
+
       // Update element-node list for this element.
       for(size_t cnt=0;cnt<nloc;cnt++){
         _mesh->_ENList[eid0*nloc+cnt] = n_swap[cnt];
         _mesh->_ENList[eid1*nloc+cnt] = m_swap[cnt];
       }
+
 
       edge.edge.first = std::min(k, l);
       edge.edge.second = std::max(k, l);
