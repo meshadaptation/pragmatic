@@ -86,8 +86,7 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
   
   VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
    

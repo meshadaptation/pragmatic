@@ -116,8 +116,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
   
   smooth.smooth("smart Laplacian");
 

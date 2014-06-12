@@ -93,8 +93,7 @@ int main(int argc, char **argv){
     std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
   }
   
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_2d", mesh);
 

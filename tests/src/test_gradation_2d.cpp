@@ -104,8 +104,7 @@ int main(int argc, char **argv){
 
   if(verbose)
     if(!mesh->verify()){
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
+      mesh->defragment();
       
       VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
       exit(-1);
@@ -126,8 +125,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-refine", mesh);
         exit(-1);
@@ -143,8 +141,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
         exit(-1);
@@ -160,8 +157,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after swapping.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
         exit(-1);
@@ -174,8 +170,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   if(verbose){
     if(rank==0)

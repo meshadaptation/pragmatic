@@ -93,8 +93,7 @@ int main(int argc, char **argv){
   double toc = get_wtime();
 
   if(!mesh->verify()){
-    std::vector<int> active_vertex_map;
-    mesh->defragment(&active_vertex_map);
+    mesh->defragment();
     
     VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
     exit(-1);

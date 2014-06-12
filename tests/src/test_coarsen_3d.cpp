@@ -90,8 +90,7 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   int nelements = mesh->get_number_elements();  
 

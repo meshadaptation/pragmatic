@@ -83,8 +83,7 @@ int main(int argc, char **argv){
   adapt.coarsen(0.4, sqrt(2.0));
   double toc = get_wtime();
   
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
   
   VTKTools<double>::export_vtu("../data/test_mpi_coarsen_3d", mesh);
 

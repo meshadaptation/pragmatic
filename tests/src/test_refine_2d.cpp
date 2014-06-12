@@ -95,24 +95,32 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
   
   double lrms = mesh->get_lrms();
   double qrms = mesh->get_qrms();
+  double perimeter = mesh->calculate_perimeter();
   if(verbose){
     int nelements = mesh->get_number_elements();      
     if(rank==0)
       std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
                <<"Number elements:      "<<nelements<<std::endl
                <<"Edge length RMS:      "<<lrms<<std::endl
-               <<"Quality RMS:          "<<qrms<<std::endl;
+               <<"Quality RMS:          "<<qrms<<std::endl
+               <<"Perimeter:            "<<perimeter<<std::endl;;
   }
 
   if(rank==0){
+    std::cout<<"Expecting (lrms<0.8)&&(qrms<0.3): ";
     if((lrms<0.8)&&(qrms<0.3))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+
+    std::cout<<"Expecting perimeter = 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

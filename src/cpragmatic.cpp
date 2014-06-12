@@ -208,8 +208,7 @@ extern "C" {
           break;
       }
 
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
+      mesh->defragment();
 
       smooth.smooth("optimisation Linf", 10);
     }else{
@@ -236,8 +235,7 @@ extern "C" {
           break;
       }
 
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
+      mesh->defragment();
 
       smooth.smooth("optimisation Linf", 10);
     }

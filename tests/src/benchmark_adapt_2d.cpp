@@ -151,9 +151,7 @@ int main(int argc, char **argv){
       double T2 = get_wtime();
       if(t>0) time_adapt += (T2-T1);
       
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+      mesh->defragment();
       
       tic = get_wtime();
       if(I>0)

@@ -87,8 +87,7 @@ int main(int argc, char **argv){
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
   
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   int nelements = mesh->get_number_elements();
 

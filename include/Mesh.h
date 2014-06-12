@@ -656,16 +656,13 @@ template<typename real_t> class Mesh{
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significantly
     coarsened. */
-  void defragment(std::vector<index_t> *active_vertex_map=NULL){
+  void defragment(){
     // Discover which vertices and elements are active.
-    bool local_active_vertex_map=(active_vertex_map==NULL);
-    if(local_active_vertex_map){
-      active_vertex_map = new std::vector<index_t>();
-    }
-    (*active_vertex_map).resize(NNodes);
+    std::vector<index_t> active_vertex_map(NNodes);
+    
 #pragma omp parallel for schedule(static)
     for(size_t i=0;i<NNodes;i++){
-      (*active_vertex_map)[i] = -1;
+      active_vertex_map[i] = -1;
       NNList[i].clear();
       NEList[i].clear();
     }
@@ -702,7 +699,7 @@ template<typename real_t> class Mesh{
       std::set<int> neigh;
       for(size_t j=0;j<nloc;j++){
         nid = _ENList[e*nloc+j];
-        (*active_vertex_map)[nid]=0;
+        active_vertex_map[nid]=0;
 
         if(halo_element){
           for(int k=0;k<num_processes;k++){
@@ -725,10 +722,10 @@ template<typename real_t> class Mesh{
     // Create a new numbering.
     index_t cnt=0;
     for(size_t i=0;i<NNodes;i++){
-      if((*active_vertex_map)[i]<0)
+      if(active_vertex_map[i]<0)
         continue;
 
-      (*active_vertex_map)[i] = cnt++;
+      active_vertex_map[i] = cnt++;
     }
 
     int metis_nnodes = cnt;
@@ -736,9 +733,9 @@ template<typename real_t> class Mesh{
     std::vector< std::set<index_t> > graph(metis_nnodes);
     for(typename std::vector<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
       for(size_t i=0;i<nloc;i++){
-        index_t nid0 = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+        index_t nid0 = active_vertex_map[_ENList[(*ie)*nloc+i]];
         for(size_t j=i+1;j<nloc;j++){
-          index_t nid1 = (*active_vertex_map)[_ENList[(*ie)*nloc+j]];
+          index_t nid1 = active_vertex_map[_ENList[(*ie)*nloc+j]];
           graph[nid0].insert(nid1);
           graph[nid1].insert(nid0);
         }
@@ -768,10 +765,10 @@ template<typename real_t> class Mesh{
 
       // Update active_vertex_map
       for(size_t i=0;i<NNodes;i++){
-        if((*active_vertex_map)[i]<0)
+        if(active_vertex_map[i]<0)
           continue;
 
-        (*active_vertex_map)[i] = inorder[(*active_vertex_map)[i]];
+        active_vertex_map[i] = inorder[active_vertex_map[i]];
       }
     }
 
@@ -781,16 +778,16 @@ template<typename real_t> class Mesh{
       index_t old_eid = active_element[i];
       std::set<index_t> sorted_element;
       for(size_t j=0;j<nloc;j++){
-        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        index_t new_nid = active_vertex_map[_ENList[old_eid*nloc+j]];
         sorted_element.insert(new_nid);
       }
       if(ordered_elements.find(sorted_element)==ordered_elements.end()){
         ordered_elements[sorted_element] = old_eid;
       }else{
         std::cerr<<"dup! "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc]]<<" "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc+1]]<<" "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc+2]]<<std::endl;
+                 <<active_vertex_map[_ENList[old_eid*nloc]]<<" "
+                 <<active_vertex_map[_ENList[old_eid*nloc+1]]<<" "
+                 <<active_vertex_map[_ENList[old_eid*nloc+2]]<<std::endl;
       }
     }
     std::vector<index_t> metis_element_renumber;
@@ -836,7 +833,7 @@ template<typename real_t> class Mesh{
       index_t old_eid = metis_element_renumber[i];
       index_t new_eid = i;
       for(size_t j=0;j<nloc;j++){
-        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        index_t new_nid = active_vertex_map[_ENList[old_eid*nloc+j]];
         assert(new_nid<(index_t)NNodes);
         defrag_ENList[new_eid*nloc+j] = new_nid;
         defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
@@ -844,8 +841,8 @@ template<typename real_t> class Mesh{
     }
 
     // Second sweep writes node data with new numbering.
-    for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
-      index_t new_nid = (*active_vertex_map)[old_nid];
+    for(size_t old_nid=0;old_nid<active_vertex_map.size();++old_nid){
+      index_t new_nid = active_vertex_map[old_nid];
       if(new_nid<0)
         continue;
 
@@ -865,8 +862,8 @@ template<typename real_t> class Mesh{
       std::vector<index_t> defrag_lnn2gnn(NNodes);
       std::vector<int> defrag_owner(NNodes);
 
-      for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
-        index_t new_nid = (*active_vertex_map)[old_nid];
+      for(size_t old_nid=0;old_nid<active_vertex_map.size();++old_nid){
+        index_t new_nid = active_vertex_map[old_nid];
         if(new_nid<0)
           continue;
 
@@ -882,7 +879,7 @@ template<typename real_t> class Mesh{
         send_map[k].clear();
         for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
           if(new_send_set[k].count(*jt)){
-            index_t new_lnn = (*active_vertex_map)[*jt];
+            index_t new_lnn = active_vertex_map[*jt];
             new_halo.push_back(new_lnn);
             send_map[k][lnn2gnn[new_lnn]] = new_lnn;
           }
@@ -895,7 +892,7 @@ template<typename real_t> class Mesh{
         recv_map[k].clear();
         for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
           if(new_recv_set[k].count(*jt)){
-            index_t new_lnn = (*active_vertex_map)[*jt];
+            index_t new_lnn = active_vertex_map[*jt];
             new_halo.push_back(new_lnn);
             recv_map[k][lnn2gnn[new_lnn]] = new_lnn;
           }
@@ -929,9 +926,6 @@ template<typename real_t> class Mesh{
 
 #pragma omp parallel
     create_adjacency();
-
-    if(local_active_vertex_map)
-      delete active_vertex_map;
   }
 
   /// This is used to verify that the mesh and its metadata is correct.

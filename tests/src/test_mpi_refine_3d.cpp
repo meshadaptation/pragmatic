@@ -89,8 +89,7 @@ int main(int argc, char **argv){
   adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
 

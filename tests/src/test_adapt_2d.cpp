@@ -134,8 +134,7 @@ int main(int argc, char **argv){
   }
 
   double time_defrag = get_wtime();
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
+  mesh->defragment();
   time_defrag = get_wtime()-time_defrag;
 
   if(verbose){
