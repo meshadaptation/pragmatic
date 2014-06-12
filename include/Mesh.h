@@ -192,7 +192,7 @@ template<typename real_t> class Mesh{
     if(ndims==2){
       // Initialise the boundary array
       boundary.resize(NElements*3);
-      std::fill(boundary.begin(), boundary.end(), -1);
+      std::fill(boundary.begin(), boundary.end(), -2);
       
       // Create node-element adjancy list.      
       std::vector< std::set<int> > NEList(NNodes);
@@ -209,24 +209,32 @@ template<typename real_t> class Mesh{
 	if(_ENList[i*3]==-1)
 	  continue;
 	
-	for(int j=0;j<3;j++){  
-	  std::set<int> neighbours;
-	  set_intersection(NEList[_ENList[i*3+(j+1)%3]].begin(), NEList[_ENList[i*3+(j+1)%3]].end(),
-			   NEList[_ENList[i*3+(j+2)%3]].begin(), NEList[_ENList[i*3+(j+2)%3]].end(),
-			   inserter(neighbours, neighbours.begin()));
+	for(int j=0;j<3;j++){
+	  int n1 = _ENList[i*3+(j+1)%3];
+	  int n2 = _ENList[i*3+(j+2)%3];
 	  
-	  if(neighbours.size()==2){
-	    if(*neighbours.begin()==i)
-	      boundary[i*3+j] = *neighbours.rbegin();
-	    else
-	      boundary[i*3+j] = *neighbours.begin();
+	  if(is_owned_node(n1)||is_owned_node(n2)){
+	    std::set<int> neighbours;
+	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
+			     NEList[n2].begin(), NEList[n2].end(),
+			     inserter(neighbours, neighbours.begin()));
+	    
+	    if(neighbours.size()==2){
+	      if(*neighbours.begin()==i)
+		boundary[i*3+j] = *neighbours.rbegin();
+	      else
+		boundary[i*3+j] = *neighbours.begin();
+	    }
+	  }else{
+	    // This is a halo facet.
+	    boundary[i*3+j] = -1;
 	  }
 	}
       }
     }else{ // ndims==3
       // Initialise the boundary array
       boundary.resize(NElements*4);
-      std::fill(boundary.begin(), boundary.end(), -1);
+      std::fill(boundary.begin(), boundary.end(), -2);
       
       // Create node-element adjancy list.      
       std::vector< std::set<int> > NEList(NNodes);
@@ -264,9 +272,9 @@ template<typename real_t> class Mesh{
       }
     }
     for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
-      if(*it==-1)
+      if(*it==-2)
         *it = 1;
-      else
+      else if(*it>=0)
         *it = 0;
   }
 
@@ -388,6 +396,7 @@ template<typename real_t> class Mesh{
     assert(ndims==2);
     int NElements = get_number_elements();
     long double total_length=0;
+    double downcast_total_length=0;
     
     if(num_processes>1){
      for(int i=0;i<NElements;i++){
@@ -395,14 +404,17 @@ template<typename real_t> class Mesh{
           int n1 = _ENList[i*nloc+(j+1)%3];
           int n2 = _ENList[i*nloc+(j+2)%3];
 
-          if(boundary[i*nloc+j]>0 || (std::min(node_owner[n1], node_owner[n2])==rank)){
-            total_length += sqrt((_coords[n1*2  ]-_coords[n2*2  ])*(_coords[n1*2  ]-_coords[n2*2  ])+
-                                 (_coords[n1*2+1]-_coords[n2*2+1])*(_coords[n1*2+1]-_coords[n2*2+1]));
+          if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	    
+            total_length += sqrt(dx*dx+dy*dy);
           }
         }
-      }
-
-      MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+     }
+     
+     downcast_total_length = total_length;
+     MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
     }else{
       for(int i=0;i<NElements;i++){
         for(int j=0;j<3;j++){
@@ -410,14 +422,17 @@ template<typename real_t> class Mesh{
           int n2 = _ENList[i*nloc+(j+2)%3];
 
           if(boundary[i*nloc+j]>0){
-            total_length += sqrt((_coords[n1*2  ]-_coords[n2*2  ])*(_coords[n1*2  ]-_coords[n2*2  ])+
-                                 (_coords[n1*2+1]-_coords[n2*2+1])*(_coords[n1*2+1]-_coords[n2*2+1]));
+	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	    
+            total_length += sqrt(dx*dx+dy*dy);
           }
         }
       }
+      downcast_total_length = total_length; 
     }
-
-    return total_length;
+    
+    return downcast_total_length;
   }
 
   /// Get the edge length RMS value in metric space.

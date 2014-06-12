@@ -138,7 +138,7 @@ int main(int argc, char **argv){
       if(fabs(perimeter-4)<DBL_EPSILON)
         std::cout<<"pass"<<std::endl;
       else
-        std::cout<<"fail"<<std::endl;
+        std::cout<<"fail ("<<perimeter<<")"<<std::endl;
     }
   }
   
