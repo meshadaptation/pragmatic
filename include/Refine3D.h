@@ -57,9 +57,8 @@
 template<typename real_t> class Refine3D{
  public:
   /// Default constructor.
-  Refine3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
+  Refine3D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     size_t NElements = _mesh->get_number_elements();
 
@@ -667,12 +666,6 @@ template<typename real_t> class Refine3D{
         }
       }
 
-      // Refine surface
-#pragma omp single
-      {
-        _surface->refine(refined_edges, lnn2gnn);
-      }
-
       // Recreate adjancy information.
       _mesh->create_adjacency();
     }
@@ -748,7 +741,6 @@ template<typename real_t> class Refine3D{
   }
 
   Mesh<real_t> *_mesh;
-  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   index_t *lnn2gnn;

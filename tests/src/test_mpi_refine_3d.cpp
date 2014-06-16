@@ -51,7 +51,6 @@
 #endif
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -68,11 +67,9 @@ int main(int argc, char **argv){
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+  mesh->create_boundary();
 
-  Surface3D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField3D<double> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -86,18 +83,15 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 0.1);
   metric_field.update_mesh();
   
-  Refine3D<double> adapt(*mesh, surface);
+  Refine3D<double> adapt(*mesh);
 
   double tic = get_wtime();
   adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
-  VTKTools<double>::export_vtu("../data/test_mpi_refine_3d_surface", &surface);
 
   delete mesh;
 

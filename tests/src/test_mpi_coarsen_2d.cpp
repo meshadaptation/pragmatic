@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -66,11 +65,9 @@ int main(int argc, char **argv){
   }
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+  mesh->create_boundary();
 
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -79,7 +76,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  Coarsen2D<double> adapt(*mesh, surface);
+  Coarsen2D<double> adapt(*mesh);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -92,9 +89,7 @@ int main(int argc, char **argv){
     std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   int nelements = mesh->get_number_elements();
 
@@ -110,7 +105,6 @@ int main(int argc, char **argv){
   }
 
   VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
-  VTKTools<double>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 

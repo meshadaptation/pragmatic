@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -140,13 +139,10 @@ int main(int argc, char **argv){
 
     mesh = new Mesh<double>(NNodes, NElements, &(Triangles[0]), &(x[0]), &(y[0]));
   }
-
-  // Stuff this into a pragmatic mesh.
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
+  mesh->create_boundary();
 
   // Need to get the metric from the xml file - but for now just add this dummy.
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
 
   // Begin dummy...
   double I[] = {1.0, 0.0, 1.0};
@@ -179,10 +175,10 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double> coarsen(*mesh, surface);  
-  Smooth2D<double> smooth(*mesh, surface);
-  Refine2D<double> refine(*mesh, surface);
-  Swapping2D<double> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh);  
+  Smooth2D<double> smooth(*mesh);
+  Refine2D<double> refine(*mesh);
+  Swapping2D<double> swapping(*mesh);
 
   time_adapt = get_wtime();
 
@@ -220,9 +216,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   tic = get_wtime();
   smooth.smooth("optimisation Linf", 200);

@@ -43,13 +43,11 @@ module pragmatic
   public :: &
        pragmatic_init, &
        pragmatic_add_field, &
-       pragmatic_set_surface, &
        pragmatic_set_metric, &
        pragmatic_adapt, &
        pragmatic_get_info, &
        pragmatic_get_coords, &
        pragmatic_get_elements, &
-       pragmatic_get_surface, &
        pragmatic_get_lnn2gnn, &
        pragmatic_get_metric, &
        pragmatic_dump, &
@@ -103,21 +101,6 @@ module pragmatic
        integer(c_int) :: pnorm
      end subroutine pragmatic_add_field
   end interface pragmatic_add_field
-
-  !> Set the surface mesh.
-  !
-  !> @param[in] nfacets Number of surface elements.
-  !> @param[in] facets Surface elements.
-  !> @param[in] boundary_ids Boundary ID's.
-  interface pragmatic_set_surface
-     subroutine pragmatic_set_surface(nfacets, facets, boundary_ids) bind(c,name="pragmatic_set_surface")
-       use iso_c_binding
-       implicit none
-       integer(c_int) :: nfacets
-       integer(c_int) :: facets(*)
-       integer(c_int) :: boundary_ids(*)
-     end subroutine pragmatic_set_surface
-  end interface pragmatic_set_surface
   
   !> Set the metric tensor field.
   !
@@ -141,13 +124,11 @@ module pragmatic
   !
   !> @param[out] NNodes Number of nodes.
   !> @param[out] NElements Number of elements.
-  !> @param[out] NSElements Number of surface elements.
   interface pragmatic_get_info
-     subroutine pragmatic_get_info(NNodes, NElements, NSElements) bind(c,name="pragmatic_get_info")
+     subroutine pragmatic_get_info(NNodes, NElements) bind(c,name="pragmatic_get_info")
        use iso_c_binding
        integer(kind=c_int) :: NNodes
        integer(kind=c_int) :: NElements
-       integer(kind=c_int) :: NSElements
      end subroutine pragmatic_get_info
   end interface pragmatic_get_info
 
@@ -182,19 +163,6 @@ module pragmatic
        integer(c_int) :: elements(*)
      end subroutine pragmatic_get_elements
   end interface pragmatic_get_elements
-
-  !> Get the surface mesh.
-  !
-  !> @param[out] facets Surface elements.
-  !> @param[out] boundary_ids Boundary ID's.
-  interface pragmatic_get_surface
-     subroutine pragmatic_get_surface(facets, boundary_ids) bind(c,name="pragmatic_get_surface")
-       use iso_c_binding
-       implicit none
-       integer(c_int) :: facets(*)
-       integer(c_int) :: boundary_ids(*)
-     end subroutine pragmatic_get_surface
-  end interface pragmatic_get_surface
 
   !> Get the global node numbering.
   !

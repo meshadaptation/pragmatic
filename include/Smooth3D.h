@@ -44,9 +44,8 @@ template<typename real_t>
   class Smooth3D{
  public:
   /// Default constructor.
-  Smooth3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
+  Smooth3D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     mpi_nparts = 1;
     rank=0;
@@ -234,43 +233,7 @@ template<typename real_t>
   bool laplacian_3d_kernel(index_t node, real_t *p, double *mp){
     const real_t *normal[]={NULL, NULL};
     std::vector<index_t> adj_nodes;
-    if(_surface->contains_node(node)){
-      // Check how many different planes intersect at this node.
-      std::set<index_t> patch = _surface->get_surface_patch(node);
-      std::map<int, std::set<int> > coids;
-      for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e)
-        coids[_surface->get_coplanar_id(*e)].insert(*e);
-
-      int loc=0;
-      if(coids.size()<3){
-        /* We will need the normals later when making sure that point
-           is on the surface to within roundoff.*/
-        for(std::map<int, std::set<int> >::const_iterator ic=coids.begin();ic!=coids.end();++ic){
-          normal[loc++] = _surface->get_normal(*(ic->second.begin()));
-        }
-
-        // Find the adjacent nodes that are on this surface.
-        std::set<index_t> adj_nodes_set;
-        for(typename std::set<index_t>::const_iterator e=patch.begin();e!=patch.end();++e){
-          const index_t *facet = _surface->get_facet(*e);
-          if(facet[0]<0)
-            continue;
-
-          adj_nodes_set.insert(facet[0]); assert(_mesh->NNList[facet[0]].size()>0);
-          adj_nodes_set.insert(facet[1]); assert(_mesh->NNList[facet[1]].size()>0);
-          adj_nodes_set.insert(facet[2]); assert(_mesh->NNList[facet[2]].size()>0);
-        }
-        for(typename std::set<index_t>::const_iterator il=adj_nodes_set.begin();il!=adj_nodes_set.end();++il){
-          if((*il)!=node)
-            adj_nodes.push_back(*il);
-        }
-      }else{
-        // Corner node, in which case it cannot be moved.
-        return false;
-      }
-    }else{
-      adj_nodes.insert(adj_nodes.end(), _mesh->NNList[node].begin(), _mesh->NNList[node].end());
-    }
+    adj_nodes.insert(adj_nodes.end(), _mesh->NNList[node].begin(), _mesh->NNList[node].end());
 
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
@@ -501,13 +464,26 @@ template<typename real_t>
     std::vector<char> colour(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
+    int NElements = _mesh->get_number_elements();
+    std::vector<bool> is_boundary(NNodes, false);
+    for(int i=0;i<NElements;i++){
+      if(_mesh->_ENList[i*4]==-1)
+        continue;
+
+      for(int j=0;j<4;j++){
+        if(_mesh->boundary[i*4+j]>0){
+          for(int k=1;k<4;k++)
+            is_boundary[_mesh->_ENList[i*4+(j+k)%4]] = true;
+        }
+      }
+    }
+
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i)))
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||is_boundary[i])
         continue;
       colour_sets[colour[i]].push_back(i);
     }
 
-    int NElements = _mesh->get_number_elements();
     quality.resize(NElements);
 #pragma omp parallel
     {
@@ -594,7 +570,6 @@ template<typename real_t>
   }
 
   Mesh<real_t> *_mesh;
-  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
 
   const static size_t ndims=3;

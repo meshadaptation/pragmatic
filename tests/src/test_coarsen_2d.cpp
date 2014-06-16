@@ -41,8 +41,9 @@
 
 #include <omp.h>
 
+#include <cfloat>
+
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -66,11 +67,9 @@ int main(int argc, char **argv){
   }
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+  mesh->create_boundary();
 
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -79,7 +78,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  Coarsen2D<double> adapt(*mesh, surface);
+  Coarsen2D<double> adapt(*mesh);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -88,12 +87,11 @@ int main(int argc, char **argv){
   adapt.coarsen(L_low, L_up);
   double toc = get_wtime();
   
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   int nelements = mesh->get_number_elements();
 
+  double perimeter = mesh->calculate_perimeter();
   if(verbose){
     double lrms = mesh->get_lrms();
     double qrms = mesh->get_qrms();
@@ -102,19 +100,27 @@ int main(int argc, char **argv){
       std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
                <<"Number elements:      "<<nelements<<std::endl
                <<"Edge length RMS:      "<<lrms<<std::endl
-               <<"Quality RMS:          "<<qrms<<std::endl;
+               <<"Quality RMS:          "<<qrms<<std::endl
+               <<"Perimeter:            "<<perimeter<<std::endl;
   }
 
   VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
-  VTKTools<double>::export_vtu("../data/test_coarsen_2d_surface", &surface);
 
   delete mesh;
 
   if(rank==0){
+    std::cout<<"Expecting 2 elements: ";
     if(nelements==2)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
+
+    std::cout<<"Expecting perimeter = 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
+
   }
 
   MPI_Finalize();

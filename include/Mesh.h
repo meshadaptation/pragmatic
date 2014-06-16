@@ -183,6 +183,101 @@ template<typename real_t> class Mesh{
     return get_number_elements()-1;
   }
 
+  void create_boundary(){
+    assert(boundary.size()==0);
+    
+    size_t NNodes = get_number_nodes();
+    size_t NElements = get_number_elements();
+    
+    if(ndims==2){
+      // Initialise the boundary array
+      boundary.resize(NElements*3);
+      std::fill(boundary.begin(), boundary.end(), -2);
+      
+      // Create node-element adjancy list.      
+      std::vector< std::set<int> > NEList(NNodes);
+      for(size_t i=0;i<NElements;i++){
+	if(_ENList[i*3]==-1)
+	  continue;
+	
+	for(size_t j=0;j<3;j++)
+	  NEList[_ENList[i*3+j]].insert(i);
+      }
+      
+      // Check neighbourhood of each element
+      for(int i=0;i<NElements;i++){
+	if(_ENList[i*3]==-1)
+	  continue;
+	
+	for(int j=0;j<3;j++){
+	  int n1 = _ENList[i*3+(j+1)%3];
+	  int n2 = _ENList[i*3+(j+2)%3];
+	  
+	  if(is_owned_node(n1)||is_owned_node(n2)){
+	    std::set<int> neighbours;
+	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
+			     NEList[n2].begin(), NEList[n2].end(),
+			     inserter(neighbours, neighbours.begin()));
+	    
+	    if(neighbours.size()==2){
+	      if(*neighbours.begin()==i)
+		boundary[i*3+j] = *neighbours.rbegin();
+	      else
+		boundary[i*3+j] = *neighbours.begin();
+	    }
+	  }else{
+	    // This is a halo facet.
+	    boundary[i*3+j] = -1;
+	  }
+	}
+      }
+    }else{ // ndims==3
+      // Initialise the boundary array
+      boundary.resize(NElements*4);
+      std::fill(boundary.begin(), boundary.end(), -2);
+      
+      // Create node-element adjancy list.      
+      std::vector< std::set<int> > NEList(NNodes);
+      for(size_t i=0;i<NElements;i++){
+	if(_ENList[i*4]==-1)
+	  continue;
+	
+	for(size_t j=0;j<4;j++)
+	  NEList[_ENList[i*4+j]].insert(i);
+      }
+      
+      // Check neighbourhood of each element
+      for(int i=0;i<NElements;i++){
+	if(_ENList[i*4]==-1)
+	  continue;
+	
+	for(int j=0;j<4;j++){  
+	  std::set<int> edge_neighbours;
+	  set_intersection(NEList[_ENList[i*4+(j+1)%4]].begin(), NEList[_ENList[i*4+(j+1)%4]].end(),
+			   NEList[_ENList[i*4+(j+2)%4]].begin(), NEList[_ENList[i*4+(j+2)%4]].end(),
+			   inserter(edge_neighbours, edge_neighbours.begin()));
+	  
+	  std::set<int> neighbours;
+	  set_intersection(NEList[_ENList[i*4+(j+3)%4]].begin(), NEList[_ENList[i*4+(j+4)%4]].end(),
+			   edge_neighbours.begin(), edge_neighbours.end(),
+			   inserter(neighbours, neighbours.begin()));
+	  
+	  if(neighbours.size()==2){
+	    if(*neighbours.begin()==i)
+	      boundary[i*4+j] = *neighbours.rbegin();
+	    else
+	      boundary[i*4+j] = *neighbours.begin();
+	  }
+	}
+      }
+    }
+    for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
+      if(*it==-2)
+        *it = 1;
+      else if(*it>=0)
+        *it = 0;
+  }
+
   /// Erase an element
   void erase_element(const index_t eid){
     const index_t *n = get_element(eid);
@@ -294,6 +389,50 @@ template<typename real_t> class Mesh{
     double mean = total_length/nedges;
 
     return mean;
+  }
+
+  /// Calculate perimeter (2D only)
+  double calculate_perimeter(){
+    assert(ndims==2);
+    int NElements = get_number_elements();
+    long double total_length=0;
+    double downcast_total_length=0;
+    
+    if(num_processes>1){
+     for(int i=0;i<NElements;i++){
+        for(int j=0;j<3;j++){
+          int n1 = _ENList[i*nloc+(j+1)%3];
+          int n2 = _ENList[i*nloc+(j+2)%3];
+
+          if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	    
+            total_length += sqrt(dx*dx+dy*dy);
+          }
+        }
+     }
+     
+     downcast_total_length = total_length;
+     MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+    }else{
+      for(int i=0;i<NElements;i++){
+        for(int j=0;j<3;j++){
+          int n1 = _ENList[i*nloc+(j+1)%3];
+          int n2 = _ENList[i*nloc+(j+2)%3];
+
+          if(boundary[i*nloc+j]>0){
+	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	    
+            total_length += sqrt(dx*dx+dy*dy);
+          }
+        }
+      }
+      downcast_total_length = total_length; 
+    }
+    
+    return downcast_total_length;
   }
 
   /// Get the edge length RMS value in metric space.
@@ -532,16 +671,13 @@ template<typename real_t> class Mesh{
   /*! Defragment mesh. This compresses the storage of internal data
     structures. This is useful if the mesh has been significantly
     coarsened. */
-  void defragment(std::vector<index_t> *active_vertex_map=NULL){
+  void defragment(){
     // Discover which vertices and elements are active.
-    bool local_active_vertex_map=(active_vertex_map==NULL);
-    if(local_active_vertex_map){
-      active_vertex_map = new std::vector<index_t>();
-    }
-    (*active_vertex_map).resize(NNodes);
+    std::vector<index_t> active_vertex_map(NNodes);
+    
 #pragma omp parallel for schedule(static)
     for(size_t i=0;i<NNodes;i++){
-      (*active_vertex_map)[i] = -1;
+      active_vertex_map[i] = -1;
       NNList[i].clear();
       NEList[i].clear();
     }
@@ -578,7 +714,7 @@ template<typename real_t> class Mesh{
       std::set<int> neigh;
       for(size_t j=0;j<nloc;j++){
         nid = _ENList[e*nloc+j];
-        (*active_vertex_map)[nid]=0;
+        active_vertex_map[nid]=0;
 
         if(halo_element){
           for(int k=0;k<num_processes;k++){
@@ -601,10 +737,10 @@ template<typename real_t> class Mesh{
     // Create a new numbering.
     index_t cnt=0;
     for(size_t i=0;i<NNodes;i++){
-      if((*active_vertex_map)[i]<0)
+      if(active_vertex_map[i]<0)
         continue;
 
-      (*active_vertex_map)[i] = cnt++;
+      active_vertex_map[i] = cnt++;
     }
 
     int metis_nnodes = cnt;
@@ -612,9 +748,9 @@ template<typename real_t> class Mesh{
     std::vector< std::set<index_t> > graph(metis_nnodes);
     for(typename std::vector<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
       for(size_t i=0;i<nloc;i++){
-        index_t nid0 = (*active_vertex_map)[_ENList[(*ie)*nloc+i]];
+        index_t nid0 = active_vertex_map[_ENList[(*ie)*nloc+i]];
         for(size_t j=i+1;j<nloc;j++){
-          index_t nid1 = (*active_vertex_map)[_ENList[(*ie)*nloc+j]];
+          index_t nid1 = active_vertex_map[_ENList[(*ie)*nloc+j]];
           graph[nid0].insert(nid1);
           graph[nid1].insert(nid0);
         }
@@ -644,10 +780,10 @@ template<typename real_t> class Mesh{
 
       // Update active_vertex_map
       for(size_t i=0;i<NNodes;i++){
-        if((*active_vertex_map)[i]<0)
+        if(active_vertex_map[i]<0)
           continue;
 
-        (*active_vertex_map)[i] = inorder[(*active_vertex_map)[i]];
+        active_vertex_map[i] = inorder[active_vertex_map[i]];
       }
     }
 
@@ -657,16 +793,16 @@ template<typename real_t> class Mesh{
       index_t old_eid = active_element[i];
       std::set<index_t> sorted_element;
       for(size_t j=0;j<nloc;j++){
-        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        index_t new_nid = active_vertex_map[_ENList[old_eid*nloc+j]];
         sorted_element.insert(new_nid);
       }
       if(ordered_elements.find(sorted_element)==ordered_elements.end()){
         ordered_elements[sorted_element] = old_eid;
       }else{
         std::cerr<<"dup! "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc]]<<" "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc+1]]<<" "
-                 <<(*active_vertex_map)[_ENList[old_eid*nloc+2]]<<std::endl;
+                 <<active_vertex_map[_ENList[old_eid*nloc]]<<" "
+                 <<active_vertex_map[_ENList[old_eid*nloc+1]]<<" "
+                 <<active_vertex_map[_ENList[old_eid*nloc+2]]<<std::endl;
       }
     }
     std::vector<index_t> metis_element_renumber;
@@ -687,6 +823,7 @@ template<typename real_t> class Mesh{
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<double> defrag_metric(NNodes*msize);
+    std::vector<int> defrag_boundary(NElements*nloc);
 
     assert(NElements==(size_t)metis_nelements);
 
@@ -695,17 +832,14 @@ template<typename real_t> class Mesh{
     {
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NElements;i++){
-        for(size_t j=0;j<nloc;j++){
-          defrag_ENList[i*nloc+j] = 0;
-        }
+        defrag_ENList[i*nloc] = 0;
+        defrag_boundary[i*nloc] = 0;
       }
 
 #pragma omp for schedule(static)
       for(int i=0;i<(int)NNodes;i++){
-        for(size_t j=0;j<ndims;j++)
-          defrag_coords[i*ndims+j] = 0.0;
-        for(size_t j=0;j<msize;j++)
-          defrag_metric[i*msize+j] = 0.0;
+        defrag_coords[i*ndims] = 0.0;
+        defrag_metric[i*msize] = 0.0;
       }
     }
 
@@ -714,15 +848,16 @@ template<typename real_t> class Mesh{
       index_t old_eid = metis_element_renumber[i];
       index_t new_eid = i;
       for(size_t j=0;j<nloc;j++){
-        index_t new_nid = (*active_vertex_map)[_ENList[old_eid*nloc+j]];
+        index_t new_nid = active_vertex_map[_ENList[old_eid*nloc+j]];
         assert(new_nid<(index_t)NNodes);
         defrag_ENList[new_eid*nloc+j] = new_nid;
+        defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
       }
     }
 
     // Second sweep writes node data with new numbering.
-    for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
-      index_t new_nid = (*active_vertex_map)[old_nid];
+    for(size_t old_nid=0;old_nid<active_vertex_map.size();++old_nid){
+      index_t new_nid = active_vertex_map[old_nid];
       if(new_nid<0)
         continue;
 
@@ -733,6 +868,7 @@ template<typename real_t> class Mesh{
     }
 
     memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
+    memcpy(&boundary[0], &defrag_boundary[0], NElements*nloc*sizeof(int));
     memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
     memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));
 
@@ -741,8 +877,8 @@ template<typename real_t> class Mesh{
       std::vector<index_t> defrag_lnn2gnn(NNodes);
       std::vector<int> defrag_owner(NNodes);
 
-      for(size_t old_nid=0;old_nid<(*active_vertex_map).size();++old_nid){
-        index_t new_nid = (*active_vertex_map)[old_nid];
+      for(size_t old_nid=0;old_nid<active_vertex_map.size();++old_nid){
+        index_t new_nid = active_vertex_map[old_nid];
         if(new_nid<0)
           continue;
 
@@ -758,7 +894,7 @@ template<typename real_t> class Mesh{
         send_map[k].clear();
         for(std::vector<int>::iterator jt=send[k].begin();jt!=send[k].end();++jt){
           if(new_send_set[k].count(*jt)){
-            index_t new_lnn = (*active_vertex_map)[*jt];
+            index_t new_lnn = active_vertex_map[*jt];
             new_halo.push_back(new_lnn);
             send_map[k][lnn2gnn[new_lnn]] = new_lnn;
           }
@@ -771,7 +907,7 @@ template<typename real_t> class Mesh{
         recv_map[k].clear();
         for(std::vector<int>::iterator jt=recv[k].begin();jt!=recv[k].end();++jt){
           if(new_recv_set[k].count(*jt)){
-            index_t new_lnn = (*active_vertex_map)[*jt];
+            index_t new_lnn = active_vertex_map[*jt];
             new_halo.push_back(new_lnn);
             recv_map[k][lnn2gnn[new_lnn]] = new_lnn;
           }
@@ -805,9 +941,6 @@ template<typename real_t> class Mesh{
 
 #pragma omp parallel
     create_adjacency();
-
-    if(local_active_vertex_map)
-      delete active_vertex_map;
   }
 
   /// This is used to verify that the mesh and its metadata is correct.
@@ -1065,8 +1198,6 @@ template<typename real_t> class Mesh{
   template<typename _real_t> friend class Coarsen3D;
   template<typename _real_t> friend class Refine2D;
   template<typename _real_t> friend class Refine3D;
-  template<typename _real_t> friend class Surface2D;
-  template<typename _real_t> friend class Surface3D;
   template<typename _real_t> friend class VTKTools;
   template<typename _real_t> friend class CUDATools;
 
@@ -1774,6 +1905,9 @@ template<typename real_t> class Mesh{
   std::vector<real_t> _coords;
 
   size_t NNodes, NElements;
+
+  // Boundary Label
+  std::vector<int> boundary;
 
   // Adjacency lists
   std::vector< std::set<index_t> > NEList;

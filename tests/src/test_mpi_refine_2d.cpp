@@ -51,7 +51,6 @@
 #endif
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -68,11 +67,9 @@ int main(int argc, char **argv){
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
+  mesh->create_boundary();
 
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -85,7 +82,7 @@ int main(int argc, char **argv){
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
 
-  Refine2D<double> adapt(*mesh, surface);
+  Refine2D<double> adapt(*mesh);
 
   double tic = get_wtime();
   for(int i=0;i<10;i++)
@@ -96,12 +93,9 @@ int main(int argc, char **argv){
     std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
   }
   
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_2d", mesh);
-  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_surface", &surface);
 
   delete mesh;
 

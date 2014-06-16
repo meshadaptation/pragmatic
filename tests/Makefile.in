@@ -81,6 +81,8 @@ test: $(TEST_GENERIC) $(TEST2D_BIN) $(TEST3D_BIN)
 	@cp $(TEST_CUDA_BIN) $(TEST_CXX_BIN) $(TEST2D_BIN) $(TEST3D_BIN) bin/
 	python ./unittest bin
 
+binaries: $(TEST_GENERIC) $(TEST2D_BIN) $(TEST3D_BIN)
+
 test_generic: $(TEST_GENERIC)
 	@echo Test generic functionality.
 	@mkdir -p bin_generic

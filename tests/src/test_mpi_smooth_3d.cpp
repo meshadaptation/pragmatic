@@ -49,7 +49,6 @@
 #endif
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "Smooth.h"
@@ -65,11 +64,9 @@ int main(int argc, char **argv){
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
+  mesh->create_boundary();
 
-  Surface3D<double> surface(*mesh);
-  surface.find_surface(true);
-
-  MetricField3D<double> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -87,7 +84,7 @@ int main(int argc, char **argv){
   metric_field.apply_nelements(NElements);
   metric_field.update_mesh();
 
-  Smooth3D<double> smooth(*mesh, surface);
+  Smooth3D<double> smooth(*mesh);
   double tic = get_wtime();
   smooth.smooth("Laplacian");
   smooth.smooth("smart Laplacian");
@@ -97,7 +94,6 @@ int main(int argc, char **argv){
   double qrms = mesh->get_qrms();
 
   VTKTools<double>::export_vtu("../data/test_mpi_smooth_3d", mesh);
-  VTKTools<double>::export_vtu("../data/test_mpi_smooth_3d_surface", &surface);
 
   delete mesh;
 

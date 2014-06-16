@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -72,11 +71,9 @@ int main(int argc, char **argv){
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+  mesh->create_boundary();
 
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.001;
@@ -106,10 +103,10 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double> coarsen(*mesh, surface);
-  Smooth2D<double> smooth(*mesh, surface);
-  Refine2D<double> refine(*mesh, surface);
-  Swapping2D<double> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh);
+  Smooth2D<double> smooth(*mesh);
+  Refine2D<double> refine(*mesh);
+  Swapping2D<double> swapping(*mesh);
 
   time_adapt = get_wtime();
 
@@ -137,9 +134,7 @@ int main(int argc, char **argv){
   }
 
   double time_defrag = get_wtime();
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
   time_defrag = get_wtime()-time_defrag;
 
   if(verbose){
@@ -172,11 +167,12 @@ int main(int argc, char **argv){
   }
 
   VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
-  VTKTools<double>::export_vtu("../data/test_adapt_2d_surface", &surface);
 
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
+  
+  double perimeter = mesh->calculate_perimeter();
 
   delete mesh;
 
@@ -192,12 +188,18 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    if((qmean>0.8)&&(qmin>0.29))
+    if((qmean>0.8)&&(qmin>0.2))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
   }
 
+  std::cout<<"Expecting perimeter == 4: ";
+  if(fabs(perimeter-4)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail"<<std::endl;
+  
   MPI_Finalize();
 
   return 0;

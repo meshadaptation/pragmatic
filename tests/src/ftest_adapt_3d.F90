@@ -39,7 +39,7 @@ program test_adapt
   use iso_c_binding
   implicit none
 
-  integer(kind=c_int) :: NNodes, NElements, NSElements
+  integer(kind=c_int) :: NNodes, NElements
   real(c_double), allocatable, dimension(:) :: xv, yv, zv, metric
   real(c_double), parameter :: eta=0.1, dh=0.02, maxh=1.0
   
@@ -48,7 +48,7 @@ program test_adapt
 
   call pragmatic_init("../data/box10x10x10.vtu"//C_NULL_CHAR)
   
-  call pragmatic_get_info(NNodes, NElements, NSElements)
+  call pragmatic_get_info(NNodes, NElements)
 
   allocate(xv(NNodes), yv(NNodes), zv(NNodes))
   call pragmatic_get_coords(xv, yv, zv)

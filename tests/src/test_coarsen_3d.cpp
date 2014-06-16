@@ -41,7 +41,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 #include "Coarsen.h"
@@ -61,11 +60,9 @@ int main(int argc, char **argv){
   }
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+   mesh->create_boundary();
 
-  Surface3D<double> surface(*mesh);
-  surface.find_surface();
-
-  MetricField3D<double> metric_field(*mesh, surface);
+  MetricField3D<double> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -81,7 +78,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
   
-  Coarsen3D<double> adapt(*mesh, surface);
+  Coarsen3D<double> adapt(*mesh);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
@@ -93,9 +90,7 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   int nelements = mesh->get_number_elements();  
 
@@ -110,7 +105,6 @@ int main(int argc, char **argv){
   }
 
   VTKTools<double>::export_vtu("../data/test_coarsen_3d", mesh);
-  VTKTools<double>::export_vtu("../data/test_coarsen_3d_surface", &surface);
 
   if(nelements<50)
     std::cout<<"pass"<<std::endl;

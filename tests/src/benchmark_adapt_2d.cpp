@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -75,9 +74,7 @@ int main(int argc, char **argv){
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
+  mesh->create_boundary();
 
   double eta=0.00005;
   char filename[4096];
@@ -87,7 +84,7 @@ int main(int argc, char **argv){
   for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
-    MetricField2D<double> metric_field(*mesh, surface);
+    MetricField2D<double> metric_field(*mesh);
     std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
@@ -113,10 +110,10 @@ int main(int argc, char **argv){
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
 
-    Coarsen2D<double> coarsen(*mesh, surface);
-    Smooth2D<double> smooth(*mesh, surface);
-    Refine2D<double> refine(*mesh, surface);
-    Swapping2D<double> swapping(*mesh, surface);
+    Coarsen2D<double> coarsen(*mesh);
+    Smooth2D<double> smooth(*mesh);
+    Refine2D<double> refine(*mesh);
+    Swapping2D<double> swapping(*mesh);
 
     double tic, toc;
 
@@ -151,9 +148,7 @@ int main(int argc, char **argv){
       double T2 = get_wtime();
       if(t>0) time_adapt += (T2-T1);
       
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+      mesh->defragment();
       
       tic = get_wtime();
       if(I>0)

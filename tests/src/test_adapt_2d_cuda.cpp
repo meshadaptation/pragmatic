@@ -125,9 +125,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   if(rank==0) std::cout<<"Basic quality:\n";
   mesh->verify();

@@ -51,9 +51,8 @@
 template<typename real_t> class Swapping3D{
  public:
   /// Default constructor.
-  Swapping3D(Mesh<real_t> &mesh, Surface3D<real_t> &surface){
+  Swapping3D(Mesh<real_t> &mesh){
     _mesh = &mesh;
-    _surface = &surface;
 
     size_t NElements = _mesh->get_number_elements();
 
@@ -367,9 +366,6 @@ template<typename real_t> class Swapping3D{
               }
 
               if(*constrained_edges.begin() != *constrained_edges.rbegin()){
-                assert(_surface->contains_node(n[k]));
-                assert(_surface->contains_node(n[l]));
-
                 toxic = true;
                 break;
               }
@@ -728,7 +724,6 @@ template<typename real_t> class Swapping3D{
   std::vector<size_t> originalVertexDegree;
 
   Mesh<real_t> *_mesh;
-  Surface3D<real_t> *_surface;
   ElementProperty<real_t> *property;
   static const size_t ndims=3;
   static const size_t nloc=4;

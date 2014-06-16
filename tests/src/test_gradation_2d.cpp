@@ -42,7 +42,6 @@
 #include <omp.h>
 
 #include "Mesh.h"
-#include "Surface.h"
 #include "VTKTools.h"
 #include "MetricField.h"
 
@@ -69,9 +68,7 @@ int main(int argc, char **argv){
   }
   
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
-
-  Surface2D<double> surface(*mesh);
-  surface.find_surface();
+  mesh->create_boundary();
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -85,7 +82,7 @@ int main(int argc, char **argv){
       psi[i] = -1.0;
   }
   
-  MetricField2D<double> metric_field(*mesh, surface);
+  MetricField2D<double> metric_field(*mesh);
   
   metric_field.add_field(&(psi[0]), 0.2);
 
@@ -98,18 +95,16 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double> coarsen(*mesh, surface);  
-  Smooth2D<double> smooth(*mesh, surface);
-  Refine2D<double> refine(*mesh, surface);
-  Swapping2D<double> swapping(*mesh, surface);
+  Coarsen2D<double> coarsen(*mesh);  
+  Smooth2D<double> smooth(*mesh);
+  Refine2D<double> refine(*mesh);
+  Swapping2D<double> swapping(*mesh);
 
   coarsen.coarsen(L_low, L_up);
 
   if(verbose)
     if(!mesh->verify()){
-      std::vector<int> active_vertex_map;
-      mesh->defragment(&active_vertex_map);
-      surface.defragment(&active_vertex_map);
+      mesh->defragment();
       
       VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen0", mesh);
       exit(-1);
@@ -130,9 +125,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-refine", mesh);
         exit(-1);
@@ -148,9 +141,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-coarsen", mesh);
         exit(-1);
@@ -166,9 +157,7 @@ int main(int argc, char **argv){
       if(!mesh->verify()){
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after swapping.\n";
 
-        std::vector<int> active_vertex_map;
-        mesh->defragment(&active_vertex_map);
-        surface.defragment(&active_vertex_map);
+        mesh->defragment();
         
         VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
         exit(-1);
@@ -181,9 +170,7 @@ int main(int argc, char **argv){
       break;
   }
 
-  std::vector<int> active_vertex_map;
-  mesh->defragment(&active_vertex_map);
-  surface.defragment(&active_vertex_map);
+  mesh->defragment();
 
   if(verbose){
     if(rank==0)
