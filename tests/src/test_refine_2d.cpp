@@ -119,7 +119,7 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail"<<std::endl;
 
-    std::cout<<"Expecting perimeter = 4: ";
+    std::cout<<"Expecting perimeter == 4: ";
     if(fabs(perimeter-4)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else

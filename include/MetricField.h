@@ -159,6 +159,7 @@ template<typename real_t>
     size_t pNNodes = 0.5*pNElements;
 
     _mesh->_ENList.resize(pNElements*3);
+    _mesh->boundary.resize(pNElements*3);
     _mesh->_coords.resize(pNNodes*2);
     _mesh->metric.resize(pNNodes*4);
     _mesh->NNList.resize(pNNodes);
@@ -210,6 +211,7 @@ template<typename real_t>
 
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
     _mesh->_ENList.resize(pNElements*3);
+    _mesh->boundary.resize(pNElements*3);
     _mesh->_coords.resize(pNElements);
     _mesh->metric.resize(pNElements*1.5);
     _mesh->NNList.resize(pNElements/2);

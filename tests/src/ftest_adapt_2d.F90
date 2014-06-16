@@ -41,7 +41,7 @@ program test_adapt
 
   include 'mpif.h' 
 
-  integer(kind=c_int) :: NNodes, NElements, NSElements
+  integer(kind=c_int) :: NNodes, NElements
   real(c_double), allocatable, dimension(:) :: xv, yv, psi
   real(c_double), parameter :: eta=0.002
 
@@ -52,7 +52,7 @@ program test_adapt
 
   call pragmatic_init("../data/smooth_2d.vtu"//C_NULL_CHAR)
 
-  call pragmatic_get_info(NNodes, NElements, NSElements)
+  call pragmatic_get_info(NNodes, NElements)
 
   allocate(xv(NNodes), yv(NNodes))
   call pragmatic_get_coords(xv, yv)

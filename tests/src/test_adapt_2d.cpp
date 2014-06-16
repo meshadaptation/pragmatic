@@ -171,6 +171,8 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
+  
+  double perimeter = mesh->calculate_perimeter();
 
   delete mesh;
 
@@ -186,12 +188,18 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    if((qmean>0.8)&&(qmin>0.29))
+    if((qmean>0.8)&&(qmin>0.2))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
   }
 
+  std::cout<<"Expecting perimeter == 4: ";
+  if(fabs(perimeter-4)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail"<<std::endl;
+  
   MPI_Finalize();
 
   return 0;

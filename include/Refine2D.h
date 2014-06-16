@@ -83,6 +83,7 @@ template<typename real_t> class Refine2D{
 
     newVertices.resize(nthreads);
     newElements.resize(nthreads);
+    newBoundaries.resize(nthreads);
     newCoords.resize(nthreads);
     newMetric.resize(nthreads);
 
@@ -427,8 +428,8 @@ template<typename real_t> class Refine2D{
   }
 
   int refine_element(index_t eid, size_t tid){
-    // Check if this element has been erased - if so continue to next element.
     const int *n=_mesh->get_element(eid);
+    const int *boundary=&(_mesh->boundary[eid*3]);
 
     // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
     index_t newVertex[3] = {-1, -1, -1};
@@ -443,16 +444,20 @@ template<typename real_t> class Refine2D{
 
     if(refine_cnt==1){
       // Single edge split.
-      int rotated_ele[3] = {-1, -1, -1};
+      int rotated_ele[3];
+      int rotated_boundary[3];
       index_t vertexID=-1;
       for(int j=0;j<3;j++)
         if(newVertex[j] >= 0){
           vertexID = newVertex[j];
 
-          // Loop hand unrolled because compiler could not vectorise.
           rotated_ele[0] = n[j];
           rotated_ele[1] = n[(j+1)%3];
           rotated_ele[2] = n[(j+2)%3];
+
+          rotated_boundary[0] = boundary[j];
+          rotated_boundary[1] = boundary[(j+1)%3];
+          rotated_boundary[2] = boundary[(j+2)%3];
 
           break;
         }
@@ -460,6 +465,9 @@ template<typename real_t> class Refine2D{
 
       const index_t ele0[] = {rotated_ele[0], rotated_ele[1], vertexID};
       const index_t ele1[] = {rotated_ele[0], vertexID, rotated_ele[2]};
+
+      const index_t ele0_boundary[] = {rotated_boundary[0], 0, rotated_boundary[2]};
+      const index_t ele1_boundary[] = {rotated_boundary[0], rotated_boundary[1], 0};
 
       index_t ele1ID;
       ele1ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 1);
@@ -486,12 +494,13 @@ template<typename real_t> class Refine2D{
       assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
 
-      replace_element(eid, ele0);
-      append_element(ele1, ele1ID);
+      set_element(eid, ele0, ele0_boundary);
+      set_element(ele1ID, ele1, ele1_boundary);
 
       return 1;
     }else if(refine_cnt==2){
-      int rotated_ele[3] = {-1, -1, -1};
+      int rotated_ele[3];
+      int rotated_boundary[3];
       index_t vertexID[2];
       for(int j=0;j<3;j++){
         if(newVertex[j] < 0){
@@ -502,6 +511,10 @@ template<typename real_t> class Refine2D{
           rotated_ele[1] = n[(j+1)%3];
           rotated_ele[2] = n[(j+2)%3];
 
+	  rotated_boundary[0] = boundary[j];
+          rotated_boundary[1] = boundary[(j+1)%3];
+          rotated_boundary[2] = boundary[(j+2)%3];
+	  
           break;
         }
       }
@@ -514,6 +527,10 @@ template<typename real_t> class Refine2D{
       const index_t ele0[] = {rotated_ele[0], vertexID[1], vertexID[0]};
       const index_t ele1[] = {vertexID[offset], rotated_ele[1], rotated_ele[2]};
       const index_t ele2[] = {vertexID[0], vertexID[1], rotated_ele[offset+1]};
+
+      const index_t ele0_boundary[] = {0, rotated_boundary[1], rotated_boundary[2]};
+      const index_t ele1_boundary[] = {rotated_boundary[0], (offset==0)?rotated_boundary[1]:0, (offset==0)?0:rotated_boundary[2]};
+      const index_t ele2_boundary[] = {(offset==0)?rotated_boundary[2]:0, (offset==0)?0:rotated_boundary[1], 0};
 
       index_t ele0ID, ele2ID;
       ele0ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 2);
@@ -549,9 +566,9 @@ template<typename real_t> class Refine2D{
       assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
       assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
 
-      replace_element(eid, ele1);
-      append_element(ele0, ele0ID);
-      append_element(ele2, ele2ID);
+      set_element(eid, ele1, ele1_boundary);
+      set_element(ele0ID, ele0, ele0_boundary);
+      set_element(ele2ID, ele2, ele2_boundary);
 
       return 2;
     }else{ // refine_cnt==3
@@ -559,6 +576,11 @@ template<typename real_t> class Refine2D{
       const index_t ele1[] = {n[1], newVertex[0], newVertex[2]};
       const index_t ele2[] = {n[2], newVertex[1], newVertex[0]};
       const index_t ele3[] = {newVertex[0], newVertex[1], newVertex[2]};
+
+      const int ele0_boundary[] = {0, boundary[1], boundary[2]};
+      const int ele1_boundary[] = {0, boundary[2], boundary[0]};
+      const int ele2_boundary[] = {0, boundary[0], boundary[1]};
+      const int ele3_boundary[] = {0, 0, 0};
 
       index_t ele1ID, ele2ID, ele3ID;
       ele1ID = pragmatic_omp_atomic_capture(&_mesh->NElements, 3);
@@ -597,23 +619,20 @@ template<typename real_t> class Refine2D{
       assert(ele2[0]>=0 && ele2[1]>=0 && ele2[2]>=0);
       assert(ele3[0]>=0 && ele3[1]>=0 && ele3[2]>=0);
 
-      replace_element(eid, ele0);
-      append_element(ele1, ele1ID);
-      append_element(ele2, ele2ID);
-      append_element(ele3, ele3ID);
+      set_element(eid, ele0, ele0_boundary);
+      set_element(ele1ID, ele1, ele1_boundary);
+      set_element(ele2ID, ele2, ele2_boundary);
+      set_element(ele3ID, ele3, ele3_boundary);
 
       return 3;
     }
   }
-
-  inline void append_element(const index_t *elem, const index_t eid){
-    for(size_t i=0; i<nloc; ++i)
-      _mesh->_ENList[eid*nloc+i]=elem[i];
-  }
-
-  inline void replace_element(const index_t eid, const index_t *n){
-    for(size_t i=0;i<nloc;i++)
-      _mesh->_ENList[eid*nloc+i]=n[i];
+  
+  inline void set_element(const index_t eid, const index_t *element, const int *boundary){
+    for(size_t i=0; i<nloc; ++i){
+      _mesh->_ENList[eid*nloc+i]=element[i];
+      _mesh->boundary[eid*nloc+i]=boundary[i];
+    }
   }
 
   inline size_t edgeNumber(index_t eid, index_t v1, index_t v2) const{
@@ -637,6 +656,7 @@ template<typename real_t> class Refine2D{
   std::vector< std::vector<real_t> > newCoords;
   std::vector< std::vector<double> > newMetric;
   std::vector< std::vector<index_t> > newElements;
+  std::vector< std::vector<int> > newBoundaries;
   std::vector<index_t> new_vertices_per_element;
 
   std::vector<size_t> threadIdx, splitCnt;

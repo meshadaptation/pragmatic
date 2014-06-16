@@ -125,22 +125,21 @@ extern "C" {
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     if(_pragmatic_metric_field==NULL){
-
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
         MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
+	metric_field->add_field(psi, *error, *pnorm);
+	metric_field->update_mesh();
+	
         _pragmatic_metric_field = metric_field;
       }else{
         MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
+	metric_field->add_field(psi, *error, *pnorm);
+	metric_field->update_mesh();
+
         _pragmatic_metric_field = metric_field;
       }
-    }
-
-    if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField2D<double> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
-      ((MetricField2D<double> *)_pragmatic_metric_field)->update_mesh();
     }else{
-      ((MetricField3D<double> *)_pragmatic_metric_field)->add_field(psi, *error, *pnorm);
-      ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
+      std::cerr<<"WARNING: Fortran interface currently only supports adding a single field.\n";
     }
   }
 
@@ -167,8 +166,6 @@ extern "C" {
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       ((MetricField2D<double> *)_pragmatic_metric_field)->set_metric(metric);
       ((MetricField2D<double> *)_pragmatic_metric_field)->update_mesh();
-      
-      ((MetricField2D<double> *)_pragmatic_metric_field)->relax_mesh(1.0);
     }else{
       ((MetricField3D<double> *)_pragmatic_metric_field)->set_metric(metric);
       ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
