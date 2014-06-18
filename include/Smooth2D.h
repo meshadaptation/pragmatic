@@ -465,7 +465,7 @@ template<typename real_t>
         continue;
   
       for(int j=0;j<3;j++){
-        if(_mesh->boundary[i*3+j]!=0){
+        if(_mesh->boundary[i*3+j]>0){
           is_boundary[n[(j+1)%3]] = true;
           is_boundary[n[(j+2)%3]] = true;
         }
