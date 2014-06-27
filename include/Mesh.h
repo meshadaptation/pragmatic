@@ -251,22 +251,31 @@ template<typename real_t> class Mesh{
 	if(_ENList[i*4]==-1)
 	  continue;
 	
-	for(int j=0;j<4;j++){  
-	  std::set<int> edge_neighbours;
-	  set_intersection(NEList[_ENList[i*4+(j+1)%4]].begin(), NEList[_ENList[i*4+(j+1)%4]].end(),
-			   NEList[_ENList[i*4+(j+2)%4]].begin(), NEList[_ENList[i*4+(j+2)%4]].end(),
-			   inserter(edge_neighbours, edge_neighbours.begin()));
-	  
-	  std::set<int> neighbours;
-	  set_intersection(NEList[_ENList[i*4+(j+3)%4]].begin(), NEList[_ENList[i*4+(j+4)%4]].end(),
-			   edge_neighbours.begin(), edge_neighbours.end(),
-			   inserter(neighbours, neighbours.begin()));
-	  
-	  if(neighbours.size()==2){
-	    if(*neighbours.begin()==i)
-	      boundary[i*4+j] = *neighbours.rbegin();
-	    else
-	      boundary[i*4+j] = *neighbours.begin();
+	for(int j=0;j<4;j++){
+	  int n1 = _ENList[i*4+(j+1)%4];
+	  int n2 = _ENList[i*4+(j+2)%4];
+	  int n3 = _ENList[i*4+(j+3)%4];
+
+	  if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
+	    std::set<int> edge_neighbours;
+	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
+			     NEList[n2].begin(), NEList[n2].end(),
+			     inserter(edge_neighbours, edge_neighbours.begin()));
+	    
+	    std::set<int> neighbours;
+	    set_intersection(NEList[n3].begin(), NEList[n3].end(),
+			     edge_neighbours.begin(), edge_neighbours.end(),
+			     inserter(neighbours, neighbours.begin()));
+	    
+	    if(neighbours.size()==2){
+	      if(*neighbours.begin()==i)
+		boundary[i*4+j] = *neighbours.rbegin();
+	      else
+		boundary[i*4+j] = *neighbours.begin();
+	    }
+	  }else{
+	    // This is a halo facet.
+	    boundary[i*4+j] = -1;
 	  }
 	}
       }
@@ -391,48 +400,149 @@ template<typename real_t> class Mesh{
     return mean;
   }
 
-  /// Calculate perimeter (2D only)
+  /// Calculate perimeter
   double calculate_perimeter(){
-    assert(ndims==2);
     int NElements = get_number_elements();
-    long double total_length=0;
-    double downcast_total_length=0;
-    
-    if(num_processes>1){
-     for(int i=0;i<NElements;i++){
-        for(int j=0;j<3;j++){
-          int n1 = _ENList[i*nloc+(j+1)%3];
-          int n2 = _ENList[i*nloc+(j+2)%3];
-
-          if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
-	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+    if(ndims==2){
+      long double total_length=0;
+      double downcast_total_length=0;
+      
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+	  for(int j=0;j<3;j++){
+	    int n1 = _ENList[i*nloc+(j+1)%3];
+	    int n2 = _ENList[i*nloc+(j+2)%3];
 	    
-            total_length += sqrt(dx*dx+dy*dy);
-          }
-        }
-     }
-     
-     downcast_total_length = total_length;
-     MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-    }else{
-      for(int i=0;i<NElements;i++){
-        for(int j=0;j<3;j++){
-          int n1 = _ENList[i*nloc+(j+1)%3];
-          int n2 = _ENList[i*nloc+(j+2)%3];
-
-          if(boundary[i*nloc+j]>0){
-	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	    if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+	      double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	      double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	      
+	      total_length += sqrt(dx*dx+dy*dy);
+	    }
+	  }
+	}
+	
+	downcast_total_length = total_length;
+	MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+	for(int i=0;i<NElements;i++){
+	  for(int j=0;j<3;j++){
+	    int n1 = _ENList[i*nloc+(j+1)%3];
+	    int n2 = _ENList[i*nloc+(j+2)%3];
 	    
-            total_length += sqrt(dx*dx+dy*dy);
-          }
-        }
+	    if(boundary[i*nloc+j]>0){
+	      double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	      double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	      
+	      total_length += sqrt(dx*dx+dy*dy);
+	    }
+	  }
+	}
+	downcast_total_length = total_length; 
       }
-      downcast_total_length = total_length; 
+      
+      return downcast_total_length;
+    }else{
+      // 3D - the perimeter is the surface area.
+      long double total_area=0;
+      double downcast_total_area=0;
+      
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+	  for(int j=0;j<4;j++){
+	    if(boundary[i*nloc+j]<=0)
+	      continue;
+	    
+	    int n1 = n[(j+1)%4];
+	    int n2 = n[(j+2)%4];
+	    int n3 = n[(j+3)%4];
+	    
+	    // Don't sum if it's not ours
+	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+	      continue;
+	    
+	    const double *x1 = get_coords(n1);
+	    const double *x2 = get_coords(n2);
+	    const double *x3 = get_coords(n3);
+	    
+	    // Use Heron's Formula
+	    long double a;
+	    {
+	      long double dx = (x1[0]-x2[0]);
+	      long double dy = (x1[1]-x2[1]);
+	      long double dz = (x1[2]-x2[2]);
+	      a = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double b;
+	    {
+	      long double dx = (x1[0]-x3[0]);
+	      long double dy = (x1[1]-x3[1]);
+	      long double dz = (x1[2]-x3[2]);
+	      b = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double c;
+	    {
+	      long double dx = (x2[0]-x3[0]);
+	      long double dy = (x2[1]-x3[1]);
+	      long double dz = (x2[2]-x3[2]);
+	      c = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double s = 0.5*(a+b+c);
+	    
+	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+	  }
+	}
+	
+	downcast_total_area = total_area;
+	MPI_Allreduce(MPI_IN_PLACE, &downcast_total_area, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+	  for(int j=0;j<4;j++){
+	    if(boundary[i*nloc+j]<=0)
+	      continue;
+	    
+	    int n1 = n[(j+1)%4];
+	    int n2 = n[(j+2)%4];
+	    int n3 = n[(j+3)%4];
+	    
+	    const double *x1 = get_coords(n1);
+	    const double *x2 = get_coords(n2);
+	    const double *x3 = get_coords(n3);
+	    
+	    // Use Heron's Formula
+	    long double a;
+	    {
+	      long double dx = (x1[0]-x2[0]);
+	      long double dy = (x1[1]-x2[1]);
+	      long double dz = (x1[2]-x2[2]);
+	      a = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double b;
+	    {
+	      long double dx = (x1[0]-x3[0]);
+	      long double dy = (x1[1]-x3[1]);
+	      long double dz = (x1[2]-x3[2]);
+	      b = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double c;
+	    {
+	      long double dx = (x2[0]-x3[0]);
+	      long double dy = (x2[1]-x3[1]);
+	      long double dz = (x2[2]-x3[2]);
+	      c = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double s = 0.5*(a+b+c);
+	    
+	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+	  }
+	}
+	downcast_total_area = total_area; 
+      }
+      
+      return downcast_total_area;
     }
-    
-    return downcast_total_length;
   }
 
   /// Get the edge length RMS value in metric space.

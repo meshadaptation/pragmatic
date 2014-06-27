@@ -38,6 +38,8 @@
 #ifndef SMOOTH3D_H
 #define SMOOTH3D_H
 
+#include "Colour.h"
+
 /*! \brief Applies Laplacian smoothen in metric space.
  */
 template<typename real_t>
@@ -54,8 +56,7 @@ template<typename real_t>
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
-    sigma_q = 0.0001;
-    good_q = 0.7;
+    epsilon_q = 1.0e-6;
 
     // Set the orientation of elements.
     property = NULL;
@@ -74,8 +75,7 @@ template<typename real_t>
 
     kernels["Laplacian"]       = &Smooth3D<real_t>::laplacian_3d_kernel;
     kernels["smart Laplacian"] = &Smooth3D<real_t>::smart_laplacian_3d_kernel;
-    //	kernels["smart Laplacian search"]	= &Smooth3D<real_t>::smart_laplacian_search_3d_kernel;
-    //	kernels["optimisation Linf"]			= &Smooth3D<real_t>::optimisation_linf_3d_kernel;
+    kernels["optimisation Linf"] = &Smooth3D<real_t>::optimisation_linf_3d_kernel;
   }
 
   /// Default destructor.
@@ -84,21 +84,25 @@ template<typename real_t>
   }
 
   // Smooth the mesh using a given method. Valid methods are:
-  // "Laplacian", "smart Laplacian", "smart Laplacian search", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=10){
+  // "Laplacian", "smart Laplacian", "optimisation Linf"
+  void smooth(std::string method, int max_iterations=10, double quality_tol=0.5){
+    good_q = quality_tol;
+
     init_cache(method);
 
     std::vector<int> halo_elements;
     int NElements = _mesh->get_number_elements();
-    for(int i=0;i<NElements;i++){
-      const int *n=_mesh->get_element(i);
-      if(n[0]<0)
-        continue;
+    if(mpi_nparts>1){
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
 
-      for(size_t j=0;j<nloc;j++){
-        if(!_mesh->is_owned_node(n[j])){
-          halo_elements.push_back(i);
-          break;
+        for(size_t j=0;j<nloc;j++){
+          if(!_mesh->is_owned_node(n[j])){
+            halo_elements.push_back(i);
+            break;
+          }
         }
       }
     }
@@ -108,8 +112,8 @@ template<typename real_t>
     if(kernels.count(method)){
       smooth_kernel = kernels[method];
     }else{
-      std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"smart Laplacian\"\n";
-      smooth_kernel = kernels["smart Laplacian"];
+      std::cerr<<"WARNING: Unknown smoothing method \""<<method<<"\"\nUsing \"optimisation Linf\"\n";
+      smooth_kernel = kernels["optimisation Linf"];
     }
 
     // Use this to keep track of vertices that are still to be visited.
@@ -120,17 +124,17 @@ template<typename real_t>
     // vertex moved into the active_vertex list.
     int max_colour = colour_sets.rbegin()->first;
 #ifdef HAVE_MPI
-    if(mpi_nparts>1)
+    if(mpi_nparts>1){
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+    }
 #endif
 
-    int nav = 0;
 #pragma omp parallel
     {
       for(int ic=1;ic<=max_colour;ic++){
         if(colour_sets.count(ic)){
           int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(static)
+#pragma omp for schedule(guided)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
 
@@ -142,72 +146,48 @@ template<typename real_t>
           }
         }
 
-#pragma omp master
-        {
+#pragma omp single
+        if(mpi_nparts>1){
           _mesh->halo_update(&(_mesh->_coords[0]), ndims);
           _mesh->halo_update(&(_mesh->metric[0]), msize);
 
           for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
             quality[*ie] = -1;
         }
-#pragma omp barrier
       }
 
       for(int iter=1;iter<max_iterations;iter++){
         for(int ic=1;ic<=max_colour;ic++){
           if(colour_sets.count(ic)){
             int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(guided)
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
 
               // Only process if it is active.
-              if(!active_vertices[node])
-                continue;
+              if(active_vertices[node]){
+                // Reset mask
+                active_vertices[node] = 0;
 
-              // Reset mask
-              active_vertices[node] = 0;
-
-              if((this->*smooth_kernel)(node)){
-                for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                  active_vertices[*it] = 1;
+                if((this->*smooth_kernel)(node)){
+                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                    active_vertices[*it] = 1;
+                  }
                 }
               }
             }
           }
-#pragma omp master
-          {
-            _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-            _mesh->halo_update(&(_mesh->metric[0]), msize);
-
-            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-              quality[*ie] = -1;
-          }
-#pragma omp barrier
-        }
-
-        // Count number of active vertices.
+          if(mpi_nparts>1){
 #pragma omp single
-        {
-          nav = 0;
-        }
-#pragma omp for schedule(static) reduction(+:nav)
-        for(int i=0;i<NNodes;i++){
-          if(_mesh->is_owned_node(i))
-            nav += active_vertices[i];
-        }
-#ifdef HAVE_MPI
-        if(mpi_nparts>1){
-#pragma omp master
-          {
-            MPI_Allreduce(MPI_IN_PLACE, &nav, 1, MPI_INT, MPI_SUM, _mesh->get_mpi_comm());
+            {
+              _mesh->halo_update(&(_mesh->_coords[0]), ndims);
+              _mesh->halo_update(&(_mesh->metric[0]), msize);
+
+              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+                quality[*ie] = -1;
+            }
           }
         }
-#endif
-
-#pragma omp barrier
-        if(nav==0)
-          break;
       }
     }
 
@@ -216,48 +196,47 @@ template<typename real_t>
 
   bool laplacian_3d_kernel(index_t node){
     real_t p[3];
+    bool valid =laplacian_3d_kernel(node, p);
+    if(!valid)
+      return false;
+    
     double mp[6];
-    if(laplacian_3d_kernel(node, p, mp)){
-      // Looks good so lets copy it back;
-      for(size_t j=0;j<3;j++)
-        _mesh->_coords[node*3+j] = p[j];
-
-      for(size_t j=0;j<6;j++)
-        _mesh->metric[node*6+j] = mp[j];
-
-      return true;
-    }
-    return false;
+    valid = generate_location_3d(node, p, mp);
+    if(!valid)
+      return false;
+    
+    for(size_t j=0;j<3;j++)
+      _mesh->_coords[node*3+j] = p[j];
+    
+    for(size_t j=0;j<6;j++)
+      _mesh->metric[node*6+j] = mp[j];
+    
+    return true;
   }
 
-  bool laplacian_3d_kernel(index_t node, real_t *p, double *mp){
-    const real_t *normal[]={NULL, NULL};
-    std::vector<index_t> adj_nodes;
-    adj_nodes.insert(adj_nodes.end(), _mesh->NNList[node].begin(), _mesh->NNList[node].end());
+  bool laplacian_3d_kernel(index_t node, real_t *p){
+    std::set<index_t> patch(_mesh->get_node_patch(node));
+
+    real_t x0 = get_x(node);
+    real_t y0 = get_y(node);
+    real_t z0 = get_z(node);
 
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-    for(typename std::vector<index_t>::const_iterator il=adj_nodes.begin();il!=adj_nodes.end();++il){
-      const real_t *m0 = _mesh->get_metric(node);
-      const real_t *m1 = _mesh->get_metric(*il);
-      
-      real_t ml00 = 0.5*(m0[0] + m1[0]);
-      real_t ml01 = 0.5*(m0[1] + m1[1]);
-      real_t ml02 = 0.5*(m0[2] + m1[2]);
-      real_t ml11 = 0.5*(m0[3] + m1[3]);
-      real_t ml12 = 0.5*(m0[4] + m1[4]);
-      real_t ml22 = 0.5*(m0[5] + m1[5]);
 
-      q[0] += ml00*get_x(*il) + ml01*get_y(*il) + ml02*get_z(*il);
-      q[1] += ml01*get_x(*il) + ml11*get_y(*il) + ml12*get_z(*il);
-      q[2] += ml02*get_x(*il) + ml12*get_y(*il) + ml22*get_z(*il);
+    const real_t *m = _mesh->get_metric(node);
+    for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
+      real_t x = get_x(*il)-x0;
+      real_t y = get_y(*il)-y0;
+      real_t z = get_z(*il)-z0;
 
-      A[0] += ml00;
-      A[1] += ml01;
-      A[2] += ml02;
-      A[4] += ml11;
-      A[5] += ml12;
-      A[8] += ml22;
+      q[0] += m[0]*x + m[1]*y + m[2]*z;
+      q[1] += m[1]*x + m[3]*y + m[4]*z;
+      q[2] += m[2]*x + m[4]*y + m[6]*z;
+
+      A[0] += m[0]; A[1] += m[1]; A[2] += m[2];
+                    A[4] += m[3]; A[5] += m[4];
+                                  A[8] += m[6];
     }
     A[3] = A[1];
     A[6] = A[2];
@@ -270,172 +249,295 @@ template<typename real_t>
     for(int i=0;i<3;i++)
       p[i] = b[i];
 
-    if(!pragmatic_isnormal(p[0]+p[1]+p[2])){
-      errno = 0;
-      return false;
-    }
-
-    // If this is on the surface or edge, then make a roundoff correction.
-    for(int i=0;i<2;i++)
-      if(normal[i]!=NULL){
-        p[0] -= (p[0]-get_x(node))*fabs(normal[i][0]);
-        p[1] -= (p[1]-get_y(node))*fabs(normal[i][1]);
-        p[2] -= (p[2]-get_z(node))*fabs(normal[i][2]);
-      }
-
-    // Interpolate metric at this new position.
-    real_t l[4], L;
-    int best_e;
-    bool inverted=false;
-    // 5 bisections along the search line
-    for(size_t bisections=0;bisections<5;bisections++){
-      // Reset values
-      for(int i=0;i<4;i++)
-        l[i]=-1.0;
-      L=-1;
-      best_e=-1;
-      inverted=false;
-      real_t tol=-1;
-
-      for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-        const index_t *n=_mesh->get_element(*ie);
-        assert(n[0]>=0);
-
-        real_t vectors[] = {get_x(n[0]), get_y(n[0]), get_z(n[0]),
-                            get_x(n[1]), get_y(n[1]), get_z(n[1]),
-                            get_x(n[2]), get_y(n[2]), get_z(n[2]),
-                            get_x(n[3]), get_y(n[3]), get_z(n[3])};
-        real_t *x0 = vectors;
-        real_t *x1 = vectors+3;
-        real_t *x2 = vectors+6;
-        real_t *x3 = vectors+9;
-
-        real_t *r[4];
-        for(int iloc=0;iloc<4;iloc++)
-          if(n[iloc]==node){
-            r[iloc] = p;
-          }else{
-            r[iloc] = vectors+3*iloc;
-          }
-        /* Check for inversion by looking at the volume of element who
-           node is being moved.*/
-        real_t volume = property->volume(r[0], r[1], r[2], r[3]);
-        if(volume<=0){
-          inverted = true;
-          break;
-        }
-
-        real_t ll[4];
-        ll[0] = property->volume(p,  x1, x2, x3);
-        ll[1] = property->volume(x0, p,  x2, x3);
-        ll[2] = property->volume(x0, x1, p,  x3);
-        ll[3] = property->volume(x0, x1, x2, p);
-
-        real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
-        if(best_e<0){
-          tol = min_l;
-          best_e = *ie;
-          for(int i=0;i<4;i++)
-            l[i] = ll[i];
-          L = property->volume(x0, x1, x2, x3);
-        }else{
-          if(min_l>tol){
-            tol = min_l;
-            best_e = *ie;
-            for(int i=0;i<4;i++)
-              l[i] = ll[i];
-            L = property->volume(x0, x1, x2, x3);
-          }
-        }
-      }
-      if(inverted){
-        p[0] = (get_x(node)+p[0])/2;
-        p[1] = (get_y(node)+p[1])/2;
-        p[2] = (get_z(node)+p[2])/2;
-      }else{
-        break;
-      }
-    }
-
-    if(inverted)
-      return false;
-
-    {
-      const index_t *n=_mesh->get_element(best_e);
-      assert(n[0]>=0);
-
-      for(size_t i=0;i<6;i++)
-        mp[i] =
-          (l[0]*_mesh->metric[n[0]*6+i]+
-           l[1]*_mesh->metric[n[1]*6+i]+
-           l[2]*_mesh->metric[n[2]*6+i]+
-           l[3]*_mesh->metric[n[3]*6+i])/L;
-    }
+    p[0] += x0;
+    p[1] += y0;
+    p[2] += z0;
 
     return true;
   }
 
   bool smart_laplacian_3d_kernel(index_t node){
     real_t p[3];
+    if(!laplacian_3d_kernel(node, p))
+      return false;
+    
     double mp[6];
-    if(!laplacian_3d_kernel(node, p, mp))
+    bool valid = generate_location_3d(node, p, mp);
+    if(!valid)
       return false;
-
-    // Check if this positions improves the local mesh quality.
-    std::map<int, real_t> new_quality;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      if(n[0]<0)
-        continue;
-
-      int iloc = 0;
-      while(n[iloc]!=(int)node){
-        iloc++;
-      }
-      int loc1 = (iloc+1)%4;
-      int loc2 = (iloc+2)%4;
-      int loc3 = (iloc+3)%4;
-
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-      const real_t *x3 = _mesh->get_coords(n[loc3]);
-
-      new_quality[*ie] = property->lipnikov(p, x1, x2, x3,
-                                            mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]), _mesh->get_metric(n[loc3]));
-    }
-
-    real_t min_q=0;
-    {
-      typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();
-      min_q = quality[*ie];
-      ++ie;
-      for(;ie!=_mesh->NEList[node].end();++ie)
-        min_q = std::min(min_q, quality[*ie]);
-    }
-    real_t new_min_q=0;
-    {
-      typename std::map<int, real_t>::iterator ie=new_quality.begin();
-      new_min_q = ie->second;
-      ++ie;
-      for(;ie!=new_quality.end();++ie)
-        new_min_q = std::min(new_min_q, ie->second);
-    }
-
-    // Check if this is an improvement.
-    if(new_min_q-min_q<sigma_q)
+    
+    real_t functional = functional_Linf(node, p, mp);
+    real_t functional_orig = functional_Linf(node);
+    
+    if(functional-functional_orig<epsilon_q)
       return false;
-
-    // Looks good so lets copy it back;
-    for(typename std::map<int, real_t>::const_iterator it=new_quality.begin();it!=new_quality.end();++it)
-      quality[it->first] = it->second;
 
     for(size_t j=0;j<3;j++)
       _mesh->_coords[node*3+j] = p[j];
-
+    
     for(size_t j=0;j<6;j++)
       _mesh->metric[node*6+j] = mp[j];
-
+    
+    // Reset quality cache.
+    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+      const index_t *n=_mesh->get_element(*ie);
+      
+      const double *x0 = _mesh->get_coords(n[0]);
+      const double *x1 = _mesh->get_coords(n[1]);
+      const double *x2 = _mesh->get_coords(n[2]);
+      const double *x3 = _mesh->get_coords(n[3]);
+      
+      const double *m0 = _mesh->get_metric(n[0]);
+      const double *m1 = _mesh->get_metric(n[1]);
+      const double *m2 = _mesh->get_metric(n[2]);
+      const double *m3 = _mesh->get_metric(n[3]);
+      
+      quality[*ie] = property->lipnikov(x0, x1, x2, x3,
+					m0, m1, m2, m3);
+    }
+    
     return true;
+  }
+  
+
+  bool optimisation_linf_3d_kernel(index_t n0){
+    bool smart_update = smart_laplacian_3d_kernel(n0);
+    
+    const double *m0 = _mesh->get_metric(n0);
+    const double *x0 = _mesh->get_coords(n0);
+    
+    // Find the worst element.
+    std::pair<double, index_t> worst_element(DBL_MAX, -1);
+    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
+      if(quality[*it]<worst_element.first)
+	worst_element = std::pair<double, index_t>(quality[*it], *it);
+    }
+    assert(worst_element.second!=-1);
+    
+    // Jump out if already good enough.
+    if(worst_element.first>good_q)
+      return smart_update;
+
+    // Find direction of steepest ascent for quality of worst element.
+    double search[3];
+    {
+      const index_t *n=_mesh->get_element(worst_element.second);
+      size_t loc=0;
+      for(;loc<4;loc++)
+	if(n[loc]==n0)
+	  break;
+      
+      int n1, n2, n3;
+      switch(loc){
+      case 0:
+	n1 = n[1];
+	n2 = n[2];
+	n3 = n[3];
+	break;
+      case 1:
+	n1 = n[2];
+	n2 = n[0];
+	n3 = n[3];
+	break;
+      case 2:
+	n1 = n[0];
+	n2 = n[1];
+	n3 = n[3];
+	break;
+      case 3:
+	n1 = n[0];
+	n2 = n[2];
+	n3 = n[1];
+	break;
+      }
+      
+      const double *x1 = _mesh->get_coords(n1);
+      const double *x2 = _mesh->get_coords(n2);
+      const double *x3 = _mesh->get_coords(n3);
+      
+      double grad[3];
+      property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
+      
+      double mag = sqrt(grad[0]*grad[0] + grad[1]*grad[1] + grad[2]*grad[2]);
+      if(!std::isnormal(mag)){
+         std::cout<<"mag issues "<<mag<<", "<<grad[0]<<", "<<grad[1]<<", "<<grad[2]<<std::endl;
+         std::cout<<n0<<", "<<n1<<", "<<n2<<", "<<n3<<std::endl;
+         std::cout<<x0[0]<<", "<<x0[1]<<", "<<x0[2]<<std::endl;
+         std::cout<<x1[0]<<", "<<x1[1]<<", "<<x1[2]<<std::endl;
+         std::cout<<x2[0]<<", "<<x2[1]<<", "<<x2[2]<<std::endl;
+         std::cout<<x3[0]<<", "<<x3[1]<<", "<<x3[2]<<std::endl;
+         std::cout<<m0[0]<<", "<<m0[1]<<", "<<m0[2]<<", "<<m0[3]<<", "<<m0[4]<<", "<<m0[5]<<std::endl;
+         std::cout<<"This usually means that the metric field is rubbish\n";
+      }
+      assert(std::isnormal(mag));
+      
+      for(int i=0;i<3;i++)
+        search[i] = grad[i]/mag;
+    }
+
+    // Estimate how far we move along this search path until we make
+    // another element of a simular quality to the current worst. This
+    // is effictively a simplex method for linear programming.
+    double alpha;
+    {
+      const index_t *n=_mesh->get_element(worst_element.second);
+      const double *x1 = _mesh->get_coords(n[1]);
+      const double *x2 = _mesh->get_coords(n[2]);
+      const double *x3 = _mesh->get_coords(n[3]);
+
+      double bbox[] = {x0[0], x0[0], x0[1], x0[1], x0[2], x0[2]};
+      bbox[0] = std::min(std::min(bbox[0], x1[0]), std::min(x2[0], x3[0]));
+      bbox[1] = std::max(std::max(bbox[0], x1[0]), std::max(x2[0], x3[0]));
+
+      bbox[2] = std::min(std::min(bbox[1], x1[1]), std::min(x2[1], x3[1]));
+      bbox[3] = std::max(std::max(bbox[1], x1[1]), std::max(x2[1], x3[1]));
+
+      bbox[4] = std::min(std::min(bbox[2], x1[2]), std::min(x2[2], x3[2]));
+      bbox[5] = std::max(std::max(bbox[2], x1[2]), std::max(x2[2], x3[2]));
+
+      alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/3.0;
+    }
+    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
+      if(*it==worst_element.second)
+        continue;
+
+      const index_t *n=_mesh->get_element(*it);
+      size_t loc=0;
+      for(;loc<4;loc++)
+        if(n[loc]==n0)
+	  break;
+
+      int n1, n2, n3;
+      switch(loc){
+      case 0:
+	n1 = n[1];
+	n2 = n[2];
+	n3 = n[3];
+	break;
+      case 1:
+	n1 = n[2];
+	n2 = n[0];
+	n3 = n[3];
+	break;
+      case 2:
+	n1 = n[0];
+	n2 = n[1];
+	n3 = n[3];
+	break;
+      case 3:
+	n1 = n[0];
+	n2 = n[2];
+	n3 = n[1];
+	break;
+      }
+      
+      const double *x1 = _mesh->get_coords(n1);
+      const double *x2 = _mesh->get_coords(n2);
+      const double *x3 = _mesh->get_coords(n3);
+	
+      double grad[3];
+      property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
+	
+      double new_alpha = (epsilon_q+worst_element.first-quality[*it])/(search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]);
+
+      if(new_alpha>0)
+        alpha = std::min(alpha, new_alpha);
+    }
+    
+    bool linf_update;
+    for(int isearch=0;isearch<10;isearch++){
+      linf_update = false;
+      
+      // Only want to step half that distance so we do not degrade the other elements too much.
+      alpha*=0.5;
+      
+      double new_x0[3];
+      for(int i=0;i<3;i++){
+        new_x0[i] = x0[i] + alpha*search[i];
+      }
+
+      double new_m0[6];
+      bool valid = generate_location_3d(n0, new_x0, new_m0);
+      
+      if(!valid)
+        continue;
+
+      // Need to check that we have not decreased the Linf norm. Start by assuming the best.
+      linf_update = true;
+      std::vector<double> new_quality;
+      for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
+	const index_t *n=_mesh->get_element(*it);
+	size_t loc=0;
+	for(;loc<4;loc++)
+	  if(n[loc]==n0)
+	    break;
+
+	int n1, n2, n3;
+	switch(loc){
+	case 0:
+	  n1 = n[1];
+	  n2 = n[2];
+	  n3 = n[3];
+	  break;
+	case 1:
+	  n1 = n[2];
+	  n2 = n[0];
+	  n3 = n[3];
+	  break;
+	case 2:
+	  n1 = n[0];
+	  n2 = n[1];
+	  n3 = n[3];
+	  break;
+	case 3:
+	  n1 = n[0];
+	  n2 = n[2];
+	  n3 = n[1];
+	  break;
+	}
+	
+	const double *x1 = _mesh->get_coords(n1);
+	const double *x2 = _mesh->get_coords(n2);
+	const double *x3 = _mesh->get_coords(n3);
+	
+	
+	const double *m1 = _mesh->get_metric(n1);
+	const double *m2 = _mesh->get_metric(n2);
+	const double *m3 = _mesh->get_metric(n3);
+	
+        double new_q = property->lipnikov(new_x0, x1, x2, x3,
+				          new_m0, m1, m2, m3);
+
+        if(new_q>worst_element.first){
+	  new_quality.push_back(new_q);
+	}else{
+	  linf_update = false;
+	  break;
+	}
+      }
+      
+      if(!linf_update)
+        continue;
+
+      // Update information
+      // go backwards and pop quality
+      assert(_mesh->NEList[n0].size()==new_quality.size());
+      for(typename std::set<index_t>::const_reverse_iterator it=_mesh->NEList[n0].rbegin();it!=_mesh->NEList[n0].rend();++it){
+	quality[*it] = new_quality.back();
+	new_quality.pop_back();
+      }
+      assert(new_quality.empty());
+      
+      for(size_t i=0;i<3;i++)
+        _mesh->_coords[n0*3+i] = new_x0[i];
+      
+      for(size_t i=0;i<6;i++)
+        _mesh->metric[n0*6+i] = new_m0[i];
+
+      break;
+    }
+  
+    return smart_update || linf_update;
   }
 
  private:
@@ -443,51 +545,36 @@ template<typename real_t>
     colour_sets.clear();
 
     int NNodes = _mesh->get_number_nodes();
-    assert(NNodes==(int)_mesh->NNList.size());
-
-    std::vector<size_t> nedges(NNodes);
-    size_t sum = 0;
-    for(int i=0;i<NNodes;i++){
-      size_t cnt = _mesh->NNList[i].size();
-      nedges[i] = cnt;
-      sum+=cnt;
-    }
-
-    std::vector<size_t> csr_edges(sum);
-    sum=0;
-    for(int i=0;i<NNodes;i++){
-      for(typename std::vector<index_t>::iterator it=_mesh->NNList[i].begin();it!=_mesh->NNList[i].end();++it){
-        csr_edges[sum++] = *it;
-      }
-    }
-
     std::vector<char> colour(NNodes);
     Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
 
     int NElements = _mesh->get_number_elements();
     std::vector<bool> is_boundary(NNodes, false);
     for(int i=0;i<NElements;i++){
-      if(_mesh->_ENList[i*4]==-1)
+      const int *n=_mesh->get_element(i);
+      if(n[0]==-1)
         continue;
-
+  
       for(int j=0;j<4;j++){
         if(_mesh->boundary[i*4+j]>0){
-          for(int k=1;k<4;k++)
-            is_boundary[_mesh->_ENList[i*4+(j+k)%4]] = true;
+	  is_boundary[n[(j+1)%4]] = true;
+	  is_boundary[n[(j+2)%4]] = true;
+	  is_boundary[n[(j+3)%4]] = true;
         }
       }
     }
 
     for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i))||is_boundary[i])
+      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||is_boundary[i])
         continue;
+
       colour_sets[colour[i]].push_back(i);
     }
 
     quality.resize(NElements);
 #pragma omp parallel
     {
-#pragma omp for schedule(static)
+#pragma omp for schedule(guided)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
@@ -546,27 +633,122 @@ template<typename real_t>
     return patch_quality;
   }
   
-  real_t functional_Linf(index_t node, const real_t *p, const real_t *mp) const{
+  real_t functional_Linf(index_t n0, const real_t *p, const real_t *mp) const{
     real_t functional = DBL_MAX;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+    for(typename std::set<index_t>::iterator ie=_mesh->NEList[n0].begin();ie!=_mesh->NEList[n0].end();++ie){
       const index_t *n=_mesh->get_element(*ie);
-      assert(n[0]>=0);
-      int iloc = 0;
-
-      while(n[iloc]!=(int)node){
-        iloc++;
+      size_t loc=0;
+      for(;loc<4;loc++)
+	if(n[loc]==n0)
+	  break;
+      
+      int n1, n2, n3;
+      switch(loc){
+      case 0:
+	n1 = n[1];
+	n2 = n[2];
+	n3 = n[3];
+	break;
+      case 1:
+	n1 = n[2];
+	n2 = n[0];
+	n3 = n[3];
+	break;
+      case 2:
+	n1 = n[0];
+	n2 = n[1];
+	n3 = n[3];
+	break;
+      case 3:
+	n1 = n[0];
+	n2 = n[2];
+	n3 = n[1];
+	break;
       }
-      int loc1 = (iloc+1)%3;
-      int loc2 = (iloc+2)%3;
+      
+      const double *x1 = _mesh->get_coords(n1);
+      const double *x2 = _mesh->get_coords(n2);
+      const double *x3 = _mesh->get_coords(n3);
+      
+      const double *m1 = _mesh->get_metric(n1);
+      const double *m2 = _mesh->get_metric(n2);
+      const double *m3 = _mesh->get_metric(n3);
+      
+      real_t fnl = property->lipnikov(p, x1, x2, x3,
+                                      mp,m1, m2, m3);
 
-      const real_t *x1 = _mesh->get_coords(n[loc1]);
-      const real_t *x2 = _mesh->get_coords(n[loc2]);
-
-      real_t fnl = property->lipnikov(p, x1, x2,
-                                      mp, _mesh->get_metric(n[loc1]), _mesh->get_metric(n[loc2]));
       functional = std::min(functional, fnl);
     }
     return functional;
+  }
+
+  bool generate_location_3d(index_t node, const real_t *p, double *mp){
+    // Interpolate metric at this new position.
+    real_t l[]={-1, -1, -1, -1};
+    int best_e=-1;
+    real_t tol=-1;
+
+    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+      const index_t *n=_mesh->get_element(*ie);
+      assert(n[0]>=0);
+
+      const real_t *x0 = _mesh->get_coords(n[0]);
+      const real_t *x1 = _mesh->get_coords(n[1]);
+      const real_t *x2 = _mesh->get_coords(n[2]);
+      const real_t *x3 = _mesh->get_coords(n[3]);
+
+      /* Check for inversion by looking at the volume of element who
+         node is being moved.*/
+      real_t volume;
+      if(n[0]==node){
+        volume = property->volume(p, x1, x2, x3);
+      }else if(n[1]==node){
+        volume = property->volume(x0, p, x2, x3);
+      }else if(n[2]==node){
+        volume = property->volume(x0, x1, p, x3);
+      }else{
+        volume = property->volume(x0, x1, x2, p);
+      }
+      if(volume<0)
+        return false;
+
+      real_t L = property->volume(x0, x1, x2, x3);
+
+      real_t ll[4];
+      ll[0] = property->volume(p,  x1, x2, x3)/L;
+      ll[1] = property->volume(x0, p,  x2, x3)/L;
+      ll[2] = property->volume(x0, x1, p,  x3)/L;
+      ll[3] = property->volume(x0, x1, x2, p )/L;
+
+      real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
+      if(best_e==-1){
+        tol = min_l;
+        best_e = *ie;
+        for(int i=0;i<4;i++)
+          l[i] = ll[i];
+      }else{
+        if(min_l>tol){
+          tol = min_l;
+          best_e = *ie;
+          for(int i=0;i<4;i++)
+            l[i] = ll[i];
+        }
+      }
+    }
+    assert(best_e!=-1);
+    assert(tol>-DBL_EPSILON);
+
+    const index_t *n=_mesh->get_element(best_e);
+    assert(n[0]>=0);
+
+    for(size_t i=0;i<6;i++)
+      mp[i] =
+        l[0]*_mesh->metric[n[0]*6+i]+
+        l[1]*_mesh->metric[n[1]*6+i]+
+        l[2]*_mesh->metric[n[2]*6+i]+
+        l[3]*_mesh->metric[n[3]*6+i];
+
+    return true;
   }
 
   Mesh<real_t> *_mesh;
@@ -577,7 +759,7 @@ template<typename real_t>
   const static size_t msize=6;
 
   int mpi_nparts, rank;
-  real_t good_q, sigma_q;
+  real_t good_q, epsilon_q;
   std::vector<real_t> quality;
   std::map<int, std::vector<index_t> > colour_sets;
 
