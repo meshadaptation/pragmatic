@@ -509,11 +509,11 @@ template<typename real_t>
       }
       assert(new_quality.empty());
       
-      for(size_t i=0;i<3;i++)
-        _mesh->_coords[n0*3+i] = new_x0[i];
+      for(size_t i=0;i<ndims;i++)
+        _mesh->_coords[n0*ndims+i] = new_x0[i];
       
-      for(size_t i=0;i<6;i++)
-        _mesh->metric[n0*6+i] = new_m0[i];
+      for(size_t i=0;i<msize;i++)
+        _mesh->metric[n0*msize+i] = new_m0[i];
 
       break;
     }
@@ -537,11 +537,11 @@ template<typename real_t>
       if(n[0]==-1)
         continue;
   
-      for(int j=0;j<4;j++){
-        if(_mesh->boundary[i*4+j]>0){
-	  is_boundary[n[(j+1)%4]] = true;
-	  is_boundary[n[(j+2)%4]] = true;
-	  is_boundary[n[(j+3)%4]] = true;
+      for(int j=0;j<nloc;j++){
+        if(_mesh->boundary[i*nloc+j]>0){
+          for(int k=1;k<nloc;k++){
+            is_boundary[n[(j+k)%3]] = true;
+          }
         }
       }
     }
@@ -566,15 +566,8 @@ template<typename real_t>
           continue;
         }
 
-        quality[i] = property->lipnikov(_mesh->get_coords(n[0]),
-                                        _mesh->get_coords(n[1]),
-                                        _mesh->get_coords(n[2]),
-                                        _mesh->get_coords(n[3]),
-                                        _mesh->get_metric(n[0]),
-                                        _mesh->get_metric(n[1]),
-                                        _mesh->get_metric(n[2]),
-                                        _mesh->get_metric(n[3]));
-	qsum+=quality[i];
+        update_quality(i);
+        qsum+=quality[i];
       }
     }
     good_q = qsum/NElements;
@@ -598,21 +591,6 @@ template<typename real_t>
     double patch_quality = std::numeric_limits<double>::max();
 
     for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      // Check cache - if it's stale then recalculate.
-      if(quality[*ie]<0){
-        const int *n=_mesh->get_element(*ie);
-        assert(n[0]>=0);
-        std::vector<const real_t *> x(nloc);
-        std::vector<const double *> m(nloc);
-        for(size_t i=0;i<nloc;i++){
-          x[i] = _mesh->get_coords(n[i]);
-          m[i] = _mesh->get_metric(n[i]);
-        }
-
-        quality[*ie] = property->lipnikov(x[0], x[1], x[2], x[3],
-                                          m[0], m[1], m[2], m[3]);
-      }
-
       patch_quality = std::min(patch_quality, quality[*ie]);
     }
 
@@ -710,13 +688,13 @@ template<typename real_t>
       if(best_e==-1){
         tol = min_l;
         best_e = *ie;
-        for(int i=0;i<4;i++)
+        for(int i=0;i<nloc;i++)
           l[i] = ll[i];
       }else{
         if(min_l>tol){
           tol = min_l;
           best_e = *ie;
-          for(int i=0;i<4;i++)
+          for(int i=0;i<nloc;i++)
             l[i] = ll[i];
         }
       }
@@ -727,12 +705,12 @@ template<typename real_t>
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
 
-    for(size_t i=0;i<6;i++)
+    for(size_t i=0;i<msize;i++)
       mp[i] =
-        l[0]*_mesh->metric[n[0]*6+i]+
-        l[1]*_mesh->metric[n[1]*6+i]+
-        l[2]*_mesh->metric[n[2]*6+i]+
-        l[3]*_mesh->metric[n[3]*6+i];
+        l[0]*_mesh->metric[n[0]*msize+i]+
+        l[1]*_mesh->metric[n[1]*msize+i]+
+        l[2]*_mesh->metric[n[2]*msize+i]+
+        l[3]*_mesh->metric[n[3]*msize+i];
 
     return true;
   }

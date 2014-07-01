@@ -56,7 +56,7 @@ template<typename real_t>
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
-    sigma_q = 0.0001;
+    epsilon_q = 1.0e-6;
 
     // Set the orientation of elements.
     property = NULL;
@@ -264,7 +264,7 @@ template<typename real_t>
     real_t functional = functional_Linf(node, p, mp);
     real_t functional_orig = functional_Linf(node);
 
-    if(functional-functional_orig<sigma_q)
+    if(functional-functional_orig<epsilon_q)
       return false;
 
     for(size_t j=0;j<2;j++)
@@ -428,11 +428,11 @@ template<typename real_t>
       }
       assert(new_quality.empty());
       
-      for(size_t i=0;i<2;i++)
-        _mesh->_coords[n0*2+i] = new_x0[i];
+      for(size_t i=0;i<ndims;i++)
+        _mesh->_coords[n0*ndims+i] = new_x0[i];
       
-      for(size_t i=0;i<3;i++)
-        _mesh->metric[n0*3+i] = new_m0[i];
+      for(size_t i=0;i<msize;i++)
+        _mesh->metric[n0*msize+i] = new_m0[i];
 
       break;
     }
@@ -456,10 +456,11 @@ template<typename real_t>
       if(n[0]==-1)
         continue;
   
-      for(int j=0;j<3;j++){
-        if(_mesh->boundary[i*3+j]>0){
-          is_boundary[n[(j+1)%3]] = true;
-          is_boundary[n[(j+2)%3]] = true;
+      for(int j=0;j<nloc;j++){
+        if(_mesh->boundary[i*nloc+j]>0){
+          for(int k=1;k<nloc;k++){
+            is_boundary[n[(j+k)%3]] = true;
+          }
         }
       }
     }
@@ -472,6 +473,7 @@ template<typename real_t>
     }
 
     quality.resize(NElements);
+
     double qsum=0;
 #pragma omp parallel
     {
@@ -483,12 +485,7 @@ template<typename real_t>
           continue;
         }
 
-        quality[i] = property->lipnikov(_mesh->get_coords(n[0]),
-                                        _mesh->get_coords(n[1]),
-                                        _mesh->get_coords(n[2]),
-                                        _mesh->get_metric(n[0]),
-                                        _mesh->get_metric(n[1]),
-                                        _mesh->get_metric(n[2]));
+        update_quality(i);
         qsum+=quality[i];
       }
     }
@@ -509,36 +506,20 @@ template<typename real_t>
     double patch_quality = std::numeric_limits<double>::max();
 
     for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      // Check cache - if it's stale then recalculate. 
-      if(quality[*ie]<0){
-        const int *n=_mesh->get_element(*ie);
-        assert(n[0]>=0);
-        std::vector<const real_t *> x(nloc);
-        std::vector<const double *> m(nloc);
-        for(size_t i=0;i<nloc;i++){
-          x[i] = _mesh->get_coords(n[i]);
-          m[i] = _mesh->get_metric(n[i]);
-        }
-
-        quality[*ie] = property->lipnikov(x[0], x[1], x[2], 
-                                          m[0], m[1], m[2]);
-      }
-
       patch_quality = std::min(patch_quality, quality[*ie]);
     }
 
     return patch_quality;
   }
   
-  real_t functional_Linf(index_t node, const real_t *p, const real_t *mp) const{
-
+  real_t functional_Linf(index_t n0, const real_t *p, const real_t *mp) const{
     real_t functional = DBL_MAX;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
+    for(typename std::set<index_t>::iterator ie=_mesh->NEList[n0].begin();ie!=_mesh->NEList[n0].end();++ie){
       const index_t *n=_mesh->get_element(*ie);
       assert(n[0]>=0);
       int iloc = 0;
 
-      while(n[iloc]!=(int)node){
+      while(n[iloc]!=(int)n0){
         iloc++;
       }
       int loc1 = (iloc+1)%3;
@@ -596,26 +577,28 @@ template<typename real_t>
       if(best_e==-1){
         tol = min_l;
         best_e = *ie;
-        for(int i=0;i<3;i++)
+        for(int i=0;i<nloc;i++)
           l[i] = ll[i];
       }else{
         if(min_l>tol){
           tol = min_l;
           best_e = *ie;
-          for(int i=0;i<3;i++)
+          for(int i=0;i<nloc;i++)
             l[i] = ll[i];
         }
       }
     }
+    assert(best_e!=-1);
+    assert(tol>-DBL_EPSILON);
 
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
 
-    for(size_t i=0;i<3;i++)
+    for(size_t i=0;i<msize;i++)
       mp[i] = 
-        l[0]*_mesh->metric[n[0]*3+i]+
-        l[1]*_mesh->metric[n[1]*3+i]+
-        l[2]*_mesh->metric[n[2]*3+i];
+        l[0]*_mesh->metric[n[0]*msize+i]+
+        l[1]*_mesh->metric[n[1]*msize+i]+
+        l[2]*_mesh->metric[n[2]*msize+i];
 
     return true;
   }
@@ -644,7 +627,7 @@ template<typename real_t>
   const static size_t msize=3;
 
   int mpi_nparts, rank;
-  real_t good_q, sigma_q;
+  real_t good_q, epsilon_q;
   std::vector<real_t> quality;
   std::map<int, std::vector<index_t> > colour_sets;
 
