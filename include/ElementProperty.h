@@ -70,13 +70,9 @@ class ElementProperty{
    * @param x2 pointer to 2D position for third point in triangle.
    */
  ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): dimension(2){
-    orientation = 1;
-    
-    double A = area(x0, x1, x2);
-    if(A<0)
-      orientation = -1;
-    else
-      orientation = 1;
+   double A = area(x0, x1, x2);
+   if(A<0)
+     orientation = -1;
   }
 
   /*! Constructor for 3D tetrahedral elements.
@@ -86,13 +82,9 @@ class ElementProperty{
    * @param x3 pointer to 3D position for forth point in triangle.
    */
  ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) : dimension(3){
-    orientation = 1;
-
     double V = volume(x0, x1, x2, x3);
     if(V<0)
       orientation = -1;
-    else
-      orientation = 1;
   }
 
   /*! Calculate area of 2D triangle.
@@ -532,18 +524,18 @@ class ElementProperty{
   }
 
  private:
-  const static real_t inv2 = 0.5;
-  const static real_t inv6 = 1.0/6.0;
+  real_t inv2 = 0.5;
+  real_t inv6 = 1.0/6.0;
 
-  const static double finv2 = 0.5;
-  const static double finv3 = 1.0/3.0;
-  const static double finv4 = 1.0/4.0;
-  const static double finv6 = 1.0/6.0;
+  double finv2 = 0.5;
+  double finv3 = 1.0/3.0;
+  double finv4 = 1.0/4.0;
+  double finv6 = 1.0/6.0;
 
-  const static double lipnikov_const2d = 20.784609690826528; // 12.0*sqrt(3.0);
-  const static double lipnikov_const3d = 1832.8207768355312; // pow(6.0, 4)*sqrt(2.0);
+  double lipnikov_const2d = 20.784609690826528; // 12.0*sqrt(3.0);
+  double lipnikov_const3d = 1832.8207768355312; // pow(6.0, 4)*sqrt(2.0);
 
   const int dimension;
-  int orientation;
+  int orientation = 1;
 };
 #endif

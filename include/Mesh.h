@@ -405,7 +405,6 @@ template<typename real_t> class Mesh{
     int NElements = get_number_elements();
     if(ndims==2){
       long double total_length=0;
-      double downcast_total_length=0;
       
       if(num_processes>1){
 	for(int i=0;i<NElements;i++){
@@ -422,8 +421,7 @@ template<typename real_t> class Mesh{
 	  }
 	}
 	
-	downcast_total_length = total_length;
-	MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+	MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
 	for(int i=0;i<NElements;i++){
 	  for(int j=0;j<3;j++){
@@ -438,14 +436,12 @@ template<typename real_t> class Mesh{
 	    }
 	  }
 	}
-	downcast_total_length = total_length; 
       }
       
-      return downcast_total_length;
+      return total_length;
     }else{
       // 3D - the perimeter is the surface area.
       long double total_area=0;
-      double downcast_total_area=0;
       
       if(num_processes>1){
 	for(int i=0;i<NElements;i++){
@@ -494,8 +490,7 @@ template<typename real_t> class Mesh{
 	  }
 	}
 	
-	downcast_total_area = total_area;
-	MPI_Allreduce(MPI_IN_PLACE, &downcast_total_area, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
 	for(int i=0;i<NElements;i++){
 	  const index_t *n=get_element(i);
@@ -538,10 +533,9 @@ template<typename real_t> class Mesh{
 	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
 	  }
 	}
-	downcast_total_area = total_area; 
       }
       
-      return downcast_total_area;
+      return total_area;
     }
   }
 
@@ -639,55 +633,46 @@ template<typename real_t> class Mesh{
 
   /// Get the element minimum quality in metric space.
   double get_qmin() const{
+    if(ndims==2)
+      return get_qmin_2d();
+    else
+      return get_qmin_3d();
+  }
+
+  double get_qmin_2d() const{
     double qmin=1; // Where 1 is ideal.
 
-    // TODO: This is not urgent - but when OpenMP 3.1 is more common we
-    // should stick a proper min reduction in here.
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
 
-      if(ndims==2)
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
-      else
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
+      qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
     }
-#ifdef HAVE_MPI
-    if(num_processes>1){
+
+    if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-    }
-#endif
+    
     return qmin;
   }
 
-  /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
-  double get_qrms() const{
-    double mean = get_qmean();
+  double get_qmin_3d() const{
+    double qmin=1; // Where 1 is ideal.
 
-    double rms=0;
-    int nele=0;
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
 
-      real_t q;
-      if(ndims==2)
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-      else
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
-
-      rms += pow(q-mean, 2);
-      nele++;
+      qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
     }
-    rms = sqrt(rms/nele);
 
-    return rms;
+    if(num_processes>1)
+      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+    
+    return qmin;
   }
 
 #ifdef HAVE_MPI
@@ -1246,11 +1231,9 @@ template<typename real_t> class Mesh{
     }
     double qmean = get_qmean();
     double qmin = get_qmin();
-    double qrms = get_qrms();
     if(rank==0){
       std::cout<<"VERIFY: mean quality...."<<qmean<<std::endl;
       std::cout<<"VERIFY: min quality...."<<qmin<<std::endl;
-      std::cout<<"VERIFY: rms quality...."<<qrms<<std::endl;
     }
 
 #ifdef HAVE_MPI

@@ -84,13 +84,11 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
 
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
   if(rank==0) std::cout<<"Initial quality:\n"
                 <<"Quality mean:  "<<qmean<<std::endl
-                <<"Quality min:   "<<qmin<<std::endl
-                <<"Quality RMS:   "<<qrms<<std::endl;
+                <<"Quality min:   "<<qmin<<std::endl;
   VTKTools<double>::export_vtu("../data/test_mpi_adapt_3d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950

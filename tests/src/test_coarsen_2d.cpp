@@ -93,14 +93,10 @@ int main(int argc, char **argv){
 
   double perimeter = mesh->calculate_perimeter();
   if(verbose){
-    double lrms = mesh->get_lrms();
-    double qrms = mesh->get_qrms();
 
     if(rank==0)
       std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
                <<"Number elements:      "<<nelements<<std::endl
-               <<"Edge length RMS:      "<<lrms<<std::endl
-               <<"Quality RMS:          "<<qrms<<std::endl
                <<"Perimeter:            "<<perimeter<<std::endl;
   }
 

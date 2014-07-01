@@ -162,13 +162,11 @@ int main(int argc, char **argv){
 
   // Initial stats.
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
 
   if(rank==0) std::cout<<"Initial quality:\n"
                        <<"Quality mean:  "<<qmean<<std::endl
-                       <<"Quality min:   "<<qmin<<std::endl
-                       <<"Quality RMS:   "<<qrms<<std::endl;
+                       <<"Quality min:   "<<qmin<<std::endl;
   VTKTools<double>::export_vtu("../data/test_dolfin_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -230,7 +228,6 @@ int main(int argc, char **argv){
   VTKTools<double>::export_vtu("../data/test_dolfin_2d", mesh);
 
   qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
 
   std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";

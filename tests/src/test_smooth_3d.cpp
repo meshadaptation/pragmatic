@@ -61,44 +61,39 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation Linf"};
-  const double target_quality_mean[] = {0.09, 0.9, 0.1};
-  const double target_quality_min[]  = {0.0, 0.001, 0.001};
-  for(int m=0;m<3;m++){
+  const char *methods[] = {"smart Laplacian", "optimisation Linf"};
+  const double target_quality_mean[] = {0.5, 0.3};
+  const double target_quality_min[]  = {0.001, 0.01};
+
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
+  mesh->create_boundary();
+  
+  double pi = 3.14159265358979323846;
+  for(int m=0;m<2;m++){
     const char *method = methods[m];
-
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
-    mesh->create_boundary();
-
+    
     MetricField3D<double> metric_field(*mesh);
-
+    
     size_t NNodes = mesh->get_number_nodes();
-
-    double eta=1.0;
-
-    std::vector<double> psi(NNodes);
+    
+    double dx = 1.0/20;
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
       double z = 2*mesh->get_coords(i)[2]-1;
-    
-      psi[i] = 
-	0.100000000000000*sin(50*x) + 
-	0.100000000000000*sin(50*z) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+      
+      double l = dx + 0.9*dx*(sin(3*x*pi) + sin(3*y*pi) + sin(3*z*pi))/3;
+      double invl2 = 1.0/(l*l);
+      double m[] = {invl2, 0.0, 0.0, invl2, 0.0, invl2};
+ 
+      metric_field.set_metric(m, i);
     }
-
-    metric_field.add_field(&(psi[0]), eta, 1);
-    size_t NElements = mesh->get_number_elements();
-    metric_field.apply_nelements(NElements);
-    metric_field.apply_max_edge_length(1.0);
-    metric_field.apply_min_edge_length(0.01);
-
+    
     metric_field.update_mesh();
     
     if(m==0){
       VTKTools<double>::export_vtu("../data/test_smooth_3d_init", mesh);
       double qmean = mesh->get_qmean();
-      double qrms = mesh->get_qrms();
       double qmin = mesh->get_qmin();
       double perimeter = mesh->calculate_perimeter();
       
@@ -106,17 +101,15 @@ int main(int argc, char **argv){
         std::cout<<"Initial quality:"<<std::endl
                  <<"Quality mean:    "<<qmean<<std::endl
                  <<"Quality min:     "<<qmin<<std::endl
-                 <<"Quality RMS:     "<<qrms<<std::endl
 		 <<"Perimeter area:  "<<perimeter<<std::endl;
     }
     
     Smooth3D<double> smooth(*mesh);
     
     double tic = get_wtime();
-    smooth.smooth(method, 500);
+    smooth.smooth(method, 100);
     double toc = get_wtime();
     
-    double lmean = mesh->get_lmean();    
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();
     
@@ -124,13 +117,11 @@ int main(int argc, char **argv){
 
     if(rank==0)
       std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
-               <<"Edge length mean:      "<<lmean<<std::endl
                <<"Quality mean:          "<<qmean<<std::endl
                <<"Quality min:          "<<qmin<<std::endl;
     
     std::string vtu_filename = std::string("../data/test_smooth_3d_")+std::string(method);
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
-    delete mesh;
     
     if(rank==0){
       std::cout<<"Checking quality between bounds - "<<" (mean>"<<target_quality_mean[m]<<", min>"<<target_quality_min[m]<<"): ";

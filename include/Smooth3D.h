@@ -85,8 +85,9 @@ template<typename real_t>
 
   // Smooth the mesh using a given method. Valid methods are:
   // "Laplacian", "smart Laplacian", "optimisation Linf"
-  void smooth(std::string method, int max_iterations=10, double quality_tol=0.5){
-    good_q = quality_tol;
+  void smooth(std::string method, int max_iterations=10, double quality_tol=-1){
+    if(quality_tol>0)
+      good_q = quality_tol;
 
     init_cache(method);
 
@@ -148,11 +149,11 @@ template<typename real_t>
 
 #pragma omp single
         if(mpi_nparts>1){
-          _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-          _mesh->halo_update(&(_mesh->metric[0]), msize);
+          halo_update<real_t, ndims>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords);
+          halo_update<real_t, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
 
-          for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-            quality[*ie] = -1;
+          for(std::vector<int>::iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+            update_quality(*ie);
         }
       }
 
@@ -180,11 +181,11 @@ template<typename real_t>
           if(mpi_nparts>1){
 #pragma omp single
             {
-              _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-              _mesh->halo_update(&(_mesh->metric[0]), msize);
+              halo_update<real_t, ndims>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords);
+              halo_update<real_t, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
 
-              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-                quality[*ie] = -1;
+              for(std::vector<int>::iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+                update_quality(*ie);
             }
           }
         }
@@ -280,20 +281,7 @@ template<typename real_t>
     
     // Reset quality cache.
     for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
-      
-      const double *x0 = _mesh->get_coords(n[0]);
-      const double *x1 = _mesh->get_coords(n[1]);
-      const double *x2 = _mesh->get_coords(n[2]);
-      const double *x3 = _mesh->get_coords(n[3]);
-      
-      const double *m0 = _mesh->get_metric(n[0]);
-      const double *m1 = _mesh->get_metric(n[1]);
-      const double *m2 = _mesh->get_metric(n[2]);
-      const double *m3 = _mesh->get_metric(n[3]);
-      
-      quality[*ie] = property->lipnikov(x0, x1, x2, x3,
-					m0, m1, m2, m3);
+      update_quality(*ie);
     }
     
     return true;
@@ -301,8 +289,6 @@ template<typename real_t>
   
 
   bool optimisation_linf_3d_kernel(index_t n0){
-    bool smart_update = smart_laplacian_3d_kernel(n0);
-    
     const double *m0 = _mesh->get_metric(n0);
     const double *x0 = _mesh->get_coords(n0);
     
@@ -316,10 +302,10 @@ template<typename real_t>
     
     // Jump out if already good enough.
     if(worst_element.first>good_q)
-      return smart_update;
+      return false;
 
     // Find direction of steepest ascent for quality of worst element.
-    double search[3];
+    double grad_w[3], search[3];
     {
       const index_t *n=_mesh->get_element(worst_element.second);
       size_t loc=0;
@@ -355,24 +341,17 @@ template<typename real_t>
       const double *x2 = _mesh->get_coords(n2);
       const double *x3 = _mesh->get_coords(n3);
       
-      double grad[3];
-      property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
+      property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad_w);
       
-      double mag = sqrt(grad[0]*grad[0] + grad[1]*grad[1] + grad[2]*grad[2]);
+      double mag = sqrt(grad_w[0]*grad_w[0] + grad_w[1]*grad_w[1] + grad_w[2]*grad_w[2]);
       if(!std::isnormal(mag)){
-         std::cout<<"mag issues "<<mag<<", "<<grad[0]<<", "<<grad[1]<<", "<<grad[2]<<std::endl;
-         std::cout<<n0<<", "<<n1<<", "<<n2<<", "<<n3<<std::endl;
-         std::cout<<x0[0]<<", "<<x0[1]<<", "<<x0[2]<<std::endl;
-         std::cout<<x1[0]<<", "<<x1[1]<<", "<<x1[2]<<std::endl;
-         std::cout<<x2[0]<<", "<<x2[1]<<", "<<x2[2]<<std::endl;
-         std::cout<<x3[0]<<", "<<x3[1]<<", "<<x3[2]<<std::endl;
-         std::cout<<m0[0]<<", "<<m0[1]<<", "<<m0[2]<<", "<<m0[3]<<", "<<m0[4]<<", "<<m0[5]<<std::endl;
-         std::cout<<"This usually means that the metric field is rubbish\n";
+	std::cout<<"mag issues "<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
+	std::cout<<"This usually means that the metric field is rubbish\n";
       }
       assert(std::isnormal(mag));
       
       for(int i=0;i<3;i++)
-        search[i] = grad[i]/mag;
+        search[i] = grad_w[i]/mag;
     }
 
     // Estimate how far we move along this search path until we make
@@ -380,22 +359,20 @@ template<typename real_t>
     // is effictively a simplex method for linear programming.
     double alpha;
     {
-      const index_t *n=_mesh->get_element(worst_element.second);
-      const double *x1 = _mesh->get_coords(n[1]);
-      const double *x2 = _mesh->get_coords(n[2]);
-      const double *x3 = _mesh->get_coords(n[3]);
-
-      double bbox[] = {x0[0], x0[0], x0[1], x0[1], x0[2], x0[2]};
-      bbox[0] = std::min(std::min(bbox[0], x1[0]), std::min(x2[0], x3[0]));
-      bbox[1] = std::max(std::max(bbox[0], x1[0]), std::max(x2[0], x3[0]));
-
-      bbox[2] = std::min(std::min(bbox[1], x1[1]), std::min(x2[1], x3[1]));
-      bbox[3] = std::max(std::max(bbox[1], x1[1]), std::max(x2[1], x3[1]));
-
-      bbox[4] = std::min(std::min(bbox[2], x1[2]), std::min(x2[2], x3[2]));
-      bbox[5] = std::max(std::max(bbox[2], x1[2]), std::max(x2[2], x3[2]));
-
-      alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/3.0;
+      double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
+      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
+	const double *x1 = _mesh->get_coords(*it);
+	
+	bbox[0] = std::min(bbox[0], x1[0]);
+	bbox[1] = std::max(bbox[0], x1[0]);
+	
+	bbox[2] = std::min(bbox[1], x1[1]);
+	bbox[3] = std::max(bbox[1], x1[1]);
+	
+	bbox[4] = std::min(bbox[2], x1[2]);
+	bbox[5] = std::max(bbox[2], x1[2]);
+      }
+      alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/6.0;
     }
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
       if(*it==worst_element.second)
@@ -438,7 +415,10 @@ template<typename real_t>
       double grad[3];
       property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
 	
-      double new_alpha = (epsilon_q+worst_element.first-quality[*it])/(search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]);
+      double new_alpha =
+	(quality[*it]-worst_element.first)/
+	((search[0]*grad_w[0]+search[1]*grad_w[1]+search[2]*grad_w[2])-
+	 (search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]));
 
       if(new_alpha>0)
         alpha = std::min(alpha, new_alpha);
@@ -511,6 +491,7 @@ template<typename real_t>
         if(new_q>worst_element.first){
 	  new_quality.push_back(new_q);
 	}else{
+	  // This means that the linear approximation was not sufficient.
 	  linf_update = false;
 	  break;
 	}
@@ -537,7 +518,7 @@ template<typename real_t>
       break;
     }
   
-    return smart_update || linf_update;
+    return linf_update;
   }
 
  private:
@@ -546,7 +527,8 @@ template<typename real_t>
 
     int NNodes = _mesh->get_number_nodes();
     std::vector<char> colour(NNodes);
-    Colour::GebremedhinManne(NNodes, _mesh->NNList, colour);
+
+    Colour::GebremedhinManne(MPI_COMM_WORLD, NNodes, _mesh->NNList, _mesh->send, _mesh->recv, _mesh->node_owner, colour);
 
     int NElements = _mesh->get_number_elements();
     std::vector<bool> is_boundary(NNodes, false);
@@ -572,9 +554,11 @@ template<typename real_t>
     }
 
     quality.resize(NElements);
+
+    double qsum=0;
 #pragma omp parallel
     {
-#pragma omp for schedule(guided)
+#pragma omp for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
@@ -590,8 +574,10 @@ template<typename real_t>
                                         _mesh->get_metric(n[1]),
                                         _mesh->get_metric(n[2]),
                                         _mesh->get_metric(n[3]));
+	qsum+=quality[i];
       }
     }
+    good_q = qsum/NElements;
 
     return;
   }
@@ -749,6 +735,24 @@ template<typename real_t>
         l[3]*_mesh->metric[n[3]*6+i];
 
     return true;
+  }
+
+  inline void update_quality(index_t element){
+    const index_t *n=_mesh->get_element(element);
+
+    const double *x0 = _mesh->get_coords(n[0]);
+    const double *x1 = _mesh->get_coords(n[1]);
+    const double *x2 = _mesh->get_coords(n[2]);
+    const double *x3 = _mesh->get_coords(n[3]);
+
+    const double *m0 = _mesh->get_metric(n[0]);
+    const double *m1 = _mesh->get_metric(n[1]);
+    const double *m2 = _mesh->get_metric(n[2]);
+    const double *m3 = _mesh->get_metric(n[3]);
+
+    quality[element] = property->lipnikov(x0, x1, x2, x3,
+                                          m0, m1, m2, m3);
+    return;
   }
 
   Mesh<real_t> *_mesh;

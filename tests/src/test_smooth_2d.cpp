@@ -61,14 +61,15 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const char *methods[] = {"Laplacian", "smart Laplacian", "optimisation Linf"};
-  const double target_quality_mean[] = {0.4, 0.7, 0.7};
-  const double target_quality_min[]  = {0.0, 0.1, 0.3};
-  for(int m=0;m<3;m++){
-    const char *method = methods[m];
+  const char *methods[] = {"smart Laplacian", "optimisation Linf"};
+  const double target_quality_mean[] = {0.7, 0.7};
+  const double target_quality_min[]  = {0.05, 0.1};
 
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
-    mesh->create_boundary();
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
+  mesh->create_boundary();
+
+  for(int m=0;m<2;m++){
+    const char *method = methods[m];
 
     MetricField2D<double> metric_field(*mesh);
 
@@ -81,7 +82,7 @@ int main(int argc, char **argv){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
     
-      psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+      psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
     }
 
     metric_field.add_field(&(psi[0]), eta, 1);
@@ -90,23 +91,20 @@ int main(int argc, char **argv){
     if(m==0){
       VTKTools<double>::export_vtu("../data/test_smooth_2d_init", mesh);
       double qmean = mesh->get_qmean();
-      double qrms = mesh->get_qrms();
       double qmin = mesh->get_qmin();
       
       if(rank==0)
         std::cout<<"Initial quality:"<<std::endl
                  <<"Quality mean:    "<<qmean<<std::endl
-                 <<"Quality min:     "<<qmin<<std::endl
-                 <<"Quality RMS:     "<<qrms<<std::endl;
+                 <<"Quality min:     "<<qmin<<std::endl;
     }
     
     Smooth2D<double> smooth(*mesh);
     
     double tic = get_wtime();
-    smooth.smooth(method);
+    smooth.smooth(method, 100);
     double toc = get_wtime();
     
-    double lmean = mesh->get_lmean();    
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();
     
@@ -114,13 +112,11 @@ int main(int argc, char **argv){
 
     if(rank==0)
       std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
-               <<"Edge length mean:      "<<lmean<<std::endl
-               <<"Quality mean:          "<<qmean<<std::endl
-               <<"Quality min:          "<<qmin<<std::endl;
+               <<"Quality mean:     "<<qmean<<std::endl
+               <<"Quality min:      "<<qmin<<std::endl;
     
     std::string vtu_filename = std::string("../data/test_smooth_2d_")+std::string(method);
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
-    delete mesh;
     
     if(rank==0){
       std::cout<<"Checking quality between bounds - "<<methods[m]<<" (mean>"<<target_quality_mean[m]<<", min>"<<target_quality_min[m]<<"): ";
