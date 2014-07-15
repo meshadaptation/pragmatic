@@ -65,6 +65,7 @@
 #include "Metis.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
+#include "HaloExchange.h"
 
 /*! \brief Manages mesh data.
  *
@@ -868,10 +869,9 @@ template<typename real_t> class Mesh{
 
     std::vector<int> norder(metis_nnodes);
     std::vector<int> inorder(metis_nnodes);
-    int numflag=0, options[] = {0};
 
     if(metis_nnodes != 0){
-      METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
+      METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &(norder[0]), &(inorder[0]));
 
       // Update active_vertex_map
       for(size_t i=0;i<NNodes;i++){
@@ -1271,7 +1271,7 @@ template<typename real_t> class Mesh{
       }
 
       // Update GNN's for the halo nodes.
-      halo_update(&(lnn2gnn[0]), 1);
+      halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
     }else{
       NPNodes[0] = NNodes;
       for(index_t i=0;i<(index_t)NNodes;i++){
@@ -1677,55 +1677,6 @@ template<typename real_t> class Mesh{
     }
   }
 
-  template <typename DATATYPE>
-  void halo_update(DATATYPE *vec, int block){
-#ifdef HAVE_MPI
-    if(num_processes<2)
-      return;
-
-    mpi_type_wrapper<DATATYPE> wrap;
-
-    // MPI_Requests for all non-blocking communications.
-    std::vector<MPI_Request> request(num_processes*2);
-
-    // Setup non-blocking receives.
-    std::vector< std::vector<DATATYPE> > recv_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-      if((i==rank)||(recv[i].size()==0)){
-        request[i] =  MPI_REQUEST_NULL;
-      }else{
-        recv_buff[i].resize(recv[i].size()*block);
-        MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), wrap.mpi_type, i, 0, _mpi_comm, &(request[i]));
-      }
-    }
-
-    // Non-blocking sends.
-    std::vector< std::vector<DATATYPE> > send_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-      if((i==rank)||(send[i].size()==0)){
-        request[num_processes+i] = MPI_REQUEST_NULL;
-      }else{
-        for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
-          for(int j=0;j<block;j++){
-            send_buff[i].push_back(vec[(*it)*block+j]);
-          }
-        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), wrap.mpi_type, i, 0, _mpi_comm, &(request[num_processes+i]));
-      }
-    }
-
-    std::vector<MPI_Status> status(num_processes*2);
-    MPI_Waitall(num_processes, &(request[0]), &(status[0]));
-    MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
-
-    for(int i=0;i<num_processes;i++){
-      int k=0;
-      for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
-        for(int j=0;j<block;j++)
-          vec[(*it)*block+j] = recv_buff[i][k*block+j];
-    }
-#endif
-  }
-
   void trim_halo(){
     std::set<index_t> recv_halo_temp, send_halo_temp;
 
@@ -1886,7 +1837,7 @@ template<typename real_t> class Mesh{
       }
 
       // Update GNN's for the halo nodes.
-      halo_update(&(lnn2gnn[0]), 1);
+      halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
 
       // Finish writing node ownerships.
       for(int i=0;i<num_processes;i++){
@@ -1915,7 +1866,7 @@ template<typename real_t> class Mesh{
         lnn2gnn[i] = -1;
     }
 
-    halo_update(&lnn2gnn[0], 1);
+    halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
 
     for(int i=0;i<num_processes;i++){
       send_map[i].clear();

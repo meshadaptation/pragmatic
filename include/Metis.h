@@ -57,7 +57,6 @@ extern "C" {
 #endif
 
 typedef int idxtype;
-void METIS_PartMeshNodal(int *, int *, idxtype *, int *, int *, int *, int *, idxtype *, idxtype *);
 }
 
 /*! \brief Class provides a specialised interface to some METIS
@@ -87,9 +86,8 @@ namespace metis{
     
     norder.resize(nnodes);
     std::vector<int> inorder(nnodes);
-    int numflag=0, options[] = {0};
     
-    METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
+    int ierr = METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &(norder[0]), &(inorder[0]));
   }
 };
 #endif

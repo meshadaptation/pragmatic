@@ -109,7 +109,7 @@ template<typename real_t> class VTKTools{
       nloc = 4;
       ndims = 3;
     }else{
-      std::cerr<<"ERROR: unsupported element type\n";
+      std::cerr<<"ERROR("<<__FILE__<<"): unsupported element type\n";
       exit(-1);
     }
 
@@ -126,7 +126,6 @@ template<typename real_t> class VTKTools{
     int nparts=1;
     Mesh<real_t> *mesh=NULL;
 
-#ifdef HAVE_MPI
     // Handle mpi parallel run.
     MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
@@ -135,23 +134,36 @@ template<typename real_t> class VTKTools{
       std::vector<index_t> lnn2gnn;
       std::vector<int> node_owner;
 
-      std::vector<idxtype> epart(NElements, 0), npart(NNodes, 0);
+      std::vector<int> epart(NElements, 0), npart(NNodes, 0);
       int rank;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
       if(rank==0){
-        int numflag = 0, edgecut;
-        int etype = 1; // triangles
-        if(ndims==3)
-          etype = 2; // tetrahedra
+        int edgecut;
+        int vsize = nloc - 1;
 
-        std::vector<idxtype> metis_ENList(NElements*nloc);
+        std::vector<int> eptr(NElements+1), eind(NElements*nloc);
+        eind[0] = 0;
         for(size_t i=0;i<NElements*nloc;i++)
-          metis_ENList[i] = ENList[i];
+          eind[i] = ENList[i];
+        for(size_t i=0;i<NElements;i++)
+          eptr[i+1] = eptr[i]+nloc;
+
         int intNElements = NElements;
         int intNNodes = NNodes;
-        METIS_PartMeshNodal(&intNElements, &intNNodes, &(metis_ENList[0]), &etype,
-            &numflag, &nparts, &edgecut, &(epart[0]), &(npart[0]));
+
+        METIS_PartMeshNodal(&intNElements,
+                            &intNNodes,
+                            &(eptr[0]),
+                            &(eind[0]),
+                            NULL,
+                            &vsize,
+                            &nparts,
+                            NULL,
+                            NULL,
+                            &edgecut,
+                            &(epart[0]), 
+                            &(npart[0]));
       }
 
       mpi_type_wrapper<index_t> mpi_index_t_wrapper;
@@ -252,7 +264,6 @@ template<typename real_t> class VTKTools{
       else
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]), &(lnn2gnn[0]), &(owner_range[0]), comm);
     }
-#endif
 
     if(nparts==1){ // If nparts!=1, then the mesh has been created already by the code a few lines above.
       if(ndims==2)

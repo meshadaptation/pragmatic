@@ -149,8 +149,9 @@ template<typename real_t>
         if(mpi_nparts>1){
 #pragma omp single
           {
-            halo_update<real_t, ndims>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords);
-            halo_update<real_t, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+            halo_update<real_t, ndims, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+            // halo_update<real_t, ndims>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords);
+            // halo_update<real_t, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
 
             for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
               update_quality(*ie);
@@ -182,9 +183,10 @@ template<typename real_t>
           if(mpi_nparts>1){
 #pragma omp single
             {
-              _mesh->halo_update(&(_mesh->_coords[0]), ndims);
-              _mesh->halo_update(&(_mesh->metric[0]), msize);
-
+              // halo_update<real_t, ndims>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords);
+              // halo_update<real_t, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+	      halo_update<real_t, ndims, msize>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+	      
               for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
                 update_quality(*ie);
             }
