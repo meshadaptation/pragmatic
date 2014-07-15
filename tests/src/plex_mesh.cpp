@@ -4,6 +4,9 @@
 #include "plex_mesh.h"
 
 PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+
   // Create the boundary mesh first.
   DM boundary;
   PetscErrorCode ierr = DMPlexCreate(comm, &boundary); CHKERRQ(ierr);
@@ -43,7 +46,7 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   PetscInt size;
   ierr = DMPlexGetStratumSize(lmesh, "boundary_ids", 1, &size); CHKERRQ(ierr);
 
-  assert(size>0);
+  assert(rank==0 ? size>0 : true);
 
   IS regionIS;
   ierr = DMPlexGetStratumIS(lmesh, "boundary_ids", 1, &regionIS); CHKERRQ(ierr);
@@ -58,7 +61,7 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
     PetscScalar *face_coords;
     ierr = DMPlexVecGetClosure(lmesh, coord_sec, coords, face, &csize, &face_coords); CHKERRQ(ierr);
 
-    assert(csize==4);
+    assert(rank==0 ? csize==4 : true);
 
     if(fabs(face_coords[0])<DBL_EPSILON && fabs(face_coords[2])<DBL_EPSILON){
       DMPlexSetLabelValue(lmesh, "boundary_ids", face, 1);
@@ -69,7 +72,7 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
     }else if(fabs(face_coords[1]-1.0)<DBL_EPSILON && fabs(face_coords[3]-1.0)<DBL_EPSILON){
       DMPlexSetLabelValue(lmesh, "boundary_ids", face, 4);
     }
- }
+  }
 
   int nranks;
   MPI_Comm_size(comm, &nranks);
