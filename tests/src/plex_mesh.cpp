@@ -54,12 +54,12 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
     ierr = ISGetIndices(regionIS, &boundary_faces); CHKERRQ(ierr);
 
     ierr = DMPlexCreateLabel(lmesh, "boundary_ids"); CHKERRQ(ierr);
+    PetscInt face, csize;
+    PetscScalar *face_coords;
     for(int i=0;i<size;i++){
-      PetscInt face = boundary_faces[i];
-
-      PetscInt csize;
-      PetscScalar *face_coords;
-      ierr = DMPlexVecGetClosure(lmesh, coord_sec, coords, face, &csize, &face_coords); CHKERRQ(ierr);
+      face = boundary_faces[i];
+      ierr = DMPlexVecGetClosure(lmesh, coord_sec, coords, face,
+                                 &csize, &face_coords); CHKERRQ(ierr);
 
       assert(rank==0 ? csize==4 : true);
 
@@ -73,6 +73,8 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
         DMPlexSetLabelValue(lmesh, "boundary_ids", face, 4);
       }
     }
+    ierr = DMPlexVecRestoreClosure(lmesh, coord_sec, coords, face,
+                                   &csize, &face_coords); CHKERRQ(ierr);
   }
 
   int nranks;
