@@ -21,6 +21,7 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   // Mesh area
   DM lmesh;
   ierr = DMPlexGenerate(boundary, NULL, PETSC_TRUE, &lmesh); CHKERRQ(ierr);
+  ierr = DMDestroy(&boundary); CHKERRQ(ierr);
 
   /* Apply boundary IDs. Boundaries are labeled as:
 
@@ -29,12 +30,9 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
      3: plane y == 0
      4: plane y == 1
    */
-
-  ierr = DMPlexCreateLabel(lmesh, "boundary_ids"); CHKERRQ(ierr);
-  
   DMLabel label;
-  ierr = DMPlexGetLabel(lmesh, "boundary_ids", &label); CHKERRQ(ierr);
-
+  ierr = DMPlexCreateLabel(lmesh, "boundary_faces"); CHKERRQ(ierr);
+  ierr = DMPlexGetLabel(lmesh, "boundary_faces", &label); CHKERRQ(ierr);
   ierr = DMPlexMarkBoundaryFaces(lmesh, label); CHKERRQ(ierr);
 
   Vec coords;
@@ -44,16 +42,17 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   ierr = DMGetCoordinateSection(lmesh, &coord_sec); CHKERRQ(ierr);
 
   PetscInt size;
-  ierr = DMPlexGetStratumSize(lmesh, "boundary_ids", 1, &size); CHKERRQ(ierr);
+  ierr = DMPlexGetStratumSize(lmesh, "boundary_faces", 1, &size); CHKERRQ(ierr);
 
   assert(rank==0 ? size>0 : true);
 
   IS regionIS;
-  ierr = DMPlexGetStratumIS(lmesh, "boundary_ids", 1, &regionIS); CHKERRQ(ierr);
+  ierr = DMPlexGetStratumIS(lmesh, "boundary_faces", 1, &regionIS); CHKERRQ(ierr);
 
   const PetscInt *boundary_faces;
   ierr = ISGetIndices(regionIS, &boundary_faces); CHKERRQ(ierr);
 
+  ierr = DMPlexCreateLabel(lmesh, "boundary_ids"); CHKERRQ(ierr);
   for(int i=0;i<size;i++){
     PetscInt face = boundary_faces[i];
 
@@ -82,8 +81,6 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   }else{
      *mesh = lmesh;
   }
-
-  ierr = DMDestroy(&boundary); CHKERRQ(ierr);
 
   return ierr;
 }
