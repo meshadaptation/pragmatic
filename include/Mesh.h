@@ -90,7 +90,7 @@ template<typename real_t> class Mesh{
    *
    * @param plex DMPlex object that we import from.
    */
-  Mesh(DM *plex, MPI_Comm comm){
+  Mesh(DM plex, MPI_Comm comm){
     _mpi_comm = comm;
 
     MPI_Comm_size(_mpi_comm, &num_processes);
