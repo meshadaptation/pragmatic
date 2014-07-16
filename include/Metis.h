@@ -87,7 +87,7 @@ namespace metis{
     norder.resize(nnodes);
     std::vector<int> inorder(nnodes);
     
-    int ierr = METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &(norder[0]), &(inorder[0]));
+    METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &(norder[0]), &(inorder[0]));
   }
 };
 #endif

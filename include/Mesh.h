@@ -47,6 +47,19 @@
 #include <cmath>
 #include <stdint.h>
 
+#include <petsc-private/dmpleximpl.h>
+#include <petsc-private/isimpl.h>
+#include <petscdmda.h>
+#include <petscsf.h>
+#include <petsc.h>
+#include <petscsys.h>
+#include <petscerror.h>
+#include <petscdmplex.h>
+#include <petscviewertypes.h>
+#include <petscsf.h>
+#include <petscdm.h>
+#include "petscdmplex.h"   
+
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
 #endif
@@ -55,9 +68,7 @@
 #include <omp.h>
 #endif
 
-#ifdef HAVE_MPI
 #include "mpi_tools.h"
-#endif
 
 #include "PragmaticTypes.h"
 #include "PragmaticMinis.h"
@@ -74,6 +85,137 @@
 
 template<typename real_t> class Mesh{
  public:
+
+  /*! Constructor from PETSc/DMPlex
+   *
+   * @param plex DMPlex object that we import from.
+   */
+  Mesh(DM *plex, MPI_Comm comm){
+    _mpi_comm = comm;
+
+    MPI_Comm_size(_mpi_comm, &num_processes);
+    MPI_Comm_rank(_mpi_comm, &rank);
+
+    // Assign the correct MPI data type to MPI_INDEX_T
+    mpi_type_wrapper<index_t> mpi_index_t_wrapper;
+    MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
+
+    nthreads = pragmatic_nthreads();
+
+    // dmplex NElements = local number of elements
+    // dmplex NNodes = local number of nodes/vertices
+
+    /* dmplex ....
+    if(plex is 3D){
+      nloc = 3;
+      ndims = 2;
+      msize = 3;
+    }else{
+      nloc = 4;
+      ndims = 3;
+      msize = 6;
+    }
+    */
+
+    // Import local element node list
+    _ENList.resize(NElements*nloc);
+    // ...read from plex.
+
+    // Import local coordinates
+    _coords.resize(NNodes*ndims);
+    // ...read from plex
+
+    // Stores the rank that owns each vertex.
+    node_owner.resize(NNodes);
+    // ...from plex.
+
+    // Stores the local2global node number map.
+    lnn2gnn.resize(NNodes);
+    // ...from plex.
+
+    /* This std::vector< std::vector<index_t> > send, recv defines the halo
+     * where node index send[i][k] is sent to rank i, and is received by index recv[j][k], 
+     * where j is the sending rank. Note that k on the send side is the same as k on the recv size.
+     */
+    // ...from plex
+
+    // Right now we are doing nothing with this. But in the future the plex may contain a special tensor field/section that we will need to import.
+    //metric.resize(NNodes*msize);
+
+
+    // This really needs to be revisited...leave as it for now.
+    deferred_operations.resize(nthreads);
+#pragma omp parallel
+    {
+      // Each thread allocates nthreads DeferredOperations
+      // structs, one for each OMP thread.
+      deferred_operations[pragmatic_thread_id()].resize((defOp_scaling_factor*nthreads));
+
+#pragma omp single nowait
+      {
+        if(num_processes>1){
+          // Take into account renumbering for halo.
+          for(int j=0;j<num_processes;j++){
+            for(size_t k=0;k<recv[j].size();k++){
+              recv_halo.insert(recv[j][k]);
+            }
+            for(size_t k=0;k<send[j].size();k++){
+              send_halo.insert(send[j][k]);
+            }
+          }
+        }
+      }
+
+      // Set the orientation of elements.
+#pragma omp single
+      {
+        const int *n=get_element(0);
+        assert(n[0]>=0);
+
+        if(ndims==2)
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]));
+        else
+          property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                 get_coords(n[1]),
+                                                 get_coords(n[2]),
+                                                 get_coords(n[3]));
+      }
+
+      if(ndims==2){
+#pragma omp for schedule(static)
+        for(size_t i=1;i<(size_t)NElements;i++){
+          const int *n=get_element(i);
+          assert(n[0]>=0);
+
+          double volarea = property->area(get_coords(n[0]),
+                                          get_coords(n[1]),
+                                          get_coords(n[2]));
+
+          if(volarea<0)
+            invert_element(i);
+        }
+      }else{
+#pragma omp for schedule(static)
+        for(size_t i=1;i<(size_t)NElements;i++){
+          const int *n=get_element(i);
+          assert(n[0]>=0);
+
+          double volarea = property->volume(get_coords(n[0]),
+                                            get_coords(n[1]),
+                                            get_coords(n[2]),
+                                            get_coords(n[2]));
+
+          if(volarea<0)
+            invert_element(i);
+        }
+      }
+
+      // create_adjacency is meant to be called from inside a parallel region
+      create_adjacency();
+    }
+  }
 
   /*! 2D triangular mesh constructor. This is for use when there is no MPI.
    *
