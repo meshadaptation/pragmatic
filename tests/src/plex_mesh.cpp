@@ -23,53 +23,55 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   ierr = DMPlexGenerate(boundary, NULL, PETSC_TRUE, &lmesh); CHKERRQ(ierr);
   ierr = DMDestroy(&boundary); CHKERRQ(ierr);
 
-  /* Apply boundary IDs. Boundaries are labeled as:
+  if (rank == 0) {
+    /* Apply boundary IDs. Boundaries are labeled as:
 
-     1: plane x == 0
-     2: plane x == 1
-     3: plane y == 0
-     4: plane y == 1
-   */
-  DMLabel label;
-  ierr = DMPlexCreateLabel(lmesh, "boundary_faces"); CHKERRQ(ierr);
-  ierr = DMPlexGetLabel(lmesh, "boundary_faces", &label); CHKERRQ(ierr);
-  ierr = DMPlexMarkBoundaryFaces(lmesh, label); CHKERRQ(ierr);
+       1: plane x == 0
+       2: plane x == 1
+       3: plane y == 0
+       4: plane y == 1
+    */
+    DMLabel label;
+    ierr = DMPlexCreateLabel(lmesh, "boundary_faces"); CHKERRQ(ierr);
+    ierr = DMPlexGetLabel(lmesh, "boundary_faces", &label); CHKERRQ(ierr);
+    ierr = DMPlexMarkBoundaryFaces(lmesh, label); CHKERRQ(ierr);
 
-  Vec coords;
-  ierr = DMGetCoordinates(lmesh, &coords); CHKERRQ(ierr);
+    Vec coords;
+    ierr = DMGetCoordinatesLocal(lmesh, &coords); CHKERRQ(ierr);
 
-  PetscSection coord_sec;
-  ierr = DMGetCoordinateSection(lmesh, &coord_sec); CHKERRQ(ierr);
+    PetscSection coord_sec;
+    ierr = DMGetCoordinateSection(lmesh, &coord_sec); CHKERRQ(ierr);
 
-  PetscInt size;
-  ierr = DMPlexGetStratumSize(lmesh, "boundary_faces", 1, &size); CHKERRQ(ierr);
+    PetscInt size;
+    ierr = DMPlexGetStratumSize(lmesh, "boundary_faces", 1, &size); CHKERRQ(ierr);
 
-  assert(rank==0 ? size>0 : true);
+    assert(rank==0 ? size>0 : true);
 
-  IS regionIS;
-  ierr = DMPlexGetStratumIS(lmesh, "boundary_faces", 1, &regionIS); CHKERRQ(ierr);
+    IS regionIS;
+    ierr = DMPlexGetStratumIS(lmesh, "boundary_faces", 1, &regionIS); CHKERRQ(ierr);
 
-  const PetscInt *boundary_faces;
-  ierr = ISGetIndices(regionIS, &boundary_faces); CHKERRQ(ierr);
+    const PetscInt *boundary_faces;
+    ierr = ISGetIndices(regionIS, &boundary_faces); CHKERRQ(ierr);
 
-  ierr = DMPlexCreateLabel(lmesh, "boundary_ids"); CHKERRQ(ierr);
-  for(int i=0;i<size;i++){
-    PetscInt face = boundary_faces[i];
+    ierr = DMPlexCreateLabel(lmesh, "boundary_ids"); CHKERRQ(ierr);
+    for(int i=0;i<size;i++){
+      PetscInt face = boundary_faces[i];
 
-    PetscInt csize;
-    PetscScalar *face_coords;
-    ierr = DMPlexVecGetClosure(lmesh, coord_sec, coords, face, &csize, &face_coords); CHKERRQ(ierr);
+      PetscInt csize;
+      PetscScalar *face_coords;
+      ierr = DMPlexVecGetClosure(lmesh, coord_sec, coords, face, &csize, &face_coords); CHKERRQ(ierr);
 
-    assert(rank==0 ? csize==4 : true);
+      assert(rank==0 ? csize==4 : true);
 
-    if(fabs(face_coords[0])<DBL_EPSILON && fabs(face_coords[2])<DBL_EPSILON){
-      DMPlexSetLabelValue(lmesh, "boundary_ids", face, 1);
-    }else if(fabs(face_coords[0]-1.0)<DBL_EPSILON && fabs(face_coords[2]-1.0)<DBL_EPSILON){
-      DMPlexSetLabelValue(lmesh, "boundary_ids", face, 2);
-    }else if(fabs(face_coords[1])<DBL_EPSILON && fabs(face_coords[3])<DBL_EPSILON){
-      DMPlexSetLabelValue(lmesh, "boundary_ids", face, 3);
-    }else if(fabs(face_coords[1]-1.0)<DBL_EPSILON && fabs(face_coords[3]-1.0)<DBL_EPSILON){
-      DMPlexSetLabelValue(lmesh, "boundary_ids", face, 4);
+      if(fabs(face_coords[0])<DBL_EPSILON && fabs(face_coords[2])<DBL_EPSILON){
+        DMPlexSetLabelValue(lmesh, "boundary_ids", face, 1);
+      }else if(fabs(face_coords[0]-1.0)<DBL_EPSILON && fabs(face_coords[2]-1.0)<DBL_EPSILON){
+        DMPlexSetLabelValue(lmesh, "boundary_ids", face, 2);
+      }else if(fabs(face_coords[1])<DBL_EPSILON && fabs(face_coords[3])<DBL_EPSILON){
+        DMPlexSetLabelValue(lmesh, "boundary_ids", face, 3);
+      }else if(fabs(face_coords[1]-1.0)<DBL_EPSILON && fabs(face_coords[3]-1.0)<DBL_EPSILON){
+        DMPlexSetLabelValue(lmesh, "boundary_ids", face, 4);
+      }
     }
   }
 
