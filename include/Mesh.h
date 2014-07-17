@@ -102,11 +102,16 @@ template<typename real_t> class Mesh{
 
     nthreads = pragmatic_nthreads();
 
-    // dmplex NElements = local number of elements
-    // dmplex NNodes = local number of nodes/vertices
+    /* Establish sizes */
+    PetscErrorCode ierr;
+    PetscInt dim, cStart, cEnd, vStart, vEnd;
+    ierr = DMPlexGetDimension(plex, &dim);assert(ierr==0);
+    ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);
+    NNodes = vEnd - vStart;
+    ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);
+    NElements = cEnd - cStart;
 
-    /* dmplex ....
-    if(plex is 3D){
+    if(dim == 2){
       nloc = 3;
       ndims = 2;
       msize = 3;
@@ -115,7 +120,17 @@ template<typename real_t> class Mesh{
       ndims = 3;
       msize = 6;
     }
+
+    /* Pragmatic assumes that local facet numbers correspond to the local vertex number
+       of the opposite vertex. Since this is not given by the Plex we have to perform a
+       re-ordering of Plex closures in order to enforce local entity numbering according
+       to Fenics rules. The universal vertex numbering is provided by the Plex's
+       coordinate section.
     */
+    PetscSection coord_sec;
+    ierr = DMGetCoordinateSection(plex, &coord_sec);
+    std::vector<std::pair<PetscInt, PetscInt>> fenics_local_numbering;
+    derive_fenics_local_numbering(plex, coord_sec, nloc, &fenics_local_numbering);
 
     // Import local element node list
     _ENList.resize(NElements*nloc);
@@ -2064,6 +2079,109 @@ template<typename real_t> class Mesh{
         lnn2gnn[*it] = recv_buff[i][k];
     }
 #endif
+  }
+
+/* PETSc DMPlex objects do not adhere to the Fenics local numbering convention
+   for simplices when deriving the transitive closure of cells. This routine
+   performs a one time bulk re-ordering of all cell closures in a DMPlex object
+   and store the Plex points for the according vertices and facets in a
+   vector<pair<PetscInt, PetscInt>>.
+
+   Input Parameters:
+   plex -  The DM object holding mesh topology
+   vertex_numbering:
+           Section providing the global (universal) vertex numbering
+           on which the Fenics local numbering is based
+   cell_closure:
+           Transitive closures for each cell reordered accordign to Fenics
+           conventions. We allocate, but user is responsible for deallocating.
+   local_numbering:
+           Vector of size(nloc*nlements) with a pair of Plex points <vertex, facet>
+           for each nloc verteices/facets in each element according to Fenics convention.
+  */
+  void derive_fenics_local_numbering(DM plex, PetscSection vertex_numbering, size_t nloc,
+                                    std::vector<std::pair<PetscInt,PetscInt>> *local_numbering)
+  {
+    PetscInt cStart, cEnd, vStart, vEnd, fStart, fEnd;
+    PetscInt dim, cell, vertex, v_per_cell, nfacet_vertices, nclosure, *closure = NULL;
+    PetscInt f, ci, vi, fi;
+    PetscInt *vertices = NULL, *v_global = NULL, *facets = NULL, *facet_vertices = NULL;
+    PetscBool incident;
+    /* Need to do better error checking in here */
+    PetscErrorCode ierr;
+
+    ierr = DMPlexGetDimension(plex, &dim);assert(ierr==0);
+    ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);  // vertices
+    ierr = DMPlexGetHeightStratum(plex, 1, &fStart, &fEnd);assert(ierr==0);  // facets
+    ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);  // cells
+
+    v_per_cell = (PetscInt) nloc;
+    ierr = PetscMalloc(v_per_cell, &vertices);assert(ierr==0);
+    ierr = PetscMalloc(v_per_cell, &v_global);assert(ierr==0);
+    ierr = PetscMalloc(v_per_cell, &facets);assert(ierr==0);
+    ierr = PetscMalloc(v_per_cell - 1, &facet_vertices);assert(ierr==0);
+
+    local_numbering->resize((cEnd-cStart) * nloc);
+
+    for (cell=cStart; cell<cEnd; cell++) {
+      ierr = DMPlexGetTransitiveClosure(plex, cell, PETSC_TRUE, &nclosure, &closure);
+
+      /* Find vertices and translate universal numbers */
+      vi = 0; fi = 0;
+      for (ci=0; ci<nclosure; ci++) {
+        if (vStart <= closure[2*ci] && closure[2*ci] < vEnd) {
+          vertices[vi] = closure[2*ci];
+          ierr = PetscSectionGetOffset(vertex_numbering, closure[2*ci], &vertex);
+
+          /* Correct -ve offsets for non-owned vertices */
+          if (vertex >= 0) { v_global[vi] = vertex; }
+          else { v_global[vi] = -(vertex+1);}
+          vi++;
+        }
+
+        if (fStart <= closure[2*ci] && closure[2*ci] < fEnd) {
+          facets[fi] = closure[2*ci]; fi++;
+        }
+      }
+
+      /* Sort vertices by universal number */
+      ierr = PetscSortIntWithArray(v_per_cell, v_global, vertices);
+
+      for (vi=0; vi<v_per_cell; vi++) {
+        (*local_numbering)[cell*nloc + vi].first = vertices[vi];
+      }
+
+      for (f=0; f<nloc; f++) {
+        /* Get all vertices associated with this facet */
+        ierr = DMPlexGetTransitiveClosure(plex, facets[f], PETSC_TRUE, &nclosure, &closure);
+        vi = 0;
+        for (ci=0; ci<nclosure; ci++) {
+          if (vStart <= closure[2*ci] && closure[2*ci] < vEnd) {
+            facet_vertices[vi] = closure[2*ci]; vi++;
+          }
+        }
+        nfacet_vertices = vi;
+
+        /* Now we look for the non-incident (opposite) cell vertex */
+        for (vi=0; vi<v_per_cell; vi++) {
+          incident = PETSC_FALSE;
+          for (fi=0; fi<nfacet_vertices; fi++) {
+            if (vertices[vi] == facet_vertices[fi]) {
+              incident = PETSC_TRUE; break;
+            }
+          }
+          if (!incident) {
+            /* We have found the non-incident vertex for this facet */
+            (*local_numbering)[cell*nloc + vi].second = facets[f]; break;
+          }
+        }
+      }
+    }
+
+    PetscFree(vertices);
+    PetscFree(v_global);
+    PetscFree(facets);
+    PetscFree(facet_vertices);
   }
 
   // This is used temporarily for 3D - it will be removed in the future.
