@@ -132,13 +132,29 @@ template<typename real_t> class Mesh{
     std::vector<std::pair<PetscInt, PetscInt>> fenics_local_numbering;
     derive_fenics_local_numbering(plex, coord_sec, nloc, &fenics_local_numbering);
 
-    // Import local element node list
+    /* Import local element node list and set boundary IDs according to Plex label "boundary_ids" */
     _ENList.resize(NElements*nloc);
-    // ...read from plex.
+    boundary.resize(NElements*nloc);
+    int bid, ind = 0;
+    for(std::vector<std::pair<PetscInt, PetscInt>>::iterator it = fenics_local_numbering.begin();
+        it != fenics_local_numbering.end(); it++) {
+      _ENList[ind] = it->first - vStart;
+
+      ierr = DMPlexGetLabelValue(plex, "boundary_ids", it->second, &bid);
+      if (bid > 0) boundary[ind] = bid;
+      else boundary[ind] = 0;
+      ind++;
+    }
 
     // Import local coordinates
     _coords.resize(NNodes*ndims);
-    // ...read from plex
+    Vec coords_vec;
+    PetscReal *plex_coords;
+    ierr = DMGetCoordinatesLocal(plex, &coords_vec);
+    ierr = VecGetArray(coords_vec, &plex_coords);
+    /* Not sure we really need to deep copy here */
+    for (int i=0; i<NNodes*ndims; i++) _coords[i] = plex_coords[i];
+    ierr = VecRestoreArray(coords_vec, &plex_coords);
 
     // Stores the rank that owns each vertex.
     node_owner.resize(NNodes);
@@ -148,6 +164,9 @@ template<typename real_t> class Mesh{
     lnn2gnn.resize(NNodes);
     // ...from plex.
 
+    NNList.resize(NNodes);
+    NEList.resize(NNodes);
+
     /* This std::vector< std::vector<index_t> > send, recv defines the halo
      * where node index send[i][k] is sent to rank i, and is received by index recv[j][k], 
      * where j is the sending rank. Note that k on the send side is the same as k on the recv size.
@@ -155,7 +174,7 @@ template<typename real_t> class Mesh{
     // ...from plex
 
     // Right now we are doing nothing with this. But in the future the plex may contain a special tensor field/section that we will need to import.
-    //metric.resize(NNodes*msize);
+    metric.resize(NNodes*msize);
 
 
     // This really needs to be revisited...leave as it for now.
