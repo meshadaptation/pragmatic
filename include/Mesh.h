@@ -132,6 +132,11 @@ template<typename real_t> class Mesh{
     std::vector<std::pair<PetscInt, PetscInt>> fenics_local_numbering;
     derive_fenics_local_numbering(plex, coord_sec, nloc, &fenics_local_numbering);
 
+    /* Make sure label "boundary_ids" exists */
+    PetscBool has_label;
+    ierr = DMPlexHasLabel(plex, "boundary_ids", &has_label);
+    if (!has_label) ierr = DMPlexCreateLabel(plex, "boundary_ids");
+
     /* Import local element node list and set boundary IDs according to Plex label "boundary_ids" */
     _ENList.resize(NElements*nloc);
     boundary.resize(NElements*nloc);
