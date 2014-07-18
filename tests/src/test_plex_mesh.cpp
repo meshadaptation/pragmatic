@@ -20,6 +20,17 @@ int main(int argv, char **argc){
   ierr = DMView(unit_cube_mesh, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
 
   Mesh<double> mesh3d(unit_cube_mesh, MPI_COMM_WORLD);
+
+  MetricField3D<double> metric_field(mesh3d);
+  size_t NNodes = mesh3d.get_number_nodes();
+  for(size_t i=0;i<NNodes;i++){
+    double m[] = {0.5, 0.0, 0.0,
+                  0.5, 0.0,
+                  0.5};
+    metric_field.set_metric(m, i);
+  }
+  metric_field.update_mesh();
+
   VTKTools<double>::export_vtu("data/test_plex_3d", &mesh3d);
 
   ierr = PetscFinalize(); CHKERRQ(ierr);

@@ -180,7 +180,6 @@ template<typename real_t> class Mesh{
 
     // Right now we are doing nothing with this. But in the future the plex may contain a special tensor field/section that we will need to import.
     metric.resize(NNodes*msize);
-    for (int i=0; i<NNodes*msize; i++) metric[i] = 1.0;  // Set to 1. to get past assertions
 
 
     // This really needs to be revisited...leave as it for now.
