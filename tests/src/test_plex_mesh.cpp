@@ -13,6 +13,26 @@ int main(int argv, char **argc){
 
   VTKTools<double>::export_vtu("../data/test_plex_2d", &mesh);
 
+  double perimeter = mesh.calculate_perimeter();
+  double area = mesh.calculate_area();
+
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if(rank==0){
+    std::cout<<"Expecting perimeter == 4: ";
+    if(fabs(perimeter-4)<=2*DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<=2*DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+  }
+
   /*
   int NVerts, NElements;
   ///....
