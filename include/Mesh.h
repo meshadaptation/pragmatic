@@ -1633,6 +1633,52 @@ template<typename real_t> class Mesh{
     }
   }
 
+  void export_dmplex(DM *plex)
+  {
+    PetscErrorCode ierr;
+    ierr = DMPlexCreateFromCellList(_mpi_comm, ndims, NElements, NNodes, nloc, PETSC_TRUE,
+                                    _ENList.data(), ndims, _coords.data(), plex); assert(ierr==0);
+
+    /* Mark boundary faces */
+    DMLabel label;
+    ierr = DMPlexCreateLabel(*plex, "boundary_faces"); assert(ierr==0);
+    ierr = DMPlexGetLabel(*plex, "boundary_faces", &label); assert(ierr==0);
+    ierr = DMPlexMarkBoundaryFaces(*plex, label); assert(ierr==0);
+
+    /* Now apply our boundary IDs to the new Plex */
+    PetscInt cell, ci, f, v, vStart, vEnd, fStart, fEnd;
+    PetscInt bid, vertex, nclosure, *closure=NULL;
+    const PetscInt *facets=NULL;
+    PetscBool incident;
+    ierr = DMPlexCreateLabel(*plex, "boundary_ids"); assert(ierr==0);
+    ierr = DMPlexGetLabel(*plex, "boundary_ids", &label); assert(ierr==0);
+    ierr = DMPlexGetDepthStratum(*plex, 0, &vStart, &vEnd);assert(ierr==0);
+    ierr = DMPlexGetHeightStratum(*plex, 1, &fStart, &fEnd);assert(ierr==0);  // facets
+    for (cell=0; cell<NElements; cell++){
+      ierr = DMPlexGetCone(*plex, cell, &facets);
+
+      for (v=0; v<nloc; v++) {
+        bid = boundary[cell*nloc+v];
+        if (bid > 0){
+          /* Find the Plex facet that is not included in the "star"
+             (inverse closure) of the non-incident vertex */
+          vertex = _ENList[cell*nloc+v] + vStart;
+          ierr = DMPlexGetTransitiveClosure(*plex, vertex, PETSC_FALSE, &nclosure, &closure);
+
+          for (f=0; f<nloc; f++) {
+            incident = PETSC_FALSE;
+            for (ci=0; ci<nclosure; ci++) {
+              if (facets[f] == closure[2*ci]) {incident=PETSC_TRUE; break;}
+            }
+            if (!incident) {
+              ierr = DMLabelSetValue(label, facets[f], bid); break;
+            }
+          }
+        }
+      }
+    }
+  }
+
  private:
   template<typename _real_t> friend class MetricField2D;
   template<typename _real_t> friend class MetricField3D;
