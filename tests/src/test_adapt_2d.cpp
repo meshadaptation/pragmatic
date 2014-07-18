@@ -170,7 +170,8 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
   
-  double perimeter = mesh->calculate_perimeter();
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
 
   delete mesh;
 
@@ -197,6 +198,12 @@ int main(int argc, char **argv){
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
   }
 
   MPI_Finalize();

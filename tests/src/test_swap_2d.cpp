@@ -102,7 +102,10 @@ int main(int argc, char **argv){
   
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
-  double perimeter = mesh->calculate_perimeter();
+
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
+
   if(verbose&&rank==0){
     std::cout<<"Swap loop time: "<<toc-tic<<std::endl
              <<"Quality mean:   "<<qmean<<std::endl
@@ -116,6 +119,12 @@ int main(int argc, char **argv){
   else
     std::cout<<"false ("<<fabs(perimeter-4)<<", epsilon="<<DBL_EPSILON<<")\n";
   
+  std::cout<<"Checking area == 1: ";
+  if(fabs(area-1)<DBL_EPSILON)
+    std::cout<<"pass\n";
+  else
+    std::cout<<"false ("<<fabs(area-1)<<", epsilon="<<DBL_EPSILON<<")\n";
+
   delete mesh;
   
   MPI_Finalize();

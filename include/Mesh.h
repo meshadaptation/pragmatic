@@ -582,6 +582,52 @@ template<typename real_t> class Mesh{
     return mean;
   }
 
+  /// Calculate perimeter
+  double calculate_perimeter(){
+    int NElements = get_number_elements();
+    if(ndims==2){
+      long double total_length=0;
+      
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+	  for(int j=0;j<3;j++){
+            int n1 = _ENList[i*nloc+(j+1)%3];
+	    int n2 = _ENList[i*nloc+(j+2)%3];
+
+	    if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+	      long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+	      long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	      
+	      total_length += sqrt(dx*dx+dy*dy);
+	    }
+	  }
+	}
+	
+	MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+	for(int i=0;i<NElements;i++){
+	  for(int j=0;j<3;j++){
+	    if(boundary[i*nloc+j]>0){
+	      int n1 = _ENList[i*nloc+(j+1)%3];
+	      int n2 = _ENList[i*nloc+(j+2)%3];
+	    
+              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+	      
+	      total_length += sqrt(dx*dx+dy*dy);
+	    }
+	  }
+	}
+      }
+      
+      return total_length;
+    }else{
+      std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
+      return -1;
+    }
+  }
+
+
   /// Calculate area
   double calculate_area(){
     int NElements = get_number_elements();
@@ -753,145 +799,71 @@ template<typename real_t> class Mesh{
     return total_area;
   }
 
-
-  /// Calculate perimeter
-  double calculate_perimeter(){
+  /// Calculate volume
+  double calculate_volume(){
     int NElements = get_number_elements();
-    if(ndims==2){
-      long double total_length=0;
-      
-      if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  for(int j=0;j<3;j++){
-            int n1 = _ENList[i*nloc+(j+1)%3];
-	    int n2 = _ENList[i*nloc+(j+2)%3];
+    long double total_volume=0;
 
-	    if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
-	      long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	      long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	      
-	      total_length += sqrt(dx*dx+dy*dy);
-	    }
-	  }
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-      }else{
-	for(int i=0;i<NElements;i++){
-	  for(int j=0;j<3;j++){
-	    if(boundary[i*nloc+j]>0){
-	      int n1 = _ENList[i*nloc+(j+1)%3];
-	      int n2 = _ENList[i*nloc+(j+2)%3];
-	    
-              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	      
-	      total_length += sqrt(dx*dx+dy*dy);
-	    }
-	  }
-	}
-      }
-      
-      return total_length;
-    }else{
-      // 3D - the perimeter is the surface area.
-      long double total_area=0;
-      
+    if(ndims==2){
+      std::cerr<<"ERROR: Cannot calculate volume in 2D\n"; 
+    }else{ // 3D
       if(num_processes>1){
 	for(int i=0;i<NElements;i++){
 	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
 	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    // Don't sum if it's not ours
-	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
-	      continue;
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
+          // Don't sum if it's not ours
+          if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
+            continue;
+
+          const double *x0 = get_coords(n[0]);
+          const double *x1 = get_coords(n[1]);
+          const double *x2 = get_coords(n[2]);
+          const double *x3 = get_coords(n[3]);
+
+          long double x01 = (x0[0] - x1[0]);
+          long double x02 = (x0[0] - x2[0]);
+          long double x03 = (x0[0] - x3[0]);
+
+          long double y01 = (x0[1] - x1[1]);
+          long double y02 = (x0[1] - x2[1]);
+          long double y03 = (x0[1] - x3[1]);
+
+          long double z01 = (x0[2] - x1[2]);
+          long double z02 = (x0[2] - x2[2]);
+          long double z03 = (x0[2] - x3[2]);
+
+          total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
 	}
 	
-	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+	MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
 	for(int i=0;i<NElements;i++){
 	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
-	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
-	}
+
+          const double *x0 = get_coords(n[0]);
+          const double *x1 = get_coords(n[1]);
+          const double *x2 = get_coords(n[2]);
+          const double *x3 = get_coords(n[3]);
+
+          long double x01 = (x0[0] - x1[0]);
+          long double x02 = (x0[0] - x2[0]);
+          long double x03 = (x0[0] - x3[0]);
+
+          long double y01 = (x0[1] - x1[1]);
+          long double y02 = (x0[1] - x2[1]);
+          long double y03 = (x0[1] - x3[1]);
+
+          long double z01 = (x0[2] - x1[2]);
+          long double z02 = (x0[2] - x2[2]);
+          long double z03 = (x0[2] - x3[2]);
+
+          total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+        }
       }
-      
-      return total_area;
     }
+    return total_volume;
   }
+
 
   /// Get the edge length RMS value in metric space.
   double get_lrms(){

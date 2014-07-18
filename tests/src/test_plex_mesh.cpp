@@ -58,13 +58,21 @@ int main(int argv, char **argc){
   mesh2d.export_dmplex(&coarse_square);
   ierr = DMView(coarse_square, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
 
-
   /* Build and dump a 3D unit cube */
   DM unit_cube_mesh;
   ierr = create_unit_cube(6, 6, 6, MPI_COMM_WORLD, &unit_cube_mesh); CHKERRQ(ierr);
   ierr = DMView(unit_cube_mesh, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
 
   Mesh<double> mesh3d(unit_cube_mesh, MPI_COMM_WORLD);
+
+  area = mesh3d.calculate_area();
+  if(rank==0){
+    std::cout<<"Expecting area == 6: ";
+    if(fabs(area-6)<=2*DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+  }
 
   MetricField3D<double> metric_field(mesh3d);
   size_t NNodes = mesh3d.get_number_nodes();

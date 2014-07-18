@@ -95,13 +95,13 @@ int main(int argc, char **argv){
       VTKTools<double>::export_vtu("../data/test_smooth_3d_init", mesh);
       double qmean = mesh->get_qmean();
       double qmin = mesh->get_qmin();
-      double perimeter = mesh->calculate_perimeter();
+      double area = mesh->calculate_area();
       
       if(rank==0)
         std::cout<<"Initial quality:"<<std::endl
                  <<"Quality mean:    "<<qmean<<std::endl
                  <<"Quality min:     "<<qmin<<std::endl
-		 <<"Perimeter area:  "<<perimeter<<std::endl;
+		 <<"Total area:      "<<area<<std::endl;
     }
     
     Smooth3D<double> smooth(*mesh);
@@ -113,12 +113,13 @@ int main(int argc, char **argv){
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();
     
-    double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
 
     if(rank==0)
       std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
                <<"Quality mean:          "<<qmean<<std::endl
-               <<"Quality min:          "<<qmin<<std::endl;
+               <<"Quality min:           "<<qmin<<std::endl;
     
     std::string vtu_filename = std::string("../data/test_smooth_3d_")+std::string(method);
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
@@ -130,11 +131,18 @@ int main(int argc, char **argv){
       else
         std::cout<<"fail"<<std::endl;
       
-      std::cout<<"Checking perimeter == 6: ";
-      if(fabs(perimeter-6)<DBL_EPSILON)
+      std::cout<<"Checking area == 6: ";
+      if(fabs(area-6)<DBL_EPSILON)
         std::cout<<"pass"<<std::endl;
       else
-        std::cout<<"fail ("<<perimeter<<": difference="<<perimeter-6<<")"<<std::endl;
+        std::cout<<"fail ("<<perimeter<<": area="<<area<<")"<<std::endl;
+
+      std::cout<<"Checking volume == 1: ";
+      if(fabs(volume-1)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+      else
+        std::cout<<"fail ("<<volume<<": volume="<<volume<<")"<<std::endl;
+
     }
   }
   

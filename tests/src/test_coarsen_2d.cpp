@@ -91,7 +91,9 @@ int main(int argc, char **argv){
 
   int nelements = mesh->get_number_elements();
 
-  double perimeter = mesh->calculate_perimeter();
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
+
   if(verbose){
 
     if(rank==0)
@@ -117,6 +119,11 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail"<<std::endl;
 
+    std::cout<<"Expecting area = 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
   }
 
   MPI_Finalize();

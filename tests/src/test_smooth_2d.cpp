@@ -108,7 +108,8 @@ int main(int argc, char **argv){
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();
     
-    double perimeter = mesh->calculate_perimeter();
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
 
     if(rank==0)
       std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
@@ -125,11 +126,17 @@ int main(int argc, char **argv){
       else
         std::cout<<"fail"<<std::endl;
       
-      std::cout<<"Checking perimeter = 4: ";
+      std::cout<<"Checking perimeter == 4: ";
       if(fabs(perimeter-4)<DBL_EPSILON)
         std::cout<<"pass"<<std::endl;
       else
         std::cout<<"fail ("<<perimeter<<")"<<std::endl;
+
+      std::cout<<"Checking area == 1: ";
+      if(fabs(area-1)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+      else
+        std::cout<<"fail ("<<area<<")"<<std::endl;
     }
   }
   
