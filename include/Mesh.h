@@ -161,14 +161,6 @@ template<typename real_t> class Mesh{
     for (int i=0; i<NNodes*ndims; i++) _coords[i] = plex_coords[i];
     ierr = VecRestoreArray(coords_vec, &plex_coords);
 
-    // Stores the rank that owns each vertex.
-    node_owner.resize(NNodes);
-    // ...from plex.
-
-    // Stores the local2global node number map.
-    lnn2gnn.resize(NNodes);
-    // ...from plex.
-
     NNList.resize(NNodes);
     NEList.resize(NNodes);
 
@@ -176,7 +168,88 @@ template<typename real_t> class Mesh{
      * where node index send[i][k] is sent to rank i, and is received by index recv[j][k], 
      * where j is the sending rank. Note that k on the send side is the same as k on the recv size.
      */
-    // ...from plex
+    send.resize(num_processes);
+    recv.resize(num_processes);
+    send_map.resize(num_processes);
+    recv_map.resize(num_processes);
+
+    // Stores the rank that owns each vertex.
+    node_owner.resize(NNodes);
+
+    PetscSF sf = NULL;
+    PetscInt nroots, nleaves;
+    const PetscInt *local;
+    const PetscSFNode *remote;
+
+    /* Hack alert: Build a scalar CG1 section to enforce a meaningful SF */
+    PetscSection section;
+    PetscInt  comp[1] = {1};
+    PetscInt  dof[4] = {1, 0, 0, 0};
+    ierr = DMPlexCreateSection(plex, ndims, 1, comp, dof, 0, NULL, NULL, NULL, &section); assert(ierr==0);
+    ierr = DMSetDefaultSection(plex, section); assert(ierr==0);
+    ierr = DMGetDefaultSF(plex, &sf); assert(ierr==0);
+
+    /* Derive local receives, the according remote sends and a local
+       root->leaf mapping */
+    std::vector< std::vector<index_t> > remote_send(num_processes);
+    std::map<index_t, index_t> root_leaf_map;
+    ierr = PetscSFGetGraph(sf, &nroots, &nleaves, &local, &remote); assert(ierr==0);
+    assert(nleaves == NNodes);
+    for (int i=0; i<nleaves; i++) {
+      if (remote[i].rank != rank) {
+        recv[remote[i].rank].push_back( local[i] );
+        remote_send[remote[i].rank].push_back( remote[i].index );
+      } else {
+        root_leaf_map.insert( std::pair<index_t, index_t>(remote[i].index, local[i]) );
+      }
+      node_owner[i] = remote[i].rank;
+    }
+
+    /* Propagate remote send lists to the actual sender */
+    int tag = 123456;
+    std::vector<MPI_Request> send_req(num_processes);
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc != rank) {
+        ierr = MPI_Isend(remote_send[proc].data(), remote_send[proc].size(), MPI_INT,
+                         proc, tag, comm, &send_req[proc]); assert(ierr==0);
+      }
+    }
+
+    /* Receive local send list from receiving proc */
+    MPI_Status status;
+    std::vector<int> recv_size(num_processes);
+    std::vector<MPI_Request> recv_req(num_processes);
+    std::vector<index_t*> recv_buffer(num_processes);
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc != rank) {
+        ierr = MPI_Probe(proc, tag, comm, &status); assert(ierr==0);
+        ierr = MPI_Get_count(&status, MPI_INT, &recv_size[proc]); assert(ierr==0);
+        recv_buffer[proc] = new index_t[recv_size[proc]];
+
+        MPI_Irecv(recv_buffer[proc], recv_size[proc], MPI_INT, proc,
+                  tag, comm, &recv_req[proc]); assert(ierr==0);
+      }
+    }
+
+    /* Translate received send lists from roots into leaves and assign to send */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc != rank) {
+        send[proc].resize( recv_size[proc] );
+        for (int i=0; i<recv_size[proc]; i++) {
+          send[proc][i] = root_leaf_map.find(recv_buffer[proc][i])->second;
+        }
+        free(recv_buffer[proc]);
+      }
+    }
+
+    // Stores the local2global node number map.
+    lnn2gnn.resize(NNodes);
+    ISLocalToGlobalMapping ltog;
+    const PetscInt *ltog_indices;
+    ierr = DMGetLocalToGlobalMapping(plex, &ltog); assert(ierr==0);
+    ISLocalToGlobalMappingGetIndices(ltog, &ltog_indices); assert(ierr==0);
+    for (int i=0; i<NNodes; i++) lnn2gnn[i] = ltog_indices[i];
+    ISLocalToGlobalMappingRestoreIndices(ltog, &ltog_indices); assert(ierr==0);
 
     // Right now we are doing nothing with this. But in the future the plex may contain a special tensor field/section that we will need to import.
     metric.resize(NNodes*msize);
