@@ -1730,6 +1730,9 @@ template<typename real_t> class Mesh{
 
     PetscSection point_owners;
     plex_create_point_ownership(*plex, &point_owners);
+
+    PetscSection remote_roots;
+    plex_map_remote_roots(*plex, &remote_roots);
   }
 
   /* This routine establishes the ownership of all points in the DAG
@@ -1789,6 +1792,211 @@ template<typename real_t> class Mesh{
         }
       }
     }
+  }
+
+  /* This routine matches the local plex IDs (leafs) of all points
+     in the halo/non-core region with their remote Plex IDs (roots)
+     on the sending rank.
+
+     This is done by first matching the local vertex IDs in the
+     closure(star(v)), forall v in the "send" halo via Pragmatic's GNN.
+     After that we can match entities in higher stratas (edges, facets,
+     cells) in turn by communicating the cone of the local entity and
+     matching it to the local leaf on the remote rank.
+  */
+  void plex_map_remote_roots(DM plex, PetscSection *remote_roots) {
+
+    /* Build section to store remote roots */
+    PetscErrorCode ierr;
+    PetscInt p, pStart, pEnd, cStart, cEnd, vStart, vEnd;
+    PetscInt v, ci, root, leaf, depth, size, max_cone_size, max_support_size;
+    PetscInt nmatch, njoin, *matches=NULL, nclosure, *closure=NULL;
+    const PetscInt *cone=NULL, *join=NULL;
+    std::vector< std::set<index_t> > adjacent_points(num_processes);
+    std::vector< std::set<index_t> > stratum_points(num_processes);
+    std::map<index_t,index_t> root_leaf_map;
+    std::map<index_t,index_t>::iterator entry;
+
+    /* Establish Plex sizes */
+    ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);
+    ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);
+    ierr = DMPlexGetMaxSizes(plex, &max_cone_size, &max_support_size); assert(ierr==0);
+    ierr = PetscMalloc(max_cone_size, &matches); assert(ierr==0);
+
+    /* Build remote_root section */
+    ierr = DMPlexGetChart(plex, &pStart, &pEnd); assert(ierr==0);
+    ierr = PetscSectionCreate(_mpi_comm, remote_roots); assert(ierr==0);
+    ierr = PetscSectionSetChart(*remote_roots, pStart, pEnd); assert(ierr==0);
+    ierr = PetscSectionSetUp(*remote_roots); assert(ierr==0);
+    for (p=pStart; p<pEnd; p++) {
+      ierr = PetscSectionSetDof(*remote_roots, p, 1); assert(ierr==0);
+      ierr = PetscSectionSetOffset(*remote_roots, p, -1); assert(ierr==0);
+    }
+
+    /* Communicate send halo vertex IDs */
+    std::vector< std::vector<index_t> > send_gnn(num_processes);
+    std::vector< std::vector<index_t> > recv_gnn(num_processes);
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      send_gnn[proc].resize( 2*send[proc].size() );
+      for (v=0; v<send[proc].size(); v++) {
+        /* Send pairs of Plex ID and GNN */
+        send_gnn[proc][2*v] = vStart + send[proc][v];
+        send_gnn[proc][2*v+1] = lnn2gnn[ send[proc][v] ];
+      }
+    }
+    send_all_to_all(send_gnn, &recv_gnn);
+
+    /* Compute the local leaf -> root mapping for "send" halo */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      for (v=0; v<recv_gnn[proc].size(); v+=2) {
+        root = recv_gnn[proc][v];
+        leaf = vStart + recv_map[proc][ recv_gnn[proc][v+1] ];
+        ierr = PetscSectionSetOffset(*remote_roots, leaf, root); assert(ierr==0);
+        root_leaf_map.insert( std::pair<index_t,index_t>(root, leaf) );
+      }
+    }
+
+    /* Communicate recv halo vertex IDs */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      send_gnn[proc].resize( 2*recv[proc].size() );
+      for (v=0; v<recv[proc].size(); v++) {
+        /* Send pairs of Plex ID and GNN */
+        send_gnn[proc][2*v] = vStart + recv[proc][v];
+        send_gnn[proc][2*v+1] = lnn2gnn[ recv[proc][v] ];
+      }
+    }
+    send_all_to_all(send_gnn, &recv_gnn);
+
+    /* Compute the local leaf -> root mapping for "recv" halo */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      for (v=0; v<recv_gnn[proc].size(); v+=2) {
+        root = recv_gnn[proc][v];
+        leaf = vStart + send_map[proc][ recv_gnn[proc][v+1] ];
+        ierr = PetscSectionSetOffset(*remote_roots, leaf, root); assert(ierr==0);
+        root_leaf_map.insert( std::pair<index_t,index_t>(root, leaf) );
+      }
+    }
+
+    /* Now we can to establish the leaf->root mapping for edges, faces, etc.
+       For this we first need to derive all points adjacent to our "send"
+       vertex list by finding the closure(star(v)), where v is a "send" vertex. */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      /* Collect all points in star(v), where v is a "send" vertex */
+      for (v=0; v<send[proc].size(); v++) {
+        ierr = DMPlexGetTransitiveClosure(plex, vStart+send[proc][v], PETSC_FALSE, &nclosure, &closure);
+        for (ci=0; ci<nclosure; ci++)  adjacent_points[proc].insert(closure[2*ci]);
+      }
+
+      /* Add the closure of all cells in star(v) */
+      for (std::set<index_t>::iterator it=adjacent_points[proc].begin();
+           it!= adjacent_points[proc].end(); it++) {
+        if (cStart <= *it && *it < cEnd) {
+          ierr = DMPlexGetTransitiveClosure(plex, *it, PETSC_TRUE, &nclosure, &closure);
+          for (ci=0; ci<nclosure; ci++)  adjacent_points[proc].insert(closure[2*ci]);
+        }
+      }
+    }
+
+    /* Finally, we can step through all layers (strata) above the vertices
+       and reconstruct the local_lnn(leaf)->remote_lnn(root) mapping. */
+    for (depth = 1; depth < ndims+1; depth++) {
+      ierr = DMPlexGetDepthStratum(plex, depth, &pStart, &pEnd);assert(ierr==0);
+      for (int proc=0; proc<num_processes; proc++) {
+        if (proc == rank) continue;
+
+        /* Go through the adjacent_points and count the entities in this stratum/layer */
+        stratum_points[proc].clear();
+        for (v=0; v<send[proc].size(); v++) {
+          for (std::set<index_t>::iterator it=adjacent_points[proc].begin();
+               it!= adjacent_points[proc].end(); it++) {
+            if (pStart <= *it && *it < pEnd) stratum_points[proc].insert(*it);
+          }
+        }
+
+        /* Pack cone of each edge touching a "send" vertex; +1 is the actual cone size */
+        send_gnn[proc].resize( stratum_points[proc].size()*(max_cone_size+2) );
+        v = 0;
+        for (std::set<index_t>::iterator it=stratum_points[proc].begin();
+             it!= stratum_points[proc].end(); it++) {
+          ierr = DMPlexGetConeSize(plex, *it, &size); assert(ierr==0);
+          ierr = DMPlexGetCone(plex, *it, &cone); assert(ierr==0);
+          send_gnn[proc][v] = *it;
+          send_gnn[proc][v+1] = size;
+          for (ci=0; ci<size; ci++)  send_gnn[proc][v+2+ci] = cone[ci];
+          v += max_cone_size + 2;
+        }
+      }
+      send_all_to_all(send_gnn, &recv_gnn);
+
+      for (int proc=0; proc<num_processes; proc++) {
+        if (proc == rank) continue;
+
+        /* Now we try to match the received cone to one of our local Plex points */
+        for (v=0; v<recv_gnn[proc].size(); v+=max_cone_size+2) {
+          root = recv_gnn[proc][v];
+          size = recv_gnn[proc][v+1];
+          nmatch = 0;
+          for (ci=2; ci<size+2; ci++) {
+            /* Go through the remote cone and find matches with locally know points */
+            entry = root_leaf_map.find( recv_gnn[proc][v+ci] );
+            if (entry != root_leaf_map.end()) {
+              matches[nmatch] = entry->second;
+              nmatch++;
+            }
+          }
+
+          /* If we know all points in the remote cone, we can find the local counterpart */
+          if (nmatch == size) {
+            ierr = DMPlexGetJoin(plex, nmatch, matches, &njoin, &join); assert(ierr==0);
+            if (njoin > 0) {
+              assert(njoin == 1);
+              ierr = PetscSectionSetOffset(*remote_roots, join[0], root); assert(ierr==0);
+              root_leaf_map.insert( std::pair<index_t,index_t>(root, join[0]) );
+            }
+          }
+        }
+      }
+    }
+    ierr = PetscFree(matches); assert(ierr==0);
+  }
+
+  void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
+                       std::vector< std::vector<index_t> > *recv_vec) {
+    int ierr, recv_size, tag = 123456;
+    std::vector<MPI_Status> status(num_processes);
+    std::vector<MPI_Request> send_req(num_processes);
+    std::vector<MPI_Request> recv_req(num_processes);
+
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) {send_req[proc] = MPI_REQUEST_NULL; continue;}
+
+      ierr = MPI_Isend(send_vec[proc].data(), send_vec[proc].size(), MPI_INDEX_T,
+                       proc, tag, _mpi_comm, &send_req[proc]); assert(ierr==0);
+    }
+
+    /* Receive send list from remote proc */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) {recv_req[proc] = MPI_REQUEST_NULL; continue;}
+
+      ierr = MPI_Probe(proc, tag, _mpi_comm, &(status[proc])); assert(ierr==0);
+      ierr = MPI_Get_count(&(status[proc]), MPI_INT, &recv_size); assert(ierr==0);
+      (*recv_vec)[proc].resize(recv_size);
+      MPI_Irecv((*recv_vec)[proc].data(), recv_size, MPI_INT, proc,
+                tag, _mpi_comm, &recv_req[proc]); assert(ierr==0);
+    }
+
+    MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
+    MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
   }
 
  private:
