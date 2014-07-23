@@ -1722,6 +1722,73 @@ template<typename real_t> class Mesh{
         }
       }
     }
+
+    /* After building the Plex DAG in parallel we need to build the PetscSF
+       that maps all local halo points (leaves) to remote points (roots).
+    */
+    if (num_processes <= 1) return;
+
+    PetscSection point_owners;
+    plex_create_point_ownership(*plex, &point_owners);
+  }
+
+  /* This routine establishes the ownership of all points in the DAG
+     fom Pragmatic's vertex ownership. The convention is to assign a
+     point to the lowest rank of all associated vertex owners. The
+     resulting ownership is stored in a PetscSection.
+  */
+  void plex_create_point_ownership(DM plex, PetscSection *point_owners) {
+    PetscErrorCode ierr;
+    PetscInt p, pStart, pEnd, cStart, cEnd, v, vStart, vEnd;
+    PetscInt vertex, nhalo_points, owner, ci, nclosure, *closure = NULL;
+    ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);
+    ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);
+
+    /* Build a section to store point owners */
+    ierr = DMPlexGetChart(plex, &pStart, &pEnd); assert(ierr==0);
+    ierr = PetscSectionCreate(_mpi_comm, point_owners); assert(ierr==0);
+    ierr = PetscSectionSetChart(*point_owners, pStart, pEnd); assert(ierr==0);
+    ierr = PetscSectionSetUp(*point_owners); assert(ierr==0);
+    for (p=pStart; p<pEnd; p++) {
+      ierr = PetscSectionSetDof(*point_owners, p, 1); assert(ierr==0);
+      ierr = PetscSectionSetOffset(*point_owners, p, rank); assert(ierr==0);
+    }
+
+    /* Establish ownership of each Plex point from our halo recv lists */
+    std::vector<PetscInt> vertex_star;
+    nhalo_points = 0;
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+
+      for (v=0; v<recv[proc].size(); v++) {
+        /* Assign ownership of halo vertex */
+        vertex = recv[proc][v] + vStart;
+        ierr = PetscSectionSetOffset(*point_owners, vertex, proc); assert(ierr==0);
+        nhalo_points++;
+
+        /* Store the vertex star (inverse closure) for later traversal */
+        ierr = DMPlexGetTransitiveClosure(plex, vertex, PETSC_FALSE, &nclosure, &closure);
+        vertex_star.resize(nclosure);
+        for (ci=0; ci<nclosure; ci++) vertex_star[ci] = closure[2*ci];
+
+        /* For each point in the vertex star determine the owner as
+           the minimum owner of all vertices in the point's closure */
+        for (p=0; p<vertex_star.size(); p++) {
+          /* Skip the original halo vertex */
+          if (vStart <= vertex_star[p] && vertex_star[p] < vEnd) continue;
+
+          owner = std::numeric_limits<int>::max();
+          ierr = DMPlexGetTransitiveClosure(plex, vertex_star[p], PETSC_TRUE, &nclosure, &closure);
+          for (ci=0; ci<nclosure; ci++) {
+            if (vStart <= closure[2*ci] && closure[2*ci] < vEnd) {
+              owner = std::min(owner, node_owner[ closure[2*ci]-vStart ]);
+            }
+          }
+          ierr = PetscSectionSetOffset(*point_owners, vertex_star[p], owner); assert(ierr==0);
+          if (owner != rank) nhalo_points++;
+        }
+      }
+    }
   }
 
  private:
