@@ -1725,6 +1725,8 @@ template<typename real_t> class Mesh{
 
     /* After building the Plex DAG in parallel we need to build the PetscSF
        that maps all local halo points (leaves) to remote points (roots).
+       For this we need to derive a consistent point ownership and map all
+       local plex entities to their remote roots.
     */
     if (num_processes <= 1) return;
 
@@ -1733,6 +1735,31 @@ template<typename real_t> class Mesh{
 
     PetscSection remote_roots;
     plex_map_remote_roots(*plex, &remote_roots);
+
+    PetscInt nhalo, p, pStart, pEnd, owner, root, *halo_points;
+    PetscSFNode *remote_points;
+    ierr = DMPlexGetChart(*plex, &pStart, &pEnd); assert(ierr==0);
+    nhalo = 0;
+    for (p=pStart; p<pEnd; p++) {
+      ierr = PetscSectionGetOffset(point_owners, p, &owner); assert(ierr==0);
+      if (owner != rank) nhalo++;
+    }
+
+    halo_points = new PetscInt[nhalo];
+    remote_points = new PetscSFNode[nhalo];
+    nhalo = 0;
+    for (p=pStart; p<pEnd; p++) {
+      ierr = PetscSectionGetOffset(point_owners, p, &owner); assert(ierr==0);
+      if (owner != rank) {
+        ierr = PetscSectionGetOffset(remote_roots, p, &root); assert(ierr==0);
+        halo_points[nhalo] = p;
+        remote_points[nhalo].rank = owner;
+        remote_points[nhalo].index = root;
+        nhalo++;
+      }
+    }
+    ierr = PetscSFSetGraph((*plex)->sf, pEnd-pStart, nhalo, halo_points, PETSC_OWN_POINTER,
+                           remote_points, PETSC_OWN_POINTER); assert(ierr==0);
   }
 
   /* This routine establishes the ownership of all points in the DAG
