@@ -40,7 +40,7 @@
 # Patrick Farrell    for mesh based metric used for coarsening.
 # James Maddinson    for the original version of Dolfin interface.
 # Davide Longoni     for p-norm function.
-# Kristian E. Jensen for ellipse function, test cases and vectorization opt.
+# Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue and gradation
 
 """@package PRAgMaTIc
 
@@ -80,6 +80,7 @@ class ParameterException(Exception):
   pass
 
 try:
+#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/pragmatic/src/.libs/libpragmatic.so")
   _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
@@ -115,8 +116,10 @@ def edge_lengths(M):
 
   return e
 
-def polyhedron_surfmesh(cells,coords):
-    #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
+def polyhedron_surfmesh(mesh):
+    cells = mesh.cells()
+    coords = mesh.coordinates()
+    #this function calculates a surface mesh assuming a polyhedral geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
     #is provided by the user, but the user can load this function herself, use it, modify the output
@@ -183,7 +186,9 @@ def polyhedron_surfmesh(cells,coords):
     bfaces_pair = zip(bfaces[:,0],bfaces[:,1],bfaces[:,2])
     return [bfaces,IDs]
 
-def polygon_surfmesh(cells,coords):
+def polygon_surfmesh(mesh):
+    cells = mesh.cells()
+    coords = mesh.coordinates()
     #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
@@ -235,7 +240,7 @@ def polygon_surfmesh(cells,coords):
             break
     #compatibility fixes
     IDs += 1
-    bfaces_pair = zip(bfaces[:,0],bfaces[:,1])
+    #bfaces_pair = zip(bfaces[:,0],bfaces[:,1])
     return [bfaces,IDs]
 
 def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
@@ -248,7 +253,13 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   ed = MeshEditor()
   ed.open(n_mesh, len(n_xy), len(n_xy))
   ed.init_vertices(nvtx) #n_NNodes.value
-  if len(n_xy) == 2:
+  if len(n_xy) == 1:
+   for i in range(nvtx):
+    ed.add_vertex(i, n_xy[0,i])
+   ed.init_cells(len(n_enlist)/2)
+   for i in range(len(n_enlist)/2): #n_NElements.value
+    ed.add_cell(i, n_enlist[i * 2], n_enlist[i * 2 + 1])
+  elif len(n_xy) == 2:
    for i in range(nvtx): #n_NNodes.value  
      ed.add_vertex(i, n_xy[0,i], n_xy[1,i])
    ed.init_cells(len(n_enlist)/3) #n_NElements.value
@@ -264,10 +275,8 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
   if debugon==True and dx is not None:
     # Sanity check to be deleted or made optional
-    n_space = FunctionSpace(n_mesh, "CG", 1)
-
-    area = assemble(Constant(1.0) * dx, mesh = mesh)
-    n_area = assemble(Constant(1.0) * dx, mesh = n_mesh)
+    area = assemble(interpolate(Constant(1.0),FunctionSpace(mesh,'DG',0)) * dx)
+    n_area = assemble(interpolate(Constant(1.0),FunctionSpace(n_mesh,'DG',0)) * dx)
     err = abs(area - n_area)
     info("Donor mesh area : %.17e" % area)
     info("Target mesh area: %.17e" % n_area)
@@ -277,18 +286,20 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
     assert(err < 2.0e-11 * area)
   return n_mesh
   
-def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
+def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=False):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
   
   #check if input is not a metric
-  if metric.function_space().ufl_element().num_sub_elements() == 1:
-     metric = metric_pnorm(metric, eta=eta)
+  if metric.function_space().ufl_element().num_sub_elements() == 0:
+     metric = metric_pnorm(metric, eta=eta, CG1out=True)
   
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
    metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
   metric = fix_CG1_metric(metric) #fixes negative eigenvalues
+  if grada:
+      metric = gradate(metric,grada)
   
   # warn before generating huge mesh
   targetN = assemble(sqrt(det(metric))*dx)
@@ -301,7 +312,7 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
   element = space.ufl_element()
 
   # Sanity checks
-  if not mesh.geometry().dim() == 2 \
+  if not (mesh.geometry().dim() == 2 or mesh.geometry().dim() == 3)\
         or not (element.cell().geometric_dimension() == 2 \
         or element.cell().geometric_dimension() == 3) \
         or not (element.cell().topological_dimension() == 2 \
@@ -316,9 +327,9 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
     if element.cell().geometric_dimension() == 2:
-      [bfaces,bfaces_IDs] = polygon_surfmesh(cells,coords)
+      [bfaces,bfaces_IDs] = polygon_surfmesh(mesh)
     else:
-      [bfaces,bfaces_IDs] = polyhedron_surfmesh(cells,coords)
+      [bfaces,bfaces_IDs] = polyhedron_surfmesh(mesh)
     
   x = coords[nodes,0]
   y = coords[nodes,1]
@@ -351,7 +362,6 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2):
     metric_arr[range(6,metric.vector().array().size,9)] = metric.vector().array()[arange(6,metric.vector().array().size,9)[dof2vtx]]
     metric_arr[range(7,metric.vector().array().size,9)] = metric.vector().array()[arange(7,metric.vector().array().size,9)[dof2vtx]]
     metric_arr[range(8,metric.vector().array().size,9)] = metric.vector().array()[arange(8,metric.vector().array().size,9)[dof2vtx]]
-  
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
@@ -470,13 +480,14 @@ def fix_CG1_metric(Mp):
 # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
 # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
 # the DG0 hessian can be extracted in three different ways (controlled CG0H option)
-def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2, CG0H=3):
+def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2, CG1out=False, CG0H=3):
   mesh = f.function_space().mesh()
   # Sanity checks
-  if max_edge_ratio < 1.0:
+  if max_edge_ratio is not None and max_edge_ratio < 1.0:
     raise InvalidArgumentException("The maximum edge ratio must be greater greater or equal to 1")
   else:
-    max_edge_ratio = max_edge_ratio**2 # ie we are going to be looking at eigenvalues
+    if max_edge_ratio is not None:
+     max_edge_ratio = max_edge_ratio**2 # ie we are going to be looking at eigenvalues
 
   n = mesh.geometry().dim()
  
@@ -515,6 +526,8 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
     gradf = project(grad(f), VectorFunctionSpace(mesh, "CG", 1))
     H = project(sym(grad(gradf)), TensorFunctionSpace(mesh, "DG", 0))
   
+  if CG1out or dolfin.__version__ == '1.4.0':
+   H = project(H,TensorFunctionSpace(mesh,'CG',1))
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
   # CALCULATE EIGENVALUES 
@@ -528,8 +541,9 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   eigL = array([numpy.abs(eigL),onesC*max_eigenvalue]).min(0)
   #enforce constraint on aspect ratio 
   L1b = eigL[0,:] > eigL[1,:]; nL1b = L1b == False
-  eigL[0,nL1b] = array([eigL[0,nL1b],eigL[1,nL1b] /max_edge_ratio]).max(0)
-  eigL[1, L1b] = array([eigL[1, L1b],eigL[0, L1b] /max_edge_ratio]).max(0)
+  if max_edge_ratio is not None:
+   eigL[0,nL1b] = array([eigL[0,nL1b],eigL[1,nL1b] /max_edge_ratio]).max(0)
+   eigL[1, L1b] = array([eigL[1, L1b],eigL[0, L1b] /max_edge_ratio]).max(0)
   
   #check (will not trigger with min_eigenvalue > 0)
   det = eigL.prod(0)
@@ -561,7 +575,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   H.vector().set_local(cbig)
   return H
 
-def metric_ellipse(H1, H2, method='in'):
+def metric_ellipse(H1, H2, method='in', qualtesting=False):
   #this function calculates the inner or outer ellipse (depending on the value of the method input)
   #of two the two input metrics.
   [HH1,cell2dof] = get_dofs(H1)
@@ -576,7 +590,12 @@ def metric_ellipse(H1, H2, method='in'):
   [eigL2,eigR2] = analytic_eig(tmp)
   # enforce inner or outer ellipse
   if method == 'in':
-    eigL2 = array([eigL2 ,ones(eigL2.shape)]).max(0)
+    if qualtesting:
+     HH = Function(FunctionSpace(H1.function_space().mesh(),'DG',0))
+     HH.vector().set_local((eigL2<ones(eigL2.shape)).sum(0)-ones(eigL2.shape[1]))
+     return HH
+    else:
+     eigL2 = array([eigL2 ,ones(eigL2.shape)]).max(0)
   else:
     eigL2 = array([eigL2, ones(eigL2.shape)]).min(0)
 
@@ -708,7 +727,9 @@ def analytic_eig(H, tol=1e-12):
       p1 = p1[nI]
       H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
       H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
-      q = (H11+H22+H33)/3.
+      q = array((H11+H22+H33)/3.)
+      H11 /= q; H12 /= q; H22 /= q; H13 /= q; H23 /= q; H33 /= q
+      p1 /= q**2; qold = q; q = ones(len(H11))
       p2 = (H11-q)**2 + (H22-q)**2 + (H33-q)**2 + 2.*p1
       p = numpy.sqrt(p2 / 6.)
       I = array([onesC,zeroC,onesC,zeroC,zeroC,onesC])#I = array([1., 0., 1., 0., 0., 1.]).repeat(len(H11)).reshape(6,len(H11)) #identity matrix
@@ -729,7 +750,8 @@ def analytic_eig(H, tol=1e-12):
       
       eig1[nI] = q + 2.*p*numpy.cos(phi)
       eig3[nI] = q + 2.*p*numpy.cos(phi + (2.*pi/3.))
-      eig2[nI] = 3.*q - eig1[nI] - eig3[nI]
+      eig2[nI] = array(3.*q - eig1[nI] - eig3[nI])
+      eig1[nI] *= qold; eig2[nI] *= qold; eig3[nI] *= qold
       v1[0,nI] = H22*H33 - H23**2 + eig1[nI]*(eig1[nI]-H33-H22)
       v1[1,nI] = H12*(eig1[nI]-H33)+H13*H23
       v1[2,nI] = H13*(eig1[nI]-H22)+H12*H23
@@ -872,24 +894,47 @@ def mesh_metric2(mesh):
   M.vector().set_local(MM[cell2dof.flatten()])
   return M
 
+def gradate(H, grada, itsolver=False):
+    #this function provides anisotropic Helm-holtz smoothing on the logarithm
+    #of a metric based on the metric of the mesh times a scaling factor(grada)
+    if itsolver:
+        solverp = {"linear_solver": "cg", "preconditioner": "ilu"}
+    else:
+        solverp = {"linear_solver": "lu"}
+    mesh = H.function_space().mesh()
+    grada = Constant(grada)
+    mm2 = mesh_metric2(mesh)
+    mm2sq = dot(grada*mm2,grada*mm2)
+    Hold = Function(H); H = logexpmetric(H) #avoid logexpmetric side-effect
+    V = TensorFunctionSpace(mesh,'CG',1); H_trial = TrialFunction(V); H_test = TestFunction(V); Hnew=Function(V)    
+    a = (inner(grad(H_test),dot(mm2sq,grad(H_trial)))+inner(H_trial,H_test))*dx
+    L = inner(H,H_test)*dx
+    solve(a==L,Hnew,[], solver_parameters=solverp)
+    Hnew = metric_ellipse(logexpmetric(Hnew,logexp='exp'), Hold)
+    return Hnew
+
+
 def c_cell_dofs(mesh,V):
-  #this function returns the degrees of freedom numbers in a cell
-  code = """
-  void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
-                 const std::vector<std::size_t>& cell_indices,
-                 std::vector<std::size_t>& dofs)
-  {
-    assert(dofmap);
-    std::size_t local_dof_size = dofmap->cell_dofs(0).size();
-    const std::size_t size = cell_indices.size()*local_dof_size;
-    dofs.resize(size);
-    for (std::size_t i=0; i<cell_indices.size(); i++)
-       for (std::size_t j=0; j<local_dof_size;j++)
-           dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
-  }
-  """
-  module = compile_extension_module(code)
-  return module.cell_dofs(V.dofmap(), arange(mesh.num_cells(), dtype=numpy.uintp))
+  if dolfin.__version__ == '1.4.0':
+   return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
+  else:
+      #this function returns the degrees of freedom numbers in a cell
+      code = """
+      void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
+                     const std::vector<std::size_t>& cell_indices,
+                     std::vector<std::size_t>& dofs)
+      {
+        assert(dofmap);
+        std::size_t local_dof_size = dofmap->cell_dofs(0).size();
+        const std::size_t size = cell_indices.size()*local_dof_size;
+        dofs.resize(size);
+        for (std::size_t i=0; i<cell_indices.size(); i++)
+           for (std::size_t j=0; j<local_dof_size;j++)
+               dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
+      }
+      """
+      module = compile_extension_module(code)
+      return module.cell_dofs(V.dofmap(), arange(mesh.num_cells(), dtype=numpy.uintp))
 
 
 if __name__=="__main__":

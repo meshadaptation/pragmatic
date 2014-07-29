@@ -1,4 +1,4 @@
-### this a testcase for use with DOLFIN/FEniCS and PRAgMaTIc 
+### this a testcase for use with DOLFIN/FEniCS and PRAgMaTIc
 ### by Kristian Ejlebjerg Jensen, January 2014, Imperial College London
 ### the purpose of the test case is to
 ### 1. derive a forcing term that gives a step function solution
@@ -17,7 +17,7 @@ from sympy import Symbol, diff
 from sympy import tanh as pytanh
 from sympy import cos as pysin
 from sympy import sin as pycos
-set_log_level(INFO+1)
+set_log_level(INFO)
 #parameters["allow_extrapolation"] = True
 
 def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.01):
@@ -25,7 +25,7 @@ def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.01):
     meshsz = 10
     hd = Constant(width)
     ### SETUP MESH
-    mesh = CubeMesh(meshsz,meshsz,meshsz)
+    mesh = BoxMesh(0,0,0,1,1,1,meshsz,meshsz,meshsz) #CubeMesh(meshsz,meshsz,meshsz)
     ### DERIVE FORCING TERM
     angle = pi/8 #rand*pi/2
     sx = Symbol('sx'); sy = Symbol('sy'); width_ = Symbol('ww'); aa = Symbol('aa')
@@ -40,8 +40,8 @@ def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.01):
     ddtestsol = "-("+ddtestsol+")"
     def boundary(x):
           return x[0]-mesh.coordinates()[:,0].min() < DOLFIN_EPS or mesh.coordinates()[:,0].max()-x[0] < DOLFIN_EPS \
-          or mesh.coordinates()[:,1].min() < DOLFIN_EPS or mesh.coordinates()[:,1].max()-x[1] < DOLFIN_EPS  \\
-          or mesh.coordinates()[:,2].min() < DOLFIN_EPS or mesh.coordinates()[:,2].max()-x[1] < DOLFIN_EPS  
+          or mesh.coordinates()[:,1].min() < DOLFIN_EPS or mesh.coordinates()[:,1].max()-x[1] < DOLFIN_EPS \
+          or mesh.coordinates()[:,2].min() < DOLFIN_EPS or mesh.coordinates()[:,2].max()-x[2] < DOLFIN_EPS
     # PERFORM TEN ADAPTATION ITERATIONS
     for iii in range(Nadapt):
      V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
@@ -50,44 +50,43 @@ def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.01):
      bc = DirichletBC(V, Expression(testsol), boundary)
      solve(a == L, u, bc)
      startTime = time()
-     H = metric_pnorm(u, eta, max_edge_length=1., max_edge_ratio=50)
-     H = logproject(H)
+     H = metric_pnorm(u, eta, max_edge_length=1., max_edge_ratio=50, CG1out=True)
+     #H = logproject(H)
      if iii != Nadapt-1:
       mesh = adapt(H) #, octaveimpl=True, debugon=True)
       L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')
       log(INFO+1,"total (adapt+metric) time was %0.1fs, L2error=%0.0e, nodes: %0.0f" % (time()-startTime,L2error,mesh.num_vertices()))
     
     plot(u,interactive=True)
-    #    # PLOT MESH
-#    figure()
-#    coords = mesh.coordinates().transpose()
-##    triplot(coords[0],coords[1],mesh.cells(),linewidth=0.1)
-##    #savefig('mesh.png',dpi=300) #savefig('mesh.eps'); 
-#            
-#    figure() #solution
-#    testf = interpolate(Expression(testsol),FunctionSpace(mesh,'CG',1))
-#    vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-#    zz = testf.vector().array()[vtx2dof]
-#    hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
-#    colorbar(hh)
-##    savefig('solution.png',dpi=300) #savefig('solution.eps'); 
-#    
-#    figure() #analytical solution
-#    testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
-#    zz = testfe.vector().array()[vtx2dof]
-#    hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
-#    colorbar(hh)
-#    #savefig('analyt.png',dpi=300) #savefig('analyt.eps');
-#    
-#    figure() #error
-#    zz -= testf.vector().array()[vtx2dof]; zz[zz==1] -= 1e-16
-#    hh=tricontourf(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),zz,100,cmap=get_cmap('binary'))
-#    colorbar(hh)
+    # # PLOT MESH
+# figure()
+# coords = mesh.coordinates().transpose()
+## triplot(coords[0],coords[1],mesh.cells(),linewidth=0.1)
+## #savefig('mesh.png',dpi=300) #savefig('mesh.eps');
 #
-#    hold('on'); triplot(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),color='r',linewidth=0.5); hold('off')
-#    axis('equal'); box('off'); title('error')
-#    show()
+# figure() #solution
+# testf = interpolate(Expression(testsol),FunctionSpace(mesh,'CG',1))
+# vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
+# zz = testf.vector().array()[vtx2dof]
+# hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
+# colorbar(hh)
+## savefig('solution.png',dpi=300) #savefig('solution.eps');
+#
+# figure() #analytical solution
+# testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
+# zz = testfe.vector().array()[vtx2dof]
+# hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
+# colorbar(hh)
+# #savefig('analyt.png',dpi=300) #savefig('analyt.eps');
+#
+# figure() #error
+# zz -= testf.vector().array()[vtx2dof]; zz[zz==1] -= 1e-16
+# hh=tricontourf(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),zz,100,cmap=get_cmap('binary'))
+# colorbar(hh)
+#
+# hold('on'); triplot(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),color='r',linewidth=0.5); hold('off')
+# axis('equal'); box('off'); title('error')
+# show()
 
 if __name__=="__main__":
- minimal_example3d()
- 
+ minimal_example3D()
