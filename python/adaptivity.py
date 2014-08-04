@@ -540,10 +540,13 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   eigL = array([numpy.abs(eigL),onesC*min_eigenvalue]).max(0)
   eigL = array([numpy.abs(eigL),onesC*max_eigenvalue]).min(0)
   #enforce constraint on aspect ratio 
-  L1b = eigL[0,:] > eigL[1,:]; nL1b = L1b == False
   if max_edge_ratio is not None:
-   eigL[0,nL1b] = array([eigL[0,nL1b],eigL[1,nL1b] /max_edge_ratio]).max(0)
-   eigL[1, L1b] = array([eigL[1, L1b],eigL[0, L1b] /max_edge_ratio]).max(0)
+   RR = arange(HH.shape[1]) 
+   CC = eigL.argmax(0)
+   I_ = array([False]).repeat(array(eigL.shape).prod())
+   I_[CC+(RR-1)*eigL.shape[0]] = True
+   I_ = I_.reshape(eigL.shape)
+   eigL[I_==False] = array([eigL[I_==False],eigL[I_].repeat(eigL.shape[0]-1)/max_edge_ratio]).max(0)
   
   #check (will not trigger with min_eigenvalue > 0)
   det = eigL.prod(0)
