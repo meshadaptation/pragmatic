@@ -526,7 +526,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
     gradf = project(grad(f), VectorFunctionSpace(mesh, "CG", 1))
     H = project(sym(grad(gradf)), TensorFunctionSpace(mesh, "DG", 0))
   
-  if CG1out or dolfin.__version__ == '1.4.0':
+  if CG1out or dolfin.__version__ >= '1.4.0':
    H = project(H,TensorFunctionSpace(mesh,'CG',1))
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
