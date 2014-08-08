@@ -918,7 +918,7 @@ def gradate(H, grada, itsolver=False):
 
 
 def c_cell_dofs(mesh,V):
-  if dolfin.__version__ == '1.4.0':
+  if dolfin.__version__ >= '1.4.0':
    return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
   else:
       #this function returns the degrees of freedom numbers in a cell
