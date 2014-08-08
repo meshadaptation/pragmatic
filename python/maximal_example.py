@@ -8,7 +8,7 @@
 ### are optional input parameters.
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, adapt
+from adaptivity import metric_pnorm, adapt
 from pylab import loglog, hold, show, axis, box, figure, tricontourf, triplot, colorbar, savefig, title, get_cmap, xlabel, ylabel
 from pylab import plot as pyplot
 from numpy import array

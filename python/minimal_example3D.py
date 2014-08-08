@@ -8,7 +8,7 @@
 ### error level (eta) are optional input parameters
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, logproject, adapt
+from adaptivity import metric_pnorm, logproject, adapt
 from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap, title, figure, savefig
 from pylab import plot as pyplot
 from numpy import array, ones

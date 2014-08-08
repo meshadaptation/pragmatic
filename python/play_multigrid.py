@@ -4,7 +4,7 @@
 ### The idea is to use the functionality in a multigrid algorithm.
 
 from dolfin import *
-from adaptivity2 import refine_metric, adapt, metric_pnorm
+from adaptivity import refine_metric, adapt, metric_pnorm
 set_log_level(WARNING)
 
 def test_refine_metric():

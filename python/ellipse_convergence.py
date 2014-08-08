@@ -12,7 +12,7 @@
 ### no, isotropic and anisotropic adaptation convergence as a function of the step width.
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, adapt, logproject
+from adaptivity import metric_pnorm, adapt, logproject
 from pylab import polyfit, hold, show, triplot, tricontourf, colorbar, axis, box, get_cmap, figure, legend, savefig, xlabel, ylabel, title, xlim, ylim
 from pylab import loglog as pyloglog
 from numpy import array

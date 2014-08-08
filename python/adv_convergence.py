@@ -13,7 +13,7 @@
 ### deviation (intrinsic to the reformulation), and the problem becomes so non-linear that the solver fails
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, adapt, mesh_metric2, metric_ellipse
+from adaptivity import metric_pnorm, adapt, mesh_metric2, metric_ellipse
 from pylab import polyfit, hold, show, triplot, tricontourf, colorbar, axis, box, get_cmap, figure, legend, savefig, xlabel, ylabel, title
 from pylab import loglog as pyloglog
 from pylab import plot as pyplot

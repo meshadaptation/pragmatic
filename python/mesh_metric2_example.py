@@ -16,7 +16,7 @@ from numpy import cos as pycos
 from numpy import sin as pysin
 from numpy import sqrt as pysqrt
 from numpy import abs as pyabs
-from adaptivity2 import metric_pnorm, mesh_metric, adapt, mesh_metric2
+from adaptivity import metric_pnorm, mesh_metric, adapt, mesh_metric2
 set_log_level(WARNING)
 
 def test_mesh_metric():
