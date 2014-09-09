@@ -7,9 +7,6 @@ TARGET_LINK_LIBRARIES(./bin/test_refine_3d pragmatic ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(./bin/test_ElementProperty ./src/test_ElementProperty.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_ElementProperty pragmatic ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(./bin/test_dolfin_2d ./src/test_dolfin_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_dolfin_2d pragmatic ${PRAGMATIC_LIBRARIES})
-
 ADD_EXECUTABLE(./bin/test_swap_2d ./src/test_swap_2d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_swap_2d pragmatic ${PRAGMATIC_LIBRARIES})
 
