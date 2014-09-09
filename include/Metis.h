@@ -38,8 +38,6 @@
 #ifndef METIS_H
 #define METIS_H
 
-#include "pragmatic_config.h"
-
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
