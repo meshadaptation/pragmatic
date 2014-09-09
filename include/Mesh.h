@@ -58,7 +58,6 @@
 #include "PragmaticTypes.h"
 #include "PragmaticMinis.h"
 
-#include "Metis.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
 #include "HaloExchange.h"

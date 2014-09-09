@@ -62,7 +62,7 @@ typedef float vtkFloatingPointType;
 
 #include "Mesh.h"
 #include "MetricTensor.h"
-#include "Metis.h"
+#include "metis.h"
 #include "ElementProperty.h"
 
 #ifdef HAVE_MPI

@@ -18,7 +18,7 @@ if(VTK_FOUND)
   set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
 endif()
 
-SET(CMAKE_CXX_FLAGS "-std=c++0x")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wliteral-suffix -Wno-deprecated -std=c++0x")
 
 FIND_PACKAGE(MPI REQUIRED)
 if(MPI_FOUND)
