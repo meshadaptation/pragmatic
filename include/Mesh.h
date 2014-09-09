@@ -55,9 +55,7 @@
 #include <omp.h>
 #endif
 
-#ifdef HAVE_MPI
 #include "mpi_tools.h"
-#endif
 
 #include "PragmaticTypes.h"
 #include "PragmaticMinis.h"
@@ -65,6 +63,7 @@
 #include "Metis.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
+#include "HaloExchange.h"
 
 /*! \brief Manages mesh data.
  *
@@ -205,7 +204,7 @@ template<typename real_t> class Mesh{
       }
       
       // Check neighbourhood of each element
-      for(int i=0;i<NElements;i++){
+      for(size_t i=0;i<NElements;i++){
 	if(_ENList[i*3]==-1)
 	  continue;
 	
@@ -220,7 +219,7 @@ template<typename real_t> class Mesh{
 			     inserter(neighbours, neighbours.begin()));
 	    
 	    if(neighbours.size()==2){
-	      if(*neighbours.begin()==i)
+	      if(*neighbours.begin()==(int)i)
 		boundary[i*3+j] = *neighbours.rbegin();
 	      else
 		boundary[i*3+j] = *neighbours.begin();
@@ -247,26 +246,35 @@ template<typename real_t> class Mesh{
       }
       
       // Check neighbourhood of each element
-      for(int i=0;i<NElements;i++){
+      for(size_t i=0;i<NElements;i++){
 	if(_ENList[i*4]==-1)
 	  continue;
 	
-	for(int j=0;j<4;j++){  
-	  std::set<int> edge_neighbours;
-	  set_intersection(NEList[_ENList[i*4+(j+1)%4]].begin(), NEList[_ENList[i*4+(j+1)%4]].end(),
-			   NEList[_ENList[i*4+(j+2)%4]].begin(), NEList[_ENList[i*4+(j+2)%4]].end(),
-			   inserter(edge_neighbours, edge_neighbours.begin()));
-	  
-	  std::set<int> neighbours;
-	  set_intersection(NEList[_ENList[i*4+(j+3)%4]].begin(), NEList[_ENList[i*4+(j+4)%4]].end(),
-			   edge_neighbours.begin(), edge_neighbours.end(),
-			   inserter(neighbours, neighbours.begin()));
-	  
-	  if(neighbours.size()==2){
-	    if(*neighbours.begin()==i)
-	      boundary[i*4+j] = *neighbours.rbegin();
-	    else
-	      boundary[i*4+j] = *neighbours.begin();
+	for(int j=0;j<4;j++){
+	  int n1 = _ENList[i*4+(j+1)%4];
+	  int n2 = _ENList[i*4+(j+2)%4];
+	  int n3 = _ENList[i*4+(j+3)%4];
+
+	  if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
+	    std::set<int> edge_neighbours;
+	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
+			     NEList[n2].begin(), NEList[n2].end(),
+			     inserter(edge_neighbours, edge_neighbours.begin()));
+	    
+	    std::set<int> neighbours;
+	    set_intersection(NEList[n3].begin(), NEList[n3].end(),
+			     edge_neighbours.begin(), edge_neighbours.end(),
+			     inserter(neighbours, neighbours.begin()));
+	    
+	    if(neighbours.size()==2){
+	      if(*neighbours.begin()==(int)i)
+		boundary[i*4+j] = *neighbours.rbegin();
+	      else
+		boundary[i*4+j] = *neighbours.begin();
+	    }
+	  }else{
+	    // This is a halo facet.
+	    boundary[i*4+j] = -1;
 	  }
 	}
       }
@@ -391,82 +399,288 @@ template<typename real_t> class Mesh{
     return mean;
   }
 
-  /// Calculate perimeter (2D only)
+  /// Calculate perimeter
   double calculate_perimeter(){
-    assert(ndims==2);
     int NElements = get_number_elements();
-    long double total_length=0;
-    double downcast_total_length=0;
-    
-    if(num_processes>1){
+    if(ndims==2){
+      long double total_length=0;
+      
+      if(num_processes>1){
 #ifdef HAVE_MPI
-     for(int i=0;i<NElements;i++){
-        for(int j=0;j<3;j++){
-          int n1 = _ENList[i*nloc+(j+1)%3];
-          int n2 = _ENList[i*nloc+(j+2)%3];
+        for(int i=0;i<NElements;i++){
+          for(int j=0;j<3;j++){
+            int n1 = _ENList[i*nloc+(j+1)%3];
+            int n2 = _ENList[i*nloc+(j+2)%3];
 
-          if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
-	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	    
-            total_length += sqrt(dx*dx+dy*dy);
-          }
-        }
-     }
-     
-     downcast_total_length = total_length;
-     MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
-    }else{
-      for(int i=0;i<NElements;i++){
-        for(int j=0;j<3;j++){
-          int n1 = _ENList[i*nloc+(j+1)%3];
-          int n2 = _ENList[i*nloc+(j+2)%3];
+            if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
 
-          if(boundary[i*nloc+j]>0){
-	    double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	    double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	    
-            total_length += sqrt(dx*dx+dy*dy);
-          }
-        }
-      }
-      downcast_total_length = total_length; 
-    }
-    
-    return downcast_total_length;
-  }
-
-  /// Get the edge length RMS value in metric space.
-  double get_lrms(){
-    double mean = get_lmean();
-
-    double rms=0;
-    int nedges=0;
-#pragma omp parallel reduction(+:rms,nedges)
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<(int)NNodes;i++){
-        if(is_owned_node(i) && (NNList[i].size()>0))
-          for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-            if(i<*it){ // Ensure that every edge length is only calculated once.
-              rms+=pow(calc_edge_length(i, *it) - mean, 2);
-              nedges++;
+              total_length += sqrt(dx*dx+dy*dy);
             }
           }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
+      }else{
+        for(int i=0;i<NElements;i++){
+          for(int j=0;j<3;j++){
+            if(boundary[i*nloc+j]>0){
+              int n1 = _ENList[i*nloc+(j+1)%3];
+              int n2 = _ENList[i*nloc+(j+2)%3];
+
+                  long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+                  long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+
+              total_length += sqrt(dx*dx+dy*dy);
+            }
+          }
+        }
+      }
+      
+      return total_length;
+    }else{
+      std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
+      return -1;
+    }
+  }
+
+
+  /// Calculate area
+  double calculate_area(){
+    int NElements = get_number_elements();
+    long double total_area=0;
+
+    if(ndims==2){
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+
+          // Don't sum if it's not ours
+          if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
+            continue;
+
+          const double *x1 = get_coords(n[0]);
+          const double *x2 = get_coords(n[1]);
+          const double *x3 = get_coords(n[2]);
+
+          // Use Heron's Formula
+          long double a;
+          {
+            long double dx = (x1[0]-x2[0]);
+            long double dy = (x1[1]-x2[1]);
+            a = sqrt(dx*dx+dy*dy);
+          }
+          long double b;
+          {
+            long double dx = (x1[0]-x3[0]);
+            long double dy = (x1[1]-x3[1]);
+            b = sqrt(dx*dx+dy*dy);
+          }
+          long double c;
+          {
+            long double dx = (x2[0]-x3[0]);
+            long double dy = (x2[1]-x3[1]);
+            c = sqrt(dx*dx+dy*dy);
+          }
+          long double s = 0.5*(a+b+c);
+
+          total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+	}
+	
+	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+
+          const double *x1 = get_coords(n[0]);
+          const double *x2 = get_coords(n[1]);
+          const double *x3 = get_coords(n[2]);
+        
+          // Use Heron's Formula
+          long double a;
+          {
+            long double dx = (x1[0]-x2[0]);
+            long double dy = (x1[1]-x2[1]);
+            a = sqrt(dx*dx+dy*dy);
+          }
+          long double b;
+          {
+            long double dx = (x1[0]-x3[0]);
+            long double dy = (x1[1]-x3[1]);
+            b = sqrt(dx*dx+dy*dy);
+          }
+          long double c;
+          {
+            long double dx = (x2[0]-x3[0]);
+            long double dy = (x2[1]-x3[1]);
+            c = sqrt(dx*dx+dy*dy);
+          }
+          long double s = 0.5*(a+b+c);
+            
+          total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+        }
+      }
+    }else{ // 3D
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+	  for(int j=0;j<4;j++){
+	    if(boundary[i*nloc+j]<=0)
+	      continue;
+	    
+	    int n1 = n[(j+1)%4];
+	    int n2 = n[(j+2)%4];
+	    int n3 = n[(j+3)%4];
+	    
+	    // Don't sum if it's not ours
+	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+	      continue;
+	    
+	    const double *x1 = get_coords(n1);
+	    const double *x2 = get_coords(n2);
+	    const double *x3 = get_coords(n3);
+	    
+	    // Use Heron's Formula
+	    long double a;
+	    {
+	      long double dx = (x1[0]-x2[0]);
+	      long double dy = (x1[1]-x2[1]);
+	      long double dz = (x1[2]-x2[2]);
+	      a = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double b;
+	    {
+	      long double dx = (x1[0]-x3[0]);
+	      long double dy = (x1[1]-x3[1]);
+	      long double dz = (x1[2]-x3[2]);
+	      b = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double c;
+	    {
+	      long double dx = (x2[0]-x3[0]);
+	      long double dy = (x2[1]-x3[1]);
+	      long double dz = (x2[2]-x3[2]);
+	      c = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double s = 0.5*(a+b+c);
+	    
+	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+	  }
+	}
+	
+	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+	  for(int j=0;j<4;j++){
+	    if(boundary[i*nloc+j]<=0)
+	      continue;
+	    
+	    int n1 = n[(j+1)%4];
+	    int n2 = n[(j+2)%4];
+	    int n3 = n[(j+3)%4];
+	    
+	    const double *x1 = get_coords(n1);
+	    const double *x2 = get_coords(n2);
+	    const double *x3 = get_coords(n3);
+	    
+	    // Use Heron's Formula
+	    long double a;
+	    {
+	      long double dx = (x1[0]-x2[0]);
+	      long double dy = (x1[1]-x2[1]);
+	      long double dz = (x1[2]-x2[2]);
+	      a = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double b;
+	    {
+	      long double dx = (x1[0]-x3[0]);
+	      long double dy = (x1[1]-x3[1]);
+	      long double dz = (x1[2]-x3[2]);
+	      b = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double c;
+	    {
+	      long double dx = (x2[0]-x3[0]);
+	      long double dy = (x2[1]-x3[1]);
+	      long double dz = (x2[2]-x3[2]);
+	      c = sqrt(dx*dx+dy*dy+dz*dz);
+	    }
+	    long double s = 0.5*(a+b+c);
+	    
+	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+	  }
+	}
       }
     }
+    return total_area;
+  }
 
-#ifdef HAVE_MPI
-    if(num_processes>1){
-      MPI_Allreduce(MPI_IN_PLACE, &rms, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
-      MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+  /// Calculate volume
+  double calculate_volume(){
+    int NElements = get_number_elements();
+    long double total_volume=0;
+
+    if(ndims==2){
+      std::cerr<<"ERROR: Cannot calculate volume in 2D\n"; 
+    }else{ // 3D
+      if(num_processes>1){
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+	    
+          // Don't sum if it's not ours
+          if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
+            continue;
+
+          const double *x0 = get_coords(n[0]);
+          const double *x1 = get_coords(n[1]);
+          const double *x2 = get_coords(n[2]);
+          const double *x3 = get_coords(n[3]);
+
+          long double x01 = (x0[0] - x1[0]);
+          long double x02 = (x0[0] - x2[0]);
+          long double x03 = (x0[0] - x3[0]);
+
+          long double y01 = (x0[1] - x1[1]);
+          long double y02 = (x0[1] - x2[1]);
+          long double y03 = (x0[1] - x3[1]);
+
+          long double z01 = (x0[2] - x1[2]);
+          long double z02 = (x0[2] - x2[2]);
+          long double z03 = (x0[2] - x3[2]);
+
+          total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+	}
+	
+	MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+      }else{
+	for(int i=0;i<NElements;i++){
+	  const index_t *n=get_element(i);
+
+          const double *x0 = get_coords(n[0]);
+          const double *x1 = get_coords(n[1]);
+          const double *x2 = get_coords(n[2]);
+          const double *x3 = get_coords(n[3]);
+
+          long double x01 = (x0[0] - x1[0]);
+          long double x02 = (x0[0] - x2[0]);
+          long double x03 = (x0[0] - x3[0]);
+
+          long double y01 = (x0[1] - x1[1]);
+          long double y02 = (x0[1] - x2[1]);
+          long double y03 = (x0[1] - x3[1]);
+
+          long double z01 = (x0[2] - x1[2]);
+          long double z02 = (x0[2] - x2[2]);
+          long double z03 = (x0[2] - x3[2]);
+
+          total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+        }
+      }
     }
-#endif
-
-    rms = sqrt(rms/nedges);
-
-    return rms;
+    return total_volume/6;
   }
 
   /// Get the element mean quality in metric space.
@@ -482,23 +696,24 @@ template<typename real_t> class Mesh{
         if(n[0]<0)
           continue;
 
+	double q;
         if(ndims==2){
-          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+				 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
         }else{
-          sum += property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+				 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
         }
+
+	sum+=q;
         nele++;
       }
     }
 
-#ifdef HAVE_MPI
     if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
-#endif
 
     double mean = sum/nele;
 
@@ -531,55 +746,46 @@ template<typename real_t> class Mesh{
 
   /// Get the element minimum quality in metric space.
   double get_qmin() const{
+    if(ndims==2)
+      return get_qmin_2d();
+    else
+      return get_qmin_3d();
+  }
+
+  double get_qmin_2d() const{
     double qmin=1; // Where 1 is ideal.
 
-    // TODO: This is not urgent - but when OpenMP 3.1 is more common we
-    // should stick a proper min reduction in here.
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
 
-      if(ndims==2)
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
-      else
-        qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                                                 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
+      qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
     }
-#ifdef HAVE_MPI
-    if(num_processes>1){
+
+    if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-    }
-#endif
+    
     return qmin;
   }
 
-  /// Get the element quality RMS value in metric space, where the ideal element has a value of unity.
-  double get_qrms() const{
-    double mean = get_qmean();
+  double get_qmin_3d() const{
+    double qmin=1; // Where 1 is ideal.
 
-    double rms=0;
-    int nele=0;
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
         continue;
 
-      real_t q;
-      if(ndims==2)
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-      else
-        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
-
-      rms += pow(q-mean, 2);
-      nele++;
+      qmin = std::min(qmin, property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
     }
-    rms = sqrt(rms/nele);
 
-    return rms;
+    if(num_processes>1)
+      MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+    
+    return qmin;
   }
 
 #ifdef HAVE_MPI
@@ -633,7 +839,7 @@ template<typename real_t> class Mesh{
       m[1] = (metric[nid0*3+1]+metric[nid1*3+1])*0.5;
       m[2] = (metric[nid0*3+2]+metric[nid1*3+2])*0.5;
 
-      length = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), m);
+      length = ElementProperty<real_t,2>::length2d(get_coords(nid0), get_coords(nid1), m);
     }else{
       double m[6];
       m[0] = (metric[nid0*msize  ]+metric[nid1*msize  ])*0.5;
@@ -645,7 +851,7 @@ template<typename real_t> class Mesh{
 
       m[5] = (metric[nid0*msize+5]+metric[nid1*msize+5])*0.5;
 
-      length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
+      length = ElementProperty<real_t,3>::length3d(get_coords(nid0), get_coords(nid1), m);
     }
     return length;
   }
@@ -745,53 +951,10 @@ template<typename real_t> class Mesh{
       active_vertex_map[i] = cnt++;
     }
 
-    int metis_nnodes = cnt;
-    int metis_nelements = active_element.size();
-    std::vector< std::set<index_t> > graph(metis_nnodes);
-    for(typename std::vector<index_t>::iterator ie=active_element.begin();ie!=active_element.end();++ie){
-      for(size_t i=0;i<nloc;i++){
-        index_t nid0 = active_vertex_map[_ENList[(*ie)*nloc+i]];
-        for(size_t j=i+1;j<nloc;j++){
-          index_t nid1 = active_vertex_map[_ENList[(*ie)*nloc+j]];
-          graph[nid0].insert(nid1);
-          graph[nid1].insert(nid0);
-        }
-      }
-    }
-
-    // Compress graph
-    std::vector<idxtype> xadj(metis_nnodes+1), adjncy;
-    int pos=0;
-    xadj[0]=0;
-    for(int i=0;i<metis_nnodes;i++){
-      for(typename std::set<index_t>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
-        assert((*jt)>=0);
-        assert((*jt)<metis_nnodes);
-        adjncy.push_back(*jt);
-        pos++;
-      }
-      xadj[i+1] = pos;
-    }
-
-    std::vector<int> norder(metis_nnodes);
-    std::vector<int> inorder(metis_nnodes);
-    int numflag=0, options[] = {0};
-
-    if(metis_nnodes != 0){
-      METIS_NodeND(&metis_nnodes, &(xadj[0]), &(adjncy[0]), &numflag, options, &(norder[0]), &(inorder[0]));
-
-      // Update active_vertex_map
-      for(size_t i=0;i<NNodes;i++){
-        if(active_vertex_map[i]<0)
-          continue;
-
-        active_vertex_map[i] = inorder[active_vertex_map[i]];
-      }
-    }
-
     // Renumber elements
+    int active_nelements = active_element.size();
     std::map< std::set<index_t>, index_t > ordered_elements;
-    for(int i=0;i<metis_nelements;i++){
+    for(int i=0;i<active_nelements;i++){
       index_t old_eid = active_element[i];
       std::set<index_t> sorted_element;
       for(size_t j=0;j<nloc;j++){
@@ -807,27 +970,20 @@ template<typename real_t> class Mesh{
                  <<active_vertex_map[_ENList[old_eid*nloc+2]]<<std::endl;
       }
     }
-    std::vector<index_t> metis_element_renumber;
-    metis_element_renumber.reserve(metis_nelements);
+    std::vector<index_t> element_renumber;
+    element_renumber.reserve(ordered_elements.size());
     for(typename std::map< std::set<index_t>, index_t >::const_iterator it=ordered_elements.begin();it!=ordered_elements.end();++it){
-      metis_element_renumber.push_back(it->second);
+      element_renumber.push_back(it->second);
     }
-    // assert(metis_nelements==metis_element_renumber.size());
-    metis_nelements=metis_element_renumber.size();
-    // end of renumbering
 
     // Compress data structures.
-    assert(cnt == metis_nnodes);
-    NNodes = metis_nnodes;
-    //NElements = active_element.size();
-    NElements = metis_nelements;
+    NNodes = cnt;
+    NElements = ordered_elements.size();
 
     std::vector<index_t> defrag_ENList(NElements*nloc);
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<double> defrag_metric(NNodes*msize);
     std::vector<int> defrag_boundary(NElements*nloc);
-
-    assert(NElements==(size_t)metis_nelements);
 
     // This first touch is to bind memory locally.
 #pragma omp parallel
@@ -846,8 +1002,8 @@ template<typename real_t> class Mesh{
     }
 
     // Second sweep writes elements with new numbering.
-    for(int i=0;i<metis_nelements;i++){
-      index_t old_eid = metis_element_renumber[i];
+    for(int i=0;i<NElements;i++){
+      index_t old_eid = element_renumber[i];
       index_t new_eid = i;
       for(size_t j=0;j<nloc;j++){
         index_t new_nid = active_vertex_map[_ENList[old_eid*nloc+j]];
@@ -1142,11 +1298,9 @@ template<typename real_t> class Mesh{
     }
     double qmean = get_qmean();
     double qmin = get_qmin();
-    double qrms = get_qrms();
     if(rank==0){
       std::cout<<"VERIFY: mean quality...."<<qmean<<std::endl;
       std::cout<<"VERIFY: min quality...."<<qmin<<std::endl;
-      std::cout<<"VERIFY: rms quality...."<<qrms<<std::endl;
     }
 
 #ifdef HAVE_MPI
@@ -1185,7 +1339,7 @@ template<typename real_t> class Mesh{
       }
 
       // Update GNN's for the halo nodes.
-      halo_update(&(lnn2gnn[0]), 1);
+      halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
     }else{
       NPNodes[0] = NNodes;
       for(index_t i=0;i<(index_t)NNodes;i++){
@@ -1195,9 +1349,38 @@ template<typename real_t> class Mesh{
 #endif
   }
 
+  void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
+                       std::vector< std::vector<index_t> > *recv_vec) {
+    int ierr, recv_size, tag = 123456;
+    std::vector<MPI_Status> status(num_processes);
+    std::vector<MPI_Request> send_req(num_processes);
+    std::vector<MPI_Request> recv_req(num_processes);
+
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) {send_req[proc] = MPI_REQUEST_NULL; continue;}
+
+      ierr = MPI_Isend(send_vec[proc].data(), send_vec[proc].size(), MPI_INDEX_T,
+                       proc, tag, _mpi_comm, &send_req[proc]); assert(ierr==0);
+    }
+
+    /* Receive send list from remote proc */
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) {recv_req[proc] = MPI_REQUEST_NULL; continue;}
+
+      ierr = MPI_Probe(proc, tag, _mpi_comm, &(status[proc])); assert(ierr==0);
+      ierr = MPI_Get_count(&(status[proc]), MPI_INT, &recv_size); assert(ierr==0);
+      (*recv_vec)[proc].resize(recv_size);
+      MPI_Irecv((*recv_vec)[proc].data(), recv_size, MPI_INT, proc,
+                tag, _mpi_comm, &recv_req[proc]); assert(ierr==0);
+    }
+
+    MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
+    MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
+  }
+
  private:
   template<typename _real_t, int _dim> friend class MetricField;
-  template<typename _real_t> friend class Smooth2D;
+  template<typename _real_t> friend class Smooth;
   template<typename _real_t> friend class Smooth3D;
   template<typename _real_t> friend class Swapping2D;
   template<typename _real_t> friend class Swapping3D;
@@ -1398,14 +1581,14 @@ template<typename real_t> class Mesh{
         assert(n[0]>=0);
 
         if(ndims==2)
-          property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                 get_coords(n[1]),
-                                                 get_coords(n[2]));
+          property = new ElementProperty<real_t,2>(get_coords(n[0]),
+                                                   get_coords(n[1]),
+                                                   get_coords(n[2]));
         else
-          property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                 get_coords(n[1]),
-                                                 get_coords(n[2]),
-                                                 get_coords(n[3]));
+          property = new ElementProperty<real_t,3>(get_coords(n[0]),
+                                                   get_coords(n[1]),
+                                                   get_coords(n[2]),
+                                                   get_coords(n[3]));
       }
 
       if(ndims==2){
@@ -1593,55 +1776,6 @@ template<typename real_t> class Mesh{
     }
   }
 
-  template <typename DATATYPE>
-  void halo_update(DATATYPE *vec, int block){
-#ifdef HAVE_MPI
-    if(num_processes<2)
-      return;
-
-    mpi_type_wrapper<DATATYPE> wrap;
-
-    // MPI_Requests for all non-blocking communications.
-    std::vector<MPI_Request> request(num_processes*2);
-
-    // Setup non-blocking receives.
-    std::vector< std::vector<DATATYPE> > recv_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-      if((i==rank)||(recv[i].size()==0)){
-        request[i] =  MPI_REQUEST_NULL;
-      }else{
-        recv_buff[i].resize(recv[i].size()*block);
-        MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), wrap.mpi_type, i, 0, _mpi_comm, &(request[i]));
-      }
-    }
-
-    // Non-blocking sends.
-    std::vector< std::vector<DATATYPE> > send_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-      if((i==rank)||(send[i].size()==0)){
-        request[num_processes+i] = MPI_REQUEST_NULL;
-      }else{
-        for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
-          for(int j=0;j<block;j++){
-            send_buff[i].push_back(vec[(*it)*block+j]);
-          }
-        MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), wrap.mpi_type, i, 0, _mpi_comm, &(request[num_processes+i]));
-      }
-    }
-
-    std::vector<MPI_Status> status(num_processes*2);
-    MPI_Waitall(num_processes, &(request[0]), &(status[0]));
-    MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
-
-    for(int i=0;i<num_processes;i++){
-      int k=0;
-      for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
-        for(int j=0;j<block;j++)
-          vec[(*it)*block+j] = recv_buff[i][k*block+j];
-    }
-#endif
-  }
-
   void trim_halo(){
     std::set<index_t> recv_halo_temp, send_halo_temp;
 
@@ -1803,7 +1937,7 @@ template<typename real_t> class Mesh{
       }
 
       // Update GNN's for the halo nodes.
-      halo_update(&(lnn2gnn[0]), 1);
+      halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
 
       // Finish writing node ownerships.
       for(int i=0;i<num_processes;i++){
@@ -1834,7 +1968,7 @@ template<typename real_t> class Mesh{
         lnn2gnn[i] = -1;
     }
 
-    halo_update(&lnn2gnn[0], 1);
+    halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
 
     for(int i=0;i<num_processes;i++){
       send_map[i].clear();
@@ -1926,7 +2060,7 @@ template<typename real_t> class Mesh{
   std::vector< std::set<index_t> > NEList;
   std::vector< std::vector<index_t> > NNList;
 
-  ElementProperty<real_t> *property;
+  ElementProperty<real_t,ndims> *property;
 
   // Metric tensor field.
   std::vector<double> metric;

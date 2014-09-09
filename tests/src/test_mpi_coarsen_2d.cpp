@@ -94,14 +94,9 @@ int main(int argc, char **argv){
   int nelements = mesh->get_number_elements();
 
   if(verbose){
-    double lrms = mesh->get_lrms();
-    double qrms = mesh->get_qrms();
-
     if(rank==0)
       std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-               <<"Number elements:      "<<nelements<<std::endl
-               <<"Edge length RMS:      "<<lrms<<std::endl
-               <<"Quality RMS:          "<<qrms<<std::endl;
+               <<"Number elements:      "<<nelements<<std::endl;
   }
 
   VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);

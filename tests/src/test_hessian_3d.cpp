@@ -46,6 +46,11 @@
 #include "ticker.h"
 
 int main(int argc, char **argv){
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
 
@@ -102,6 +107,8 @@ int main(int argc, char **argv){
     std::cout<<"fail\n";
   else
     std::cout<<"pass\n";
+
+  MPI_Finalize();
 
   return 0;
 }

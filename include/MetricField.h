@@ -185,7 +185,7 @@ public:
     }
     
     // Halo update if parallel
-    _mesh->halo_update(&(_mesh->metric[0]), dim==2?3:6);
+    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
 
@@ -239,7 +239,7 @@ public:
     }
     
     // Halo update if parallel
-    _mesh->halo_update(&(_mesh->metric[0]), dim==2?3:6);
+    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
@@ -525,7 +525,7 @@ public:
       const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
-      ElementProperty<real_t> property(refx0, refx1, refx2);
+      ElementProperty<real_t,2> property(refx0, refx1, refx2);
 
 #pragma omp parallel for reduction(+:total_area_metric)
       for(int i=0;i<_NElements;i++){
@@ -563,7 +563,7 @@ public:
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
       const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
-      ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
+      ElementProperty<real_t,3> property(refx0, refx1, refx2, refx3);
 
 #pragma omp parallel for reduction(+:total_volume_metric)
       for(int i=0;i<_NElements;i++){
@@ -617,7 +617,7 @@ public:
   
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, real_t *Hessian){
-    int min_patch_size = (dim==2?6:10);
+    int min_patch_size = (dim==2?6:15); // In 3D, 10 is the minimum but can give crappy results.
 
     std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
     patch.insert(i);
@@ -664,9 +664,16 @@ public:
       Eigen::Matrix<real_t, 10, 1> b = Eigen::Matrix<real_t, 10, 1>::Zero(10);
 
       real_t x0=_mesh->_coords[i*3], y0=_mesh->_coords[i*3+1], z0=_mesh->_coords[i*3+2];
-      
+      assert(std::isfinite(x0));
+      assert(std::isfinite(y0));
+      assert(std::isfinite(z0));
+
       for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
         real_t x=_mesh->_coords[(*n)*3]-x0, y=_mesh->_coords[(*n)*3+1]-y0, z=_mesh->_coords[(*n)*3+2]-z0;
+        assert(std::isfinite(x));
+        assert(std::isfinite(y));
+        assert(std::isfinite(z));
+        assert(std::isfinite(psi[*n]));
 
         A[0]+=1;
         A[10]+=x;   A[11]+=x*x;
@@ -709,6 +716,7 @@ private:
   int _NNodes, _NElements;
   MetricTensor<real_t,dim>* _metric;
   Mesh<real_t>* _mesh;
+  double bbox[6];
 };
 
 #endif

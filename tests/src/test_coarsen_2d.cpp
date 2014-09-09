@@ -91,16 +91,14 @@ int main(int argc, char **argv){
 
   int nelements = mesh->get_number_elements();
 
-  double perimeter = mesh->calculate_perimeter();
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
+
   if(verbose){
-    double lrms = mesh->get_lrms();
-    double qrms = mesh->get_qrms();
 
     if(rank==0)
       std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
                <<"Number elements:      "<<nelements<<std::endl
-               <<"Edge length RMS:      "<<lrms<<std::endl
-               <<"Quality RMS:          "<<qrms<<std::endl
                <<"Perimeter:            "<<perimeter<<std::endl;
   }
 
@@ -121,6 +119,11 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail"<<std::endl;
 
+    std::cout<<"Expecting area = 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
   }
 
   MPI_Finalize();

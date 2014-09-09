@@ -48,6 +48,7 @@
 #include "ElementProperty.h"
 #include "Mesh.h"
 #include "PragmaticMinis.h"
+#include "HaloExchange.h"
 
 /*! \brief Performs 3D mesh refinement.
  *
@@ -59,8 +60,6 @@ template<typename real_t> class Refine3D{
     _mesh = &mesh;
 
     size_t NElements = _mesh->get_number_elements();
-
-    lnn2gnn = NULL;
 
     // Set the orientation of elements.
     property = NULL;
@@ -84,9 +83,6 @@ template<typename real_t> class Refine3D{
 
   /// Default destructor.
   ~Refine3D(){
-    if(lnn2gnn==NULL)
-      delete [] lnn2gnn;
-
     delete property;
   }
 
@@ -129,15 +125,13 @@ template<typename real_t> class Refine3D{
 #endif
 
         // Initialise the lnn2gnn numbering.
-        if(lnn2gnn!=NULL)
-          delete [] lnn2gnn;
-        lnn2gnn = new index_t[NNodes];
+        lnn2gnn.resize(NNodes);
 
         for(size_t i=0;i<NNodes;i++)
           lnn2gnn[i] = gnn_offset+i;
 
         // Update halo values.
-        _mesh->halo_update(lnn2gnn, 1);
+        halo_update<int, 1>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, lnn2gnn);
 
         for(size_t i=0;i<NNodes;i++)
           gnn2lnn[lnn2gnn[i]] = i;
@@ -219,7 +213,7 @@ template<typename real_t> class Refine3D{
           typename std::vector< Edge<index_t> > split_set;
           for(size_t j=0;j<nloc;j++){
             for(size_t k=j+1;k<nloc;k++){
-              if(_mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn) >= 0)
+              if(_mesh->get_new_vertex(n[j], n[k], refined_edges, &(lnn2gnn[0])) >= 0)
                 split_set.push_back(Edge<index_t>(n[j], n[k]));
             }
           }
@@ -418,7 +412,7 @@ template<typename real_t> class Refine3D{
         index_t vertexID;
         for(size_t j=0;j<4;j++)
           for(size_t k=j+1;k<4;k++){
-            vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, lnn2gnn);
+            vertexID = _mesh->get_new_vertex(n[j], n[k], refined_edges, &(lnn2gnn[0]));
             if(vertexID >= 0){
               newVertex.push_back(vertexID);
               splitEdges.push_back(Edge<index_t>(n[j], n[k]));
@@ -741,7 +735,7 @@ template<typename real_t> class Refine3D{
   Mesh<real_t> *_mesh;
   ElementProperty<real_t> *property;
 
-  index_t *lnn2gnn;
+  std::vector<index_t> lnn2gnn;
   std::map<index_t, index_t> gnn2lnn;
   std::vector<int> node_owner;
 

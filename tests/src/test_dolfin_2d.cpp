@@ -162,13 +162,11 @@ int main(int argc, char **argv){
 
   // Initial stats.
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
 
   if(rank==0) std::cout<<"Initial quality:\n"
                        <<"Quality mean:  "<<qmean<<std::endl
-                       <<"Quality min:   "<<qmin<<std::endl
-                       <<"Quality RMS:   "<<qrms<<std::endl;
+                       <<"Quality min:   "<<qmin<<std::endl;
   VTKTools<double>::export_vtu("../data/test_dolfin_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -176,7 +174,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen2D<double> coarsen(*mesh);  
-  Smooth2D<double> smooth(*mesh);
+  Smooth<double, 2> smooth(*mesh);
   Refine2D<double> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 
@@ -219,7 +217,7 @@ int main(int argc, char **argv){
   mesh->defragment();
 
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 200);
+  smooth.smooth(200);
   time_smooth += get_wtime()-tic;
 
   time_adapt = get_wtime()-time_adapt;
@@ -230,7 +228,6 @@ int main(int argc, char **argv){
   VTKTools<double>::export_vtu("../data/test_dolfin_2d", mesh);
 
   qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
 
   std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth\n";

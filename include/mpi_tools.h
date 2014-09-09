@@ -47,6 +47,8 @@ struct mpi_type_wrapper {
   mpi_type_wrapper();
 };
 
+// Explicit instantiation for `char'
+template <> mpi_type_wrapper<char>::mpi_type_wrapper() : mpi_type(MPI_CHAR) {}
 // Explicit instantiation for `float'
 template <> mpi_type_wrapper<float>::mpi_type_wrapper() : mpi_type(MPI_FLOAT) {}
 // Explicit instantiation for `double'
