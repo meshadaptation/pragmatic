@@ -25,9 +25,6 @@ TARGET_LINK_LIBRARIES(./bin/test_coarsen_3d pragmatic ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(./bin/test_refine_2d ./src/test_refine_2d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_refine_2d pragmatic ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(./bin/test_adapt_2d_cuda ./src/test_adapt_2d_cuda.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_adapt_2d_cuda pragmatic ${PRAGMATIC_LIBRARIES})
-
 ADD_EXECUTABLE(./bin/test_colour_mpi ./src/test_colour_mpi.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_colour_mpi pragmatic ${PRAGMATIC_LIBRARIES})
 
