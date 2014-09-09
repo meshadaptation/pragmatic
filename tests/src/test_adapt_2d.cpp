@@ -90,13 +90,11 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
 
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
 
   if((rank==0)&&(verbose)) std::cout<<"Initial quality:\n"
                                     <<"Quality mean:  "<<qmean<<std::endl
-                                    <<"Quality min:   "<<qmin<<std::endl
-                                    <<"Quality RMS:   "<<qrms<<std::endl;
+                                    <<"Quality min:   "<<qmin<<std::endl;
   //VTKTools<double>::export_vtu("../data/test_adapt_2d-initial", mesh);
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -104,7 +102,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen2D<double> coarsen(*mesh);
-  Smooth2D<double> smooth(*mesh);
+  Smooth<double, 2> smooth(*mesh);
   Refine2D<double> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 
@@ -146,7 +144,7 @@ int main(int argc, char **argv){
   }
 
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 20);
+  smooth.smooth(20);
   time_smooth += get_wtime()-tic;
 
   time_adapt = get_wtime()-time_adapt;
@@ -169,10 +167,10 @@ int main(int argc, char **argv){
   VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
 
   qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
   
-  double perimeter = mesh->calculate_perimeter();
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
 
   delete mesh;
 
@@ -188,18 +186,25 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
+    std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
     if((qmean>0.8)&&(qmin>0.2))
       std::cout<<"pass"<<std::endl;
     else
-      std::cout<<"fail"<<std::endl;
+      std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
+
+    std::cout<<"Expecting perimeter == 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
   }
 
-  std::cout<<"Expecting perimeter == 4: ";
-  if(fabs(perimeter-4)<DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail"<<std::endl;
-  
   MPI_Finalize();
 
   return 0;

@@ -185,7 +185,7 @@ extern "C" {
 
     if(ndims==2){
       Coarsen2D<double> coarsen(*mesh);
-      Smooth2D<double> smooth(*mesh);
+      Smooth<double, 2> smooth(*mesh);
       Refine2D<double> refine(*mesh);
       Swapping2D<double> swapping(*mesh);
 
@@ -207,10 +207,10 @@ extern "C" {
 
       mesh->defragment();
 
-      smooth.smooth("optimisation Linf", 10);
+      smooth.smooth(10);
     }else{
       Coarsen3D<double> coarsen(*mesh);
-      Smooth3D<double> smooth(*mesh);
+      Smooth<double, 3> smooth(*mesh);
       Refine3D<double> refine(*mesh);
       Swapping3D<double> swapping(*mesh);
 
@@ -234,7 +234,7 @@ extern "C" {
 
       mesh->defragment();
 
-      smooth.smooth("optimisation Linf", 10);
+      smooth.smooth(10);
     }
   }
 

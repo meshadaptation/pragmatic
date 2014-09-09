@@ -187,7 +187,7 @@ template<typename real_t>
     }
     
     // Halo update if parallel
-    _mesh->halo_update(&(_mesh->metric[0]), 3);
+    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
 
@@ -235,7 +235,7 @@ template<typename real_t>
     }
     
     // Halo update if parallel
-    _mesh->halo_update(&(_mesh->metric[0]), 3);
+    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
@@ -519,7 +519,7 @@ template<typename real_t>
   
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, double *Hessian){
-    int min_patch_size = 6;
+    int min_patch_size = 9; // The minimum is 6 but it can give crappy results
 
     std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
     patch.insert(i);
@@ -592,6 +592,16 @@ template<typename real_t>
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
+    bbox[0] = DBL_MAX; bbox[1] = DBL_MIN;
+    bbox[2] = DBL_MAX; bbox[3] = DBL_MIN;
+    bbox[4] = DBL_MAX; bbox[5] = DBL_MIN;
+    for(int i=0; i<_NNodes; i++){
+      const double *x = _mesh->get_coords(i);
+      bbox[0] = std::min(bbox[0], x[0]); bbox[1] = std::max(bbox[1], x[0]);
+      bbox[2] = std::min(bbox[2], x[1]); bbox[3] = std::max(bbox[3], x[1]);
+      bbox[4] = std::min(bbox[4], x[2]); bbox[5] = std::max(bbox[5], x[2]);
+    }
+
     _metric = NULL;
   }
 
@@ -655,7 +665,7 @@ template<typename real_t>
     }
 
     // Halo update if parallel
-    _mesh->halo_update(&(_mesh->metric[0]), 6);
+    halo_update<double, 6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
@@ -674,7 +684,10 @@ template<typename real_t>
       add_to = false;
       _metric = new MetricTensor3D<double>[_NNodes];
     }
-
+    
+    // For our purposes the invers of the size of the domain a good estimate for epsilon.
+    double epsilon = 1.0/pow(bbox[1]-bbox[0]+bbox[3]-bbox[2]+bbox[5]-bbox[4], 2);
+    
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
@@ -684,25 +697,49 @@ template<typename real_t>
 #pragma omp for schedule(static)
         for(int i=0; i<_NNodes; i++){
           hessian_qls_kernel(psi, i, Hessian);
-          
+	  
           double *h=Hessian+i*6, m_det;
           
           /*|h[0] h[1] h[2]| 
-            |h[3] h[4] h[5]| 
-            |h[6] h[7] h[8]|*/
-          m_det = h[0]*(h[4]*h[8]-h[5]*h[7]) - h[1]*(h[3]*h[8]-h[5]*h[6]) + h[2]*(h[3]*h[7]-h[4]*h[6]);
-          
-          double scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 3));  
-          for(int j=0;j<6;j++)
-            h[j] = scaling_factor*h[j];
-        }
+            |h[3] h[4] h[5]| + epsilon * I  
+            |h[6] h[7] h[8]|
+	    
+	    The diagonal entry is in case the matrix is semi-definite
+	    which would cause Eigen to hang when calculating
+	    eigenvalues.
+	  */
+	  	  
+          m_det = fabs(h[0]*(h[4]*h[8]-h[5]*h[7]) - h[1]*(h[3]*h[8]-h[5]*h[6]) + h[2]*(h[3]*h[7]-h[4]*h[6]));
+	  double scaling_factor = eta*pow(m_det, -1.0 / (2.0 * p_norm + 3));  
+	  if(std::isnormal(scaling_factor)){
+	    for(int j=0;j<6;j++){
+	      h[j] = scaling_factor*h[j];
+	    }
+	  }else{
+	    h[0] = epsilon; h[1] = 0;       h[2] = 0;
+	                    h[3] = epsilon; h[4] = 0;
+	                                    h[5] = epsilon;
+	  }
+	}
       }else{
 #pragma omp for schedule(static)
         for(int i=0; i<_NNodes; i++){
           hessian_qls_kernel(psi, i, Hessian);
-          
-          for(int j=0;j<6;j++)
-            Hessian[i*6+j]*=eta;
+
+          double *h=Hessian+i*6;          
+          /*|h[0] h[1] h[2]| 
+            |h[3] h[4] h[5]| + epsilon * I  
+            |h[6] h[7] h[8]|
+	    
+	    The diagonal entry is in case the matrix is semi-definite
+	    which would cause Eigen to hang when calculating
+	    eigenvalues.
+	  */
+
+          for(int j=0;j<6;j++){
+	    assert(std::isfinite(h[j]));
+            h[j] *= eta;
+	  }
         }
       }
       
@@ -882,7 +919,7 @@ template<typename real_t>
   
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, double *Hessian){
-    size_t min_patch_size=10;
+    size_t min_patch_size=15; // 10 is the minimum but can give crappy results.
     
     std::set<index_t> patch;
     patch = _mesh->get_node_patch(i, min_patch_size);
@@ -900,10 +937,17 @@ template<typename real_t>
 #endif
 
     real_t x0=_mesh->_coords[i*3], y0=_mesh->_coords[i*3+1], z0=_mesh->_coords[i*3+2];
-    
+    assert(std::isfinite(x0));
+    assert(std::isfinite(y0));
+    assert(std::isfinite(z0));
+
     for(typename std::set<index_t>::const_iterator n=patch.begin(); n!=patch.end(); n++){
       real_t x=_mesh->_coords[(*n)*3]-x0, y=_mesh->_coords[(*n)*3+1]-y0, z=_mesh->_coords[(*n)*3+2]-z0;
-      
+      assert(std::isfinite(x));
+      assert(std::isfinite(y));
+      assert(std::isfinite(z));
+      assert(std::isfinite(psi[*n]));
+
       A[0]+=1;
       A[10]+=x;   A[11]+=x*x;
       A[20]+=y;   A[21]+=x*y;   A[22]+=y*y;
@@ -947,6 +991,7 @@ template<typename real_t>
   int _NNodes, _NElements;
   MetricTensor3D<real_t> *_metric;
   Mesh<real_t> *_mesh;
+  double bbox[6];
 };
 
 #endif

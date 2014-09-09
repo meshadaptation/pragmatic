@@ -83,7 +83,6 @@ int main(int argc, char **argv){
   metric_field.update_mesh();
   
   double qmean = mesh->get_qmean();
-  double qrms = mesh->get_qrms();
   double qmin = mesh->get_qmin();
   
   Swapping2D<double> swapping(*mesh);
@@ -102,14 +101,15 @@ int main(int argc, char **argv){
   VTKTools<double>::export_vtu("../data/test_swap_2d", mesh);
   
   qmean = mesh->get_qmean();
-  qrms = mesh->get_qrms();
   qmin = mesh->get_qmin();
-  double perimeter = mesh->calculate_perimeter();
+
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
+
   if(verbose&&rank==0){
     std::cout<<"Swap loop time: "<<toc-tic<<std::endl
              <<"Quality mean:   "<<qmean<<std::endl
              <<"Quality min:    "<<qmin<<std::endl
-             <<"Quality RMS:    "<<qrms<<std::endl
              <<"Perimeter:      "<<perimeter<<std::endl;;
   }
 
@@ -119,6 +119,12 @@ int main(int argc, char **argv){
   else
     std::cout<<"false ("<<fabs(perimeter-4)<<", epsilon="<<DBL_EPSILON<<")\n";
   
+  std::cout<<"Checking area == 1: ";
+  if(fabs(area-1)<DBL_EPSILON)
+    std::cout<<"pass\n";
+  else
+    std::cout<<"false ("<<fabs(area-1)<<", epsilon="<<DBL_EPSILON<<")\n";
+
   delete mesh;
   
   MPI_Finalize();

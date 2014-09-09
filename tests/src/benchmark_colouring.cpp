@@ -98,12 +98,6 @@ void colour_stats(std::vector< std::vector<index_t> > &graph, const char *colour
 
   std::cout<<"Max variance: "<<max_var<<std::endl;
   std::cout<<"Mean variance: "<<mean_var<<std::endl;
-  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
-    std::cout<<it->first<<"\t";
-  std::cout<<std::endl;
-  for(std::map<int, int>::const_iterator it=var.begin();it!=var.end();++it)
-    std::cout<<it->second<<"\t";
-  std::cout<<std::endl;
 }
 
 int main(int argc, char **argv){

@@ -40,9 +40,14 @@
 
 #include <limits>
 #include <vector>
+#include <algorithm>
+#include <random>
+
+#include "HaloExchange.h"
 
 #include "PragmaticTypes.h"
 #include "PragmaticMinis.h"
+
 /*! \brief Performs a simple first breath greedy graph colouring of a local undirected graph.
  */
 class Colour{
@@ -95,68 +100,189 @@ class Colour{
    * @param colour array that the node colouring is copied into.
    */
   static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+
+    int max_iterations = 128;
+    std::vector<bool> conflicts_exist(max_iterations, false);;
+    std::vector<bool> conflict(NNodes);
+
 #pragma omp parallel firstprivate(NNodes)
     {
       // Initialize.
+      std::default_random_engine generator;
+      std::uniform_int_distribution<int> distribution(0,6);
+
 #pragma omp for
       for(size_t i=0;i<NNodes;i++){
-        colour[i] = 0;
+        colour[i] = distribution(generator);
+        conflict[i] = true;
       }
 
-      // Phase 1: pseudo-colouring. Note - assuming graph can be colored with fewer than 64 colours.
-#pragma omp for
-      for(size_t i=0;i<NNodes;i++){
-        unsigned long colours = 0;
-        char c;
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-	      c = colour[*it];
-          colours = colours | 1<<c;
-        }
-        colours = ~colours;
+      for(int k=0;k<max_iterations;k++){
+        // Phase 1: pseudo-colouring. Note - assuming graph can be colored with fewer than 64 colours.
+#pragma omp for schedule(guided)
+        for(size_t i=0;i<NNodes;i++){
+          if(!conflict[i])
+            continue;
 
-        for(size_t j=0;j<64;j++){
-          if(colours&(1<<j)){
-            colour[i] = j;
-            break;
+          // Reset
+          conflict[i] = false;
+
+          unsigned long colours = 0;
+          char c;
+          for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+	     c = colour[*it];
+             colours = colours | 1<<c;
           }
-        }
-      }
+          colours = ~colours;
 
-      // Phase 2: find conflicts
-      std::vector<size_t> conflicts;
-#pragma omp for
-      for(size_t i=0;i<NNodes;i++){
-        for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          if(colour[i]==colour[*it]){
-            conflicts.push_back(i);
-            break;
-          }
-        }
-      }
-
-      // Phase 3: serial resolution of conflicts
-      int tid = pragmatic_thread_id();
-      int nthreads = pragmatic_nthreads();
-      for(int i=0;i<nthreads;i++){
-        if(tid==i){  
-          for(std::vector<size_t>::const_iterator it=conflicts.begin();it!=conflicts.end();++it){
-            unsigned long colours = 0;
-            for(std::vector<index_t>::const_iterator jt=NNList[*it].begin();jt!=NNList[*it].end();++jt){
-              colours = colours | 1<<(colour[*jt]);
-            }
-            colours = ~colours;
-
-            for(size_t j=0;j<64;j++){
-              if(colours&(1<<j)){
-                colour[*it] = j;
-                break;
-              }
+          for(size_t j=0;j<64;j++){
+            if(colours&(1<<j)){
+              colour[i] = j;
+              break;
             }
           }
         }
-#pragma omp barrier
+
+        // Phase 2: find conflicts
+#pragma omp for
+        for(size_t i=0;i<NNodes;i++){
+          for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+            if(colour[i]==colour[*it] && i<(size_t)*it){
+              conflict[i] = true;
+              conflicts_exist[k] = true;
+            }
+          }
+        }
+        if(!conflicts_exist[k])
+          break;
       }
     }
+  }
+
+  static void GebremedhinManne(MPI_Comm comm, size_t NNodes,
+			       const std::vector< std::vector<index_t> > &NNList,
+			       const std::vector< std::vector<index_t> > &send,
+			       const std::vector< std::vector<index_t> > &recv,
+			       const std::vector<int> &node_owner,
+			       std::vector<char> &colour){
+    int max_iterations = 4096;
+    std::vector<int> conflicts_exist(max_iterations, 0);
+    std::vector<bool> conflict(NNodes);
+
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    
+    char K=15; // Initialise guess at number
+    
+    assert(NNodes==colour.size());
+
+#pragma omp parallel firstprivate(NNodes)
+    {
+      // Initialize.  
+      std::default_random_engine generator;
+      std::uniform_int_distribution<int> distribution(0,K);
+
+#pragma omp for
+      for(size_t i=0;i<NNodes;i++){
+	colour[i] = distribution(generator);
+	conflict[i] = true;
+      }
+
+#pragma omp single
+      {
+        halo_update<char, 1>(comm, send, recv, colour);
+      }
+      
+      for(int k=0;k<max_iterations;k++){
+        assert(K<64);
+
+	std::vector<char> colour_deck;
+	for(int i=0;i<K;i++)
+	  colour_deck.push_back(i);
+	std::random_shuffle(colour_deck.begin(), colour_deck.end());
+	
+        // Phase 1: pseudo-colouring. Note - assuming graph can be colored with fewer than 64 colours.
+#pragma omp for schedule(static)
+        for(size_t i=0;i<NNodes;i++){
+          if(i%1000 == 0)
+            std::random_shuffle(colour_deck.begin(), colour_deck.end());
+
+          if(!conflict[i] || node_owner[i]!=rank)
+            continue;
+	  
+          // Reset
+          conflict[i] = false;
+	  
+	  char c;
+          unsigned long colours = 0;
+          for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+	    c = colour[*it];
+	    colours = colours | 1<<c;
+          }
+          colours = ~colours;
+
+	  bool exhausted=true;
+	  for(std::vector<char>::const_iterator it=colour_deck.begin();it!=colour_deck.end();++it){
+	    if(colours&(1<<*it)){
+	      colour[i] = *it;
+	      exhausted=false;
+	      break;
+	    }
+	  }
+	  if(exhausted){
+	    for(size_t j=K;j<64;j++){
+	      if(colours&(1<<j)){
+		colour[i] = j;
+		break;
+	      }
+	    }
+	  }
+        }
+#pragma omp single
+	{
+	  halo_update<char, 1>(comm, send, recv, colour);
+	}
+
+        // Phase 2: find conflicts
+#pragma omp for schedule(static)
+        for(index_t i=0;i<(index_t)NNodes;i++){
+	  if(node_owner[i]!=rank)
+	    continue;
+
+          for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+            if(colour[i]==colour[*it] && i<*it){
+              conflict[i] = true;
+              conflicts_exist[k]++;
+              break;
+            }
+          }
+          //if(conflict[i]){
+          //  std::cerr<<(int)colour[i]<<"("<<i<<") :: ";
+          //  for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it)
+          //    std::cerr<<(int)colour[*it]<<"("<<*it<<") ";
+          //  std::cerr<<std::endl;
+          //}
+        }
+	
+#pragma omp single
+	{	  
+	  MPI_Allreduce(MPI_IN_PLACE, &(conflicts_exist[k]), 1, MPI_INT, MPI_SUM, comm);
+	  
+          //if(rank==0)
+          //  std::cerr<<(int)K<<", "<<k<<" :: "<<conflicts_exist[k]<<std::endl;
+
+	  // If progress has stagnated then lift the limit on chromatic number.
+	  if(k>=K && conflicts_exist[k-K]==conflicts_exist[k]){
+            for(int i=0;i<k;i++)
+              conflicts_exist[i] = -1;
+	    K++;
+	  }
+	}
+	
+	if(conflicts_exist[k]==0)
+	  break;
+      }
+    } 
   }
 
   /*! This routine repairs the colouring - based on the second and

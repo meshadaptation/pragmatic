@@ -443,6 +443,9 @@ template<typename treal_t> class MetricTensor3D{
   // Enforce positive definiteness
   static void positive_definiteness(treal_t *metric){
     Eigen::Matrix<double, 3, 3> M;
+
+    assert(std::isnormal(metric[0]));
+
     M <<
       metric[0], metric[1], metric[2],
       metric[1], metric[3], metric[4],
