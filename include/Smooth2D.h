@@ -518,7 +518,7 @@ template<typename real_t>
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor2D<real_t>::positive_definiteness(mp);
+    MetricTensor<real_t,2>::positive_definiteness(mp);
     double functional_minus_dx = property->lipnikov(p, r1, r2, 
                                                    mp, m1, m2);
 
@@ -526,7 +526,7 @@ template<typename real_t>
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor2D<real_t>::positive_definiteness(mp);
+    MetricTensor<real_t,2>::positive_definiteness(mp);
     double functional_plus_dx = property->lipnikov(p, r1, r2, 
                                                   mp, m1, m2);
 
@@ -536,7 +536,7 @@ template<typename real_t>
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor2D<real_t>::positive_definiteness(mp);
+    MetricTensor<real_t,2>::positive_definiteness(mp);
     double functional_minus_dy = property->lipnikov(p, r1, r2, 
                                                    mp, m1, m2);
 
@@ -544,7 +544,7 @@ template<typename real_t>
     mp[0] = a0*p[1]*p[1]+a1*p[0]*p[0]+a2*p[0]*p[1]+a3*p[1]+a4*p[0];
     mp[1] = b0*p[1]*p[1]+b1*p[0]*p[0]+b2*p[0]*p[1]+b3*p[1]+b4*p[0];
     mp[2] = c0*p[1]*p[1]+c1*p[0]*p[0]+c2*p[0]*p[1]+c3*p[1]+c4*p[0];
-    MetricTensor2D<real_t>::positive_definiteness(mp);
+    MetricTensor<real_t,2>::positive_definiteness(mp);
     double functional_plus_dy = property->lipnikov(p, r1, r2, 
                                                   mp, m1, m2);
 

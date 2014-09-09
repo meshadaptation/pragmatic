@@ -39,10 +39,8 @@
 #define REFINE3D_H
 
 #include <algorithm>
-#include <deque>
 #include <set>
 #include <vector>
-#include <limits>
 
 #include <string.h>
 #include <inttypes.h>

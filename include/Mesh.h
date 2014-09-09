@@ -399,6 +399,7 @@ template<typename real_t> class Mesh{
     double downcast_total_length=0;
     
     if(num_processes>1){
+#ifdef HAVE_MPI
      for(int i=0;i<NElements;i++){
         for(int j=0;j<3;j++){
           int n1 = _ENList[i*nloc+(j+1)%3];
@@ -415,6 +416,7 @@ template<typename real_t> class Mesh{
      
      downcast_total_length = total_length;
      MPI_Allreduce(MPI_IN_PLACE, &downcast_total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
     }else{
       for(int i=0;i<NElements;i++){
         for(int j=0;j<3;j++){
@@ -1083,9 +1085,11 @@ template<typename real_t> class Mesh{
         max_ele_area = std::max(max_ele_area, larea);
       }
 
+#ifdef HAVE_MPI
       MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+#endif
 
       if(rank==0){
         std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
@@ -1124,9 +1128,11 @@ template<typename real_t> class Mesh{
         max_ele_vol = std::max(max_ele_vol, lvolume);
       }
 
+#ifdef HAVE_MPI
       MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+#endif
 
       if(rank==0){
         std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
@@ -1156,6 +1162,7 @@ template<typename real_t> class Mesh{
 
   // TODO - This function is here for compatibility with 3D
   void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
+#ifdef HAVE_MPI
     NPNodes.resize(num_processes);
     if(num_processes>1){
       NPNodes[rank] = NNodes - recv_halo.size();
@@ -1185,11 +1192,11 @@ template<typename real_t> class Mesh{
         lnn2gnn[i] = i;
       }
     }
+#endif
   }
 
  private:
-  template<typename _real_t> friend class MetricField2D;
-  template<typename _real_t> friend class MetricField3D;
+  template<typename _real_t, int _dim> friend class MetricField;
   template<typename _real_t> friend class Smooth2D;
   template<typename _real_t> friend class Smooth3D;
   template<typename _real_t> friend class Swapping2D;
@@ -1224,9 +1231,11 @@ template<typename real_t> class Mesh{
     MPI_Comm_size(_mpi_comm, &num_processes);
     MPI_Comm_rank(_mpi_comm, &rank);
 
-    // Assign the correct MPI data type to MPI_INDEX_T
+    // Assign the correct MPI data type to MPI_INDEX_T and MPI_REAL_T
     mpi_type_wrapper<index_t> mpi_index_t_wrapper;
     MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
+    mpi_type_wrapper<real_t> mpi_real_t_wrapper;
+    MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
 #endif
 
     nthreads = pragmatic_nthreads();
@@ -1776,6 +1785,7 @@ template<typename real_t> class Mesh{
 
   void create_global_node_numbering(){
     if(num_processes>1){
+#ifdef HAVE_MPI
       // Calculate the global numbering offset for this partition.
       int gnn_offset;
       int NPNodes = NNodes - recv_halo.size();
@@ -1801,6 +1811,7 @@ template<typename real_t> class Mesh{
           node_owner[*it] = i;
         }
       }
+#endif
     }else{
       memset(&node_owner[0], 0, NNodes*sizeof(int));
       for(index_t i=0; i < (index_t) NNodes; i++)
@@ -1809,6 +1820,7 @@ template<typename real_t> class Mesh{
   }
 
   void create_gappy_global_numbering(size_t pNElements){
+#ifdef HAVE_MPI
     // We expect to have NElements_predict/2 nodes in the partition,
     // so let's reserve 10 times more space for global node numbers.
     index_t gnn_reserve = 5*pNElements;
@@ -1837,6 +1849,7 @@ template<typename real_t> class Mesh{
         recv_map[i][lnn2gnn[*it]] = *it;
       }
     }
+#endif
   }
 
   void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt){
@@ -1937,8 +1950,9 @@ template<typename real_t> class Mesh{
   MPI_Comm _mpi_comm;
   index_t gnn_offset;
 
-  // MPI data type for index_t
+  // MPI data type for index_t and real_t
   MPI_Datatype MPI_INDEX_T;
+  MPI_Datatype MPI_REAL_T;
 #endif
 };
 

@@ -84,7 +84,7 @@ int main(int argc, char **argv){
   for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
-    MetricField2D<double> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
     std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;

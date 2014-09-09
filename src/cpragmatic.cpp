@@ -126,13 +126,13 @@ extern "C" {
 
     if(_pragmatic_metric_field==NULL){
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
+        MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
 	metric_field->add_field(psi, *error, *pnorm);
 	metric_field->update_mesh();
 	
         _pragmatic_metric_field = metric_field;
       }else{
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
+        MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
 	metric_field->add_field(psi, *error, *pnorm);
 	metric_field->update_mesh();
 
@@ -155,20 +155,20 @@ extern "C" {
 
     if(_pragmatic_metric_field==NULL){
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
+        MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
         _pragmatic_metric_field = metric_field;
       }else{
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
+        MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
         _pragmatic_metric_field = metric_field;
       }
     }
 
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField2D<double> *)_pragmatic_metric_field)->set_metric(metric);
-      ((MetricField2D<double> *)_pragmatic_metric_field)->update_mesh();
+      ((MetricField<double,2> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,2> *)_pragmatic_metric_field)->update_mesh();
     }else{
-      ((MetricField3D<double> *)_pragmatic_metric_field)->set_metric(metric);
-      ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
+      ((MetricField<double,3> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,3> *)_pragmatic_metric_field)->update_mesh();
     }
   }
   
@@ -296,19 +296,19 @@ extern "C" {
 
   void pragmatic_get_metric(double *metric){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField2D<double> *)_pragmatic_metric_field)->get_metric(metric);
+      ((MetricField<double,2> *)_pragmatic_metric_field)->get_metric(metric);
     }else{
-      ((MetricField3D<double> *)_pragmatic_metric_field)->get_metric(metric);
+      ((MetricField<double,3> *)_pragmatic_metric_field)->get_metric(metric);
     }
   }
 
   void pragmatic_finalize(){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       if(_pragmatic_metric_field!=NULL)
-        delete (MetricField2D<double> *)_pragmatic_metric_field;
+        delete (MetricField<double,2> *)_pragmatic_metric_field;
     }else{
       if(_pragmatic_metric_field!=NULL)
-        delete (MetricField3D<double> *)_pragmatic_metric_field;
+        delete (MetricField<double,3> *)_pragmatic_metric_field;
     }
     _pragmatic_metric_field=NULL;
 

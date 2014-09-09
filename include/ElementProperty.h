@@ -59,7 +59,7 @@
  * \li 2D/3D Lipnikov quality functional.
  * \li 3D sliver functional.
  */
-template<typename real_t>
+template<typename real_t, int dim>
 class ElementProperty{
  public:
   /*! Constructor for 2D triangular elements.
@@ -67,7 +67,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): dimension(2){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2){
     orientation = 1;
     
     double A = area(x0, x1, x2);
@@ -83,7 +83,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) : dimension(3){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3){
     orientation = 1;
 
     double V = volume(x0, x1, x2, x3);
@@ -138,9 +138,9 @@ class ElementProperty{
    * @param m metric tensor for first point.
    */
   real_t length(const real_t x0[], const real_t x1[], const double m[]) const{
-    if(dimension==2){
+    if(dim==2){
       return length2d(x0, x1, m);
-    }else{
+    }else{ // if(dim==3)
       return length3d(x0, x1, m);
     }
   }
@@ -410,7 +410,6 @@ class ElementProperty{
   const static double lipnikov_const2d = 20.784609690826528; // 12.0*sqrt(3.0);
   const static double lipnikov_const3d = 1832.8207768355312; // pow(6.0, 4)*sqrt(2.0);
 
-  const int dimension;
   int orientation;
 };
 #endif
