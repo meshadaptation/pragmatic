@@ -59,35 +59,4 @@ extern "C" {
 typedef int idxtype;
 }
 
-/*! \brief Class provides a specialised interface to some METIS
- *   functionality.
- */
-namespace metis{
-  /*! Calculate a node renumbering.
-   * @param graph is the undirected graph to be partitioned.
-   * @param norder is an array storing the partition each node in the graph is assigned to.
-   */
-  void reorder(const std::vector< std::set<int> > &graph, std::vector<int> &norder){
-    int nnodes = graph.size();
-    
-    // Compress graph
-    std::vector<idxtype> xadj(nnodes+1), adjncy;
-    int pos=0;
-    xadj[0]=0;
-    for(int i=0;i<nnodes;i++){
-      for(typename std::set<int>::const_iterator jt=graph[i].begin();jt!=graph[i].end();jt++){
-        assert((*jt)>=0);
-        assert((*jt)<nnodes);
-        adjncy.push_back(*jt);
-        pos++;
-      }
-      xadj[i+1] = pos;
-    }
-    
-    norder.resize(nnodes);
-    std::vector<int> inorder(nnodes);
-    
-    METIS_NodeND(&nnodes, &(xadj[0]), &(adjncy[0]), NULL, NULL, &(norder[0]), &(inorder[0]));
-  }
-};
 #endif

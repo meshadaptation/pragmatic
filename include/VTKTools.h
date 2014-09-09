@@ -140,18 +140,20 @@ template<typename real_t> class VTKTools{
 
       if(rank==0){
         int edgecut;
-        int vsize = nloc - 1;
 
-        std::vector<int> eptr(NElements+1), eind(NElements*nloc);
+        std::vector<int> eind(NElements*nloc);
         eind[0] = 0;
         for(size_t i=0;i<NElements*nloc;i++)
           eind[i] = ENList[i];
-        for(size_t i=0;i<NElements;i++)
-          eptr[i+1] = eptr[i]+nloc;
 
         int intNElements = NElements;
         int intNNodes = NNodes;
 
+#ifdef METIS_VER_MAJOR
+        int vsize = nloc - 1;
+        std::vector<int> eptr(NElements+1);
+        for(size_t i=0;i<NElements;i++)
+          eptr[i+1] = eptr[i]+nloc;
         METIS_PartMeshNodal(&intNElements,
                             &intNNodes,
                             &(eptr[0]),
@@ -164,6 +166,21 @@ template<typename real_t> class VTKTools{
                             &edgecut,
                             &(epart[0]), 
                             &(npart[0]));
+#else
+        std::vector<int> etype(NElements);
+        for(size_t i=0;i<NElements;i++)
+          etype[i] = ndims-1;
+        int numflag = 0;
+        METIS_PartMeshNodal(&intNElements,
+                            &intNNodes,
+                            &(eind[0]),
+                            &(etype[0]),
+                            &numflag,
+                            &nparts,
+                            &edgecut,
+                            &(epart[0]),
+                            &(npart[0]));
+#endif
       }
 
       mpi_type_wrapper<index_t> mpi_index_t_wrapper;
@@ -426,10 +443,10 @@ template<typename real_t> class VTKTools{
     vtk_boundary_nodes->SetNumberOfComponents(1);
     vtk_boundary_nodes->SetNumberOfTuples(NNodes);
     vtk_boundary_nodes->SetName("BoundaryNodes");
-    for(int i=0;i<NNodes;i++)
+    for(size_t i=0;i<NNodes;i++)
       vtk_boundary_nodes->SetTuple1(i, -1);
 
-    for(int i=0;i<NElements;i++){
+    for(size_t i=0;i<NElements;i++){
       const int *n=mesh->get_element(i);
       if(n[0]==-1)
         continue;

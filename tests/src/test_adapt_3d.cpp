@@ -89,7 +89,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen3D<double> coarsen(*mesh);
-  Smooth3D<double> smooth(*mesh);
+  Smooth<double, 3> smooth(*mesh);
   Refine3D<double> refine(*mesh);
   Swapping3D<double> swapping(*mesh);
   
@@ -121,7 +121,7 @@ int main(int argc, char **argv){
   
   mesh->defragment();
 
-  smooth.smooth("smart Laplacian");
+  smooth.smooth();
   
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();

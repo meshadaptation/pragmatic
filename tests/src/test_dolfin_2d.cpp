@@ -174,7 +174,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen2D<double> coarsen(*mesh);  
-  Smooth2D<double> smooth(*mesh);
+  Smooth<double, 2> smooth(*mesh);
   Refine2D<double> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 
@@ -217,7 +217,7 @@ int main(int argc, char **argv){
   mesh->defragment();
 
   tic = get_wtime();
-  smooth.smooth("optimisation Linf", 200);
+  smooth.smooth(200);
   time_smooth += get_wtime()-tic;
 
   time_adapt = get_wtime()-time_adapt;

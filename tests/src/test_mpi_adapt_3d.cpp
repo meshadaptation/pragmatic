@@ -98,7 +98,7 @@ int main(int argc, char **argv){
   Coarsen3D<double> coarsen(*mesh);
   coarsen.coarsen(L_low, L_up);
   
-  Smooth3D<double> smooth(*mesh);
+  Smooth<double, 3> smooth(*mesh);
   
   double L_max = mesh->maximal_edge_length();
   double alpha = 0.95; //sqrt(2.0)*0.5;
@@ -116,7 +116,7 @@ int main(int argc, char **argv){
 
   mesh->defragment();
   
-  smooth.smooth("smart Laplacian");
+  smooth.smooth();
 
   VTKTools<double>::export_vtu("../data/test_mpi_adapt_3d", mesh);
   

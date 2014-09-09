@@ -61,89 +61,80 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  const char *methods[] = {"smart Laplacian", "optimisation Linf"};
-  const double target_quality_mean[] = {0.5, 0.3};
-  const double target_quality_min[]  = {0.001, 0.01};
+  const double target_quality_mean = 0.3;
+  const double target_quality_min = 0.01;
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
   
   double pi = 3.14159265358979323846;
-  for(int m=0;m<2;m++){
-    const char *method = methods[m];
+  
+  MetricField3D<double> metric_field(*mesh);
+  
+  size_t NNodes = mesh->get_number_nodes();
+  
+  double dx = 1.0/20;
+  for(size_t i=0;i<NNodes;i++){
+    double x = 2*mesh->get_coords(i)[0]-1;
+    double y = 2*mesh->get_coords(i)[1]-1;
+    double z = 2*mesh->get_coords(i)[2]-1;
     
-    MetricField3D<double> metric_field(*mesh);
+    double l = dx + 0.9*dx*(sin(3*x*pi) + sin(3*y*pi) + sin(3*z*pi))/3;
+    double invl2 = 1.0/(l*l);
+    double m[] = {invl2, 0.0, 0.0, invl2, 0.0, invl2};
     
-    size_t NNodes = mesh->get_number_nodes();
+    metric_field.set_metric(m, i);
+  }
+  
+  metric_field.update_mesh();
+  
+  VTKTools<double>::export_vtu("../data/test_smooth_3d_init", mesh);
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
+  
+  if(rank==0)
+    std::cout<<"Initial quality:"<<std::endl
+	     <<"Quality mean:    "<<qmean<<std::endl
+	     <<"Quality min:     "<<qmin<<std::endl;
+  
+  Smooth<double, 3> smooth(*mesh);
+  
+  double tic = get_wtime();
+  smooth.smooth(100);
+  double toc = get_wtime();
+  
+  qmean = mesh->get_qmean();
+  qmin = mesh->get_qmin();
+  
+  long double area = mesh->calculate_area();
+  long double volume = mesh->calculate_volume();
+  
+  if(rank==0)
+    std::cout<<"Smooth loop time: "<<toc-tic<<std::endl
+	     <<"Quality mean:     "<<qmean<<std::endl
+	     <<"Quality min:      "<<qmin<<std::endl;
+  
+  std::string vtu_filename = std::string("../data/test_smooth_3d_");
+  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+  
+  if(rank==0){
+    std::cout<<"Checking quality between bounds - "<<" (mean>"<<target_quality_mean<<", min>"<<target_quality_min<<"): ";
+    if((qmean>target_quality_mean)&&(qmin>target_quality_min))
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail"<<std::endl;
     
-    double dx = 1.0/20;
-    for(size_t i=0;i<NNodes;i++){
-      double x = 2*mesh->get_coords(i)[0]-1;
-      double y = 2*mesh->get_coords(i)[1]-1;
-      double z = 2*mesh->get_coords(i)[2]-1;
-      
-      double l = dx + 0.9*dx*(sin(3*x*pi) + sin(3*y*pi) + sin(3*z*pi))/3;
-      double invl2 = 1.0/(l*l);
-      double m[] = {invl2, 0.0, 0.0, invl2, 0.0, invl2};
- 
-      metric_field.set_metric(m, i);
-    }
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
     
-    metric_field.update_mesh();
-    
-    if(m==0){
-      VTKTools<double>::export_vtu("../data/test_smooth_3d_init", mesh);
-      double qmean = mesh->get_qmean();
-      double qmin = mesh->get_qmin();
-      double area = mesh->calculate_area();
-      
-      if(rank==0)
-        std::cout<<"Initial quality:"<<std::endl
-                 <<"Quality mean:    "<<qmean<<std::endl
-                 <<"Quality min:     "<<qmin<<std::endl
-		 <<"Total area:      "<<area<<std::endl;
-    }
-    
-    Smooth3D<double> smooth(*mesh);
-    
-    double tic = get_wtime();
-    smooth.smooth(method, 100);
-    double toc = get_wtime();
-    
-    double qmean = mesh->get_qmean();
-    double qmin = mesh->get_qmin();
-    
-    long double area = mesh->calculate_area();
-    long double volume = mesh->calculate_volume();
-
-    if(rank==0)
-      std::cout<<"Smooth loop time ("<<method<<"):     "<<toc-tic<<std::endl
-               <<"Quality mean:          "<<qmean<<std::endl
-               <<"Quality min:           "<<qmin<<std::endl;
-    
-    std::string vtu_filename = std::string("../data/test_smooth_3d_")+std::string(method);
-    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
-    
-    if(rank==0){
-      std::cout<<"Checking quality between bounds - "<<" (mean>"<<target_quality_mean[m]<<", min>"<<target_quality_min[m]<<"): ";
-      if((qmean>target_quality_mean[m])&&(qmin>target_quality_min[m]))
-        std::cout<<"pass"<<std::endl;
-      else
-        std::cout<<"fail"<<std::endl;
-      
-      std::cout<<"Checking area == 6: ";
-      if(fabs(area-6)<DBL_EPSILON)
-        std::cout<<"pass"<<std::endl;
-      else
-        std::cout<<"fail ("<<perimeter<<": area="<<area<<")"<<std::endl;
-
-      std::cout<<"Checking volume == 1: ";
-      if(fabs(volume-1)<DBL_EPSILON)
-        std::cout<<"pass"<<std::endl;
-      else
-        std::cout<<"fail ("<<volume<<": volume="<<volume<<")"<<std::endl;
-
-    }
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
   }
   
   MPI_Finalize();

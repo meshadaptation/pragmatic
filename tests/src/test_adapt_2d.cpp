@@ -102,7 +102,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen2D<double> coarsen(*mesh);
-  Smooth2D<double> smooth(*mesh);
+  Smooth<double, 2> smooth(*mesh);
   Refine2D<double> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 
@@ -144,8 +144,7 @@ int main(int argc, char **argv){
   }
 
   tic = get_wtime();
-  smooth.smooth("smart Laplacian", 20);
-  smooth.smooth("optimisation Linf", 20);
+  smooth.smooth(20);
   time_smooth += get_wtime()-tic;
 
   time_adapt = get_wtime()-time_adapt;

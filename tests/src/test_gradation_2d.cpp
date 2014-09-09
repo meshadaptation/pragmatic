@@ -96,7 +96,7 @@ int main(int argc, char **argv){
   double L_low = L_up/2;
 
   Coarsen2D<double> coarsen(*mesh);  
-  Smooth2D<double> smooth(*mesh);
+  Smooth<double, 2> smooth(*mesh);
   Refine2D<double> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 

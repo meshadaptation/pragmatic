@@ -14,7 +14,7 @@ LDFLAGS = @LDFLAGS@
 NVCC = @NVCC@
 NVCCFLAGS = @CUDA_CFLAGS@ @NVCCFLAGS@
 
-objs = ticker.o tinystr.o tinyxml.o tinyxmlerror.o tinyxmlparser.o plex_mesh.o
+objs = ticker.o tinystr.o tinyxml.o tinyxmlerror.o tinyxmlparser.o
 
 CUDA_LIBS = $(objs) @CUDA_LIBS@
 LIBS = $(objs) @LIBS@

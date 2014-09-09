@@ -190,8 +190,6 @@ AC_CHECK_LIB(numa,numa_alloc,,AC_MSG_WARN([No NUMA support available.]))
 AC_CHECK_LIB(tcmalloc,malloc,,AC_MSG_WARN([No tcmalloc support available.]))
 # AC_CHECK_LIB(tbbmalloc,malloc,,AC_MSG_WARN([No TBB malloc support available.]))
 
-ACX_PETSc([AC_MSG_NOTICE(["PETSc found, enabling scalable solver"])], [AC_MSG_ERROR(["PETSc not found"])])
-
 AC_ARG_WITH(metis, [AS_HELP_STRING([--with-metis=METIS_ROOT], [root installation of METIS])])
 if test -n "$with_metis" ; then
   LIBS="$LIBS -L$with_metis/lib"

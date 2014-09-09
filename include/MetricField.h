@@ -665,7 +665,7 @@ template<typename real_t>
     }
 
     // Halo update if parallel
-    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+    halo_update<double, 6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
