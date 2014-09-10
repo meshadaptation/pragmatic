@@ -38,8 +38,6 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "pragmatic_config.h"
-
 #include <algorithm>
 #include <vector>
 #include <set>
@@ -60,7 +58,6 @@
 #include "PragmaticTypes.h"
 #include "PragmaticMinis.h"
 
-#include "Metis.h"
 #include "ElementProperty.h"
 #include "MetricTensor.h"
 #include "HaloExchange.h"

@@ -38,8 +38,6 @@
 #ifndef COARSEN3D_H
 #define COARSEN3D_H
 
-#include "pragmatic_config.h"
-
 #include <algorithm>
 #include <set>
 #include <vector>

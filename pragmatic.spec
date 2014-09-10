@@ -1,6 +1,6 @@
 Summary:   Anisotropic mesh adaptivity
 Name:	   pragmatic
-Version:   0.1
+Version:   1.3
 Release:   0
 License:   BSD 2-Clause
 Group:	   Applications/Programming
@@ -40,7 +40,6 @@ make DESTDIR=$RPM_BUILD_ROOT install
 rm -rf $RPM_BUILD_ROOT
 
 %files
-/usr/include/pragmatic/pragmatic_config.h
 /usr/include/pragmatic/Edge.h
 /usr/include/pragmatic/Swapping.h
 /usr/include/pragmatic/MetricTensor.h

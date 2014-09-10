@@ -38,8 +38,6 @@
 #ifndef H_EDGE
 #define H_EDGE
 
-#include "pragmatic_config.h"
-
 /*! \brief Mesh edge object.
  */
 template<typename index_t> class Edge{
