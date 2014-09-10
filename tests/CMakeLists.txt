@@ -6,65 +6,62 @@ COMMAND python ./unittest bin)
 include_directories(../include ./include)
 
 ADD_EXECUTABLE(./bin/test_refine_3d ./src/test_refine_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_refine_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_refine_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_ElementProperty ./src/test_ElementProperty.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_ElementProperty pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_ElementProperty ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_swap_2d ./src/test_swap_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_swap_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_swap_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_page_faults ./src/test_page_faults.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_page_faults pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_page_faults ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_coarsen_3d ./src/test_mpi_coarsen_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_mpi_coarsen_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_coarsen_3d ./src/test_coarsen_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_coarsen_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_refine_2d ./src/test_refine_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_refine_2d pragmatic ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(./bin/test_colour_mpi ./src/test_colour_mpi.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_colour_mpi pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_refine_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_eigen ./src/test_eigen.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_eigen pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_eigen ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_hessian_3d ./src/test_hessian_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_hessian_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_hessian_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_refine_3d ./src/test_mpi_refine_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_mpi_refine_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_mpi_refine_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_coarsen_2d ./src/test_coarsen_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_coarsen_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_coarsen_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_adapt_2d ./src/test_adapt_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_adapt_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_adapt_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_refine_2d ./src/test_mpi_refine_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_mpi_refine_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_mpi_refine_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_hessian_2d ./src/test_hessian_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_hessian_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_hessian_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_smooth_2d ./src/test_smooth_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_smooth_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_smooth_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_gradation_2d ./src/test_gradation_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_gradation_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_gradation_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_adapt_3d ./src/test_mpi_adapt_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_mpi_adapt_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_coarsen_2d ./src/test_mpi_coarsen_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_mpi_coarsen_2d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_mpi_coarsen_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_smooth_3d ./src/test_smooth_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_smooth_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_smooth_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_adapt_3d ./src/test_adapt_3d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_adapt_3d pragmatic ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(./bin/test_adapt_3d ${PRAGMATIC_LIBRARIES})
 

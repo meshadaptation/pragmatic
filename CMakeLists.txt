@@ -54,6 +54,6 @@ file(GLOB C_SOURCES src/*.c)
 file(GLOB CXX_SOURCES src/*.cpp)
 
 # target_link_library
-add_library(pragmatic ${C_SOURCES} ${CXX_SOURCES})
+add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
