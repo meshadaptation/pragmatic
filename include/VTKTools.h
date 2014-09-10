@@ -550,7 +550,11 @@ template<typename real_t> class VTKTools{
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".vtu");
       writer->SetFileName(filename.c_str());
+#if VTK_MAJOR_VERSION < 6
       writer->SetInput(ug);
+#else
+      writer->SetInputData(ug);
+#endif
       writer->Write();
 
       writer->Delete();
@@ -567,7 +571,11 @@ template<typename real_t> class VTKTools{
       writer->SetGhostLevel(1);
       writer->SetStartPiece(rank);
       writer->SetEndPiece(rank);
+#if VTK_MAJOR_VERSION < 6
       writer->SetInput(ug);
+#else
+      writer->SetInputData(ug);
+#endif
       writer->Write();
       writer->Delete();
 #endif
