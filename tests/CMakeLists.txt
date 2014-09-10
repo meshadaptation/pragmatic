@@ -1,3 +1,7 @@
+add_custom_target(test
+make
+COMMAND cp src/*.mpi bin/
+COMMAND python ./unittest bin)
 
 include_directories(../include ./include)
 
