@@ -57,3 +57,8 @@ file(GLOB CXX_SOURCES src/*.cpp)
 add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
+
+install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
+install(FILES libpragmatic.so DESTINATION lib)
+
+
