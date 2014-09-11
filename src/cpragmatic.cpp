@@ -182,7 +182,7 @@ extern "C" {
     assert(_pragmatic_mesh!=NULL);
 
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
-    mesh->set_doundary(*nfacets, facets, ids);
+    mesh->set_boundary(*nfacets, facets, ids);
   }
   
   /** Adapt the mesh.

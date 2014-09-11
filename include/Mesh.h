@@ -292,8 +292,8 @@ template<typename real_t> class Mesh{
     std::map< std::set<int>, int> facet2id;
     for(int i=0;i<nfacets;i++){
       std::set<int> facet;
-      for(int j=0;j<dim;j++){
-        facet.insert(facets[i*dim+j]);
+      for(int j=0;j<ndims;j++){
+        facet.insert(facets[i*ndims+j]);
       }
       assert(facet2id.find(facet)==facet2id.end());
       facet2id[facet] = ids[i];
