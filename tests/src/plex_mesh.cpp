@@ -11,7 +11,7 @@ PetscErrorCode create_unit_square(int I, int J, MPI_Comm comm, DM *mesh){
   DM boundary;
   PetscErrorCode ierr = DMPlexCreate(comm, &boundary); CHKERRQ(ierr);
   ierr = DMSetType(boundary, DMPLEX); CHKERRQ(ierr);
-  ierr = DMPlexSetDimension(boundary, 1); CHKERRQ(ierr);
+  ierr = DMSetDimension(boundary, 1); CHKERRQ(ierr);
   
   PetscReal lower[] = {0, 0};
   PetscReal upper[] = {1, 1};
@@ -94,7 +94,7 @@ PetscErrorCode create_unit_cube(int I, int J, int K, MPI_Comm comm, DM *mesh){
   DM boundary;
   ierr = DMPlexCreate(comm, &boundary); CHKERRQ(ierr);
   ierr = DMSetType(boundary, DMPLEX); CHKERRQ(ierr);
-  ierr = DMPlexSetDimension(boundary, 2); CHKERRQ(ierr);
+  ierr = DMSetDimension(boundary, 2); CHKERRQ(ierr);
 
   DM lmesh;
   PetscReal lower[] = {0, 0, 0};

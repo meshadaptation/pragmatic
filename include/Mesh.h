@@ -105,7 +105,7 @@ template<typename real_t> class Mesh{
     /* Establish sizes */
     PetscErrorCode ierr;
     PetscInt dim, cStart, cEnd, vStart, vEnd;
-    ierr = DMPlexGetDimension(plex, &dim);assert(ierr==0);
+    ierr = DMGetDimension(plex, &dim);assert(ierr==0);
     ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);
     NNodes = vEnd - vStart;
     ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);
@@ -2699,7 +2699,7 @@ template<typename real_t> class Mesh{
     /* Need to do better error checking in here */
     PetscErrorCode ierr;
 
-    ierr = DMPlexGetDimension(plex, &dim);assert(ierr==0);
+    ierr = DMGetDimension(plex, &dim);assert(ierr==0);
     ierr = DMPlexGetDepthStratum(plex, 0, &vStart, &vEnd);assert(ierr==0);  // vertices
     ierr = DMPlexGetHeightStratum(plex, 1, &fStart, &fEnd);assert(ierr==0);  // facets
     ierr = DMPlexGetHeightStratum(plex, 0, &cStart, &cEnd);assert(ierr==0);  // cells
