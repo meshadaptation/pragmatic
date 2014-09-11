@@ -1681,6 +1681,29 @@ template<typename real_t> class Mesh{
   void export_dmplex(DM *plex)
   {
     PetscErrorCode ierr;
+
+    /* Translate Pragmatic's vertex halo into a PetscSF, so that DMPlexCreateFromCellList
+       can infer the full pointSF from the vertex overlap. */
+    PetscSF vertexSF;
+    PetscInt i, nleaves=0, idx=0, *ilocal;
+    PetscSFNode *iremote;
+    std::vector< std::vector<index_t> > remote_send(num_processes);
+    send_all_to_all(send, &remote_send);
+
+    ierr = PetscSFCreate(_mpi_comm, &vertexSF); assert(ierr==0);
+    for (int proc=0; proc<num_processes; proc++) nleaves += recv[proc].size();
+    ierr = PetscMalloc2(nleaves, &ilocal, nleaves, &iremote); assert(ierr==0);
+    for (int proc=0; proc<num_processes; proc++) {
+      if (proc == rank) continue;
+      for (i=0; i<recv[proc].size(); i++) {
+        ilocal[idx] = recv[proc][i];
+        iremote[idx].index = remote_send[proc][i];
+        iremote[idx].rank = proc;
+        idx++;
+      }
+    }
+    ierr = PetscSFSetGraph(vertexSF, NNodes, nleaves, ilocal, PETSC_OWN_POINTER, iremote, PETSC_OWN_POINTER); assert(ierr==0);
+
     ierr = DMPlexCreateFromCellList(_mpi_comm, ndims, NElements, NNodes, nloc, PETSC_TRUE,
                                     _ENList.data(), ndims, _coords.data(), plex); assert(ierr==0);
 
