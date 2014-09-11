@@ -171,6 +171,19 @@ extern "C" {
       ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
     }
   }
+
+  /** Set the domain boundary.
+
+      @param [in] nfacets Number of boundary facets
+      @param [in] facets Facet list
+      @param [in] ids Boundary ids
+   */
+  void pragmatic_set_boundary(const int *nfacets, const int *facets, const int *ids){
+    assert(_pragmatic_mesh!=NULL);
+
+    Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+    mesh->set_doundary(*nfacets, facets, ids);
+  }
   
   /** Adapt the mesh.
    */
