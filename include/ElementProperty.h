@@ -69,10 +69,12 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): dimension(2){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): dimension(2), inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
    double A = area(x0, x1, x2);
    if(A<0)
      orientation = -1;
+   else
+     orientation = 1;
   }
 
   /*! Constructor for 3D tetrahedral elements.
@@ -81,7 +83,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) : dimension(3){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) : dimension(3), inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
     double V = volume(x0, x1, x2, x3);
     if(V<0)
       orientation = -1;
@@ -190,9 +192,9 @@ class ElementProperty{
   double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
 		  const double *m0, const double *m1, const double *m2){
     // Metric tensor averaged over the element
-    double m00 = (m0[0] + m1[0] + m2[0])*finv3;
-    double m01 = (m0[1] + m1[1] + m2[1])*finv3;
-    double m11 = (m0[2] + m1[2] + m2[2])*finv3;
+    double m00 = (m0[0] + m1[0] + m2[0])*inv3;
+    double m01 = (m0[1] + m1[1] + m2[1])*inv3;
+    double m11 = (m0[2] + m1[2] + m2[2])*inv3;
     
     return lipnikov(x0, x1, x2, m00, m01, m11);
   }
@@ -231,13 +233,13 @@ class ElementProperty{
     double invl = 1.0/l;
     
     // Area in physical space
-    double a=orientation*finv2*(y02*x01 - y01*x02);
+    double a=orientation*inv2*(y02*x01 - y01*x02);
     
     // Area in metric space
     double a_m = a*sqrt(m00*m11 - m01*m01);
 
     // Function
-    double f = std::min(l*finv3, 3.0*invl);
+    double f = std::min(l*inv3, 3.0*invl);
     double tf = f * (2.0 - f);
     double F = tf*tf*tf;
     double quality = lipnikov_const2d*a_m*F*invl*invl;
@@ -292,12 +294,12 @@ class ElementProperty{
   double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                   const double *m0, const double *m1, const double *m2, const double *m3){
     // Metric tensor
-    double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*finv4;
-    double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*finv4;
-    double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*finv4;
-    double m11 = (m0[3] + m1[3] + m2[3] + m3[3])*finv4;
-    double m12 = (m0[4] + m1[4] + m2[4] + m3[4])*finv4;
-    double m22 = (m0[5] + m1[5] + m2[5] + m3[5])*finv4;
+    double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
+    double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*inv4;
+    double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*inv4;
+    double m11 = (m0[3] + m1[3] + m2[3] + m3[3])*inv4;
+    double m12 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
+    double m22 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
 
     // l is the length of the edges of the tet, in metric space
     double z01 = (x0[2] - x1[2]);
@@ -335,13 +337,13 @@ class ElementProperty{
     double invl = 1.0/l;
 
     // Volume
-    double v=orientation*finv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
 
     // Volume in metric space
     double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
 
     // Function
-    double f = std::min(l*finv6, 6*invl);
+    double f = std::min(l*inv6, 6*invl);
     double tf = f * (2.0 - f);
     double F = tf*tf*tf;
     double quality = lipnikov_const3d * v_m * F *invl*invl*invl;
@@ -407,13 +409,13 @@ class ElementProperty{
     double invl = 1.0/l;
 
     // Volume
-    double v=orientation*finv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
 
     // Volume in metric space
     double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
 
     // Function
-    double f = std::min(l*finv6, 6*invl);
+    double f = std::min(l*inv6, 6*invl);
     double tf = f * (2.0 - f);
     double F = tf*tf*tf;
     double quality = lipnikov_const3d * v_m * F *invl*invl*invl;
@@ -467,12 +469,12 @@ class ElementProperty{
   real_t sliver(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                 const double *m0, const double *m1, const double *m2, const double *m3){
     // Metric tensor
-    double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*finv4;
-    double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*finv4;
-    double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*finv4;
-    double m11 = (m0[4] + m1[4] + m2[4] + m3[4])*finv4;
-    double m12 = (m0[5] + m1[5] + m2[5] + m3[5])*finv4;
-    double m22 = (m0[8] + m1[8] + m2[8] + m3[8])*finv4;
+    double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
+    double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*inv4;
+    double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*inv4;
+    double m11 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
+    double m12 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
+    double m22 = (m0[8] + m1[8] + m2[8] + m3[8])*inv4;
 
     double z01 = (x0[2] - x1[2]);
     double y01 = (x0[1] - x1[1]);
@@ -507,7 +509,7 @@ class ElementProperty{
     double dl5 = (z23*(z23*m22 + y23*m12 + x23*m02) + y23*(z23*m12 + y23*m11 + x23*m01) + x23*(z23*m02 + y23*m01 + x23*m00));
     
     // Volume
-    double v=orientation*finv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
 
     // Volume in metric space
     double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
@@ -524,18 +526,15 @@ class ElementProperty{
   }
 
  private:
-  real_t inv2 = 0.5;
-  real_t inv6 = 1.0/6.0;
+  const double inv2;
+  const double inv3;
+  const double inv4;
+  const double inv6;
 
-  double finv2 = 0.5;
-  double finv3 = 1.0/3.0;
-  double finv4 = 1.0/4.0;
-  double finv6 = 1.0/6.0;
-
-  double lipnikov_const2d = 20.784609690826528; // 12.0*sqrt(3.0);
-  double lipnikov_const3d = 1832.8207768355312; // pow(6.0, 4)*sqrt(2.0);
+  const double lipnikov_const2d; // 12.0*sqrt(3.0);
+  const double lipnikov_const3d; // pow(6.0, 4)*sqrt(2.0);
 
   const int dimension;
-  int orientation = 1;
+  int orientation;
 };
 #endif
