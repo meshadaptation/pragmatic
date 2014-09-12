@@ -35,8 +35,6 @@
  *  SUCH DAMAGE.
  */
 
-#include "pragmatic_config.h"
-
 #include <iostream>
 #include <vector>
 #include <errno.h>
