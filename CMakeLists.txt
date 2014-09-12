@@ -55,6 +55,7 @@ file(GLOB CXX_SOURCES src/*.cpp)
 
 # target_link_library
 add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
+target_link_libraries(pragmatic metis)
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
