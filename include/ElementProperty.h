@@ -61,7 +61,7 @@
  * \li 2D/3D Lipnikov quality functional.
  * \li 3D sliver functional.
  */
-template<typename real_t, int dim>
+template<typename real_t>
 class ElementProperty{
  public:
   /*! Constructor for 2D triangular elements.
@@ -137,10 +137,11 @@ class ElementProperty{
    * @param x1 coordinate at finish of line segment.
    * @param m metric tensor for first point.
    */
+  template<int dim>
   real_t length(const real_t x0[], const real_t x1[], const double m[]) const{
     if(dim==2){
       return length2d(x0, x1, m);
-    }else{ // if(dim==3)
+    }else{ //if(dim==3)
       return length3d(x0, x1, m);
     }
   }

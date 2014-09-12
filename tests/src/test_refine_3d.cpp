@@ -63,7 +63,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 0.1);
   metric_field.update_mesh();
   
-  Refine3D<double> adapt(*mesh);
+  Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
   adapt.refine(sqrt(2.0));
@@ -92,7 +92,7 @@ int main(int argc, char **argv){
    
   if(verbose){
     int nelements = mesh->get_number_elements();
-    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+    std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
              <<"Number elements:      "<<nelements<<std::endl;
   }
 

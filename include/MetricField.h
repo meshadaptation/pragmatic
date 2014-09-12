@@ -525,7 +525,7 @@ public:
       const real_t *refx0 = _mesh->get_coords(_mesh->get_element(0)[0]);
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
-      ElementProperty<real_t,2> property(refx0, refx1, refx2);
+      ElementProperty<real_t> property(refx0, refx1, refx2);
 
 #pragma omp parallel for reduction(+:total_area_metric)
       for(int i=0;i<_NElements;i++){
@@ -563,7 +563,7 @@ public:
       const real_t *refx1 = _mesh->get_coords(_mesh->get_element(0)[1]);
       const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
       const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
-      ElementProperty<real_t,3> property(refx0, refx1, refx2, refx3);
+      ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
 
 #pragma omp parallel for reduction(+:total_volume_metric)
       for(int i=0;i<_NElements;i++){

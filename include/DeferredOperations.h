@@ -59,6 +59,11 @@ public:
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(n);
   }
 
+  inline void addNN_unique(const index_t i, const index_t n, const int tid){
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN_unique.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN_unique.push_back(n);
+  }
+
   inline void remNN(const index_t i, const index_t n, const int tid){
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(i);
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(n);
@@ -85,12 +90,17 @@ public:
   }
 
   inline void propagate_coarsening(const index_t i, const int tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_vector.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].coarsening_propagation.push_back(i);
+  }
+
+  inline void propagate_refinement(const index_t i, const index_t n, const int tid){
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].refinement_propagation.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].refinement_propagation.push_back(n);
   }
 
   inline void propagate_swapping(const index_t i, const index_t n, const int tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(n);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].swapping_propagation.push_back(i);
+    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].swapping_propagation.push_back(n);
   }
 
   inline void reset_colour(const index_t i, const int tid){
@@ -104,6 +114,17 @@ public:
     }
 
     deferred_operations[tid][vtid].addNN.clear();
+  }
+
+  inline void commit_addNN_unique(const int tid, const int vtid){
+    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].addNN_unique.begin();
+        it!=deferred_operations[tid][vtid].addNN_unique.end(); it+=2){
+      typename std::vector<index_t>::iterator position = std::find(_mesh->NNList[*it].begin(), _mesh->NNList[*it].end(), *(it+1));
+      if(position == _mesh->NNList[*it].end())
+        _mesh->NNList[*it].push_back(*(it+1));
+    }
+
+    deferred_operations[tid][vtid].addNN_unique.clear();
   }
 
   inline void commit_remNN(const int tid, const int vtid){
@@ -157,21 +178,30 @@ public:
   }
 
   inline void commit_coarsening_propagation(index_t* dynamic_vertex, const int tid, const int vtid){
-    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].propagation_vector.begin();
-        it!=deferred_operations[tid][vtid].propagation_vector.end(); ++it){
+    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].coarsening_propagation.begin();
+        it!=deferred_operations[tid][vtid].coarsening_propagation.end(); ++it){
       dynamic_vertex[*it] = -2;
     }
 
-    deferred_operations[tid][vtid].propagation_vector.clear();
+    deferred_operations[tid][vtid].coarsening_propagation.clear();
   }
 
-  inline void commit_swapping_propagation(std::vector< std::set<index_t> >& marked_edges, const int tid, const int vtid){
-    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].propagation_set.begin();
-        it!=deferred_operations[tid][vtid].propagation_set.end(); it+=2){
+  inline void commit_refinement_propagation(std::vector< std::set<index_t> >& marked_edges, const int tid, const int vtid){
+    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].refinement_propagation.begin();
+        it!=deferred_operations[tid][vtid].refinement_propagation.end(); it+=2){
       marked_edges[*it].insert(*(it+1));
     }
 
-    deferred_operations[tid][vtid].propagation_set.clear();
+    deferred_operations[tid][vtid].refinement_propagation.clear();
+  }
+
+  inline void commit_swapping_propagation(std::vector< std::set<index_t> >& marked_edges, const int tid, const int vtid){
+    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].swapping_propagation.begin();
+        it!=deferred_operations[tid][vtid].swapping_propagation.end(); it+=2){
+      marked_edges[*it].insert(*(it+1));
+    }
+
+    deferred_operations[tid][vtid].swapping_propagation.clear();
   }
 
   inline void commit_colour_reset(int* node_colour, const int tid, const int vtid){
@@ -197,14 +227,16 @@ private:
   struct def_op_t{
     // Mesh
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
+    std::vector<index_t> addNN_unique; // addNN -> [i, n] : Add node n to NNList[i] if it's not already in.
     std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
     std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
     std::vector<index_t> addNE_fix; // addNE_fix -> [i, n] : Fix ID of element n according to
                                     // threadIdx[thread_which_created_n] and add it to NEList[i].
     std::vector<index_t> repEN; // remEN -> [pos, n] : Set _ENList[pos] = n.
-    std::vector<index_t> propagation_vector; // [i] : Mark Coarseninig::dynamic_vertex[i]=-2.
-    std::vector<index_t> propagation_set; // [i, n] : Mark Swapping::marked_edges[i].insert(n).
+    std::vector<index_t> coarsening_propagation; // [i] : Mark Coarseninig::dynamic_vertex[i]=-2.
+    std::vector<index_t> refinement_propagation; // [i, n]: Mark Edge(i,n) for refinement.
+    std::vector<index_t> swapping_propagation; // [i, n] : Mark Swapping::marked_edges[i].insert(n).
     std::vector<index_t> reset_colour; // [i] : Set Colouring::node_colour[i]=-1.
   };
 
