@@ -283,7 +283,39 @@ template<typename real_t> class Mesh{
         *it = 0;
   }
 
-  /// Erase an element
+
+  void set_boundary(int nfacets, const int *facets, const int *ids){
+    assert(boundary.size()==0);
+    create_boundary();
+
+    // Create a map of facets to ids.
+    std::map< std::set<int>, int> facet2id;
+    for(int i=0;i<nfacets;i++){
+      std::set<int> facet;
+      for(int j=0;j<ndims;j++){
+        facet.insert(facets[i*ndims+j]);
+      }
+      assert(facet2id.find(facet)==facet2id.end());
+      facet2id[facet] = ids[i];
+    }
+
+    // Sweep through boundary and set ids.
+    size_t NElements = get_number_elements();
+    for(int i=0;i<NElements;i++){
+      for(int j=0;j<nloc;j++){
+        if(boundary[i*nloc+j]==1){
+          std::set<int> facet;
+          for(int k=1;k<nloc;k++){
+            facet.insert(_ENList[i*nloc+(j+k)%nloc]);
+          }
+          assert(facet2id.find(facet)!=facet2id.end());
+          boundary[i*nloc+j] = facet2id[facet];
+        }
+      }
+    }
+  }
+
+ /// Erase an element
   void erase_element(const index_t eid){
     const index_t *n = get_element(eid);
 

@@ -19,7 +19,7 @@ extern MetricField<double, int>* _cpragmatic_metric_field;
 
 extern "C" {
   void cpragmatic_initialise_2d(int* NNodes, int* NElements, int* enlist, double* x, double* y);
-  void cpragmatic_set_surface(int* nfacets, int* facets, int* boundary_ids);
+  void cpragmatic_set_boundary(int* nfacets, int* facets, int* boundary_ids);
   void cpragmatic_set_metric(double* metric);
   void cpragmatic_metric_add_field(double* psi, double* error, int* pnorm);
   void cpragmatic_apply_metric_gradation(double* gradation);

@@ -385,9 +385,9 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=Fa
   nfacets = ctypes.c_int(len(bfaces))
   facets = array(bfaces.flatten(),dtype=numpy.intc)
   
-  _libpragmatic.pragmatic_set_surface(ctypes.byref(nfacets),
-                                      facets.ctypes.data,
-                                      bfaces_IDs.ctypes.data)
+  _libpragmatic.pragmatic_set_boundary(ctypes.byref(nfacets),
+                                       facets.ctypes.data,
+                                       bfaces_IDs.ctypes.data)
   
   info("Setting metric tensor field ...")
   _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data)
