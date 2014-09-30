@@ -63,7 +63,7 @@ typedef float vtkFloatingPointType;
 #include "Mesh.h"
 #include "MetricTensor.h"
 #include "ElementProperty.h"
-extern "C" { 
+extern "C" {
 #include "metis.h"
 }
 

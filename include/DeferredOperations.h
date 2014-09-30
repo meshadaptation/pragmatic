@@ -59,11 +59,6 @@ public:
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(n);
   }
 
-  inline void addNN_unique(const index_t i, const index_t n, const int tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN_unique.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN_unique.push_back(n);
-  }
-
   inline void remNN(const index_t i, const index_t n, const int tid){
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(i);
     deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(n);
@@ -114,17 +109,6 @@ public:
     }
 
     deferred_operations[tid][vtid].addNN.clear();
-  }
-
-  inline void commit_addNN_unique(const int tid, const int vtid){
-    for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].addNN_unique.begin();
-        it!=deferred_operations[tid][vtid].addNN_unique.end(); it+=2){
-      typename std::vector<index_t>::iterator position = std::find(_mesh->NNList[*it].begin(), _mesh->NNList[*it].end(), *(it+1));
-      if(position == _mesh->NNList[*it].end())
-        _mesh->NNList[*it].push_back(*(it+1));
-    }
-
-    deferred_operations[tid][vtid].addNN_unique.clear();
   }
 
   inline void commit_remNN(const int tid, const int vtid){
@@ -227,7 +211,6 @@ private:
   struct def_op_t{
     // Mesh
     std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
-    std::vector<index_t> addNN_unique; // addNN -> [i, n] : Add node n to NNList[i] if it's not already in.
     std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
     std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
     std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].

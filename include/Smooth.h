@@ -982,18 +982,18 @@ template<typename real_t, int dim>
       const real_t *x1 = _mesh->get_coords(n[1]);
       const real_t *x2 = _mesh->get_coords(n[2]);
 
-      /* Check for inversion by looking at the area of element who
-	 node is being moved.*/
+      /* Check for inversion by looking at the area
+       * of the element whose node is being moved.*/
       real_t area;
       if(n[0]==node){
-	area = property->area(p, x1, x2);
+        area = property->area(p, x1, x2);
       }else if(n[1]==node){
-	area = property->area(x0, p, x2);
+        area = property->area(x0, p, x2);
       }else{
-	area = property->area(x0, x1, p);
+        area = property->area(x0, x1, p);
       }
       if(area<0)
-	return false;
+        return false;
 
       real_t L = property->area(x0, x1, x2);
 
@@ -1004,17 +1004,17 @@ template<typename real_t, int dim>
 
       real_t min_l = std::min(ll[0], std::min(ll[1], ll[2]));
       if(best_e==-1){
-	tol = min_l;
-	best_e = *ie;
-	for(size_t i=0;i<nloc;i++)
-	  l[i] = ll[i];
+        tol = min_l;
+        best_e = *ie;
+        for(size_t i=0;i<nloc;i++)
+          l[i] = ll[i];
       }else{
-	if(min_l>tol){
-	  tol = min_l;
-	  best_e = *ie;
-	  for(size_t i=0;i<nloc;i++)
-	    l[i] = ll[i];
-	}
+        if(min_l>tol){
+          tol = min_l;
+          best_e = *ie;
+          for(size_t i=0;i<nloc;i++)
+            l[i] = ll[i];
+        }
       }
     }
     assert(best_e!=-1);
@@ -1047,20 +1047,20 @@ template<typename real_t, int dim>
       const real_t *x2 = _mesh->get_coords(n[2]);
       const real_t *x3 = _mesh->get_coords(n[3]);
 
-      /* Check for inversion by looking at the volume of element who
-	 node is being moved.*/
+      /* Check for inversion by looking at the volume
+       * of element whose node is being moved.*/
       real_t volume;
       if(n[0]==node){
-	volume = property->volume(p, x1, x2, x3);
+        volume = property->volume(p, x1, x2, x3);
       }else if(n[1]==node){
-	volume = property->volume(x0, p, x2, x3);
+        volume = property->volume(x0, p, x2, x3);
       }else if(n[2]==node){
-	volume = property->volume(x0, x1, p, x3);
+        volume = property->volume(x0, x1, p, x3);
       }else{
-	volume = property->volume(x0, x1, x2, p);
+        volume = property->volume(x0, x1, x2, p);
       }
       if(volume<0)
-	return false;
+        return false;
 
       real_t L = property->volume(x0, x1, x2, x3);
 
@@ -1072,17 +1072,17 @@ template<typename real_t, int dim>
 
       real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
       if(best_e==-1){
-	tol = min_l;
-	best_e = *ie;
-	for(size_t i=0;i<nloc;i++)
-	  l[i] = ll[i];
+        tol = min_l;
+        best_e = *ie;
+        for(size_t i=0;i<nloc;i++)
+          l[i] = ll[i];
       }else{
-	if(min_l>tol){
-	  tol = min_l;
-	  best_e = *ie;
-	  for(size_t i=0;i<nloc;i++)
-	    l[i] = ll[i];
-	}
+        if(min_l>tol){
+          tol = min_l;
+          best_e = *ie;
+          for(size_t i=0;i<nloc;i++)
+            l[i] = ll[i];
+        }
       }
     }
     assert(best_e!=-1);

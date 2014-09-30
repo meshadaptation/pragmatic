@@ -199,7 +199,7 @@ extern "C" {
     if(ndims==2){
       Coarsen2D<double> coarsen(*mesh);
       Smooth<double, 2> smooth(*mesh);
-      Refine2D<double> refine(*mesh);
+      Refine<double, 2> refine(*mesh);
       Swapping2D<double> swapping(*mesh);
 
       double L_max = mesh->maximal_edge_length();
@@ -224,7 +224,7 @@ extern "C" {
     }else{
       Coarsen3D<double> coarsen(*mesh);
       Smooth<double, 3> smooth(*mesh);
-      Refine3D<double> refine(*mesh);
+      Refine<double, 3> refine(*mesh);
       Swapping3D<double> swapping(*mesh);
 
       coarsen.coarsen(L_low, L_up);

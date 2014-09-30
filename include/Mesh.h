@@ -38,6 +38,8 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include "pragmatic_config.h"
+
 #include <algorithm>
 #include <vector>
 #include <set>
