@@ -69,7 +69,7 @@ def minimal_example3D(meshsz=20, Nadapt=10, dL=0.05, eta = 0.01, returnmesh=Fals
      #H = logproject(H)
      if iii != Nadapt-1:
       [bfaces,bfaces_IDs] = get_bnd_mesh(mesh)
-      mesh = adapt(H, bfaces=bfaces, bfaces_IDs=bfaces_IDs, octaveimpl=True) #, octaveimpl=True, debugon=True)
+      mesh = adapt(H, bfaces=bfaces, bfaces_IDs=bfaces_IDs)
       log(INFO+1,"total (adapt+metric) time was %0.1fs, nodes: %0.0f" % (time()-startTime, mesh.num_vertices()))
     
     plot(u,interactive=True)

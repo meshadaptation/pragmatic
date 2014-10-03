@@ -2,91 +2,63 @@
 ### by Kristian Ejlebjerg Jensen, January 2014, Imperial College London
 ### the purpose of the test case is to
 ### 1. derive a forcing term that gives a step function solution
-### 2. solve a poisson equation with the forcing term using 2D anisotropic adaptivity
+### 2. solve a poisson equation with the forcing term using 3D anisotropic adaptivity
 ### 3. calculate and plot the L2error of the resulting solution.
 ### the width of the step, the number of solition<->adaptation iterations as well as the
 ### error level (eta) are optional input parameters
 
 from dolfin import *
-from adaptivity import metric_pnorm, logproject, adapt
-from pylab import hold, show, triplot, tricontourf, colorbar, axis, box, rand, get_cmap, title, figure, savefig
-from pylab import plot as pyplot
-from numpy import array, ones
-import numpy
+from adaptivity2 import metric_pnorm, logproject, adapt
 from sympy import Symbol, diff
 from sympy import tanh as pytanh
 from sympy import cos as pysin
 from sympy import sin as pycos
-set_log_level(INFO)
+set_log_level(INFO+1)
 #parameters["allow_extrapolation"] = True
 
-def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.01):
+def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.04):
     ### CONSTANTS
     meshsz = 10
-    hd = Constant(width)
     ### SETUP MESH
-    mesh = BoxMesh(0,0,0,1,1,1,meshsz,meshsz,meshsz) #CubeMesh(meshsz,meshsz,meshsz)
+    mesh = BoxMesh(-0.5,-0.5,-0.5,0.5,0.5,0.5,meshsz,meshsz,meshsz)
     ### DERIVE FORCING TERM
     angle = pi/8 #rand*pi/2
-    sx = Symbol('sx'); sy = Symbol('sy'); width_ = Symbol('ww'); aa = Symbol('aa')
-    testsol = pytanh((sx*pycos(aa)+sy*pysin(aa))/width_)
-    ddtestsol = str(diff(testsol,sx,sx)+diff(testsol,sy,sy)).replace('sx','x[0]').replace('sy','x[1]')
+    angle2 = pi/8 #rand*pi/2
+    sx = Symbol('sx'); sy = Symbol('sy'); sz = Symbol('sz'); width_ = Symbol('ww'); aa = Symbol('aa'); bb = Symbol('bb')
+    testsol = pytanh((sx*pycos(aa)*pysin(bb)+sy*pysin(aa)*pysin(bb)+sz*pycos(bb))/width_)
+    ddtestsol = str(diff(testsol,sx,sx)+diff(testsol,sy,sy)+diff(testsol,sz,sz)).replace('sx','x[0]').replace('sy','x[1]').replace('sz','x[2]')
     #replace ** with pow
-    ddtestsol = ddtestsol.replace('tanh((x[0]*sin(aa) + x[1]*cos(aa))/ww)**2','pow(tanh((x[0]*sin(aa) + x[1]*cos(aa))/ww),2.)')
-    ddtestsol = ddtestsol.replace('cos(aa)**2','pow(cos(aa),2.)').replace('sin(aa)**2','pow(sin(aa),2.)').replace('ww**2','(ww*ww)')
+    ddtestsol = ddtestsol.replace('tanh((x[0]*sin(aa)*cos(bb) + x[1]*cos(aa)*cos(bb) + x[2]*sin(bb))/ww)**2','pow(tanh((x[0]*sin(aa)*sin(bb) + x[1]*cos(aa)*sin(bb) + x[2]*cos(bb))/ww),2.)')
+    ddtestsol = ddtestsol.replace('cos(aa)**2','pow(cos(aa),2.)').replace('sin(aa)**2','pow(sin(aa),2.)').replace('ww**2','(ww*ww)').replace('cos(bb)**2','(cos(bb)*cos(bb))').replace('sin(bb)**2','(sin(bb)*sin(bb))')
     #insert vaulues
-    ddtestsol = ddtestsol.replace('aa',str(angle)).replace('ww',str(width))
-    testsol = str(testsol).replace('sx','x[0]').replace('sy','x[1]').replace('aa',str(angle)).replace('ww',str(width))
+    ddtestsol = ddtestsol.replace('aa',str(angle)).replace('ww',str(width)).replace('bb',str(angle2))
+    testsol = str(testsol).replace('sx','x[0]').replace('sy','x[1]').replace('aa',str(angle)).replace('ww',str(width)).replace('bb',str(angle2)).replace('sz','x[2]')
     ddtestsol = "-("+ddtestsol+")"
     def boundary(x):
           return x[0]-mesh.coordinates()[:,0].min() < DOLFIN_EPS or mesh.coordinates()[:,0].max()-x[0] < DOLFIN_EPS \
           or mesh.coordinates()[:,1].min() < DOLFIN_EPS or mesh.coordinates()[:,1].max()-x[1] < DOLFIN_EPS \
           or mesh.coordinates()[:,2].min() < DOLFIN_EPS or mesh.coordinates()[:,2].max()-x[2] < DOLFIN_EPS
     # PERFORM TEN ADAPTATION ITERATIONS
+    fid  = File("out.pvd")
     for iii in range(Nadapt):
      V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
      a = inner(grad(dis), grad(dus))*dx
      L = Expression(ddtestsol)*dus*dx
      bc = DirichletBC(V, Expression(testsol), boundary)
      solve(a == L, u, bc)
+     fid << u
      startTime = time()
-     H = metric_pnorm(u, eta, max_edge_length=1., max_edge_ratio=50, CG1out=True)
+     H = metric_pnorm(u, eta, max_edge_length=2., max_edge_ratio=50, CG1out=True)
      #H = logproject(H)
      if iii != Nadapt-1:
-      mesh = adapt(H) #, octaveimpl=True, debugon=True)
+      mesh = adapt(H) 
       L2error = errornorm(Expression(testsol), u, degree_rise=4, norm_type='L2')
       log(INFO+1,"total (adapt+metric) time was %0.1fs, L2error=%0.0e, nodes: %0.0f" % (time()-startTime,L2error,mesh.num_vertices()))
     
+
     plot(u,interactive=True)
-    # # PLOT MESH
-# figure()
-# coords = mesh.coordinates().transpose()
-## triplot(coords[0],coords[1],mesh.cells(),linewidth=0.1)
-## #savefig('mesh.png',dpi=300) #savefig('mesh.eps');
-#
-# figure() #solution
-# testf = interpolate(Expression(testsol),FunctionSpace(mesh,'CG',1))
-# vtx2dof = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-# zz = testf.vector().array()[vtx2dof]
-# hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
-# colorbar(hh)
-## savefig('solution.png',dpi=300) #savefig('solution.eps');
-#
-# figure() #analytical solution
-# testfe = interpolate(u,FunctionSpace(mesh,'CG',1))
-# zz = testfe.vector().array()[vtx2dof]
-# hh=tricontourf(coords[0],coords[1],mesh.cells(),zz,100)
-# colorbar(hh)
-# #savefig('analyt.png',dpi=300) #savefig('analyt.eps');
-#
-# figure() #error
-# zz -= testf.vector().array()[vtx2dof]; zz[zz==1] -= 1e-16
-# hh=tricontourf(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),zz,100,cmap=get_cmap('binary'))
-# colorbar(hh)
-#
-# hold('on'); triplot(mesh.coordinates()[:,0],mesh.coordinates()[:,1],mesh.cells(),color='r',linewidth=0.5); hold('off')
-# axis('equal'); box('off'); title('error')
-# show()
+    plot(mesh,interactive=True)
+
 
 if __name__=="__main__":
  minimal_example3D()
