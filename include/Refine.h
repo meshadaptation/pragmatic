@@ -240,8 +240,10 @@ template<typename real_t, int dim> class Refine{
           int owner1 = _mesh->node_owner[secondid];
           int owner = std::min(owner0, owner1);
           _mesh->node_owner[vid] = owner;
+
+          if(_mesh->node_owner[vid] == rank)
+            _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
         }
-        _mesh->lnn2gnn[vid] = vid;
       }
 
       if(dim==3){
@@ -292,15 +294,12 @@ template<typename real_t, int dim> class Refine{
         }
       }
 
+#ifdef HAVE_MPI
       // Update halo - we need to update the global node numbering here
       // for those cases in 3D where centroidal vertices are introduced.
+      if(nprocs>1){
 #pragma omp single
-      {
-        if(nprocs==1){
-          // If we update lnn2gnn and node_owner here, OMP performance suffers.
-        }else{
-#ifdef HAVE_MPI
-          // Once the owner for all new nodes has been set, it's time to amend the halo.
+        {
           std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
           std::vector<index_t> invisible_vertices;
 
@@ -360,10 +359,6 @@ template<typename real_t, int dim> class Refine{
           }
 
           // Update global numbering
-          for(size_t i=origNNodes; i<_mesh->NNodes; ++i)
-            if(_mesh->node_owner[i] == rank)
-              _mesh->lnn2gnn[i] = _mesh->gnn_offset+i;
-
           _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
 
           // Now that the global numbering has been updated, update send_map and recv_map.
@@ -377,9 +372,9 @@ template<typename real_t, int dim> class Refine{
 
           _mesh->clear_invisible(invisible_vertices);
           _mesh->trim_halo();
-#endif
         }
       }
+#endif
 
       // Start element refinement.
       splitCnt[tid] = 0;
@@ -403,10 +398,6 @@ template<typename real_t, int dim> class Refine{
 
       threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt[tid]);
 
-      // Append new elements to the mesh and commit deferred operations
-      memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-      memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
-
 #pragma omp barrier
 #pragma omp single
       {
@@ -415,6 +406,10 @@ template<typename real_t, int dim> class Refine{
           _mesh->boundary.resize(_mesh->NElements*nloc);
         }
       }
+
+      // Append new elements to the mesh and commit deferred operations
+      memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
+      memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
 
       // Commit deferred operations.
 #pragma omp for schedule(guided)
@@ -802,18 +797,16 @@ template<typename real_t, int dim> class Refine{
        *************************
        */
       int refine_cnt;
-      std::vector<index_t> newVertex;
       std::vector< DirectedEdge<index_t> > splitEdges;
       for(int j=0, pos=0; j<4; j++)
         for(int k=j+1; k<4; k++){
           index_t vertexID = new_vertices_per_element[nedge*eid+pos];
           if(vertexID >= 0){
-            newVertex.push_back(vertexID);
-            splitEdges.push_back(DirectedEdge<index_t>(n[j], n[k]));
+            splitEdges.push_back(DirectedEdge<index_t>(n[j], n[k], vertexID));
           }
           ++pos;
         }
-      refine_cnt=newVertex.size();
+      refine_cnt=splitEdges.size();
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
   boost::unordered_map<index_t, int> b;
@@ -834,8 +827,8 @@ template<typename real_t, int dim> class Refine{
             oe[pos++] = n[j];
 
         // Form and add two new edges.
-        const int ele0[] = {splitEdges[0].edge.first, newVertex[0], oe[0], oe[1]};
-        const int ele1[] = {splitEdges[0].edge.second, newVertex[0], oe[0], oe[1]};
+        const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, oe[0], oe[1]};
+        const int ele1[] = {splitEdges[0].edge.second, splitEdges[0].id, oe[0], oe[1]};
 
         const int ele0_boundary[] = {0, b[splitEdges[0].edge.second], b[oe[0]], b[oe[1]]};
         const int ele1_boundary[] = {0, b[splitEdges[0].edge.first], b[oe[0]], b[oe[1]]};
@@ -851,8 +844,8 @@ template<typename real_t, int dim> class Refine{
         def_ops->addNE_fix(oe[1], ele1ID, tid);
 
         // Put eid and ele1 in newVertex[0]'s NEList
-        def_ops->addNE(newVertex[0], eid, tid);
-        def_ops->addNE_fix(newVertex[0], ele1ID, tid);
+        def_ops->addNE(splitEdges[0].id, eid, tid);
+        def_ops->addNE_fix(splitEdges[0].id, ele1ID, tid);
 
         // Replace eid with ele1 in splitEdges[0].edge.second's NEList
         def_ops->remNE(splitEdges[0].edge.second, eid, tid);
@@ -884,21 +877,21 @@ template<typename real_t, int dim> class Refine{
 
           // Find the diagonal which has bisected the trapezoid.
           DirectedEdge<index_t> diagonal, offdiagonal;
-          std::vector<index_t>::const_iterator p = std::find(_mesh->NNList[newVertex[0]].begin(),
-              _mesh->NNList[newVertex[0]].end(), n2);
-          if(p != _mesh->NNList[newVertex[0]].end()){
-            diagonal.edge.first = newVertex[0];
+          std::vector<index_t>::const_iterator p = std::find(_mesh->NNList[splitEdges[0].id].begin(),
+              _mesh->NNList[splitEdges[0].id].end(), n2);
+          if(p != _mesh->NNList[splitEdges[0].id].end()){
+            diagonal.edge.first = splitEdges[0].id;
             diagonal.edge.second = n[2];
-            offdiagonal.edge.first = newVertex[1];
+            offdiagonal.edge.first = splitEdges[1].id;
             offdiagonal.edge.second = n[1];
           }else{
-            diagonal.edge.first = newVertex[1];
+            diagonal.edge.first = splitEdges[1].id;
             diagonal.edge.second = n[1];
-            offdiagonal.edge.first = newVertex[0];
+            offdiagonal.edge.first = splitEdges[0].id;
             offdiagonal.edge.second = n[0];
           }
 
-          const int ele0[] = {n0, newVertex[0], newVertex[1], n3};
+          const int ele0[] = {n0, splitEdges[0].id, splitEdges[1].id, n3};
           const int ele1[] = {diagonal.edge.first, offdiagonal.edge.first, diagonal.edge.second, n3};
           const int ele2[] = {diagonal.edge.first, diagonal.edge.second, offdiagonal.edge.second, n3};
 
@@ -934,10 +927,10 @@ template<typename real_t, int dim> class Refine{
           splitCnt[tid] += 2;
         }else{
           // Case 2(b).
-          const int ele0[] = {splitEdges[0].edge.first, newVertex[0], splitEdges[1].edge.first, newVertex[1]};
-          const int ele1[] = {splitEdges[0].edge.first, newVertex[0], splitEdges[1].edge.second, newVertex[1]};
-          const int ele2[] = {splitEdges[0].edge.second, newVertex[0], splitEdges[1].edge.first, newVertex[1]};
-          const int ele3[] = {splitEdges[0].edge.second, newVertex[0], splitEdges[1].edge.second, newVertex[1]};
+          const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
+          const int ele1[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.second, splitEdges[1].id};
+          const int ele2[] = {splitEdges[0].edge.second, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
+          const int ele3[] = {splitEdges[0].edge.second, splitEdges[0].id, splitEdges[1].edge.second, splitEdges[1].id};
 
           const int ele0_boundary[] = {0, b[splitEdges[0].edge.second], 0, b[splitEdges[1].edge.second]};
           const int ele1_boundary[] = {0, b[splitEdges[0].edge.second], 0, b[splitEdges[1].edge.first]};
@@ -949,15 +942,15 @@ template<typename real_t, int dim> class Refine{
           ele2ID = ele1ID+1;
           ele3ID = ele1ID+2;
 
-          def_ops->addNE(newVertex[0], eid, tid);
-          def_ops->addNE_fix(newVertex[0], ele1ID, tid);
-          def_ops->addNE_fix(newVertex[0], ele2ID, tid);
-          def_ops->addNE_fix(newVertex[0], ele3ID, tid);
+          def_ops->addNE(splitEdges[0].id, eid, tid);
+          def_ops->addNE_fix(splitEdges[0].id, ele1ID, tid);
+          def_ops->addNE_fix(splitEdges[0].id, ele2ID, tid);
+          def_ops->addNE_fix(splitEdges[0].id, ele3ID, tid);
 
-          def_ops->addNE(newVertex[1], eid, tid);
-          def_ops->addNE_fix(newVertex[1], ele1ID, tid);
-          def_ops->addNE_fix(newVertex[1], ele2ID, tid);
-          def_ops->addNE_fix(newVertex[1], ele3ID, tid);
+          def_ops->addNE(splitEdges[1].id, eid, tid);
+          def_ops->addNE_fix(splitEdges[1].id, ele1ID, tid);
+          def_ops->addNE_fix(splitEdges[1].id, ele2ID, tid);
+          def_ops->addNE_fix(splitEdges[1].id, ele3ID, tid);
 
           def_ops->addNE_fix(splitEdges[0].edge.first, ele1ID, tid);
 
@@ -1004,22 +997,22 @@ template<typename real_t, int dim> class Refine{
           index_t m[] = {-1, -1, -1, -1, -1, -1, -1};
 
           m[0] = splitEdges[0].edge.first;
-          m[1] = newVertex[0];
+          m[1] = splitEdges[0].id;
           m[2] = splitEdges[0].edge.second;
           if(splitEdges[1].contains(m[2])){
-            m[3] = newVertex[1];
+            m[3] = splitEdges[1].id;
             if(splitEdges[1].edge.first!=m[2])
               m[4] = splitEdges[1].edge.first;
             else
               m[4] = splitEdges[1].edge.second;
-            m[5] = newVertex[2];
+            m[5] = splitEdges[2].id;
           }else{
-            m[3] = newVertex[2];
+            m[3] = splitEdges[2].id;
             if(splitEdges[2].edge.first!=m[2])
               m[4] = splitEdges[2].edge.first;
             else
               m[4] = splitEdges[2].edge.second;
-            m[5] = newVertex[1];
+            m[5] = splitEdges[1].id;
           }
           for(int j=0;j<4;j++){
             if((n[j]!=m[0])&&(n[j]!=m[2])&&(n[j]!=m[4])){
@@ -1076,228 +1069,479 @@ template<typename real_t, int dim> class Refine{
           // Find the three bottom vertices, i.e. vertices of
           // the original elements which are part of the wedge.
           index_t top_vertex = *shared.begin();
-          index_t bottom_vertex[3];
+          index_t bottom_triangle[3], top_triangle[3];
           for(int j=0; j<3; ++n){
-            assert(splitEdges[j].id == newVertex[j]);
             if(splitEdges[j].edge.first != top_vertex){
-              bottom_vertex[j] = splitEdges[j].edge.first;
+              bottom_triangle[j] = splitEdges[j].edge.first;
             }else{
-              bottom_vertex[j] = splitEdges[j].edge.second;
+              bottom_triangle[j] = splitEdges[j].edge.second;
             }
+            top_triangle[j] = splitEdges[j].id;
           }
 
-          // For each quadrilateral side of the wedge find
-          // the diagonal which has bisected the wedge side.
-          // Side0: bottom[0] - bottom[1] - new[1] - new[0]
-          // Side1: bottom[1] - bottom[2] - new[2] - new[1]
-          // Side2: bottom[2] - bottom[0] - new[0] - new[2]
-          std::vector< DirectedEdge<index_t> > diagonals, ghostDiagonals;
+          // Boundary values of each wedge side
+          int bwedge[] = {b[bottom_triangle[2]], b[bottom_triangle[0]], b[bottom_triangle[1]], 0, b[top_vertex]};
+          refine_wedge(top_triangle, bottom_triangle, bwedge, NULL, eid, tid);
+
+          const int ele0[] = {top_vertex, splitEdges[0].id, splitEdges[1].id, splitEdges[2].id};
+          const int ele0_boundary[] = {0, b[bottom_triangle[0]], b[bottom_triangle[1]], b[bottom_triangle[2]]};
+
+          def_ops->remNE(bottom_triangle[0], eid, tid);
+          def_ops->remNE(bottom_triangle[1], eid, tid);
+          def_ops->remNE(bottom_triangle[2], eid, tid);
+          def_ops->addNE(splitEdges[0].id, eid, tid);
+          def_ops->addNE(splitEdges[1].id, eid, tid);
+          def_ops->addNE(splitEdges[2].id, eid, tid);
+
+          replace_element(eid, ele0, ele0_boundary);
+        }else{
+          // Case 3(c).
+          assert(shared.size() == 2);
+          /*
+           * This case results in a 1:4 or 1:5 subdivision. There are three
+           * split edges, connected in a Z-like way (cf. connection of
+           * diagonals in 1:3 wedge split). By convention, the topOfZ edge is
+           * the one connected to middleOfZ.edge.first, bottomOfZ is the one
+           * connected to middleOfZ.edge.second. Top and bottom edges are
+           * flipped if necessary so that the first vertex of top and the
+           * second vertex of bottom are the ones connected to the middle edge.
+           */
+
+          DirectedEdge<index_t> *topZ, *middleZ, *bottomZ;
+          // Middle split edge
           for(int j=0; j<3; ++j){
-            std::vector<index_t>::const_iterator p = std::find(_mesh->NNList[bottom_vertex[j]].begin(),
-                _mesh->NNList[bottom_vertex[j]].end(), newVertex[(j+1)%3]);
-            if(p != _mesh->NNList[bottom_vertex[j]].end()){
-              diagonals.push_back(DirectedEdge<index_t>(bottom_vertex[j], newVertex[(j+1)%3]));
-              ghostDiagonals.push_back(DirectedEdge<index_t>(bottom_vertex[(j+1)%3], newVertex[j]));
-            }else{
-              diagonals.push_back(DirectedEdge<index_t>(bottom_vertex[(j+1)%3], newVertex[j]));
-              ghostDiagonals.push_back(DirectedEdge<index_t>(bottom_vertex[j], newVertex[(j+1)%3]));
-            }
-          }
+            if(splitEdges[j].contains(*shared.begin()) && splitEdges[j].contains(*shared.rbegin())){
+              middleZ = &splitEdges[j];
 
-          // Determine how the wedge will be split
-          std::vector<index_t> diag_shared;
-          for(int j=0;j<3;j++){
-            index_t nid = diagonals[j].connected(diagonals[(j+1)%3]);
-            if(nid>=0)
-              diag_shared.push_back(nid);
-          }
-
-          if(!diag_shared.empty()){
-            assert(diag_shared.size() == 2);
-            // Here we can subdivide the wedge into 3 tetrahedra.
-
-            // Find the "middle" diagonal, i.e. the one which
-            // consists of the two vertices in diag_shared.
-            int middle;
-            index_t non_shared_top=-1, non_shared_bottom=-1;
-            for(int j=0; j<3; ++j){
-              if(diagonals[j].contains(diag_shared[0]) && diagonals[j].contains(diag_shared[1])){
-                middle = j;
-                for(int k=0; k<2; ++k){
-                  if(diagonals[(j+k+1)%3].edge.first != diag_shared[0] && diagonals[(j+k+1)%3].edge.first != diag_shared[1])
-                    non_shared_bottom = diagonals[(j+k+1)%3].edge.first;
-                  else
-                    non_shared_top = diagonals[(j+k+1)%3].edge.second;
-                }
-                break;
+              if(splitEdges[(j+1)%3].contains(splitEdges[j].edge.first)){
+                topZ = &splitEdges[(j+1)%3];
+                bottomZ = &splitEdges[(j+2)%3];
+              }else{
+                topZ = &splitEdges[(j+2)%3];
+                bottomZ = &splitEdges[(j+1)%3];
               }
+
+              break;
             }
-            assert(non_shared_top >= 0 && non_shared_bottom >= 0);
+          }
 
-            /*
-             * 2 elements are formed by the three vertices of two connected
-             * diagonals plus a fourth vertex which can be found via the
-             * intersection on NNList of those three vertices. Any vertex which
-             * is part of a diagonal must be removed from the intersection and
-             * then the intersection will be left with one and only vertex.
-             *
-             * 1 element is formed by the four vertices of two disjoint diagonals.
-             */
-            index_t v_top, v_bottom;
-            std::set<index_t> intersection0, intersection1;
-            std::set_intersection(_mesh->NNList[diagonals[middle].edge.first].begin(),
-                _mesh->NNList[diagonals[middle].edge.first].end(), _mesh->NNList[diagonals[middle].edge.second].begin(),
-                _mesh->NNList[diagonals[middle].edge.second].end(), std::inserter(intersection0, intersection0.begin()));
-            std::set_intersection(_mesh->NNList[non_shared_top].begin(), _mesh->NNList[non_shared_top].end(),
-                intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
-            intersection1.erase(non_shared_bottom);
-            assert(intersection1.size()==1);
-            v_top = *intersection1.begin();
+          // Flip vertices of top and bottom edges if necessary
+          if(topZ->edge.first != middleZ->edge.first){
+            topZ->edge.second = topZ->edge.first;
+            topZ->edge.first = middleZ->edge.first;
+          }
+          if(bottomZ->edge.second != middleZ->edge.second){
+            bottomZ->edge.first = bottomZ->edge.second;
+            bottomZ->edge.second = middleZ->edge.second;
+          }
 
-            intersection1.clear();
-            std::set_intersection(_mesh->NNList[non_shared_bottom].begin(), _mesh->NNList[non_shared_bottom].end(),
-                intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
-            intersection1.erase(non_shared_top);
-            assert(intersection1.size()==1);
-            v_bottom = *intersection1.begin();
+          /*
+           * There are 3 sub-cases, depending on the way the trapezoids on the
+           * facets between topZ-middleZ and middleZ-bottomZ were bisected.
+           *
+           * Case 3(c)(1): Both diagonals involve middleZ->id.
+           * Case 3(c)(2): Only one diagonal involves middleZ->id.
+           * Case 3(c)(3): No diagonal involves middleZ->id.
+           */
 
-            // diagonals[middle].edge.first is always one of the original element vertices (bottom)
-            // diagonals[middle].edge.second is always one of the new vertices (top)
-            const int ele0[] = {top_vertex, newVertex[0], newVertex[1], newVertex[2]};
-            const int ele1[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, v_top};
-            const int ele2[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_bottom, v_bottom};
-            const int ele3[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, non_shared_bottom};
+          std::vector< DirectedEdge<index_t> > diagonals;
+          for(std::vector<index_t>::const_iterator it=_mesh->NNList[middleZ->id].begin();
+              it!=_mesh->NNList[middleZ->id].end(); ++it){
+            if(*it == topZ->edge.second || *it == bottomZ->edge.first){
+              diagonals.push_back(DirectedEdge<index_t>(middleZ->id, *it));
+            }
+          }
 
-            const int ele0_boundary[] = {0, b[bottom_vertex[0]], b[bottom_vertex[1]], b[bottom_vertex[2]]};
-            const int ele1_boundary[] = {0, b[v_bottom], b[non_shared_bottom], 0};
-            const int ele2_boundary[] = {b[diagonals[middle].edge.first], b[top_vertex], b[non_shared_bottom], 0};
-            const int ele3_boundary[] = {b[diagonals[middle].edge.first], b[v_bottom], 0, 0};
+          switch(diagonals.size()){
+          case 0:{
+            // Case 3(c)(2)
+            const int ele0[] = {middleZ->edge.first, topZ->id, bottomZ->id, bottomZ->edge.first};
+            const int ele1[] = {middleZ->id, middleZ->edge.first, topZ->id, bottomZ->id};
+            const int ele2[] = {topZ->id, topZ->edge.second, bottomZ->id, bottomZ->edge.first};
+            const int ele3[] = {topZ->id, topZ->edge.second, bottomZ->edge.second, bottomZ->id};
+            const int ele4[] = {middleZ->id, topZ->id, bottomZ->edge.second, bottomZ->id};
+
+            const int ele0_boundary[] = {0, b[topZ->edge.second], b[middleZ->edge.second], 0};
+            const int ele1_boundary[] = {0, 0, b[topZ->edge.second], b[bottomZ->edge.first]};
+            const int ele2_boundary[] = {b[middleZ->edge.first], 0, b[middleZ->edge.second], 0};
+            const int ele3_boundary[] = {b[middleZ->edge.first], 0, 0, b[bottomZ->edge.first]};
+            const int ele4_boundary[] = {0, b[topZ->edge.second], 0, b[bottomZ->edge.first]};
+
+            index_t ele1ID, ele2ID, ele3ID, ele4ID;
+            ele1ID = splitCnt[tid];
+            ele2ID = ele1ID+1;
+            ele3ID = ele1ID+2;
+            ele4ID = ele1ID+3;
+
+            def_ops->addNN(topZ->id, bottomZ->id, tid);
+            def_ops->addNN(bottomZ->id, topZ->id, tid);
+
+            def_ops->addNE_fix(middleZ->edge.first, ele1ID, tid);
+
+            def_ops->remNE(middleZ->edge.second, eid, tid);
+            def_ops->addNE_fix(middleZ->edge.second, ele3ID, tid);
+            def_ops->addNE_fix(middleZ->edge.second, ele4ID, tid);
+
+            def_ops->remNE(topZ->edge.second, eid, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele2ID, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele3ID, tid);
+
+            def_ops->addNE_fix(bottomZ->edge.first, ele2ID, tid);
+
+            def_ops->addNE_fix(middleZ->id, ele1ID, tid);
+            def_ops->addNE_fix(middleZ->id, ele4ID, tid);
+
+            def_ops->addNE(topZ->id, eid, tid);
+            def_ops->addNE_fix(topZ->id, ele1ID, tid);
+            def_ops->addNE_fix(topZ->id, ele2ID, tid);
+            def_ops->addNE_fix(topZ->id, ele3ID, tid);
+            def_ops->addNE_fix(topZ->id, ele4ID, tid);
+
+            def_ops->addNE(bottomZ->id, eid, tid);
+            def_ops->addNE_fix(bottomZ->id, ele1ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele2ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele3ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele4ID, tid);
+
+            replace_element(eid, ele0, ele0_boundary);
+            append_element(ele1, ele1_boundary, tid);
+            append_element(ele2, ele2_boundary, tid);
+            append_element(ele3, ele3_boundary, tid);
+            append_element(ele4, ele4_boundary, tid);
+            splitCnt[tid] += 4;
+            break;
+          }
+          case 1:{
+            // Case 3(c)(3)
+
+            // Re-arrange topZ and bottomZ if necessary; make topZ point to the
+            // splitEdge for which edge.second is connected to middleZ->top.
+            if(topZ->edge.second != diagonals[0].edge.second){
+              assert(diagonals[0].edge.second == bottomZ->edge.first);
+              DirectedEdge<index_t> *p = topZ;
+              topZ = bottomZ;
+              bottomZ = p;
+
+              // Flip topZ, middleZ, bottomZ
+              index_t v = middleZ->edge.first;
+              middleZ->edge.first = middleZ->edge.second;
+              middleZ->edge.second = v;
+
+              v = topZ->edge.first;
+              topZ->edge.first = topZ->edge.second;
+              topZ->edge.second = v;
+
+              v = bottomZ->edge.first;
+              bottomZ->edge.first = bottomZ->edge.second;
+              bottomZ->edge.second = v;
+            }
+
+            const int ele0[] = {middleZ->edge.first, topZ->id, bottomZ->id, bottomZ->edge.first};
+            const int ele1[] = {middleZ->id, middleZ->edge.first, topZ->id, bottomZ->id};
+            const int ele2[] = {topZ->id, topZ->edge.second, bottomZ->id, bottomZ->edge.first};
+            const int ele3[] = {middleZ->id, topZ->id, topZ->edge.second, bottomZ->id};
+            const int ele4[] = {middleZ->id, topZ->edge.second, middleZ->edge.second, bottomZ->id};
+
+            const int ele0_boundary[] = {0, b[topZ->edge.second], b[middleZ->edge.second], 0};
+            const int ele1_boundary[] = {0, 0, b[topZ->edge.second], b[bottomZ->edge.first]};
+            const int ele2_boundary[] = {b[middleZ->edge.first], 0, b[middleZ->edge.second], 0};
+            const int ele3_boundary[] = {0, 0, 0, b[bottomZ->edge.first]};
+            const int ele4_boundary[] = {b[middleZ->edge.first], b[topZ->edge.second], 0, b[bottomZ->edge.first]};
+
+            index_t ele1ID, ele2ID, ele3ID, ele4ID;
+            ele1ID = splitCnt[tid];
+            ele2ID = ele1ID+1;
+            ele3ID = ele1ID+2;
+            ele4ID = ele1ID+3;
+
+            def_ops->addNN(topZ->id, bottomZ->id, tid);
+            def_ops->addNN(bottomZ->id, topZ->id, tid);
+
+            def_ops->addNE_fix(middleZ->edge.first, ele1ID, tid);
+
+            def_ops->remNE(middleZ->edge.second, eid, tid);
+            def_ops->addNE_fix(middleZ->edge.second, ele4ID, tid);
+
+            def_ops->remNE(topZ->edge.second, eid, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele2ID, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele3ID, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele4ID, tid);
+
+            def_ops->addNE_fix(bottomZ->edge.first, ele2ID, tid);
+
+            def_ops->addNE_fix(middleZ->id, ele1ID, tid);
+            def_ops->addNE_fix(middleZ->id, ele3ID, tid);
+            def_ops->addNE_fix(middleZ->id, ele4ID, tid);
+
+            def_ops->addNE(topZ->id, eid, tid);
+            def_ops->addNE_fix(topZ->id, ele1ID, tid);
+            def_ops->addNE_fix(topZ->id, ele2ID, tid);
+            def_ops->addNE_fix(topZ->id, ele3ID, tid);
+
+            def_ops->addNE(bottomZ->id, eid, tid);
+            def_ops->addNE_fix(bottomZ->id, ele1ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele2ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele3ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele4ID, tid);
+
+            replace_element(eid, ele0, ele0_boundary);
+            append_element(ele1, ele1_boundary, tid);
+            append_element(ele2, ele2_boundary, tid);
+            append_element(ele3, ele3_boundary, tid);
+            append_element(ele4, ele4_boundary, tid);
+            splitCnt[tid] += 4;
+            break;
+          }
+          case 2:{
+            // Case 3(c)(1)
+            const int ele0[] = {middleZ->id, bottomZ->edge.first, middleZ->edge.first, topZ->id};
+            const int ele1[] = {middleZ->id, bottomZ->edge.first, topZ->id, topZ->edge.second};
+            const int ele2[] = {middleZ->id, bottomZ->id, bottomZ->edge.first, topZ->edge.second};
+            const int ele3[] = {middleZ->id, middleZ->edge.second, bottomZ->id, topZ->edge.second};
+
+            const int ele0_boundary[] = {b[middleZ->edge.second], b[bottomZ->edge.first], 0, b[topZ->edge.second]};
+            const int ele1_boundary[] = {b[middleZ->edge.second], b[bottomZ->edge.first], 0, 0};
+            const int ele2_boundary[] = {b[middleZ->edge.first], 0, 0, b[topZ->edge.second]};
+            const int ele3_boundary[] = {b[middleZ->edge.first], 0, b[bottomZ->edge.first], b[topZ->edge.second]};
 
             index_t ele1ID, ele2ID, ele3ID;
             ele1ID = splitCnt[tid];
             ele2ID = ele1ID+1;
             ele3ID = ele1ID+2;
 
-            def_ops->remNE(diagonals[middle].edge.first, eid, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.first, ele1ID, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.first, ele2ID, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.first, ele3ID, tid);
+            def_ops->addNE(middleZ->id, eid, tid);
+            def_ops->addNE_fix(middleZ->id, ele1ID, tid);
+            def_ops->addNE_fix(middleZ->id, ele2ID, tid);
+            def_ops->addNE_fix(middleZ->id, ele3ID, tid);
 
-            def_ops->addNE(diagonals[middle].edge.second, eid, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.second, ele1ID, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.second, ele2ID, tid);
-            def_ops->addNE_fix(diagonals[middle].edge.second, ele3ID, tid);
+            def_ops->remNE(middleZ->edge.second, eid, tid);
+            def_ops->addNE_fix(middleZ->edge.second, ele3ID, tid);
 
-            def_ops->remNE(non_shared_bottom, eid, tid);
-            def_ops->addNE_fix(non_shared_bottom, ele2ID, tid);
-            def_ops->addNE_fix(non_shared_bottom, ele3ID, tid);
+            def_ops->remNE(topZ->edge.second, eid, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele2ID, tid);
+            def_ops->addNE_fix(topZ->edge.second, ele3ID, tid);
 
-            def_ops->addNE(non_shared_top, eid, tid);
-            def_ops->addNE_fix(non_shared_top, ele1ID, tid);
-            def_ops->addNE_fix(non_shared_top, ele3ID, tid);
+            def_ops->addNE_fix(bottomZ->edge.first, ele1ID, tid);
+            def_ops->addNE_fix(bottomZ->edge.first, ele2ID, tid);
 
-            def_ops->remNE(v_bottom, eid, tid);
-            def_ops->addNE_fix(v_bottom, ele2ID, tid);
+            def_ops->addNE(topZ->id, eid, tid);
+            def_ops->addNE_fix(topZ->id, ele1ID, tid);
 
-            def_ops->addNE(v_top, eid, tid);
-            def_ops->addNE_fix(v_top, ele1ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele2ID, tid);
+            def_ops->addNE_fix(bottomZ->id, ele3ID, tid);
 
             replace_element(eid, ele0, ele0_boundary);
             append_element(ele1, ele1_boundary, tid);
             append_element(ele2, ele2_boundary, tid);
             append_element(ele3, ele3_boundary, tid);
             splitCnt[tid] += 3;
-          }else{
-            /*
-             * The wedge must by split into 8 tetrahedra with the introduction
-             * of a new centroidal vertex. Each tetrahedron is formed by the
-             * three vertices of a triangular facet (there are 8 triangular
-             * facets: 6 are formed via the bisection of the 3 quadrilaterals
-             * of the wedge, 2 are the original triangular facets of the wedge)
-             * and the centroidal vertex.
-             */
+            break;
+          }
+          default:
+            break;
+          }
+        }
+      }else if(refine_cnt==4){
+        /*
+         * There are 2 cases here:
+         *
+         * Case 4(a): Three split edges are on the same triangle.
+         * Case 4(b): Each of the four triangles has exactly two split edges.
+         */
 
-            // Allocate space for the centroid vertex
-            index_t cid = pragmatic_omp_atomic_capture(&_mesh->NNodes, 1);
+        std::set<index_t> shared;
+        for(int j=0; j<4; ++j){
+          for(int k=j+1; k<4; ++k){
+            index_t nid = splitEdges[j].connected(splitEdges[k]);
+            if(nid>=0)
+              shared.insert(nid);
+          }
+        }
+        size_t nshared = shared.size();
+        assert(nshared==3 || nshared==4);
 
-            const int ele0[] = {top_vertex, newVertex[0], newVertex[1], newVertex[2]};
-            const int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
-            const int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
-            const int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
-            const int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
-            const int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
-            const int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
-            const int ele7[] = {newVertex[0], newVertex[1], newVertex[2], cid};
-            const int ele8[] = {cid, bottom_vertex[0], bottom_vertex[2], bottom_vertex[1]};
+        switch(nshared){
+        case 3:{
+          // Case 4(a)
+          DirectedEdge<index_t>* p[4];
+          int pos = 0;
+          for(int j=0; j<4; ++j)
+            if(shared.count(splitEdges[j].edge.first)>0 && shared.count(splitEdges[j].edge.second)>0)
+              p[pos++] = &splitEdges[j];
+            else
+              p[3] = &splitEdges[j];
 
-            const int ele0_boundary[] = {0, b[bottom_vertex[0]], b[bottom_vertex[1]], b[bottom_vertex[2]]};
-            const int ele1_boundary[] = {0, 0, 0, b[bottom_vertex[2]]};
-            const int ele2_boundary[] = {0, 0, 0, b[bottom_vertex[2]]};
-            const int ele3_boundary[] = {0, 0, 0, b[bottom_vertex[0]]};
-            const int ele4_boundary[] = {0, 0, 0, b[bottom_vertex[0]]};
-            const int ele5_boundary[] = {0, 0, 0, b[bottom_vertex[1]]};
-            const int ele6_boundary[] = {0, 0, 0, b[bottom_vertex[1]]};
-            const int ele7_boundary[] = {0, 0, 0, 0};
-            const int ele8_boundary[] = {b[top_vertex], 0, 0, 0};
+          assert(pos==3);
 
-            index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID, ele6ID, ele7ID, ele8ID;
+          // p[0], p[1] and p[2] point to the three split edges which
+          // are on the same facet, p[3] points to the other split edge.
+
+          // Re-arrange p[] so that p[0] points to the
+          // split edge which is not connected to p[3].
+          if(p[3]->connected(*p[0])){
+            for(int j=1; j<3; ++j){
+              if(!p[3]->connected(*p[j])){
+                DirectedEdge<index_t> *swap = p[j];
+                p[j] = p[0];
+                p[0] = swap;
+                break;
+              }
+            }
+          }
+
+          // Re-arrange p[3] if necessary so that edge.first
+          // is the vertex on the triangle with the 3 split edges.
+          if(shared.count(p[3]->edge.first)==0){
+            index_t v = p[3]->edge.first;
+            p[3]->edge.first = p[3]->edge.second;
+            p[3]->edge.second = v;
+          }
+
+          // Same for p[1] and p[2]; make edge.first = p[3]->edge.first.
+          for(int j=1; j<=2; ++j)
+            if(p[j]->edge.first != p[3]->edge.first){
+              p[j]->edge.second = p[j]->edge.first;
+              p[j]->edge.first = p[3]->edge.first;
+            }
+
+          /*
+           * There are 3 sub-cases, depending on the way the trapezoids
+           * on the facets between p[1]-p[3] and p[2]-p[3] were bisected.
+           *
+           * Case 4(a)(1): No diagonal involves p[3].
+           * Case 4(a)(2): Only one diagonal involves p[3].
+           * Case 4(a)(3): Both diagonals involve p[3].
+           */
+
+          std::vector< DirectedEdge<index_t> > diagonals;
+          for(std::vector<index_t>::const_iterator it=_mesh->NNList[p[3]->id].begin();
+              it!=_mesh->NNList[p[3]->id].end(); ++it){
+            if(*it == p[1]->edge.second || *it == p[2]->edge.second){
+              diagonals.push_back(DirectedEdge<index_t>(p[3]->id, *it));
+            }
+          }
+
+          switch(diagonals.size()){
+          case 0:{
+            // Case 4(a)(1)
+            const int ele0[] = {p[0]->id, p[1]->edge.second, p[1]->id, p[3]->edge.second};
+            const int ele1[] = {p[0]->id, p[1]->id, p[2]->id, p[3]->edge.second};
+            const int ele2[] = {p[0]->id, p[2]->id, p[2]->edge.second, p[3]->edge.second};
+            const int ele3[] = {p[1]->id, p[3]->id, p[2]->id, p[3]->edge.second};
+            const int ele4[] = {p[1]->id, p[2]->id, p[3]->id, p[3]->edge.first};
+
+            const int ele0_boundary[] = {b[p[2]->edge.second], 0, b[p[3]->edge.first], b[p[3]->edge.second]};
+            const int ele1_boundary[] = {0, 0, 0, b[p[3]->edge.second]};
+            const int ele2_boundary[] = {b[p[1]->edge.second], b[p[2]->edge.first], 0, b[p[3]->edge.second]};
+            const int ele3_boundary[] = {b[p[1]->edge.second], 0, b[p[2]->edge.second], 0};
+            const int ele4_boundary[] = {b[p[1]->edge.second], b[p[2]->edge.second], b[p[3]->edge.second], 0};
+
+            index_t ele1ID, ele2ID, ele3ID, ele4ID;
+            ele1ID = splitCnt[tid];
+            ele2ID = ele1ID+1;
+            ele3ID = ele1ID+2;
+            ele4ID = ele1ID+3;
+
+            def_ops->remNE(p[2]->edge.first, eid, tid);
+            def_ops->addNE_fix(p[2]->edge.first, ele4ID, tid);
+
+            def_ops->remNE(p[2]->edge.second, eid, tid);
+            def_ops->addNE_fix(p[2]->edge.second, ele2ID, tid);
+
+            def_ops->addNE_fix(p[3]->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele2ID, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele3ID, tid);
+
+            def_ops->addNE(p[0]->id, eid, tid);
+            def_ops->addNE_fix(p[0]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele2ID, tid);
+
+            def_ops->addNE(p[1]->id, eid, tid);
+            def_ops->addNE_fix(p[1]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[1]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[1]->id, ele4ID, tid);
+
+            def_ops->addNE_fix(p[2]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele4ID, tid);
+
+            def_ops->addNE_fix(p[3]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele4ID, tid);
+
+            replace_element(eid, ele0, ele0_boundary);
+            append_element(ele1, ele1_boundary, tid);
+            append_element(ele2, ele2_boundary, tid);
+            append_element(ele3, ele3_boundary, tid);
+            append_element(ele4, ele4_boundary, tid);
+            splitCnt[tid] += 4;
+            break;
+          }
+          case 1:{
+            // Case 4(a)(2)
+
+            // Swap p[1] and p[2] if necessary so that p[2]->edge.second
+            // is the ending point of the diagonal bisecting the trapezoid.
+            if(p[2]->edge.second != diagonals[0].edge.second){
+              DirectedEdge<index_t> *swap = p[1];
+              p[1] = p[2];
+              p[2] = swap;
+              break;
+            }
+            assert(p[2]->edge.second == diagonals[0].edge.second);
+
+            const int ele0[] = {p[0]->id, p[1]->edge.second, p[1]->id, p[3]->edge.second};
+            const int ele1[] = {p[0]->id, p[3]->id, p[2]->edge.second, p[3]->edge.second};
+            const int ele2[] = {p[0]->id, p[1]->id, p[3]->id, p[3]->edge.second};
+            const int ele3[] = {p[0]->id, p[3]->id, p[2]->id, p[2]->edge.second};
+            const int ele4[] = {p[0]->id, p[1]->id, p[2]->id, p[3]->id};
+            const int ele5[] = {p[2]->id, p[3]->id, p[1]->id, p[3]->edge.first};
+
+            const int ele0_boundary[] = {b[p[2]->edge.second], 0, b[p[1]->edge.first], b[p[3]->edge.second]};
+            const int ele1_boundary[] = {b[p[1]->edge.second], b[p[3]->edge.first], 0, 0};
+            const int ele2_boundary[] = {b[p[2]->edge.second], 0, 0, 0};
+            const int ele3_boundary[] = {b[p[1]->edge.second], b[p[3]->edge.second], 0, 0};
+            const int ele4_boundary[] = {0, 0, 0, b[p[3]->edge.second]};
+            const int ele5_boundary[] = {b[p[2]->edge.second], b[p[3]->edge.second], b[p[1]->edge.second], 0};
+
+            index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID;
             ele1ID = splitCnt[tid];
             ele2ID = ele1ID+1;
             ele3ID = ele1ID+2;
             ele4ID = ele1ID+3;
             ele5ID = ele1ID+4;
-            ele6ID = ele1ID+5;
-            ele7ID = ele1ID+6;
-            ele8ID = ele1ID+7;
 
-            for(int j=0; j<3; ++j){
-              _mesh->NNList[cid].push_back(newVertex[j]);
-              _mesh->NNList[cid].push_back(bottom_vertex[j]);
-            }
+            def_ops->remNE(p[2]->edge.first, eid, tid);
+            def_ops->addNE_fix(p[2]->edge.first, ele5ID, tid);
 
-            def_ops->addNE_fix(cid, ele1ID, tid);
-            def_ops->addNE_fix(cid, ele2ID, tid);
-            def_ops->addNE_fix(cid, ele3ID, tid);
-            def_ops->addNE_fix(cid, ele4ID, tid);
-            def_ops->addNE_fix(cid, ele5ID, tid);
-            def_ops->addNE_fix(cid, ele6ID, tid);
-            def_ops->addNE_fix(cid, ele7ID, tid);
-            def_ops->addNE_fix(cid, ele8ID, tid);
+            def_ops->remNE(p[2]->edge.second, eid, tid);
+            def_ops->addNE_fix(p[2]->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(p[2]->edge.second, ele3ID, tid);
 
-            def_ops->remNE(bottom_vertex[0], eid, tid);
-            def_ops->remNE(bottom_vertex[1], eid, tid);
-            def_ops->remNE(bottom_vertex[2], eid, tid);
-            def_ops->addNE_fix(bottom_vertex[0], ele8ID, tid);
-            def_ops->addNE_fix(bottom_vertex[1], ele8ID, tid);
-            def_ops->addNE_fix(bottom_vertex[2], ele8ID, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele2ID, tid);
 
-            def_ops->addNE(newVertex[0], eid, tid);
-            def_ops->addNE(newVertex[1], eid, tid);
-            def_ops->addNE(newVertex[2], eid, tid);
-            def_ops->addNE_fix(newVertex[0], ele7ID, tid);
-            def_ops->addNE_fix(newVertex[1], ele7ID, tid);
-            def_ops->addNE_fix(newVertex[2], ele7ID, tid);
+            def_ops->addNE(p[0]->id, eid, tid);
+            def_ops->addNE_fix(p[0]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele4ID, tid);
 
-            def_ops->addNE_fix(diagonals[0].edge.first, ele1ID, tid);
-            def_ops->addNE_fix(diagonals[0].edge.first, ele2ID, tid);
-            def_ops->addNE_fix(diagonals[0].edge.second, ele1ID, tid);
-            def_ops->addNE_fix(diagonals[0].edge.second, ele2ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[0].edge.first, ele1ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[0].edge.second, ele2ID, tid);
+            def_ops->addNE(p[1]->id, eid, tid);
+            def_ops->addNE_fix(p[1]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[1]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[1]->id, ele5ID, tid);
 
-            def_ops->addNE_fix(diagonals[1].edge.first, ele3ID, tid);
-            def_ops->addNE_fix(diagonals[1].edge.first, ele4ID, tid);
-            def_ops->addNE_fix(diagonals[1].edge.second, ele3ID, tid);
-            def_ops->addNE_fix(diagonals[1].edge.second, ele4ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[1].edge.first, ele3ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[1].edge.second, ele4ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele5ID, tid);
 
-            def_ops->addNE_fix(diagonals[2].edge.first, ele5ID, tid);
-            def_ops->addNE_fix(diagonals[2].edge.first, ele6ID, tid);
-            def_ops->addNE_fix(diagonals[2].edge.second, ele5ID, tid);
-            def_ops->addNE_fix(diagonals[2].edge.second, ele6ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[2].edge.first, ele5ID, tid);
-            def_ops->addNE_fix(ghostDiagonals[2].edge.second, ele6ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele5ID, tid);
 
             replace_element(eid, ele0, ele0_boundary);
             append_element(ele1, ele1_boundary, tid);
@@ -1305,111 +1549,474 @@ template<typename real_t, int dim> class Refine{
             append_element(ele3, ele3_boundary, tid);
             append_element(ele4, ele4_boundary, tid);
             append_element(ele5, ele5_boundary, tid);
-            append_element(ele6, ele6_boundary, tid);
-            append_element(ele7, ele7_boundary, tid);
-            append_element(ele8, ele8_boundary, tid);
-            splitCnt[tid] += 8;
+            splitCnt[tid] += 5;
+            break;
+          }
+          case 2:{
+            // Case 4(a)(3)
 
-            // Sort all 6 vertices of the wedge by ascending gnn
-            // Need to do so to enforce consistency across MPI processes
-            std::map<index_t, index_t> gnn2lnn;
-            for(int j=0; j<3; ++j){
-              gnn2lnn[_mesh->lnn2gnn[bottom_vertex[j]]] = bottom_vertex[j];
-              gnn2lnn[_mesh->lnn2gnn[newVertex[j]]] = newVertex[j];
+            const int ele0[] = {p[1]->edge.first, p[1]->id, p[2]->id, p[3]->id};
+            const int ele1[] = {p[3]->id, p[1]->edge.second, p[0]->id, p[3]->edge.second};
+            const int ele2[] = {p[3]->id, p[0]->id, p[2]->edge.second, p[3]->edge.second};
+            const int ele3[] = {p[1]->id, p[1]->edge.second, p[0]->id, p[3]->id};
+            const int ele4[] = {p[1]->id, p[0]->id, p[2]->id, p[3]->id};
+            const int ele5[] = {p[2]->id, p[3]->id, p[0]->id, p[2]->edge.second};
+
+            const int ele0_boundary[] = {0, b[p[1]->edge.second], b[p[2]->edge.second], b[p[3]->edge.second]};
+            const int ele1_boundary[] = {b[p[3]->edge.first], 0, b[p[2]->edge.second], 0};
+            const int ele2_boundary[] = {b[p[3]->edge.first], b[p[1]->edge.second], 0, 0};
+            const int ele3_boundary[] = {0, 0, b[p[2]->edge.second], b[p[3]->edge.second]};
+            const int ele4_boundary[] = {0, 0, 0, b[p[3]->edge.second]};
+            const int ele5_boundary[] = {0, b[p[3]->edge.second], b[p[1]->edge.second], 0};
+
+            index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID;
+            ele1ID = splitCnt[tid];
+            ele2ID = ele1ID+1;
+            ele3ID = ele1ID+2;
+            ele4ID = ele1ID+3;
+            ele5ID = ele1ID+4;
+
+            def_ops->remNE(p[1]->edge.second, eid, tid);
+            def_ops->addNE_fix(p[1]->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(p[1]->edge.second, ele3ID, tid);
+
+            def_ops->remNE(p[2]->edge.second, eid, tid);
+            def_ops->addNE_fix(p[2]->edge.second, ele2ID, tid);
+            def_ops->addNE_fix(p[2]->edge.second, ele5ID, tid);
+
+            def_ops->remNE(p[3]->edge.second, eid, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele1ID, tid);
+            def_ops->addNE_fix(p[3]->edge.second, ele2ID, tid);
+
+            def_ops->addNE_fix(p[0]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[0]->id, ele5ID, tid);
+
+            def_ops->addNE(p[1]->id, eid, tid);
+            def_ops->addNE_fix(p[1]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[1]->id, ele4ID, tid);
+
+            def_ops->addNE(p[2]->id, eid, tid);
+            def_ops->addNE_fix(p[2]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[2]->id, ele5ID, tid);
+
+            def_ops->addNE(p[3]->id, eid, tid);
+            def_ops->addNE_fix(p[3]->id, ele1ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele2ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele3ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele4ID, tid);
+            def_ops->addNE_fix(p[3]->id, ele5ID, tid);
+
+            replace_element(eid, ele0, ele0_boundary);
+            append_element(ele1, ele1_boundary, tid);
+            append_element(ele2, ele2_boundary, tid);
+            append_element(ele3, ele3_boundary, tid);
+            append_element(ele4, ele4_boundary, tid);
+            append_element(ele5, ele5_boundary, tid);
+            splitCnt[tid] += 5;
+            break;
+          }
+          default:
+            break;
+          }
+
+          break;
+        }
+        case 4:{
+          // Case 4(b)
+          // In this case, the element is split into two wedges.
+
+          // Find the top left, top right, bottom left and
+          // bottom right split edges, as depicted in the paper.
+          DirectedEdge<index_t> *tr, *tl, *br, *bl;
+          tl = &splitEdges[0];
+
+          // Find top right
+          for(int j=1; j<4; ++j){
+            if(splitEdges[j].contains(tl->edge.first)){
+              tr = &splitEdges[j];
+              break;
             }
+          }
+          // Re-arrange tr so that tl->edge.first == tr->edge.first
+          if(tr->edge.first != tl->edge.first){
+            index_t swap = tr->edge.second;
+            tr->edge.second = tr->edge.first;
+            tr->edge.first = swap;
+          }
 
-            // Calculate the coordinates of the centroidal vertex
-            // Start with a temporary location at one of the wedge's corners, e.g. *gnn2lnn.begin().
-            real_t nc[ndims]; // new coords
-            double nm[msize]; // new metric
-            _mesh->get_coords(gnn2lnn.begin()->second, nc);
-            _mesh->get_metric(gnn2lnn.begin()->second, nm);
-
-            // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge.
-            Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
-                Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-
-            for(std::map<index_t, index_t>::const_iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it){
-              const real_t *x = _mesh->get_coords(it->second);
-
-              q[0] += nm[0]*x[0] + nm[1]*x[1] + nm[2]*x[2];
-              q[1] += nm[1]*x[0] + nm[3]*x[1] + nm[4]*x[2];
-              q[2] += nm[2]*x[0] + nm[4]*x[1] + nm[6]*x[2];
-
-              A[0] += nm[0]; A[1] += nm[1]; A[2] += nm[2];
-              A[4] += nm[3]; A[5] += nm[4];
-              A[8] += nm[6];
+          // Find bottom left
+          for(int j=1; j<4; ++j){
+            if(splitEdges[j].contains(tl->edge.second)){
+              bl = &splitEdges[j];
+              break;
             }
-            A[3] = A[1];
-            A[6] = A[2];
-            A[7] = A[5];
+          }
+          // Re-arrange bl so that tl->edge.second == bl->edge.second
+          if(bl->edge.second != tl->edge.second){
+            index_t swap = bl->edge.first;
+            bl->edge.first = bl->edge.second;
+            bl->edge.second = swap;
+          }
 
-            // Want to solve the system Ap=q to find the new position, p.
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-            A.svd().solve(q, &b);
-
-            for(int i=0;i<3;i++){
-              nc[i] += b[i];
-              _mesh->_coords[cid*3+i] = nc[i];
+          // Find bottom right
+          for(int j=1; j<4; ++j){
+            if(splitEdges[j].contains(bl->edge.first)){
+              br = &splitEdges[j];
+              break;
             }
+          }
+          // Re-arrange br so that bl->edge.first == br->edge.first
+          if(br->edge.first != bl->edge.first){
+            index_t swap = br->edge.second;
+            br->edge.second = br->edge.first;
+            br->edge.first = swap;
+          }
 
-            // Interpolate metric at new location
-            real_t l[]={-1, -1, -1, -1};
-            int best_e=-1;
-            real_t tol=-1;
+          assert(tr->edge.second == br->edge.second);
 
-            const index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
-            for(int i=0; i<8; ++i){
-              const real_t *x0 = _mesh->get_coords(welements[i][0]);
-              const real_t *x1 = _mesh->get_coords(welements[i][1]);
-              const real_t *x2 = _mesh->get_coords(welements[i][2]);
-              const real_t *x3 = _mesh->get_coords(welements[i][3]);
+          // Find how the trapezoids have been split
+          DirectedEdge<index_t> bw1, bw2, tw1, tw2;
+          std::vector<index_t>::const_iterator p;
 
-              real_t L = property->volume(x0, x1, x2, x3);
+          // For the bottom wedge:
+          // 1) From tl->id to tr->edge.second or from tr->id to tl->edge.second?
+          // 2) From bl->id to br->edge.second or from br->id to bl->edge.second?
+          // For the top wedge:
+          // 1) From tl->id to bl->edge.first or from bl->id to tl->edge.first?
+          // 2) From tr->id to br->edge.first or from br->id to tr->edge.first?
 
-              real_t ll[4];
-              ll[0] = property->volume(nc, x1, x2, x3)/L;
-              ll[1] = property->volume(x0, nc, x2, x3)/L;
-              ll[2] = property->volume(x0, x1, nc, x3)/L;
-              ll[3] = property->volume(x0, x1, x2, nc)/L;
+          p = std::find(_mesh->NNList[tl->id].begin(), _mesh->NNList[tl->id].end(), tr->edge.second);
+          if(p != _mesh->NNList[tl->id].end()){
+            bw1.edge.first = tl->id;
+            bw1.edge.second = tr->edge.second;
+          }else{
+            bw1.edge.first = tr->id;
+            bw1.edge.second = tl->edge.second;
+          }
 
-              real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
-              if(best_e==-1){
-                tol = min_l;
-                best_e = i;
-                for(int j=0;j<nloc;++j)
-                  l[j] = ll[j];
+          p = std::find(_mesh->NNList[bl->id].begin(), _mesh->NNList[bl->id].end(), br->edge.second);
+          if(p != _mesh->NNList[bl->id].end()){
+            bw2.edge.first = bl->id;
+            bw2.edge.second = br->edge.second;
+          }else{
+            bw2.edge.first = br->id;
+            bw2.edge.second = bl->edge.second;
+          }
+
+          p = std::find(_mesh->NNList[tl->id].begin(), _mesh->NNList[tl->id].end(), bl->edge.first);
+          if(p != _mesh->NNList[tl->id].end()){
+            tw1.edge.first = tl->id;
+            tw1.edge.second = bl->edge.first;
+          }else{
+            tw1.edge.first = bl->id;
+            tw1.edge.second = tl->edge.first;
+          }
+
+          p = std::find(_mesh->NNList[tr->id].begin(), _mesh->NNList[tr->id].end(), br->edge.first);
+          if(p != _mesh->NNList[tr->id].end()){
+            tw2.edge.first = tr->id;
+            tw2.edge.second = br->edge.first;
+          }else{
+            tw2.edge.first = br->id;
+            tw2.edge.second = tr->edge.first;
+          }
+
+          // If bw1 and bw2 are connected, then the third quadrilateral
+          // can be split whichever way we like. Otherwise, we want to
+          // choose the diagonal which will lead to a 1:3 wedge split.
+          // Same for tw1 and tw2.
+
+          DirectedEdge<index_t> bw, tw;
+          bool flex_bottom, flex_top;
+
+          if(bw1.connected(bw2)){
+            flex_bottom = true;
+          }else{
+            flex_bottom = false;
+            bw.edge.first = bw1.edge.first;
+            bw.edge.second = bw2.edge.first;
+          }
+          if(tw1.connected(tw2)){
+            flex_top = true;
+          }else{
+            flex_top = false;
+            tw.edge.first = tw1.edge.first;
+            tw.edge.second = tw2.edge.first;
+          }
+
+          DirectedEdge<index_t> diag;
+          if(flex_top && !flex_bottom){
+            // Choose the diagonal which is the preferred one for the bottom wedge
+            diag.edge.first = bw.edge.first;
+            diag.edge.second = bw.edge.second;
+          }else if(!flex_top && flex_bottom){
+            // Choose the diagonal which is the preferred one for the top wedge
+            diag.edge.first = tw.edge.first;
+            diag.edge.second = tw.edge.second;
+          }else{
+            // Choose the shortest diagonal
+            real_t ldiag1 = _mesh->calc_edge_length(tl->id, br->id);
+            real_t ldiag2 = _mesh->calc_edge_length(bl->id, tr->id);
+
+            if(flex_top && flex_bottom){
+              if(ldiag1 < ldiag2){
+                diag.edge.first = tl->id;
+                diag.edge.second = br->id;
               }else{
-                if(min_l>tol){
-                  tol = min_l;
-                  best_e = i;
-                  for(int j=0;j<nloc;++j)
-                    l[j] = ll[j];
+                diag.edge.first = bl->id;
+                diag.edge.second = tr->id;
+              }
+            }else{
+              // If we reach this point, it means we are not
+              // flexible in any of the diagonals. If we are
+              // lucky enough and bw==tw, then diag=bw.
+              if(bw.contains(tw.edge.first) && bw.contains(tw.edge.second)){
+                diag.edge.first = bw.edge.first;
+                diag.edge.second = bw.edge.second;
+              }else{
+                // Choose the shortest diagonal
+                if(ldiag1 < ldiag2){
+                  diag.edge.first = tl->id;
+                  diag.edge.second = br->id;
+                }else{
+                  diag.edge.first = bl->id;
+                  diag.edge.second = tr->id;
                 }
               }
             }
+          }
 
-            const index_t *best_nodes = welements[best_e];
-            assert(n[0]>=0);
+          def_ops->addNN(diag.edge.first, diag.edge.second, tid);
+          def_ops->addNN(diag.edge.second, diag.edge.first, tid);
 
-            for(size_t i=0;i<msize;i++)
-              _mesh->metric[cid*6+i] = l[0]*_mesh->metric[best_nodes[0]*msize+i]+
-                                       l[1]*_mesh->metric[best_nodes[1]*msize+i]+
-                                       l[2]*_mesh->metric[best_nodes[2]*msize+i]+
-                                       l[3]*_mesh->metric[best_nodes[3]*msize+i];
+          // At this point, we have identified the wedges and how their sides
+          // have been split, so we can proceed to the actual refinement.
+          index_t top_triangle[3] = {};
+          index_t bottom_triangle[3] = {};
+          int bwedge[5] = {};
+
+          // Bottom wedge
+          top_triangle[0] = tr->id;
+          top_triangle[1] = tr->edge.second;
+          top_triangle[2] = br->id;
+          bottom_triangle[0] = tl->id;
+          bottom_triangle[1] = tl->edge.second;
+          bottom_triangle[2] = bl->id;
+          bwedge[0] = b[bl->edge.first];
+          bwedge[1] = b[tl->edge.first];
+          bwedge[2] = 0;
+          bwedge[3] = b[tl->edge.second];
+          bwedge[4] = b[tr->edge.second];
+          refine_wedge(top_triangle, bottom_triangle, bwedge, &diag, eid, tid);
+
+          // Top wedge
+          top_triangle[0] = tl->id;
+          top_triangle[1] = tl->edge.first;
+          top_triangle[2] = tr->id;
+          bottom_triangle[0] = bl->id;
+          bottom_triangle[1] = bl->edge.first;
+          bottom_triangle[2] = br->id;
+          bwedge[0] = b[tr->edge.second];
+          bwedge[1] = b[tl->edge.second];
+          bwedge[2] = 0;
+          bwedge[3] = b[bl->edge.first];
+          bwedge[4] = b[tl->edge.first];
+          refine_wedge(top_triangle, bottom_triangle, bwedge, &diag, eid, tid);
+
+          // Remove parent element
+          for(size_t j=0; j<nloc; ++j)
+            def_ops->remNE(n[j], eid, tid);
+          _mesh->_ENList[eid*nloc] = -1;
+
+          break;
+        }
+        default:
+          break;
+        }
+      }else if(refine_cnt==5){
+        // Find the unsplit edge
+        int adj_cnt[] = {0, 0, 0, 0};
+        for(int j=0; j<nloc; ++j){
+          for(int k=0; k<5; ++k)
+            if(splitEdges[k].contains(n[j]))
+              ++adj_cnt[j];
+        }
+
+        // Vertices of the unsplit edge are adjacent to 2 split edges;
+        // the other vertices are adjacent to 3 split edges.
+        index_t ue[2];
+        int pos=0;
+        for(int j=0; j<nloc; ++j)
+          if(adj_cnt[j] == 2)
+            ue[pos++] = n[j];
+
+        // Find the opposite edge
+        DirectedEdge<index_t> *oe;
+        for(int k=0; k<5; ++k)
+          if(splitEdges[k].contains(ue[0]) && splitEdges[k].contains(ue[1])){
+            // Swap splitEdges[k] with splitEdges[4]
+            if(k!=4){
+              DirectedEdge<index_t> swap = splitEdges[4];
+              splitEdges[4] = splitEdges[k];
+              splitEdges[k] = swap;
+            }
+            oe = &splitEdges[4];
+            break;
+          }
+
+        // Like in 4(b), find tl, tr, bl and br
+        DirectedEdge<index_t> *tr, *tl, *br, *bl;
+        tl = &splitEdges[0];
+
+        // Find top right
+        for(int j=1; j<4; ++j){
+          if(splitEdges[j].contains(tl->edge.first)){
+            tr = &splitEdges[j];
+            break;
+          }
+        }
+        // Re-arrange tr so that tl->edge.first == tr->edge.first
+        if(tr->edge.first != tl->edge.first){
+          index_t swap = tr->edge.second;
+          tr->edge.second = tr->edge.first;
+          tr->edge.first = swap;
+        }
+
+        // Find bottom left
+        for(int j=1; j<4; ++j){
+          if(splitEdges[j].contains(tl->edge.second)){
+            bl = &splitEdges[j];
+            break;
+          }
+        }
+        // Re-arrange bl so that tl->edge.second == bl->edge.second
+        if(bl->edge.second != tl->edge.second){
+          index_t swap = bl->edge.first;
+          bl->edge.first = bl->edge.second;
+          bl->edge.second = swap;
+        }
+
+        // Find bottom right
+        for(int j=1; j<4; ++j){
+          if(splitEdges[j].contains(bl->edge.first)){
+            br = &splitEdges[j];
+            break;
+          }
+        }
+        // Re-arrange br so that bl->edge.first == br->edge.first
+        if(br->edge.first != bl->edge.first){
+          index_t swap = br->edge.second;
+          br->edge.second = br->edge.first;
+          br->edge.first = swap;
+        }
+
+        assert(tr->edge.second == br->edge.second);
+        assert(oe->contains(tr->edge.first) && oe->contains(tr->edge.second));
+
+        // Find how the trapezoids have been split:
+        // 1) From tl->id to bl->edge.first or from bl->id to tl->edge.first?
+        // 2) From tr->id to br->edge.first or from br->id to tr->edge.first?
+        DirectedEdge<index_t> q1, q2;
+        std::vector<index_t>::const_iterator p;
+
+        p = std::find(_mesh->NNList[tl->id].begin(), _mesh->NNList[tl->id].end(), bl->edge.first);
+        if(p != _mesh->NNList[tl->id].end()){
+          q1.edge.first = tl->id;
+          q1.edge.second = bl->edge.first;
+        }else{
+          q1.edge.first = bl->id;
+          q1.edge.second = tl->edge.first;
+        }
+
+        p = std::find(_mesh->NNList[tr->id].begin(), _mesh->NNList[tr->id].end(), br->edge.first);
+        if(p != _mesh->NNList[tr->id].end()){
+          q2.edge.first = tr->id;
+          q2.edge.second = br->edge.first;
+        }else{
+          q2.edge.first = br->id;
+          q2.edge.second = tr->edge.first;
+        }
+
+        DirectedEdge<index_t> diag, cross_diag;
+        if(q1.connected(q2)){
+          // We are flexible in choosing how the third quadrilateral
+          // will be split and we will choose the shortest diagonal.
+          real_t ldiag1 = _mesh->calc_edge_length(tl->id, br->id);
+          real_t ldiag2 = _mesh->calc_edge_length(bl->id, tr->id);
+
+          if(ldiag1 < ldiag2){
+            diag.edge.first = br->id;
+            diag.edge.second = tl->id;
+            cross_diag.edge.first = tr->id;
+            cross_diag.edge.second = bl->id;
+          }else{
+            diag.edge.first = bl->id;
+            diag.edge.second = tr->id;
+            cross_diag.edge.first = tl->id;
+            cross_diag.edge.second = br->id;
           }
         }else{
-          // Case 3(c).
-          std::cerr << "Case 3(c) encountered" << std::endl;
-          exit(-1);
+          // We will choose the diagonal which leads to a 1:3 wedge refinement.
+          diag.edge.first = q1.edge.first;
+          diag.edge.second = q2.edge.first;
+          cross_diag.edge.first = (diag.edge.second == tr->id ? br->id : tr->id);
+          cross_diag.edge.second = (diag.edge.first == tl->id ? bl->id : tl->id);
         }
-      }else if(refine_cnt==4){
-        std::cerr << "Case 4 encountered" << std::endl;
-        exit(-1);
-      }else if(refine_cnt==5){
-        std::cerr << "Case 5 encountered" << std::endl;
-        exit(-1);
+
+        def_ops->addNN(diag.edge.first, diag.edge.second, tid);
+        def_ops->addNN(diag.edge.second, diag.edge.first, tid);
+
+        index_t bottom_triangle[] = {br->id, br->edge.first, bl->id};
+        index_t top_triangle[] = {tr->id, tr->edge.first, tl->id};
+        int bwedge[] = {b[bl->edge.second], b[br->edge.second], 0, b[bl->edge.first], b[tl->edge.first]};
+        refine_wedge(top_triangle, bottom_triangle, bwedge, &diag, eid, tid);
+
+        const int ele0[] = {tl->edge.second, bl->id, tl->id, oe->id};
+        const int ele1[] = {tr->edge.second, tr->id, br->id, oe->id};
+        const int ele2[] = {diag.edge.first, cross_diag.edge.first, diag.edge.second, oe->id};
+        const int ele3[] = {diag.edge.first, diag.edge.second, cross_diag.edge.second, oe->id};
+
+        const int ele0_boundary[] = {0, b[bl->edge.first], b[tl->edge.first], b[tr->edge.second]};
+        const int ele1_boundary[] = {0, b[tl->edge.first], b[bl->edge.first], b[tl->edge.second]};
+        const int ele2_boundary[] = {b[bl->edge.first], 0, 0, 0};
+        const int ele3_boundary[] = {0, b[tl->edge.first], 0, 0};
+
+        index_t ele1ID, ele2ID, ele3ID;
+        ele1ID = splitCnt[tid];
+        ele2ID = ele1ID+1;
+        ele3ID = ele1ID+2;
+
+        def_ops->remNE(tr->edge.first, eid, tid);
+        def_ops->remNE(br->edge.first, eid, tid);
+        def_ops->remNE(tr->edge.second, eid, tid);
+
+        def_ops->addNE(tl->id, eid, tid);
+        def_ops->addNE(bl->id, eid, tid);
+        def_ops->addNE(oe->id, eid, tid);
+
+        def_ops->addNE_fix(tr->edge.second, ele1ID, tid);
+        def_ops->addNE_fix(tr->id, ele1ID, tid);
+        def_ops->addNE_fix(br->id, ele1ID, tid);
+        def_ops->addNE_fix(oe->id, ele1ID, tid);
+
+        def_ops->addNE_fix(diag.edge.first, ele2ID, tid);
+        def_ops->addNE_fix(diag.edge.second, ele2ID, tid);
+        def_ops->addNE_fix(cross_diag.edge.second, ele2ID, tid);
+        def_ops->addNE_fix(oe->id, ele2ID, tid);
+
+        def_ops->addNE_fix(diag.edge.first, ele3ID, tid);
+        def_ops->addNE_fix(diag.edge.second, ele3ID, tid);
+        def_ops->addNE_fix(cross_diag.edge.first, ele3ID, tid);
+        def_ops->addNE_fix(oe->id, ele3ID, tid);
+
+        replace_element(eid, ele0, ele0_boundary);
+        append_element(ele1, ele1_boundary, tid);
+        append_element(ele2, ele2_boundary, tid);
+        append_element(ele3, ele3_boundary, tid);
+        splitCnt[tid] += 3;
       }else if(refine_cnt==6){
         /*
          * There is an internal edge in this case. We choose the shortest among:
@@ -1418,55 +2025,55 @@ template<typename real_t, int dim> class Refine{
          * c) newVertex[2] - newVertex[3]
          */
 
-        real_t ldiag0 = _mesh->calc_edge_length(newVertex[0], newVertex[5]);
-        real_t ldiag1 = _mesh->calc_edge_length(newVertex[1], newVertex[4]);
-        real_t ldiag2 = _mesh->calc_edge_length(newVertex[2], newVertex[3]);
+        real_t ldiag0 = _mesh->calc_edge_length(splitEdges[0].id, splitEdges[5].id);
+        real_t ldiag1 = _mesh->calc_edge_length(splitEdges[1].id, splitEdges[4].id);
+        real_t ldiag2 = _mesh->calc_edge_length(splitEdges[2].id, splitEdges[3].id);
 
         std::vector<index_t> internal(2);
         std::vector<index_t> opposite(4);
         std::vector<int> bndr(4);
         if(ldiag0 < ldiag1 && ldiag0 < ldiag2){
           // 0-5
-          internal[0] = newVertex[5];
-          internal[1] = newVertex[0];
-          opposite[0] = newVertex[3];
-          opposite[1] = newVertex[4];
-          opposite[2] = newVertex[2];
-          opposite[3] = newVertex[1];
+          internal[0] = splitEdges[5].id;
+          internal[1] = splitEdges[0].id;
+          opposite[0] = splitEdges[3].id;
+          opposite[1] = splitEdges[4].id;
+          opposite[2] = splitEdges[2].id;
+          opposite[3] = splitEdges[1].id;
           bndr[0] = boundary[0];
           bndr[1] = boundary[2];
           bndr[2] = boundary[1];
           bndr[3] = boundary[3];
         }else if(ldiag1 < ldiag2){
           // 1-4
-          internal[0] = newVertex[1];
-          internal[1] = newVertex[4];
-          opposite[0] = newVertex[0];
-          opposite[1] = newVertex[3];
-          opposite[2] = newVertex[5];
-          opposite[3] = newVertex[2];
+          internal[0] = splitEdges[1].id;
+          internal[1] = splitEdges[4].id;
+          opposite[0] = splitEdges[0].id;
+          opposite[1] = splitEdges[3].id;
+          opposite[2] = splitEdges[5].id;
+          opposite[3] = splitEdges[2].id;
           bndr[0] = boundary[3];
           bndr[1] = boundary[0];
           bndr[2] = boundary[1];
           bndr[3] = boundary[2];
         }else{
           // 2-3
-          internal[0] = newVertex[3];
-          internal[1] = newVertex[2];
-          opposite[0] = newVertex[4];
-          opposite[1] = newVertex[5];
-          opposite[2] = newVertex[1];
-          opposite[3] = newVertex[0];
+          internal[0] = splitEdges[3].id;
+          internal[1] = splitEdges[2].id;
+          opposite[0] = splitEdges[4].id;
+          opposite[1] = splitEdges[5].id;
+          opposite[2] = splitEdges[1].id;
+          opposite[3] = splitEdges[0].id;
           bndr[0] = boundary[0];
           bndr[1] = boundary[1];
           bndr[2] = boundary[3];
           bndr[3] = boundary[2];
         }
 
-        const int ele0[] = {n[0], newVertex[0], newVertex[1], newVertex[2]};
-        const int ele1[] = {n[1], newVertex[3], newVertex[0], newVertex[4]};
-        const int ele2[] = {n[2], newVertex[1], newVertex[3], newVertex[5]};
-        const int ele3[] = {n[3], newVertex[2], newVertex[4], newVertex[5]};
+        const int ele0[] = {n[0], splitEdges[0].id, splitEdges[1].id, splitEdges[2].id};
+        const int ele1[] = {n[1], splitEdges[3].id, splitEdges[0].id, splitEdges[4].id};
+        const int ele2[] = {n[2], splitEdges[1].id, splitEdges[3].id, splitEdges[5].id};
+        const int ele3[] = {n[3], splitEdges[2].id, splitEdges[4].id, splitEdges[5].id};
         const int ele4[] = {internal[0], opposite[0], opposite[1], internal[1]};
         const int ele5[] = {internal[0], opposite[1], opposite[2], internal[1]};
         const int ele6[] = {internal[0], opposite[2], opposite[3], internal[1]};
@@ -1500,23 +2107,23 @@ template<typename real_t, int dim> class Refine{
         def_ops->remNE(n[3], eid, tid);
         def_ops->addNE_fix(n[3], ele3ID, tid);
 
-        def_ops->addNE(newVertex[0], eid, tid);
-        def_ops->addNE_fix(newVertex[0], ele1ID, tid);
+        def_ops->addNE(splitEdges[0].id, eid, tid);
+        def_ops->addNE_fix(splitEdges[0].id, ele1ID, tid);
 
-        def_ops->addNE(newVertex[1], eid, tid);
-        def_ops->addNE_fix(newVertex[1], ele2ID, tid);
+        def_ops->addNE(splitEdges[1].id, eid, tid);
+        def_ops->addNE_fix(splitEdges[1].id, ele2ID, tid);
 
-        def_ops->addNE(newVertex[2], eid, tid);
-        def_ops->addNE_fix(newVertex[2], ele3ID, tid);
+        def_ops->addNE(splitEdges[2].id, eid, tid);
+        def_ops->addNE_fix(splitEdges[2].id, ele3ID, tid);
 
-        def_ops->addNE_fix(newVertex[3], ele1ID, tid);
-        def_ops->addNE_fix(newVertex[3], ele2ID, tid);
+        def_ops->addNE_fix(splitEdges[3].id, ele1ID, tid);
+        def_ops->addNE_fix(splitEdges[3].id, ele2ID, tid);
 
-        def_ops->addNE_fix(newVertex[4], ele1ID, tid);
-        def_ops->addNE_fix(newVertex[4], ele3ID, tid);
+        def_ops->addNE_fix(splitEdges[4].id, ele1ID, tid);
+        def_ops->addNE_fix(splitEdges[4].id, ele3ID, tid);
 
-        def_ops->addNE_fix(newVertex[5], ele2ID, tid);
-        def_ops->addNE_fix(newVertex[5], ele3ID, tid);
+        def_ops->addNE_fix(splitEdges[5].id, ele2ID, tid);
+        def_ops->addNE_fix(splitEdges[5].id, ele3ID, tid);
 
         def_ops->addNE_fix(internal[0], ele4ID, tid);
         def_ops->addNE_fix(internal[0], ele5ID, tid);
@@ -1545,6 +2152,361 @@ template<typename real_t, int dim> class Refine{
         append_element(ele6, ele6_boundary, tid);
         append_element(ele7, ele7_boundary, tid);
         splitCnt[tid] += 7;
+      }
+    }
+  }
+
+  void refine_wedge(const index_t top_triangle[], const index_t bottom_triangle[],
+      const int bndr[], DirectedEdge<index_t>* third_diag, int eid, int tid){
+
+    /*
+     * b[] must contain the boundary values for each side of the wedge:
+     * b[0], b[1] and b[2]: Boundary values of Side0, Side1 and Side2
+     * b[3]: Boundary value of top triangle
+     * b[4]: Boundary value of bottom triangle
+     */
+
+    /*
+     * third_diag is used optionally if we need to define manually what the
+     * third diagonal is (used in cases 4(b) and 5). It needs to be a directed
+     * edge from the bottom triangle to the top triangle and be on Side2.
+     */
+    if(third_diag != NULL){
+      for(int j=0; j<3; ++j){
+        if(third_diag->edge.first == bottom_triangle[j] || third_diag->edge.second == top_triangle[j]){
+          break;
+        }else if(third_diag->edge.first == top_triangle[j] || third_diag->edge.second == bottom_triangle[j]){
+          index_t swap = third_diag->edge.first;
+          third_diag->edge.first = third_diag->edge.second;
+          third_diag->edge.second = swap;
+          break;
+        }
+      }
+    }
+
+    /*
+     * For each quadrilateral side of the wedge find
+     * the diagonal which has bisected the wedge side.
+     * Side0: bottom[0] - bottom[1] - top[1] - top[0]
+     * Side1: bottom[1] - bottom[2] - top[2] - top[1]
+     * Side2: bottom[2] - bottom[0] - top[0] - top[2]
+     */
+    std::vector< DirectedEdge<index_t> > diagonals, ghostDiagonals;
+    for(int j=0; j<3; ++j){
+      bool fwd_connected;
+      if(j==2 && third_diag != NULL){
+        fwd_connected = (bottom_triangle[j] == third_diag->edge.first ? true : false);
+      }else{
+        std::vector<index_t>::const_iterator p = std::find(_mesh->NNList[bottom_triangle[j]].begin(),
+            _mesh->NNList[bottom_triangle[j]].end(), top_triangle[(j+1)%3]);
+        fwd_connected = (p != _mesh->NNList[bottom_triangle[j]].end() ? true : false);
+      }
+      if(fwd_connected){
+        diagonals.push_back(DirectedEdge<index_t>(bottom_triangle[j], top_triangle[(j+1)%3]));
+        ghostDiagonals.push_back(DirectedEdge<index_t>(bottom_triangle[(j+1)%3], top_triangle[j]));
+      }else{
+        diagonals.push_back(DirectedEdge<index_t>(bottom_triangle[(j+1)%3], top_triangle[j]));
+        ghostDiagonals.push_back(DirectedEdge<index_t>(bottom_triangle[j], top_triangle[(j+1)%3]));
+      }
+    }
+
+    // Determine how the wedge will be split
+    std::vector<index_t> diag_shared;
+    for(int j=0;j<3;j++){
+      index_t nid = diagonals[j].connected(diagonals[(j+1)%3]);
+      if(nid>=0)
+        diag_shared.push_back(nid);
+    }
+
+    if(!diag_shared.empty()){
+      assert(diag_shared.size() == 2);
+      // Here we can subdivide the wedge into 3 tetrahedra.
+
+      // Find the "middle" diagonal, i.e. the one which
+      // consists of the two vertices in diag_shared.
+      int middle;
+      index_t non_shared_top=-1, non_shared_bottom=-1;
+      for(int j=0; j<3; ++j){
+        if(diagonals[j].contains(diag_shared[0]) && diagonals[j].contains(diag_shared[1])){
+          middle = j;
+          for(int k=0; k<2; ++k){
+            if(diagonals[(j+k+1)%3].edge.first != diag_shared[0] && diagonals[(j+k+1)%3].edge.first != diag_shared[1])
+              non_shared_bottom = diagonals[(j+k+1)%3].edge.first;
+            else
+              non_shared_top = diagonals[(j+k+1)%3].edge.second;
+          }
+          break;
+        }
+      }
+      assert(non_shared_top >= 0 && non_shared_bottom >= 0);
+
+      /*
+       * 2 elements are formed by the three vertices of two connected
+       * diagonals plus a fourth vertex which can be found via the
+       * intersection on NNList of those three vertices. Any vertex which
+       * is part of a diagonal must be removed from the intersection and
+       * then the intersection will be left with one and only vertex.
+       *
+       * 1 element is formed by the four vertices of two disjoint diagonals.
+       */
+      index_t v_top, v_bottom;
+      std::set<index_t> intersection0, intersection1;
+      std::set_intersection(_mesh->NNList[diagonals[middle].edge.first].begin(),
+          _mesh->NNList[diagonals[middle].edge.first].end(), _mesh->NNList[diagonals[middle].edge.second].begin(),
+          _mesh->NNList[diagonals[middle].edge.second].end(), std::inserter(intersection0, intersection0.begin()));
+      std::set_intersection(_mesh->NNList[non_shared_top].begin(), _mesh->NNList[non_shared_top].end(),
+          intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
+      intersection1.erase(non_shared_bottom);
+      assert(intersection1.size()==1);
+      v_top = *intersection1.begin();
+
+      intersection1.clear();
+      std::set_intersection(_mesh->NNList[non_shared_bottom].begin(), _mesh->NNList[non_shared_bottom].end(),
+          intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
+      intersection1.erase(non_shared_top);
+      assert(intersection1.size()==1);
+      v_bottom = *intersection1.begin();
+
+      // diagonals[middle].edge.first is always one of the bottom vertices
+      // diagonals[middle].edge.second is always one of the top vertices
+      const int ele1[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, v_top};
+      const int ele2[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_bottom, v_bottom};
+      const int ele3[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, non_shared_bottom};
+
+      int bv_bottom, bnsb, bfirst;
+      for(int j=0; j<3; ++j){
+        if(v_bottom == bottom_triangle[j]){
+          bv_bottom = bndr[j];
+        }else if(non_shared_bottom == bottom_triangle[j]){
+          bnsb = bndr[j];
+        }else{
+          bfirst = bndr[j];
+        }
+      }
+
+      const int ele1_boundary[] = {bndr[3], bv_bottom, bnsb, 0};
+      const int ele2_boundary[] = {bfirst, bndr[4], bnsb, 0};
+      const int ele3_boundary[] = {bfirst, bv_bottom, 0, 0};
+
+      index_t ele1ID, ele2ID, ele3ID;
+      ele1ID = splitCnt[tid];
+      ele2ID = ele1ID+1;
+      ele3ID = ele1ID+2;
+
+      def_ops->addNE_fix(diagonals[middle].edge.first, ele1ID, tid);
+      def_ops->addNE_fix(diagonals[middle].edge.first, ele2ID, tid);
+      def_ops->addNE_fix(diagonals[middle].edge.first, ele3ID, tid);
+
+      def_ops->addNE_fix(diagonals[middle].edge.second, ele1ID, tid);
+      def_ops->addNE_fix(diagonals[middle].edge.second, ele2ID, tid);
+      def_ops->addNE_fix(diagonals[middle].edge.second, ele3ID, tid);
+
+      def_ops->addNE_fix(non_shared_bottom, ele2ID, tid);
+      def_ops->addNE_fix(non_shared_bottom, ele3ID, tid);
+
+      def_ops->addNE_fix(non_shared_top, ele1ID, tid);
+      def_ops->addNE_fix(non_shared_top, ele3ID, tid);
+
+      def_ops->addNE_fix(v_bottom, ele2ID, tid);
+
+      def_ops->addNE_fix(v_top, ele1ID, tid);
+
+      append_element(ele1, ele1_boundary, tid);
+      append_element(ele2, ele2_boundary, tid);
+      append_element(ele3, ele3_boundary, tid);
+      splitCnt[tid] += 3;
+    }else{
+      /*
+       * The wedge must by split into 8 tetrahedra with the introduction of
+       * a new centroidal vertex. Each tetrahedron is formed by the three
+       * vertices of a triangular facet (there are 8 triangular facets: 6 are
+       * formed via the bisection of the 3 quadrilaterals of the wedge, 2 are
+       * the top and bottom triangles and the centroidal vertex.
+       */
+
+      // Allocate space for the centroid vertex
+      index_t cid = pragmatic_omp_atomic_capture(&_mesh->NNodes, 1);
+
+      const int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
+      const int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
+      const int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
+      const int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
+      const int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
+      const int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
+      const int ele7[] = {top_triangle[0], top_triangle[1], top_triangle[2], cid};
+      const int ele8[] = {cid, bottom_triangle[0], bottom_triangle[2], bottom_triangle[1]};
+
+      const int ele1_boundary[] = {0, 0, 0, bndr[0]};
+      const int ele2_boundary[] = {0, 0, 0, bndr[0]};
+      const int ele3_boundary[] = {0, 0, 0, bndr[1]};
+      const int ele4_boundary[] = {0, 0, 0, bndr[1]};
+      const int ele5_boundary[] = {0, 0, 0, bndr[2]};
+      const int ele6_boundary[] = {0, 0, 0, bndr[2]};
+      const int ele7_boundary[] = {0, 0, 0, bndr[3]};
+      const int ele8_boundary[] = {bndr[4], 0, 0, 0};
+
+      index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID, ele6ID, ele7ID, ele8ID;
+      ele1ID = splitCnt[tid];
+      ele2ID = ele1ID+1;
+      ele3ID = ele1ID+2;
+      ele4ID = ele1ID+3;
+      ele5ID = ele1ID+4;
+      ele6ID = ele1ID+5;
+      ele7ID = ele1ID+6;
+      ele8ID = ele1ID+7;
+
+      for(int j=0; j<3; ++j){
+        _mesh->NNList[cid].push_back(top_triangle[j]);
+        _mesh->NNList[cid].push_back(bottom_triangle[j]);
+      }
+
+      def_ops->addNE_fix(cid, ele1ID, tid);
+      def_ops->addNE_fix(cid, ele2ID, tid);
+      def_ops->addNE_fix(cid, ele3ID, tid);
+      def_ops->addNE_fix(cid, ele4ID, tid);
+      def_ops->addNE_fix(cid, ele5ID, tid);
+      def_ops->addNE_fix(cid, ele6ID, tid);
+      def_ops->addNE_fix(cid, ele7ID, tid);
+      def_ops->addNE_fix(cid, ele8ID, tid);
+
+      def_ops->addNE_fix(bottom_triangle[0], ele8ID, tid);
+      def_ops->addNE_fix(bottom_triangle[1], ele8ID, tid);
+      def_ops->addNE_fix(bottom_triangle[2], ele8ID, tid);
+
+      def_ops->addNE_fix(top_triangle[0], ele7ID, tid);
+      def_ops->addNE_fix(top_triangle[1], ele7ID, tid);
+      def_ops->addNE_fix(top_triangle[2], ele7ID, tid);
+
+      def_ops->addNE_fix(diagonals[0].edge.first, ele1ID, tid);
+      def_ops->addNE_fix(diagonals[0].edge.first, ele2ID, tid);
+      def_ops->addNE_fix(diagonals[0].edge.second, ele1ID, tid);
+      def_ops->addNE_fix(diagonals[0].edge.second, ele2ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[0].edge.first, ele1ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[0].edge.second, ele2ID, tid);
+
+      def_ops->addNE_fix(diagonals[1].edge.first, ele3ID, tid);
+      def_ops->addNE_fix(diagonals[1].edge.first, ele4ID, tid);
+      def_ops->addNE_fix(diagonals[1].edge.second, ele3ID, tid);
+      def_ops->addNE_fix(diagonals[1].edge.second, ele4ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[1].edge.first, ele3ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[1].edge.second, ele4ID, tid);
+
+      def_ops->addNE_fix(diagonals[2].edge.first, ele5ID, tid);
+      def_ops->addNE_fix(diagonals[2].edge.first, ele6ID, tid);
+      def_ops->addNE_fix(diagonals[2].edge.second, ele5ID, tid);
+      def_ops->addNE_fix(diagonals[2].edge.second, ele6ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[2].edge.first, ele5ID, tid);
+      def_ops->addNE_fix(ghostDiagonals[2].edge.second, ele6ID, tid);
+
+      append_element(ele1, ele1_boundary, tid);
+      append_element(ele2, ele2_boundary, tid);
+      append_element(ele3, ele3_boundary, tid);
+      append_element(ele4, ele4_boundary, tid);
+      append_element(ele5, ele5_boundary, tid);
+      append_element(ele6, ele6_boundary, tid);
+      append_element(ele7, ele7_boundary, tid);
+      append_element(ele8, ele8_boundary, tid);
+      splitCnt[tid] += 8;
+
+      // Sort all 6 vertices of the wedge by ascending gnn
+      // Need to do so to enforce consistency across MPI processes
+      std::map<index_t, index_t> gnn2lnn;
+      for(int j=0; j<3; ++j){
+        gnn2lnn[_mesh->lnn2gnn[bottom_triangle[j]]] = bottom_triangle[j];
+        gnn2lnn[_mesh->lnn2gnn[top_triangle[j]]] = top_triangle[j];
+      }
+
+      // Calculate the coordinates of the centroidal vertex
+      // Start with a temporary location at one of the wedge's corners, e.g. *gnn2lnn.begin().
+      real_t nc[ndims]; // new coords
+      double nm[msize]; // new metric
+      _mesh->get_coords(gnn2lnn.begin()->second, nc);
+      _mesh->get_metric(gnn2lnn.begin()->second, nm);
+
+      // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge.
+      Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
+          Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
+      Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+
+      for(std::map<index_t, index_t>::const_iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it){
+        const real_t *x = _mesh->get_coords(it->second);
+
+        q[0] += nm[0]*x[0] + nm[1]*x[1] + nm[2]*x[2];
+        q[1] += nm[1]*x[0] + nm[3]*x[1] + nm[4]*x[2];
+        q[2] += nm[2]*x[0] + nm[4]*x[1] + nm[6]*x[2];
+
+        A[0] += nm[0]; A[1] += nm[1]; A[2] += nm[2];
+        A[4] += nm[3]; A[5] += nm[4];
+        A[8] += nm[6];
+      }
+      A[3] = A[1];
+      A[6] = A[2];
+      A[7] = A[5];
+
+      // Want to solve the system Ap=q to find the new position, p.
+      Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+      A.svd().solve(q, &b);
+
+      for(int i=0;i<3;i++){
+        nc[i] += b[i];
+        _mesh->_coords[cid*3+i] = nc[i];
+      }
+
+      // Interpolate metric at new location
+      real_t l[]={-1, -1, -1, -1};
+      int best_e=-1;
+      real_t tol=-1;
+
+      const index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
+      for(int i=0; i<8; ++i){
+        const real_t *x0 = _mesh->get_coords(welements[i][0]);
+        const real_t *x1 = _mesh->get_coords(welements[i][1]);
+        const real_t *x2 = _mesh->get_coords(welements[i][2]);
+        const real_t *x3 = _mesh->get_coords(welements[i][3]);
+
+        real_t L = property->volume(x0, x1, x2, x3);
+
+        real_t ll[4];
+        ll[0] = property->volume(nc, x1, x2, x3)/L;
+        ll[1] = property->volume(x0, nc, x2, x3)/L;
+        ll[2] = property->volume(x0, x1, nc, x3)/L;
+        ll[3] = property->volume(x0, x1, x2, nc)/L;
+
+        real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
+        if(best_e==-1){
+          tol = min_l;
+          best_e = i;
+          for(int j=0;j<nloc;++j)
+            l[j] = ll[j];
+        }else{
+          if(min_l>tol){
+            tol = min_l;
+            best_e = i;
+            for(int j=0;j<nloc;++j)
+              l[j] = ll[j];
+          }
+        }
+      }
+
+      const index_t *best_nodes = welements[best_e];
+
+      for(size_t i=0;i<msize;i++)
+        _mesh->metric[cid*6+i] = l[0]*_mesh->metric[best_nodes[0]*msize+i]+
+                                 l[1]*_mesh->metric[best_nodes[1]*msize+i]+
+                                 l[2]*_mesh->metric[best_nodes[2]*msize+i]+
+                                 l[3]*_mesh->metric[best_nodes[3]*msize+i];
+
+      // Finally, assign a gnn and owner
+      if(nprocs>1){
+        int owner = nprocs;
+        const index_t* n = _mesh->get_element(eid);
+        for(int j=0; j<nloc; ++j)
+          owner = std::min(owner, _mesh->node_owner[n[j]]);
+
+        _mesh->node_owner[cid] = owner;
+
+        if(_mesh->node_owner[cid] == rank)
+          _mesh->lnn2gnn[cid] = _mesh->gnn_offset+cid;
       }
     }
   }
