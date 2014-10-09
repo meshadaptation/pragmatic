@@ -25,7 +25,7 @@ DOI: [10.1016/j.procs.2012.04.166](http://dx.doi.org/10.1016/j.procs.2012.04.166
 DOI: [10.1007/978-3-642-23397-5_38](http://dx.doi.org/10.1007/978-3-642-23397-5_38)
 
 # Build
-$ ./configure
+$ cmake .
 $ make
 
 # Testing
