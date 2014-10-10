@@ -185,7 +185,7 @@ public:
     }
     
     // Halo update if parallel
-    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+    halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
 
@@ -239,7 +239,7 @@ public:
     }
     
     // Halo update if parallel
-    halo_update<double, 3>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+    halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 

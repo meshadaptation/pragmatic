@@ -74,7 +74,7 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.1);
+  metric_field.add_field(&(psi[0]), 0.0477125);
   metric_field.update_mesh();
   
   Refine<double,3> adapt(*mesh);
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
     mesh->verify();
 
   mesh->defragment();
-  
+
   VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
    
   if(verbose){

@@ -98,6 +98,9 @@ template<typename real_t, int dim> class Refine{
     splitCnt.resize(nthreads);
 
     def_ops = new DeferredOperations<real_t>(_mesh, nthreads, defOp_scaling_factor);
+
+    cidRecv_additional.resize(nprocs);
+    cidSend_additional.resize(nprocs);
   }
 
   /// Default destructor.
@@ -370,8 +373,10 @@ template<typename real_t, int dim> class Refine{
               _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
           }
 
-          _mesh->clear_invisible(invisible_vertices);
-          _mesh->trim_halo();
+          if(dim==2){
+            _mesh->clear_invisible(invisible_vertices);
+            _mesh->trim_halo();
+          }
         }
       }
 #endif
@@ -423,6 +428,51 @@ template<typename real_t, int dim> class Refine{
         }
       }
 
+      if(dim==3){
+#ifdef HAVE_MPI
+        // Update halo for centroidal vertices.
+        if(nprocs>1){
+#pragma omp single
+          {
+            // Append vertices in cidRecv_additional and cidSend_additional to recv and send.
+            // Mark how many vertices are added to each of these vectors.
+            std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
+
+            for(int i=0;i<nprocs;++i){
+              recv_cnt[i] = cidRecv_additional[i].size();
+              for(typename std::set<Wedge>::const_iterator it=cidRecv_additional[i].begin();it!=cidRecv_additional[i].end();++it){
+                _mesh->recv[i].push_back(it->cid);
+                _mesh->recv_halo.insert(it->cid);
+              }
+
+              send_cnt[i] = cidSend_additional[i].size();
+              for(typename std::set<Wedge>::const_iterator it=cidSend_additional[i].begin();it!=cidSend_additional[i].end();++it){
+                _mesh->send[i].push_back(it->cid);
+                _mesh->send_halo.insert(it->cid);
+              }
+            }
+
+            // Update global numbering
+            _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+
+            // Now that the global numbering has been updated, update send_map and recv_map.
+            for(int i=0;i<nprocs;++i){
+              for(typename std::set<Wedge>::const_iterator it=cidRecv_additional[i].begin();it!=cidRecv_additional[i].end();++it)
+                _mesh->recv_map[i][_mesh->lnn2gnn[it->cid]] = it->cid;
+
+              for(typename std::set<Wedge>::const_iterator it=cidSend_additional[i].begin();it!=cidSend_additional[i].end();++it)
+                _mesh->send_map[i][_mesh->lnn2gnn[it->cid]] = it->cid;
+
+              cidRecv_additional[i].clear();
+              cidSend_additional[i].clear();
+            }
+
+            _mesh->trim_halo();
+          }
+        }
+#endif
+      }
+
       if(dim==2){
 #if !defined NDEBUG
 #pragma omp barrier
@@ -461,6 +511,9 @@ template<typename real_t, int dim> class Refine{
 
 #pragma omp for schedule(guided)
         for(int i=0; i<NElements; i++){
+          if(_mesh->_ENList[i*nloc] == -1)
+            continue;
+
           index_t n0 = _mesh->_ENList[i*nloc];
           index_t n1 = _mesh->_ENList[i*nloc + 1];
           index_t n2 = _mesh->_ENList[i*nloc + 2];
@@ -486,6 +539,9 @@ template<typename real_t, int dim> class Refine{
         }
       }
     }
+
+    std::bitset<16> y(encountered);
+    std::cout << y << std::endl;
   }
 
  private:
@@ -820,6 +876,7 @@ template<typename real_t, int dim> class Refine{
       if(refine_cnt==0){
         // No refinement - continue to next element.
       }else if(refine_cnt==1){
+        encountered |= 1;
         // Find the opposite edge
         index_t oe[2];
         for(int j=0, pos=0;j<4;j++)
@@ -863,6 +920,7 @@ template<typename real_t, int dim> class Refine{
 
         int n0=splitEdges[0].connected(splitEdges[1]);
         if(n0>=0){
+          encountered |= 1<<1;
           // Case 2(a).
           int n1 = (n0 == splitEdges[0].edge.first) ? splitEdges[0].edge.second : splitEdges[0].edge.first;
           int n2 = (n0 == splitEdges[1].edge.first) ? splitEdges[1].edge.second : splitEdges[1].edge.first;
@@ -881,14 +939,16 @@ template<typename real_t, int dim> class Refine{
               _mesh->NNList[splitEdges[0].id].end(), n2);
           if(p != _mesh->NNList[splitEdges[0].id].end()){
             diagonal.edge.first = splitEdges[0].id;
-            diagonal.edge.second = n[2];
+            diagonal.edge.second = n2;
             offdiagonal.edge.first = splitEdges[1].id;
-            offdiagonal.edge.second = n[1];
+            offdiagonal.edge.second = n1;
           }else{
+            assert(std::find(_mesh->NNList[splitEdges[1].id].begin(),
+                _mesh->NNList[splitEdges[1].id].end(), n1) != _mesh->NNList[splitEdges[1].id].end());
             diagonal.edge.first = splitEdges[1].id;
-            diagonal.edge.second = n[1];
+            diagonal.edge.second = n1;
             offdiagonal.edge.first = splitEdges[0].id;
-            offdiagonal.edge.second = n[0];
+            offdiagonal.edge.second = n2;
           }
 
           const int ele0[] = {n0, splitEdges[0].id, splitEdges[1].id, n3};
@@ -908,8 +968,8 @@ template<typename real_t, int dim> class Refine{
           def_ops->addNE_fix(diagonal.edge.first, ele2ID, tid);
 
           def_ops->remNE(diagonal.edge.second, eid, tid);
-          def_ops->addNE_fix(diagonal.edge.first, ele1ID, tid);
-          def_ops->addNE_fix(diagonal.edge.first, ele2ID, tid);
+          def_ops->addNE_fix(diagonal.edge.second, ele1ID, tid);
+          def_ops->addNE_fix(diagonal.edge.second, ele2ID, tid);
 
           def_ops->addNE(offdiagonal.edge.first, eid, tid);
           def_ops->addNE_fix(offdiagonal.edge.first, ele1ID, tid);
@@ -917,7 +977,6 @@ template<typename real_t, int dim> class Refine{
           def_ops->remNE(offdiagonal.edge.second, eid, tid);
           def_ops->addNE_fix(offdiagonal.edge.second, ele2ID, tid);
 
-          def_ops->remNE(n3, eid, tid);
           def_ops->addNE_fix(n3, ele1ID, tid);
           def_ops->addNE_fix(n3, ele2ID, tid);
 
@@ -927,6 +986,7 @@ template<typename real_t, int dim> class Refine{
           splitCnt[tid] += 2;
         }else{
           // Case 2(b).
+          encountered |= 1<<2;
           const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
           const int ele1[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.second, splitEdges[1].id};
           const int ele2[] = {splitEdges[0].edge.second, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
@@ -941,6 +1001,9 @@ template<typename real_t, int dim> class Refine{
           ele1ID = splitCnt[tid];
           ele2ID = ele1ID+1;
           ele3ID = ele1ID+2;
+
+          def_ops->addNN(splitEdges[0].id, splitEdges[1].id, tid);
+          def_ops->addNN(splitEdges[1].id, splitEdges[0].id, tid);
 
           def_ops->addNE(splitEdges[0].id, eid, tid);
           def_ops->addNE_fix(splitEdges[0].id, ele1ID, tid);
@@ -994,6 +1057,7 @@ template<typename real_t, int dim> class Refine{
 
         if(nshared==3){
           // Case 3(a).
+          encountered |= 1<<3;
           index_t m[] = {-1, -1, -1, -1, -1, -1, -1};
 
           m[0] = splitEdges[0].edge.first;
@@ -1065,12 +1129,13 @@ template<typename real_t, int dim> class Refine{
           splitCnt[tid] += 3;
         }else if(nshared==1){
           // Case 3(b).
+          encountered |= 1<<4;
 
           // Find the three bottom vertices, i.e. vertices of
           // the original elements which are part of the wedge.
           index_t top_vertex = *shared.begin();
           index_t bottom_triangle[3], top_triangle[3];
-          for(int j=0; j<3; ++n){
+          for(int j=0; j<3; ++j){
             if(splitEdges[j].edge.first != top_vertex){
               bottom_triangle[j] = splitEdges[j].edge.first;
             }else{
@@ -1155,6 +1220,7 @@ template<typename real_t, int dim> class Refine{
           switch(diagonals.size()){
           case 0:{
             // Case 3(c)(2)
+            encountered |= 1<<5;
             const int ele0[] = {middleZ->edge.first, topZ->id, bottomZ->id, bottomZ->edge.first};
             const int ele1[] = {middleZ->id, middleZ->edge.first, topZ->id, bottomZ->id};
             const int ele2[] = {topZ->id, topZ->edge.second, bottomZ->id, bottomZ->edge.first};
@@ -1213,6 +1279,7 @@ template<typename real_t, int dim> class Refine{
           }
           case 1:{
             // Case 3(c)(3)
+            encountered |= 1<<6;
 
             // Re-arrange topZ and bottomZ if necessary; make topZ point to the
             // splitEdge for which edge.second is connected to middleZ->top.
@@ -1294,6 +1361,7 @@ template<typename real_t, int dim> class Refine{
           }
           case 2:{
             // Case 3(c)(1)
+            encountered |= 1<<7;
             const int ele0[] = {middleZ->id, bottomZ->edge.first, middleZ->edge.first, topZ->id};
             const int ele1[] = {middleZ->id, bottomZ->edge.first, topZ->id, topZ->edge.second};
             const int ele2[] = {middleZ->id, bottomZ->id, bottomZ->edge.first, topZ->edge.second};
@@ -1379,9 +1447,9 @@ template<typename real_t, int dim> class Refine{
 
           // Re-arrange p[] so that p[0] points to the
           // split edge which is not connected to p[3].
-          if(p[3]->connected(*p[0])){
+          if(p[3]->connected(*p[0]) >= 0){
             for(int j=1; j<3; ++j){
-              if(!p[3]->connected(*p[j])){
+              if(p[3]->connected(*p[j]) < 0){
                 DirectedEdge<index_t> *swap = p[j];
                 p[j] = p[0];
                 p[0] = swap;
@@ -1401,6 +1469,7 @@ template<typename real_t, int dim> class Refine{
           // Same for p[1] and p[2]; make edge.first = p[3]->edge.first.
           for(int j=1; j<=2; ++j)
             if(p[j]->edge.first != p[3]->edge.first){
+              assert(p[j]->edge.second == p[3]->edge.first);
               p[j]->edge.second = p[j]->edge.first;
               p[j]->edge.first = p[3]->edge.first;
             }
@@ -1425,6 +1494,7 @@ template<typename real_t, int dim> class Refine{
           switch(diagonals.size()){
           case 0:{
             // Case 4(a)(1)
+            encountered |= 1<<8;
             const int ele0[] = {p[0]->id, p[1]->edge.second, p[1]->id, p[3]->edge.second};
             const int ele1[] = {p[0]->id, p[1]->id, p[2]->id, p[3]->edge.second};
             const int ele2[] = {p[0]->id, p[2]->id, p[2]->edge.second, p[3]->edge.second};
@@ -1480,6 +1550,7 @@ template<typename real_t, int dim> class Refine{
           }
           case 1:{
             // Case 4(a)(2)
+            encountered |= 1<<9;
 
             // Swap p[1] and p[2] if necessary so that p[2]->edge.second
             // is the ending point of the diagonal bisecting the trapezoid.
@@ -1511,6 +1582,9 @@ template<typename real_t, int dim> class Refine{
             ele3ID = ele1ID+2;
             ele4ID = ele1ID+3;
             ele5ID = ele1ID+4;
+
+            def_ops->addNN(p[0]->id, p[3]->id, tid);
+            def_ops->addNN(p[3]->id, p[0]->id, tid);
 
             def_ops->remNE(p[2]->edge.first, eid, tid);
             def_ops->addNE_fix(p[2]->edge.first, ele5ID, tid);
@@ -1554,6 +1628,7 @@ template<typename real_t, int dim> class Refine{
           }
           case 2:{
             // Case 4(a)(3)
+            encountered |= 1<<10;
 
             const int ele0[] = {p[1]->edge.first, p[1]->id, p[2]->id, p[3]->id};
             const int ele1[] = {p[3]->id, p[1]->edge.second, p[0]->id, p[3]->edge.second};
@@ -1575,6 +1650,10 @@ template<typename real_t, int dim> class Refine{
             ele3ID = ele1ID+2;
             ele4ID = ele1ID+3;
             ele5ID = ele1ID+4;
+
+            def_ops->addNN(p[0]->id, p[3]->id, tid);
+            def_ops->addNN(p[3]->id, p[0]->id, tid);
+
 
             def_ops->remNE(p[1]->edge.second, eid, tid);
             def_ops->addNE_fix(p[1]->edge.second, ele1ID, tid);
@@ -1626,6 +1705,7 @@ template<typename real_t, int dim> class Refine{
         }
         case 4:{
           // Case 4(b)
+          encountered |= 1<<11;
           // In this case, the element is split into two wedges.
 
           // Find the top left, top right, bottom left and
@@ -1663,7 +1743,7 @@ template<typename real_t, int dim> class Refine{
 
           // Find bottom right
           for(int j=1; j<4; ++j){
-            if(splitEdges[j].contains(bl->edge.first)){
+            if(splitEdges[j].contains(bl->edge.first) && &splitEdges[j] != bl){
               br = &splitEdges[j];
               break;
             }
@@ -1732,14 +1812,14 @@ template<typename real_t, int dim> class Refine{
           DirectedEdge<index_t> bw, tw;
           bool flex_bottom, flex_top;
 
-          if(bw1.connected(bw2)){
+          if(bw1.connected(bw2) >= 0){
             flex_bottom = true;
           }else{
             flex_bottom = false;
             bw.edge.first = bw1.edge.first;
             bw.edge.second = bw2.edge.first;
           }
-          if(tw1.connected(tw2)){
+          if(tw1.connected(tw2) >= 0){
             flex_top = true;
           }else{
             flex_top = false;
@@ -1837,6 +1917,7 @@ template<typename real_t, int dim> class Refine{
           break;
         }
       }else if(refine_cnt==5){
+        encountered |= 1<<12;
         // Find the unsplit edge
         int adj_cnt[] = {0, 0, 0, 0};
         for(int j=0; j<nloc; ++j){
@@ -1856,7 +1937,7 @@ template<typename real_t, int dim> class Refine{
         // Find the opposite edge
         DirectedEdge<index_t> *oe;
         for(int k=0; k<5; ++k)
-          if(splitEdges[k].contains(ue[0]) && splitEdges[k].contains(ue[1])){
+          if(!splitEdges[k].contains(ue[0]) && !splitEdges[k].contains(ue[1])){
             // Swap splitEdges[k] with splitEdges[4]
             if(k!=4){
               DirectedEdge<index_t> swap = splitEdges[4];
@@ -1870,6 +1951,13 @@ template<typename real_t, int dim> class Refine{
         // Like in 4(b), find tl, tr, bl and br
         DirectedEdge<index_t> *tr, *tl, *br, *bl;
         tl = &splitEdges[0];
+
+        // Flip tl if necessary so that tl->edge.first is part of the unsplit edge
+        if(oe->contains(tl->edge.first)){
+          index_t swap = tl->edge.second;
+          tl->edge.second = tl->edge.first;
+          tl->edge.first = swap;
+        }
 
         // Find top right
         for(int j=1; j<4; ++j){
@@ -1901,7 +1989,7 @@ template<typename real_t, int dim> class Refine{
 
         // Find bottom right
         for(int j=1; j<4; ++j){
-          if(splitEdges[j].contains(bl->edge.first)){
+          if(splitEdges[j].contains(bl->edge.first) && &splitEdges[j] != bl){
             br = &splitEdges[j];
             break;
           }
@@ -1914,7 +2002,7 @@ template<typename real_t, int dim> class Refine{
         }
 
         assert(tr->edge.second == br->edge.second);
-        assert(oe->contains(tr->edge.first) && oe->contains(tr->edge.second));
+        assert(oe->contains(tl->edge.second) && oe->contains(tr->edge.second));
 
         // Find how the trapezoids have been split:
         // 1) From tl->id to bl->edge.first or from bl->id to tl->edge.first?
@@ -1941,7 +2029,7 @@ template<typename real_t, int dim> class Refine{
         }
 
         DirectedEdge<index_t> diag, cross_diag;
-        if(q1.connected(q2)){
+        if(q1.connected(q2) >= 0){
           // We are flexible in choosing how the third quadrilateral
           // will be split and we will choose the shortest diagonal.
           real_t ldiag1 = _mesh->calc_edge_length(tl->id, br->id);
@@ -1966,9 +2054,6 @@ template<typename real_t, int dim> class Refine{
           cross_diag.edge.second = (diag.edge.first == tl->id ? bl->id : tl->id);
         }
 
-        def_ops->addNN(diag.edge.first, diag.edge.second, tid);
-        def_ops->addNN(diag.edge.second, diag.edge.first, tid);
-
         index_t bottom_triangle[] = {br->id, br->edge.first, bl->id};
         index_t top_triangle[] = {tr->id, tr->edge.first, tl->id};
         int bwedge[] = {b[bl->edge.second], b[br->edge.second], 0, b[bl->edge.first], b[tl->edge.first]};
@@ -1988,6 +2073,9 @@ template<typename real_t, int dim> class Refine{
         ele1ID = splitCnt[tid];
         ele2ID = ele1ID+1;
         ele3ID = ele1ID+2;
+
+        def_ops->addNN(diag.edge.first, diag.edge.second, tid);
+        def_ops->addNN(diag.edge.second, diag.edge.first, tid);
 
         def_ops->remNE(tr->edge.first, eid, tid);
         def_ops->remNE(br->edge.first, eid, tid);
@@ -2018,6 +2106,7 @@ template<typename real_t, int dim> class Refine{
         append_element(ele3, ele3_boundary, tid);
         splitCnt[tid] += 3;
       }else if(refine_cnt==6){
+        encountered |= 1<<13;
         /*
          * There is an internal edge in this case. We choose the shortest among:
          * a) newVertex[0] - newVertex[5]
@@ -2220,6 +2309,7 @@ template<typename real_t, int dim> class Refine{
 
     if(!diag_shared.empty()){
       assert(diag_shared.size() == 2);
+      encountered |= 1<<14;
       // Here we can subdivide the wedge into 3 tetrahedra.
 
       // Find the "middle" diagonal, i.e. the one which
@@ -2250,19 +2340,24 @@ template<typename real_t, int dim> class Refine{
        * 1 element is formed by the four vertices of two disjoint diagonals.
        */
       index_t v_top, v_bottom;
+      std::set<index_t> NNFirst, NNSecond, NNNST, NNNSB;
+      NNFirst.insert(_mesh->NNList[diagonals[middle].edge.first].begin(), _mesh->NNList[diagonals[middle].edge.first].end());
+      NNSecond.insert(_mesh->NNList[diagonals[middle].edge.second].begin(), _mesh->NNList[diagonals[middle].edge.second].end());
+      NNNST.insert(_mesh->NNList[non_shared_top].begin(), _mesh->NNList[non_shared_top].end());
+      NNNSB.insert(_mesh->NNList[non_shared_bottom].begin(), _mesh->NNList[non_shared_bottom].end());
+
       std::set<index_t> intersection0, intersection1;
-      std::set_intersection(_mesh->NNList[diagonals[middle].edge.first].begin(),
-          _mesh->NNList[diagonals[middle].edge.first].end(), _mesh->NNList[diagonals[middle].edge.second].begin(),
-          _mesh->NNList[diagonals[middle].edge.second].end(), std::inserter(intersection0, intersection0.begin()));
-      std::set_intersection(_mesh->NNList[non_shared_top].begin(), _mesh->NNList[non_shared_top].end(),
-          intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
+      std::set_intersection(NNFirst.begin(), NNFirst.end(), NNSecond.begin(),
+          NNSecond.end(), std::inserter(intersection0, intersection0.begin()));
+      std::set_intersection(NNNST.begin(), NNNST.end(), intersection0.begin(),
+          intersection0.end(), std::inserter(intersection1, intersection1.begin()));
       intersection1.erase(non_shared_bottom);
       assert(intersection1.size()==1);
       v_top = *intersection1.begin();
 
       intersection1.clear();
-      std::set_intersection(_mesh->NNList[non_shared_bottom].begin(), _mesh->NNList[non_shared_bottom].end(),
-          intersection0.begin(), intersection0.end(), std::inserter(intersection1, intersection1.begin()));
+      std::set_intersection(NNNSB.begin(), NNNSB.end(), intersection0.begin(),
+          intersection0.end(), std::inserter(intersection1, intersection1.begin()));
       intersection1.erase(non_shared_top);
       assert(intersection1.size()==1);
       v_bottom = *intersection1.begin();
@@ -2323,6 +2418,7 @@ template<typename real_t, int dim> class Refine{
        * formed via the bisection of the 3 quadrilaterals of the wedge, 2 are
        * the top and bottom triangles and the centroidal vertex.
        */
+      encountered |= 1<<15;
 
       // Allocate space for the centroid vertex
       index_t cid = pragmatic_omp_atomic_capture(&_mesh->NNodes, 1);
@@ -2358,6 +2454,8 @@ template<typename real_t, int dim> class Refine{
       for(int j=0; j<3; ++j){
         _mesh->NNList[cid].push_back(top_triangle[j]);
         _mesh->NNList[cid].push_back(bottom_triangle[j]);
+        def_ops->addNN(top_triangle[j], cid, tid);
+        def_ops->addNN(bottom_triangle[j], cid, tid);
       }
 
       def_ops->addNE_fix(cid, ele1ID, tid);
@@ -2497,7 +2595,10 @@ template<typename real_t, int dim> class Refine{
                                  l[3]*_mesh->metric[best_nodes[3]*msize+i];
 
       // Finally, assign a gnn and owner
-      if(nprocs>1){
+      if(nprocs == 1){
+        _mesh->node_owner[cid] = 0;
+        _mesh->lnn2gnn[cid] = cid;
+      }else{
         int owner = nprocs;
         const index_t* n = _mesh->get_element(eid);
         for(int j=0; j<nloc; ++j)
@@ -2505,8 +2606,39 @@ template<typename real_t, int dim> class Refine{
 
         _mesh->node_owner[cid] = owner;
 
-        if(_mesh->node_owner[cid] == rank)
+        if(_mesh->node_owner[cid] != rank){
+          // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
+          // Only update them if the vertex is actually visible by *this* MPI process,
+          // i.e. if at least one of its neighbours is owned by *this* process.
+          for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[cid].begin(); neigh!=_mesh->NNList[cid].end(); ++neigh){
+            if(_mesh->is_owned_node(*neigh)){
+              Wedge gnn_wedge(bottom_triangle, top_triangle, cid, _mesh->lnn2gnn);
+#pragma omp critical
+              cidRecv_additional[_mesh->node_owner[cid]].insert(gnn_wedge);
+              break;
+            }
+          }
+        }else{
+          // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
+          // The latter is true only if all vertices of the original element were halo vertices.
+          if(_mesh->is_halo_node(n[0]) && _mesh->is_halo_node(n[1]) && _mesh->is_halo_node(n[2]) && _mesh->is_halo_node(n[3])){
+            // Find which processes see this vertex
+            std::set<int> processes;
+            for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[cid].begin(); neigh!=_mesh->NNList[cid].end(); ++neigh)
+              processes.insert(_mesh->node_owner[*neigh]);
+
+            processes.erase(rank);
+
+            Wedge gnn_wedge(bottom_triangle, top_triangle, cid, _mesh->lnn2gnn);
+            for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
+#pragma omp critical
+              cidSend_additional[*proc].insert(gnn_wedge);
+            }
+          }
+
+          // Finally, assign a gnn
           _mesh->lnn2gnn[cid] = _mesh->gnn_offset+cid;
+        }
       }
     }
   }
@@ -2569,6 +2701,39 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
+  // Struct containing gnn's of the six vertices comprising a wedge. It is only
+  // to be used for consistent sorting of centroidal vertices across MPI processes.
+  struct Wedge{
+    std::set<index_t> gnn;
+    index_t cid;
+
+    Wedge(const index_t bottom[], const index_t top[], const index_t lnn, std::vector<index_t>& lnn2gnn){
+      for(int j=0; j<3; ++j){
+        gnn.insert(lnn2gnn[bottom[j]]);
+        gnn.insert(lnn2gnn[top[j]]);
+      }
+
+      cid = lnn;
+    }
+
+    /// Less-than operator
+    bool operator<(const Wedge& in) const{
+      bool isLess;
+
+      for(std::set<index_t>::const_iterator it1=this->gnn.begin(), it2=in.gnn.begin();
+          it1 != this->gnn.end() || it2 != in.gnn.end(); ++it1, ++it2)
+        if(*it1 < *it2){
+          isLess = true;
+          break;
+        }
+        else if(*it2 < *it1){
+          isLess = false;
+        }
+
+      return isLess;
+    }
+  };
+
   std::vector< std::vector< DirectedEdge<index_t> > > newVertices;
   std::vector< std::vector<real_t> > newCoords;
   std::vector< std::vector<double> > newMetric;
@@ -2578,6 +2743,7 @@ template<typename real_t, int dim> class Refine{
 
   std::vector<size_t> threadIdx, splitCnt;
   std::vector< DirectedEdge<index_t> > allNewVertices;
+  std::vector< std::set<Wedge> > cidRecv_additional, cidSend_additional;
 
   DeferredOperations<real_t>* def_ops;
   static const int defOp_scaling_factor = 32;
@@ -2587,6 +2753,8 @@ template<typename real_t, int dim> class Refine{
 
   static const size_t ndims=dim, nloc=(dim+1), msize=(dim==2?3:6), nedge=(dim==2?3:6);
   int nprocs, rank, nthreads;
+
+  unsigned short encountered=0;
 };
 
 
