@@ -2357,12 +2357,11 @@ template<typename real_t, int dim> class Refine{
 
   void refine_wedge(const index_t top_triangle[], const index_t bottom_triangle[],
       const int bndr[], DirectedEdge<index_t>* third_diag, int eid, int tid){
-
     /*
-     * b[] must contain the boundary values for each side of the wedge:
-     * b[0], b[1] and b[2]: Boundary values of Side0, Side1 and Side2
-     * b[3]: Boundary value of top triangle
-     * b[4]: Boundary value of bottom triangle
+     * bndr[] must contain the boundary values for each side of the wedge:
+     * bndr[0], bndr[1] and bndr[2]: Boundary values of Side0, Side1 and Side2
+     * bndr[3]: Boundary value of top triangle
+     * bndr[4]: Boundary value of bottom triangle
      */
 
     /*
@@ -2547,23 +2546,23 @@ template<typename real_t, int dim> class Refine{
       // Allocate space for the centroidal vertex
       index_t cid = pragmatic_omp_atomic_capture(&_mesh->NNodes, 1);
 
-      const int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
-      const int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
-      const int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
-      const int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
-      const int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
-      const int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
-      const int ele7[] = {top_triangle[0], top_triangle[1], top_triangle[2], cid};
-      const int ele8[] = {cid, bottom_triangle[0], bottom_triangle[2], bottom_triangle[1]};
+      int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
+      int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
+      int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
+      int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
+      int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
+      int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
+      int ele7[] = {top_triangle[0], top_triangle[1], top_triangle[2], cid};
+      int ele8[] = {bottom_triangle[0], bottom_triangle[2], bottom_triangle[1], cid};
 
-      const int ele1_boundary[] = {0, 0, 0, bndr[0]};
-      const int ele2_boundary[] = {0, 0, 0, bndr[0]};
-      const int ele3_boundary[] = {0, 0, 0, bndr[1]};
-      const int ele4_boundary[] = {0, 0, 0, bndr[1]};
-      const int ele5_boundary[] = {0, 0, 0, bndr[2]};
-      const int ele6_boundary[] = {0, 0, 0, bndr[2]};
-      const int ele7_boundary[] = {0, 0, 0, bndr[3]};
-      const int ele8_boundary[] = {bndr[4], 0, 0, 0};
+      int ele1_boundary[] = {0, 0, 0, bndr[0]};
+      int ele2_boundary[] = {0, 0, 0, bndr[0]};
+      int ele3_boundary[] = {0, 0, 0, bndr[1]};
+      int ele4_boundary[] = {0, 0, 0, bndr[1]};
+      int ele5_boundary[] = {0, 0, 0, bndr[2]};
+      int ele6_boundary[] = {0, 0, 0, bndr[2]};
+      int ele7_boundary[] = {0, 0, 0, bndr[3]};
+      int ele8_boundary[] = {0, 0, 0, bndr[4]};
 
       index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID, ele6ID, ele7ID, ele8ID;
       ele1ID = splitCnt[tid];
@@ -2620,16 +2619,6 @@ template<typename real_t, int dim> class Refine{
       def_ops->addNE_fix(ghostDiagonals[2].edge.first, ele5ID, tid);
       def_ops->addNE_fix(ghostDiagonals[2].edge.second, ele6ID, tid);
 
-      append_element(ele1, ele1_boundary, tid);
-      append_element(ele2, ele2_boundary, tid);
-      append_element(ele3, ele3_boundary, tid);
-      append_element(ele4, ele4_boundary, tid);
-      append_element(ele5, ele5_boundary, tid);
-      append_element(ele6, ele6_boundary, tid);
-      append_element(ele7, ele7_boundary, tid);
-      append_element(ele8, ele8_boundary, tid);
-      splitCnt[tid] += 8;
-
       // Sort all 6 vertices of the wedge by ascending gnn
       // Need to do so to enforce consistency across MPI processes
       std::map<index_t, index_t> gnn2lnn;
@@ -2638,14 +2627,52 @@ template<typename real_t, int dim> class Refine{
         gnn2lnn[_mesh->lnn2gnn[top_triangle[j]]] = top_triangle[j];
       }
 
-      // Calculate the coordinates of the centroidal vertex
-      // Start with a temporary location at one of the wedge's corners, e.g. *gnn2lnn.begin().
-      real_t nc[ndims]; // new coords
+      real_t nc[ndims] = {0.0, 0.0, 0.0}; // new coordinates
       double nm[msize]; // new metric
-      _mesh->get_coords(gnn2lnn.begin()->second, nc);
-      _mesh->get_metric(gnn2lnn.begin()->second, nm);
 
-      // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge.
+      // Calculate the coordinates of the centroidal vertex.
+      // We start with a temporary location at the euclidean barycentre of the wedge.
+      for(std::map<index_t, index_t>::const_iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it){
+        const real_t *x = _mesh->get_coords(it->second);
+        for(int j=0; j<ndims; ++j)
+          nc[j] += x[j];
+      }
+      for(int j=0; j<ndims; ++j)
+        nc[j] /= gnn2lnn.size();
+
+      // Interpolate metric at temporary location using the parent element's basis functions
+      std::map<index_t, index_t> parent_gnn2lnn;
+      const index_t* n = _mesh->get_element(eid);
+      for(int j=0; j<nloc; ++j)
+        parent_gnn2lnn[_mesh->lnn2gnn[n[j]]] = n[j];
+
+      std::vector<const real_t *> x;
+      std::vector<index_t> sorted_n;
+      for(std::map<index_t, index_t>::const_iterator it=parent_gnn2lnn.begin(); it!=parent_gnn2lnn.end(); ++it){
+        x.push_back(_mesh->get_coords(it->second));
+        sorted_n.push_back(it->second);
+      }
+
+      real_t L = property->volume(x[0], x[1], x[2], x[3]);
+
+      real_t ll[4];
+      ll[0] = property->volume(nc  , x[1], x[2], x[3])/L;
+      ll[1] = property->volume(x[0], nc  , x[2], x[3])/L;
+      ll[2] = property->volume(x[0], x[1], nc  , x[3])/L;
+      ll[3] = property->volume(x[0], x[1], x[2], nc  )/L;
+
+      for(int i=0; i<msize; i++){
+        nm[i] = ll[0] * _mesh->metric[sorted_n[0]*msize+i]+
+                ll[1] * _mesh->metric[sorted_n[1]*msize+i]+
+                ll[2] * _mesh->metric[sorted_n[2]*msize+i]+
+                ll[3] * _mesh->metric[sorted_n[3]*msize+i];
+      }
+
+      index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
+      int *wboundaries[] = {ele1_boundary, ele2_boundary, ele3_boundary, ele4_boundary,
+          ele5_boundary, ele6_boundary, ele7_boundary, ele8_boundary};
+
+      // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge in metric space.
       Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
           Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
       Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
@@ -2669,9 +2696,10 @@ template<typename real_t, int dim> class Refine{
       Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
       A.svd().solve(q, &b);
 
-      for(int i=0;i<3;i++){
+      for(int i=0; i<3; ++i){
         nc[i] += b[i];
         _mesh->_coords[cid*3+i] = nc[i];
+        assert(nc[i] >= 0.0 && nc[i] <= 1.0);
       }
 
       // Interpolate metric at new location
@@ -2679,7 +2707,6 @@ template<typename real_t, int dim> class Refine{
       int best_e=-1;
       real_t tol=-1;
 
-      const index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
       for(int i=0; i<8; ++i){
         const real_t *x0 = _mesh->get_coords(welements[i][0]);
         const real_t *x1 = _mesh->get_coords(welements[i][1]);
@@ -2687,6 +2714,25 @@ template<typename real_t, int dim> class Refine{
         const real_t *x3 = _mesh->get_coords(welements[i][3]);
 
         real_t L = property->volume(x0, x1, x2, x3);
+
+        assert(L!=0);
+
+        // Element might need to be flipped
+        if(L < 0){
+          index_t swap = welements[i][0];
+          welements[i][0] = welements[i][1];
+          welements[i][1] = swap;
+
+          int bswap = wboundaries[i][0];
+          wboundaries[i][0] = wboundaries[i][1];
+          wboundaries[i][1] = bswap;
+
+          L = -L;
+          x0 = _mesh->get_coords(welements[i][0]);
+          x1 = _mesh->get_coords(welements[i][1]);
+        }
+
+        assert(L>0);
 
         real_t ll[4];
         ll[0] = property->volume(nc, x1, x2, x3)/L;
@@ -2712,11 +2758,21 @@ template<typename real_t, int dim> class Refine{
 
       const index_t *best_nodes = welements[best_e];
 
-      for(size_t i=0;i<msize;i++)
-        _mesh->metric[cid*6+i] = l[0]*_mesh->metric[best_nodes[0]*msize+i]+
-                                 l[1]*_mesh->metric[best_nodes[1]*msize+i]+
-                                 l[2]*_mesh->metric[best_nodes[2]*msize+i]+
-                                 l[3]*_mesh->metric[best_nodes[3]*msize+i];
+      for(int i=0; i<msize; ++i)
+        _mesh->metric[cid*msize+i] = l[0]*_mesh->metric[best_nodes[0]*msize+i]+
+                                     l[1]*_mesh->metric[best_nodes[1]*msize+i]+
+                                     l[2]*_mesh->metric[best_nodes[2]*msize+i]+
+                                     l[3]*_mesh->metric[best_nodes[3]*msize+i];
+
+      append_element(ele1, ele1_boundary, tid);
+      append_element(ele2, ele2_boundary, tid);
+      append_element(ele3, ele3_boundary, tid);
+      append_element(ele4, ele4_boundary, tid);
+      append_element(ele5, ele5_boundary, tid);
+      append_element(ele6, ele6_boundary, tid);
+      append_element(ele7, ele7_boundary, tid);
+      append_element(ele8, ele8_boundary, tid);
+      splitCnt[tid] += 8;
 
       // Finally, assign a gnn and owner
       if(nprocs == 1){
@@ -2724,7 +2780,6 @@ template<typename real_t, int dim> class Refine{
         _mesh->lnn2gnn[cid] = cid;
       }else{
         int owner = nprocs;
-        const index_t* n = _mesh->get_element(eid);
         for(int j=0; j<nloc; ++j)
           owner = std::min(owner, _mesh->node_owner[n[j]]);
 

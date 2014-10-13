@@ -80,7 +80,7 @@ int main(int argc, char **argv){
   Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));
+  adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
   if(verbose)
