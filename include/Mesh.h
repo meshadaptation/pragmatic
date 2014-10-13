@@ -1186,7 +1186,7 @@ template<typename real_t> class Mesh{
           if(active_cnt!=local_NNList[i].size()){
             valid_nnlist=false;
 
-            std::cerr<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
+            std::cerr<<std::endl<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
             std::cerr<<"NNList["
                      <<i
                      <<"("

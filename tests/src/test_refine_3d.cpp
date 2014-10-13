@@ -74,13 +74,13 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.0477125);
+  metric_field.add_field(&(psi[0]), 0.001);
   metric_field.update_mesh();
   
   Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
   if(verbose)
