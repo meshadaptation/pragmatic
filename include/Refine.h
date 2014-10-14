@@ -132,6 +132,7 @@ template<typename real_t, int dim> class Refine{
   void refine(real_t L_max){
     size_t origNElements = _mesh->get_number_elements();
     size_t origNNodes = _mesh->get_number_nodes();
+    size_t edgeSplitCnt = 0;
 
 #pragma omp parallel
     {
@@ -191,6 +192,7 @@ template<typename real_t, int dim> class Refine{
           _mesh->node_owner.resize(_mesh->NNodes);
           _mesh->lnn2gnn.resize(_mesh->NNodes);
         }
+        edgeSplitCnt = _mesh->NNodes - origNNodes;
       }
 
       // Append new coords and metric to the mesh.
@@ -210,7 +212,7 @@ template<typename real_t, int dim> class Refine{
       // update NNList for all split edges.
 #pragma omp barrier
 #pragma omp for schedule(guided)
-      for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
+      for(size_t i=0; i<edgeSplitCnt; ++i){
         index_t vid = allNewVertices[i].id;
         index_t firstid = allNewVertices[i].edge.first;
         index_t secondid = allNewVertices[i].edge.second;
@@ -310,90 +312,6 @@ template<typename real_t, int dim> class Refine{
         }
       }
 
-#ifdef HAVE_MPI
-      // Update halo - we need to update the global node numbering here
-      // for those cases in 3D where centroidal vertices are introduced.
-      if(nprocs>1){
-#pragma omp single
-        {
-          std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
-          std::vector<index_t> invisible_vertices;
-
-          for(size_t i=0; i<_mesh->NNodes-origNNodes; ++i){
-            DirectedEdge<index_t> *vert = &allNewVertices[i];
-
-            if(_mesh->node_owner[vert->id] != rank){
-              // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-              // Only update them if the vertex is actually visible by *this* MPI process,
-              // i.e. if at least one of its neighbours is owned by *this* process.
-              bool visible = false;
-              for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
-                if(_mesh->is_owned_node(*neigh)){
-                  visible = true;
-                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                  recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
-                  break;
-                }
-              }
-              if(!visible)
-                invisible_vertices.push_back(vert->id);
-            }else{
-              // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
-              // The latter is true only if both vertices of the original edge were halo vertices.
-              if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
-                // Find which processes see this vertex
-                std::set<int> processes;
-                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
-                  processes.insert(_mesh->node_owner[*neigh]);
-
-                processes.erase(rank);
-
-                for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
-                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                  send_additional[*proc].insert(gnn_edge);
-                }
-              }
-            }
-          }
-
-          // Append vertices in recv_additional and send_additional to recv and send.
-          // Mark how many vertices are added to each of these vectors.
-          std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
-
-          for(int i=0;i<nprocs;++i){
-            recv_cnt[i] = recv_additional[i].size();
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
-              _mesh->recv[i].push_back(it->id);
-              _mesh->recv_halo.insert(it->id);
-            }
-
-            send_cnt[i] = send_additional[i].size();
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
-              _mesh->send[i].push_back(it->id);
-              _mesh->send_halo.insert(it->id);
-            }
-          }
-
-          // Update global numbering
-          _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
-
-          // Now that the global numbering has been updated, update send_map and recv_map.
-          for(int i=0;i<nprocs;++i){
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
-              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-
-            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
-              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-          }
-
-          if(dim==2){
-            _mesh->clear_invisible(invisible_vertices);
-            _mesh->trim_halo();
-          }
-        }
-      }
-#endif
-
       // Start element refinement.
       splitCnt[tid] = 0;
       newElements[tid].clear(); newBoundaries[tid].clear();
@@ -441,35 +359,101 @@ template<typename real_t, int dim> class Refine{
         }
       }
 
-      if(dim==3){
+      // Update halo.
 #ifdef HAVE_MPI
-        // Update halo for centroidal vertices.
-        if(nprocs>1){
+      if(nprocs>1){
 #pragma omp single
-          {
-            // Append vertices in cidRecv_additional and cidSend_additional to recv and send.
-            // Mark how many vertices are added to each of these vectors.
-            std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
+        {
+          std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
+          // The invisible_vertices concept needs more thought in 3D.
+          // I've commented it out for the time being.
+          //std::vector<index_t> invisible_vertices;
 
+          for(size_t i=0; i<edgeSplitCnt; ++i){
+            DirectedEdge<index_t> *vert = &allNewVertices[i];
+
+            if(_mesh->node_owner[vert->id] != rank){
+              // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
+              // Only update them if the vertex is actually visible by *this* MPI process,
+              // i.e. if at least one of its neighbours is owned by *this* process.
+              bool visible = false;
+              for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh){
+                if(_mesh->is_owned_node(*neigh)){
+                  visible = true;
+                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                  recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
+                  break;
+                }
+              }
+              //if(!visible)
+              //  invisible_vertices.push_back(vert->id);
+            }else{
+              // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
+              // The latter is true only if both vertices of the original edge were halo vertices.
+              if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)){
+                // Find which processes see this vertex
+                std::set<int> processes;
+                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
+                  processes.insert(_mesh->node_owner[*neigh]);
+
+                processes.erase(rank);
+
+                for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
+                  DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                  send_additional[*proc].insert(gnn_edge);
+                }
+              }
+            }
+          }
+
+          // Append vertices in recv_additional and send_additional to recv and send.
+          // Mark how many vertices are added to each of these vectors.
+          std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
+
+          for(int i=0;i<nprocs;++i){
+            recv_cnt[i] = recv_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it){
+              _mesh->recv[i].push_back(it->id);
+              _mesh->recv_halo.insert(it->id);
+            }
+
+            send_cnt[i] = send_additional[i].size();
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it){
+              _mesh->send[i].push_back(it->id);
+              _mesh->send_halo.insert(it->id);
+            }
+          }
+
+          // Additional code for centroidal vertices.
+          if(dim==3){
             for(int i=0;i<nprocs;++i){
-              recv_cnt[i] = cidRecv_additional[i].size();
+              recv_cnt[i] += cidRecv_additional[i].size();
               for(typename std::set<Wedge>::const_iterator it=cidRecv_additional[i].begin();it!=cidRecv_additional[i].end();++it){
                 _mesh->recv[i].push_back(it->cid);
                 _mesh->recv_halo.insert(it->cid);
               }
 
-              send_cnt[i] = cidSend_additional[i].size();
+              send_cnt[i] += cidSend_additional[i].size();
               for(typename std::set<Wedge>::const_iterator it=cidSend_additional[i].begin();it!=cidSend_additional[i].end();++it){
                 _mesh->send[i].push_back(it->cid);
                 _mesh->send_halo.insert(it->cid);
               }
             }
+          }
 
-            // Update global numbering
-            _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+          // Update global numbering
+          _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
 
-            // Now that the global numbering has been updated, update send_map and recv_map.
-            for(int i=0;i<nprocs;++i){
+          // Now that the global numbering has been updated, update send_map and recv_map.
+          for(int i=0;i<nprocs;++i){
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin();it!=recv_additional[i].end();++it)
+              _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+            for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin();it!=send_additional[i].end();++it)
+              _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+            // Additional code for centroidals.
+            if(dim==3){
               for(typename std::set<Wedge>::const_iterator it=cidRecv_additional[i].begin();it!=cidRecv_additional[i].end();++it)
                 _mesh->recv_map[i][_mesh->lnn2gnn[it->cid]] = it->cid;
 
@@ -479,15 +463,16 @@ template<typename real_t, int dim> class Refine{
               cidRecv_additional[i].clear();
               cidSend_additional[i].clear();
             }
-
-            _mesh->trim_halo();
           }
-        }
-#endif
-      }
 
-      if(dim==2){
+          //_mesh->clear_invisible(invisible_vertices);
+          _mesh->trim_halo();
+        }
+      }
+#endif
+
 #if !defined NDEBUG
+      if(dim==2){
 #pragma omp barrier
       // Fix orientations of new elements.
       size_t NElements = _mesh->get_number_elements();
@@ -514,47 +499,9 @@ template<typename real_t, int dim> class Refine{
             exit(-1);
           }
         }
-#endif
-      }else if(dim==3){
-#pragma omp barrier
-        // Fix orientations of new elements.
-        size_t NElements = _mesh->get_number_elements();
-
-        real_t *tcoords = &(_mesh->_coords[0]);
-
-#pragma omp for schedule(guided)
-        for(int i=0; i<NElements; i++){
-          if(_mesh->_ENList[i*nloc] == -1)
-            continue;
-
-          index_t n0 = _mesh->_ENList[i*nloc];
-          index_t n1 = _mesh->_ENList[i*nloc + 1];
-          index_t n2 = _mesh->_ENList[i*nloc + 2];
-          index_t n3 = _mesh->_ENList[i*nloc + 3];
-
-          const real_t *x0 = tcoords + n0*ndims;
-          const real_t *x1 = tcoords + n1*ndims;
-          const real_t *x2 = tcoords + n2*ndims;
-          const real_t *x3 = tcoords + n3*ndims;
-
-          real_t av = property->volume(x0, x1, x2, x3);
-
-          if(av<0){
-            // Flip element
-            _mesh->_ENList[i*nloc] = n1;
-            _mesh->_ENList[i*nloc+1] = n0;
-
-            // and boundary
-            int b0 = _mesh->boundary[i*nloc];
-            _mesh->boundary[i*nloc] = _mesh->boundary[i*nloc + 1];
-            _mesh->boundary[i*nloc + 1] = b0;
-          }
-        }
       }
+#endif
     }
-
-    //std::bitset<16> y(encountered);
-    //std::cout << y << std::endl;
   }
 
  private:
@@ -916,7 +863,6 @@ template<typename real_t, int dim> class Refine{
     for(int j=0; j<nloc; ++j)
       b[n[j]] = boundary[j];
 
-    //encountered |= 1;
     // Find the opposite edge
     index_t oe[2];
     for(int j=0, pos=0;j<4;j++)
@@ -974,7 +920,6 @@ template<typename real_t, int dim> class Refine{
        * Case 2(a) *
        *************
        */
-      //encountered |= 1<<1;
       int n1 = (n0 == splitEdges[0].edge.first) ? splitEdges[0].edge.second : splitEdges[0].edge.first;
       int n2 = (n0 == splitEdges[1].edge.first) ? splitEdges[1].edge.second : splitEdges[1].edge.first;
 
@@ -1043,7 +988,6 @@ template<typename real_t, int dim> class Refine{
        * Case 2(b) *
        *************
        */
-      //encountered |= 1<<2;
       const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
       const int ele1[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.second, splitEdges[1].id};
       const int ele2[] = {splitEdges[0].edge.second, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
@@ -1127,7 +1071,6 @@ template<typename real_t, int dim> class Refine{
        * Case 3(a) *
        *************
        */
-      //encountered |= 1<<3;
       index_t m[] = {-1, -1, -1, -1, -1, -1, -1};
 
       m[0] = splitEdges[0].edge.first;
@@ -1203,7 +1146,6 @@ template<typename real_t, int dim> class Refine{
        * Case 3(b) *
        *************
        */
-      //encountered |= 1<<4;
 
       // Find the three bottom vertices, i.e. vertices of
       // the original elements which are part of the wedge.
@@ -1298,7 +1240,6 @@ template<typename real_t, int dim> class Refine{
       switch(diagonals.size()){
       case 0:{
         // Case 3(c)(2)
-        //encountered |= 1<<5;
         const int ele0[] = {middleZ->edge.first, topZ->id, bottomZ->id, bottomZ->edge.first};
         const int ele1[] = {middleZ->id, middleZ->edge.first, topZ->id, bottomZ->id};
         const int ele2[] = {topZ->id, topZ->edge.second, bottomZ->id, bottomZ->edge.first};
@@ -1357,7 +1298,6 @@ template<typename real_t, int dim> class Refine{
       }
       case 1:{
         // Case 3(c)(3)
-        //encountered |= 1<<6;
 
         // Re-arrange topZ and bottomZ if necessary; make topZ point to the
         // splitEdge for which edge.second is connected to middleZ->top.
@@ -1439,7 +1379,6 @@ template<typename real_t, int dim> class Refine{
       }
       case 2:{
         // Case 3(c)(1)
-        //encountered |= 1<<7;
         const int ele0[] = {middleZ->id, bottomZ->edge.first, middleZ->edge.first, topZ->id};
         const int ele1[] = {middleZ->id, bottomZ->edge.first, topZ->id, topZ->edge.second};
         const int ele2[] = {middleZ->id, bottomZ->id, bottomZ->edge.first, topZ->edge.second};
@@ -1584,7 +1523,6 @@ template<typename real_t, int dim> class Refine{
       switch(diagonals.size()){
       case 0:{
         // Case 4(a)(1)
-        //encountered |= 1<<8;
         const int ele0[] = {p[0]->id, p[1]->edge.second, p[1]->id, p[3]->edge.second};
         const int ele1[] = {p[0]->id, p[1]->id, p[2]->id, p[3]->edge.second};
         const int ele2[] = {p[0]->id, p[2]->id, p[2]->edge.second, p[3]->edge.second};
@@ -1640,7 +1578,6 @@ template<typename real_t, int dim> class Refine{
       }
       case 1:{
         // Case 4(a)(2)
-        //encountered |= 1<<9;
 
         // Swap p[1] and p[2] if necessary so that p[2]->edge.second
         // is the ending point of the diagonal bisecting the trapezoid.
@@ -1717,8 +1654,6 @@ template<typename real_t, int dim> class Refine{
       }
       case 2:{
         // Case 4(a)(3)
-        //encountered |= 1<<10;
-
         const int ele0[] = {p[1]->edge.first, p[1]->id, p[2]->id, p[3]->id};
         const int ele1[] = {p[3]->id, p[1]->edge.second, p[0]->id, p[3]->edge.second};
         const int ele2[] = {p[3]->id, p[0]->id, p[2]->edge.second, p[3]->edge.second};
@@ -1795,7 +1730,7 @@ template<typename real_t, int dim> class Refine{
        * Case 4(b) *
        *************
        */
-      //encountered |= 1<<11;
+
       // In this case, the element is split into two wedges.
 
       // Find the top left, top right, bottom left and
@@ -2020,7 +1955,6 @@ template<typename real_t, int dim> class Refine{
     for(int j=0; j<nloc; ++j)
       b[n[j]] = boundary[j];
 
-    //encountered |= 1<<12;
     // Find the unsplit edge
     int adj_cnt[] = {0, 0, 0, 0};
     for(int j=0; j<nloc; ++j){
@@ -2218,7 +2152,6 @@ template<typename real_t, int dim> class Refine{
     for(int j=0; j<nloc; ++j)
       b[n[j]] = boundary[j];
 
-    //encountered |= 1<<13;
     /*
      * There is an internal edge in this case. We choose the shortest among:
      * a) newVertex[0] - newVertex[5]
@@ -2426,7 +2359,7 @@ template<typename real_t, int dim> class Refine{
        */
 
       assert(diag_shared.size() == 2);
-      //encountered |= 1<<14;
+
       // Here we can subdivide the wedge into 3 tetrahedra.
 
       // Find the "middle" diagonal, i.e. the one which
@@ -2541,28 +2474,27 @@ template<typename real_t, int dim> class Refine{
        * formed via the bisection of the 3 quadrilaterals of the wedge, 2 are
        * the top and bottom triangles and the centroidal vertex.
        */
-      //encountered |= 1<<15;
 
       // Allocate space for the centroidal vertex
       index_t cid = pragmatic_omp_atomic_capture(&_mesh->NNodes, 1);
 
-      int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
-      int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
-      int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
-      int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
-      int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
-      int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
-      int ele7[] = {top_triangle[0], top_triangle[1], top_triangle[2], cid};
-      int ele8[] = {bottom_triangle[0], bottom_triangle[2], bottom_triangle[1], cid};
+      const int ele1[] = {diagonals[0].edge.first, ghostDiagonals[0].edge.first, diagonals[0].edge.second, cid};
+      const int ele2[] = {diagonals[0].edge.first, diagonals[0].edge.second, ghostDiagonals[0].edge.second, cid};
+      const int ele3[] = {diagonals[1].edge.first, ghostDiagonals[1].edge.first, diagonals[1].edge.second, cid};
+      const int ele4[] = {diagonals[1].edge.first, diagonals[1].edge.second, ghostDiagonals[1].edge.second, cid};
+      const int ele5[] = {diagonals[2].edge.first, ghostDiagonals[2].edge.first, diagonals[2].edge.second, cid};
+      const int ele6[] = {diagonals[2].edge.first, diagonals[2].edge.second, ghostDiagonals[2].edge.second, cid};
+      const int ele7[] = {top_triangle[0], top_triangle[1], top_triangle[2], cid};
+      const int ele8[] = {bottom_triangle[0], bottom_triangle[2], bottom_triangle[1], cid};
 
-      int ele1_boundary[] = {0, 0, 0, bndr[0]};
-      int ele2_boundary[] = {0, 0, 0, bndr[0]};
-      int ele3_boundary[] = {0, 0, 0, bndr[1]};
-      int ele4_boundary[] = {0, 0, 0, bndr[1]};
-      int ele5_boundary[] = {0, 0, 0, bndr[2]};
-      int ele6_boundary[] = {0, 0, 0, bndr[2]};
-      int ele7_boundary[] = {0, 0, 0, bndr[3]};
-      int ele8_boundary[] = {0, 0, 0, bndr[4]};
+      const int ele1_boundary[] = {0, 0, 0, bndr[0]};
+      const int ele2_boundary[] = {0, 0, 0, bndr[0]};
+      const int ele3_boundary[] = {0, 0, 0, bndr[1]};
+      const int ele4_boundary[] = {0, 0, 0, bndr[1]};
+      const int ele5_boundary[] = {0, 0, 0, bndr[2]};
+      const int ele6_boundary[] = {0, 0, 0, bndr[2]};
+      const int ele7_boundary[] = {0, 0, 0, bndr[3]};
+      const int ele8_boundary[] = {0, 0, 0, bndr[4]};
 
       index_t ele1ID, ele2ID, ele3ID, ele4ID, ele5ID, ele6ID, ele7ID, ele8ID;
       ele1ID = splitCnt[tid];
@@ -2619,74 +2551,83 @@ template<typename real_t, int dim> class Refine{
       def_ops->addNE_fix(ghostDiagonals[2].edge.first, ele5ID, tid);
       def_ops->addNE_fix(ghostDiagonals[2].edge.second, ele6ID, tid);
 
-      // Sort all 6 vertices of the wedge by ascending gnn
-      // Need to do so to enforce consistency across MPI processes
-      std::map<index_t, index_t> gnn2lnn;
+      // Sort all 6 vertices of the wedge by their coordinates.
+      // Need to do so to enforce consistency across MPI processes.
+      std::map<Coords_t, index_t> coords_map;
       for(int j=0; j<3; ++j){
-        gnn2lnn[_mesh->lnn2gnn[bottom_triangle[j]]] = bottom_triangle[j];
-        gnn2lnn[_mesh->lnn2gnn[top_triangle[j]]] = top_triangle[j];
+        Coords_t cb(_mesh->get_coords(bottom_triangle[j]));
+        coords_map[cb] = bottom_triangle[j];
+        Coords_t ct(_mesh->get_coords(top_triangle[j]));
+        coords_map[ct] = top_triangle[j];
       }
 
-      real_t nc[ndims] = {0.0, 0.0, 0.0}; // new coordinates
+      real_t nc[] = {0.0, 0.0, 0.0}; // new coordinates
       double nm[msize]; // new metric
-
-      // Calculate the coordinates of the centroidal vertex.
-      // We start with a temporary location at the euclidean barycentre of the wedge.
-      for(std::map<index_t, index_t>::const_iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it){
-        const real_t *x = _mesh->get_coords(it->second);
-        for(int j=0; j<ndims; ++j)
-          nc[j] += x[j];
-      }
-      for(int j=0; j<ndims; ++j)
-        nc[j] /= gnn2lnn.size();
-
-      // Interpolate metric at temporary location using the parent element's basis functions
-      std::map<index_t, index_t> parent_gnn2lnn;
       const index_t* n = _mesh->get_element(eid);
-      for(int j=0; j<nloc; ++j)
-        parent_gnn2lnn[_mesh->lnn2gnn[n[j]]] = n[j];
 
-      std::vector<const real_t *> x;
-      std::vector<index_t> sorted_n;
-      for(std::map<index_t, index_t>::const_iterator it=parent_gnn2lnn.begin(); it!=parent_gnn2lnn.end(); ++it){
-        x.push_back(_mesh->get_coords(it->second));
-        sorted_n.push_back(it->second);
+      {
+        // Calculate the coordinates of the centroidal vertex.
+        // We start with a temporary location at the euclidean barycentre of the wedge.
+        for(typename std::map<Coords_t, index_t>::const_iterator it=coords_map.begin(); it!=coords_map.end(); ++it){
+          const real_t *x = _mesh->get_coords(it->second);
+          for(int j=0; j<ndims; ++j)
+            nc[j] += x[j];
+        }
+        for(int j=0; j<ndims; ++j){
+          nc[j] /= coords_map.size();
+          _mesh->_coords[cid*ndims+j] = nc[j];
+        }
+
+        // Interpolate metric at temporary location using the parent element's basis functions
+        std::map<Coords_t, index_t> parent_coords;
+        for(int j=0; j<nloc; ++j){
+          Coords_t cn(_mesh->get_coords(n[j]));
+          parent_coords[cn] = n[j];
+        }
+
+        std::vector<const real_t *> x;
+        std::vector<index_t> sorted_n;
+        for(typename std::map<Coords_t, index_t>::const_iterator it=parent_coords.begin(); it!=parent_coords.end(); ++it){
+          x.push_back(_mesh->get_coords(it->second));
+          sorted_n.push_back(it->second);
+        }
+
+        // Order of parent element's vertices has changed, so volume might be negative.
+        real_t L = fabs(property->volume(x[0], x[1], x[2], x[3]));
+
+        real_t ll[4];
+        ll[0] = fabs(property->volume(nc  , x[1], x[2], x[3])/L);
+        ll[1] = fabs(property->volume(x[0], nc  , x[2], x[3])/L);
+        ll[2] = fabs(property->volume(x[0], x[1], nc  , x[3])/L);
+        ll[3] = fabs(property->volume(x[0], x[1], x[2], nc  )/L);
+
+        for(int i=0; i<msize; i++){
+          nm[i] = ll[0] * _mesh->metric[sorted_n[0]*msize+i]+
+                  ll[1] * _mesh->metric[sorted_n[1]*msize+i]+
+                  ll[2] * _mesh->metric[sorted_n[2]*msize+i]+
+                  ll[3] * _mesh->metric[sorted_n[3]*msize+i];
+          _mesh->metric[cid*msize+i] = nm[i];
+        }
       }
-
-      real_t L = property->volume(x[0], x[1], x[2], x[3]);
-
-      real_t ll[4];
-      ll[0] = property->volume(nc  , x[1], x[2], x[3])/L;
-      ll[1] = property->volume(x[0], nc  , x[2], x[3])/L;
-      ll[2] = property->volume(x[0], x[1], nc  , x[3])/L;
-      ll[3] = property->volume(x[0], x[1], x[2], nc  )/L;
-
-      for(int i=0; i<msize; i++){
-        nm[i] = ll[0] * _mesh->metric[sorted_n[0]*msize+i]+
-                ll[1] * _mesh->metric[sorted_n[1]*msize+i]+
-                ll[2] * _mesh->metric[sorted_n[2]*msize+i]+
-                ll[3] * _mesh->metric[sorted_n[3]*msize+i];
-      }
-
-      index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
-      int *wboundaries[] = {ele1_boundary, ele2_boundary, ele3_boundary, ele4_boundary,
-          ele5_boundary, ele6_boundary, ele7_boundary, ele8_boundary};
 
       // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge in metric space.
       Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
           Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
       Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
 
-      for(std::map<index_t, index_t>::const_iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it){
-        const real_t *x = _mesh->get_coords(it->second);
+      for(typename std::map<Coords_t, index_t>::const_iterator it=coords_map.begin(); it!=coords_map.end(); ++it){
+        const real_t *il = _mesh->get_coords(it->second);
+        real_t x = il[0]-nc[0];
+        real_t y = il[1]-nc[1];
+        real_t z = il[2]-nc[2];
 
-        q[0] += nm[0]*x[0] + nm[1]*x[1] + nm[2]*x[2];
-        q[1] += nm[1]*x[0] + nm[3]*x[1] + nm[4]*x[2];
-        q[2] += nm[2]*x[0] + nm[4]*x[1] + nm[6]*x[2];
+        q[0] += nm[0]*x + nm[1]*y + nm[2]*z;
+        q[1] += nm[1]*x + nm[3]*y + nm[4]*z;
+        q[2] += nm[2]*x + nm[4]*y + nm[5]*z;
 
         A[0] += nm[0]; A[1] += nm[1]; A[2] += nm[2];
         A[4] += nm[3]; A[5] += nm[4];
-        A[8] += nm[6];
+        A[8] += nm[5];
       }
       A[3] = A[1];
       A[6] = A[2];
@@ -2698,71 +2639,57 @@ template<typename real_t, int dim> class Refine{
 
       for(int i=0; i<3; ++i){
         nc[i] += b[i];
-        _mesh->_coords[cid*3+i] = nc[i];
-        assert(nc[i] >= 0.0 && nc[i] <= 1.0);
       }
 
       // Interpolate metric at new location
       real_t l[]={-1, -1, -1, -1};
-      int best_e=-1;
       real_t tol=-1;
+      std::vector<index_t> sorted_best_e(nloc);
+      const index_t *welements[] = {ele1, ele2, ele3, ele4, ele5, ele6, ele7, ele8};
 
-      for(int i=0; i<8; ++i){
-        const real_t *x0 = _mesh->get_coords(welements[i][0]);
-        const real_t *x1 = _mesh->get_coords(welements[i][1]);
-        const real_t *x2 = _mesh->get_coords(welements[i][2]);
-        const real_t *x3 = _mesh->get_coords(welements[i][3]);
-
-        real_t L = property->volume(x0, x1, x2, x3);
-
-        assert(L!=0);
-
-        // Element might need to be flipped
-        if(L < 0){
-          index_t swap = welements[i][0];
-          welements[i][0] = welements[i][1];
-          welements[i][1] = swap;
-
-          int bswap = wboundaries[i][0];
-          wboundaries[i][0] = wboundaries[i][1];
-          wboundaries[i][1] = bswap;
-
-          L = -L;
-          x0 = _mesh->get_coords(welements[i][0]);
-          x1 = _mesh->get_coords(welements[i][1]);
+      for(int ele=0; ele<8; ++ele){
+        std::map<Coords_t, index_t> local_coords;
+        for(int j=0; j<nloc; ++j){
+          Coords_t cl(_mesh->get_coords(welements[ele][j]));
+          local_coords[cl] = welements[ele][j];
         }
+
+        std::vector<const real_t *> x;
+        std::vector<index_t> sorted_n;
+        for(typename std::map<Coords_t, index_t>::const_iterator it=local_coords.begin(); it!=local_coords.end(); ++it){
+          x.push_back(_mesh->get_coords(it->second));
+          sorted_n.push_back(it->second);
+        }
+
+        real_t L = fabs(property->volume(x[0], x[1], x[2], x[3]));
 
         assert(L>0);
 
         real_t ll[4];
-        ll[0] = property->volume(nc, x1, x2, x3)/L;
-        ll[1] = property->volume(x0, nc, x2, x3)/L;
-        ll[2] = property->volume(x0, x1, nc, x3)/L;
-        ll[3] = property->volume(x0, x1, x2, nc)/L;
+        ll[0] = fabs(property->volume(nc  , x[1], x[2], x[3])/L);
+        ll[1] = fabs(property->volume(x[0], nc  , x[2], x[3])/L);
+        ll[2] = fabs(property->volume(x[0], x[1], nc  , x[3])/L);
+        ll[3] = fabs(property->volume(x[0], x[1], x[2], nc  )/L);
 
         real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
-        if(best_e==-1){
+        if(min_l>tol){
           tol = min_l;
-          best_e = i;
-          for(int j=0;j<nloc;++j)
+          for(int j=0;j<nloc;++j){
             l[j] = ll[j];
-        }else{
-          if(min_l>tol){
-            tol = min_l;
-            best_e = i;
-            for(int j=0;j<nloc;++j)
-              l[j] = ll[j];
+            sorted_best_e[j] = sorted_n[j];
           }
         }
       }
 
-      const index_t *best_nodes = welements[best_e];
+      for(int i=0; i<ndims; ++i){
+        _mesh->_coords[cid*ndims+i] = nc[i];
+      }
 
       for(int i=0; i<msize; ++i)
-        _mesh->metric[cid*msize+i] = l[0]*_mesh->metric[best_nodes[0]*msize+i]+
-                                     l[1]*_mesh->metric[best_nodes[1]*msize+i]+
-                                     l[2]*_mesh->metric[best_nodes[2]*msize+i]+
-                                     l[3]*_mesh->metric[best_nodes[3]*msize+i];
+        _mesh->metric[cid*msize+i] = l[0]*_mesh->metric[sorted_best_e[0]*msize+i]+
+                                     l[1]*_mesh->metric[sorted_best_e[1]*msize+i]+
+                                     l[2]*_mesh->metric[sorted_best_e[2]*msize+i]+
+                                     l[3]*_mesh->metric[sorted_best_e[3]*msize+i];
 
       append_element(ele1, ele1_boundary, tid);
       append_element(ele2, ele2_boundary, tid);
@@ -2791,9 +2718,9 @@ template<typename real_t, int dim> class Refine{
           // i.e. if at least one of its neighbours is owned by *this* process.
           for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[cid].begin(); neigh!=_mesh->NNList[cid].end(); ++neigh){
             if(_mesh->is_owned_node(*neigh)){
-              Wedge gnn_wedge(bottom_triangle, top_triangle, cid, _mesh->lnn2gnn);
+              Wedge wedge(cid, _mesh->get_coords(cid));
 #pragma omp critical
-              cidRecv_additional[_mesh->node_owner[cid]].insert(gnn_wedge);
+              cidRecv_additional[_mesh->node_owner[cid]].insert(wedge);
               break;
             }
           }
@@ -2808,10 +2735,10 @@ template<typename real_t, int dim> class Refine{
 
             processes.erase(rank);
 
-            Wedge gnn_wedge(bottom_triangle, top_triangle, cid, _mesh->lnn2gnn);
+            Wedge wedge(cid, _mesh->get_coords(cid));
             for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc){
 #pragma omp critical
-              cidSend_additional[*proc].insert(gnn_wedge);
+              cidSend_additional[*proc].insert(wedge);
             }
           }
 
@@ -2823,6 +2750,31 @@ template<typename real_t, int dim> class Refine{
   }
 
   inline void append_element(const index_t *elem, const int *boundary, const size_t tid){
+    if(dim==3){
+      // Fix orientation of new element.
+      const real_t *x0 = &(_mesh->_coords[elem[0]*ndims]);
+      const real_t *x1 = &(_mesh->_coords[elem[1]*ndims]);
+      const real_t *x2 = &(_mesh->_coords[elem[2]*ndims]);
+      const real_t *x3 = &(_mesh->_coords[elem[3]*ndims]);
+
+      real_t av = property->volume(x0, x1, x2, x3);
+
+      if(av<0){
+        index_t *e = const_cast<index_t *>(elem);
+        int *b = const_cast<int *>(boundary);
+
+        // Flip element
+        index_t e0 = e[0];
+        e[0] = e[1];
+        e[1] = e0;
+
+        // and boundary
+        int b0 = b[0];
+        b[0] = b[1];
+        b[1] = b0;
+      }
+    }
+
     for(size_t i=0; i<nloc; ++i){
       newElements[tid].push_back(elem[i]);
       newBoundaries[tid].push_back(boundary[i]);
@@ -2830,6 +2782,31 @@ template<typename real_t, int dim> class Refine{
   }
 
   inline void replace_element(const index_t eid, const index_t *n, const int *boundary){
+    if(dim==3){
+      // Fix orientation of new element.
+      const real_t *x0 = &(_mesh->_coords[n[0]*ndims]);
+      const real_t *x1 = &(_mesh->_coords[n[1]*ndims]);
+      const real_t *x2 = &(_mesh->_coords[n[2]*ndims]);
+      const real_t *x3 = &(_mesh->_coords[n[3]*ndims]);
+
+      real_t av = property->volume(x0, x1, x2, x3);
+
+      if(av<0){
+        index_t *e = const_cast<index_t *>(n);
+        int *b = const_cast<int *>(boundary);
+
+        // Flip element
+        index_t e0 = e[0];
+        e[0] = e[1];
+        e[1] = e0;
+
+        // and boundary
+        int b0 = b[0];
+        b[0] = b[1];
+        b[1] = b0;
+      }
+    }
+
     for(size_t i=0;i<nloc;i++){
       _mesh->_ENList[eid*nloc+i]=n[i];
       _mesh->boundary[eid*nloc+i]=boundary[i];
@@ -2880,36 +2857,47 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  // Struct containing gnn's of the six vertices comprising a wedge. It is only
-  // to be used for consistent sorting of centroidal vertices across MPI processes.
-  struct Wedge{
-    std::set<index_t> gnn;
-    index_t cid;
+  // Struct used for sorting vertices by their coordinates. It's
+  // meant to be used by the 1:8 wedge refinement code to enforce
+  // consistent order of floating point arithmetic across MPI processes.
+  struct Coords_t{
+    real_t coords[3];
 
-    Wedge(const index_t bottom[], const index_t top[], const index_t lnn, std::vector<index_t>& lnn2gnn){
-      for(int j=0; j<3; ++j){
-        gnn.insert(lnn2gnn[bottom[j]]);
-        gnn.insert(lnn2gnn[top[j]]);
-      }
-
-      cid = lnn;
+    Coords_t(const real_t *x){
+      coords[0] = x[0];
+      coords[1] = x[1];
+      coords[2] = x[2];
     }
 
     /// Less-than operator
-    bool operator<(const Wedge& in) const{
+    bool operator<(const Coords_t& in) const{
       bool isLess;
 
-      for(std::set<index_t>::const_iterator it1=this->gnn.begin(), it2=in.gnn.begin();
-          it1 != this->gnn.end() || it2 != in.gnn.end(); ++it1, ++it2)
-        if(*it1 < *it2){
-          isLess = true;
+      for(int i=0; i<3; ++i){
+        if(coords[i] < in.coords[i]){
+          isLess=true;
+          break;
+        }else if(coords[i] > in.coords[i]){
+          isLess = false;
           break;
         }
-        else if(*it2 < *it1){
-          isLess = false;
-        }
+      }
 
       return isLess;
+    }
+  };
+
+  // Struct containing gnn's of the six vertices comprising a wedge. It is only
+  // to be used for consistent sorting of centroidal vertices across MPI processes.
+  struct Wedge{
+    const Coords_t coords;
+    const index_t cid;
+
+    Wedge(const index_t id, const real_t *cid_coords) : coords(cid_coords), cid(id){}
+
+    /// Less-than operator
+    bool operator<(const Wedge& in) const{
+      return coords < in.coords;
     }
   };
 
@@ -2933,7 +2921,6 @@ template<typename real_t, int dim> class Refine{
   static const size_t ndims=dim, nloc=(dim+1), msize=(dim==2?3:6), nedge=(dim==2?3:6);
   int nprocs, rank, nthreads;
 
-  //unsigned short encountered=0;
   void (Refine<real_t,dim>::* refineMode2D[nedge])(const index_t *, int, int);
   void (Refine<real_t,dim>::* refineMode3D[nedge])(std::vector< DirectedEdge<index_t> >&, int, int);
 };

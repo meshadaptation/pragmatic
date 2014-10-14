@@ -63,6 +63,11 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -80,18 +85,22 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.1);
+  metric_field.add_field(&(psi[0]), 0.001);
   metric_field.update_mesh();
   
   Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  for(int i=0;i<5;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
-  mesh->defragment();
+  if(verbose)
+    mesh->verify();
 
-  VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
+  //mesh->defragment();
+
+  //VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
 
   delete mesh;
 

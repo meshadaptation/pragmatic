@@ -80,7 +80,8 @@ int main(int argc, char **argv){
   Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));adapt.refine(sqrt(2.0));
+  for(int i=0;i<5;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
   if(verbose)
@@ -88,8 +89,8 @@ int main(int argc, char **argv){
 
   mesh->defragment();
 
-  VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
-   
+  //VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
+
   if(verbose){
     int nelements = mesh->get_number_elements();
     std::cout<<"Refine loop time:    "<<toc-tic<<std::endl

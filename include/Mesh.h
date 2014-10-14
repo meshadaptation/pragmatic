@@ -658,8 +658,8 @@ template<typename real_t> class Mesh{
       std::cerr<<"ERROR: Cannot calculate volume in 2D\n"; 
     }else{ // 3D
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
 	    
           // Don't sum if it's not ours
           if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
@@ -683,12 +683,12 @@ template<typename real_t> class Mesh{
           long double z03 = (x0[2] - x3[2]);
 
           total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
-	}
+        }
 	
-	MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+        MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
 
           const double *x0 = get_coords(n[0]);
           const double *x1 = get_coords(n[1]);
