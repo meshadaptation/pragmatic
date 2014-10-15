@@ -184,13 +184,14 @@ template<typename real_t, int dim> class Refine{
 
 #pragma omp single
       {
-        if(_mesh->_coords.size()<_mesh->NNodes*ndims){
-          _mesh->_coords.resize(_mesh->NNodes*ndims);
-          _mesh->metric.resize(_mesh->NNodes*msize);
-          _mesh->NNList.resize(_mesh->NNodes);
-          _mesh->NEList.resize(_mesh->NNodes);
-          _mesh->node_owner.resize(_mesh->NNodes);
-          _mesh->lnn2gnn.resize(_mesh->NNodes);
+        size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
+        if(_mesh->_coords.size()<reserve*ndims){
+          _mesh->_coords.resize(reserve*ndims);
+          _mesh->metric.resize(reserve*msize);
+          _mesh->NNList.resize(reserve);
+          _mesh->NEList.resize(reserve);
+          _mesh->node_owner.resize(reserve);
+          _mesh->lnn2gnn.resize(reserve);
         }
         edgeSplitCnt = _mesh->NNodes - origNNodes;
       }
@@ -365,9 +366,6 @@ template<typename real_t, int dim> class Refine{
 #pragma omp single
         {
           std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
-          // The invisible_vertices concept needs more thought in 3D.
-          // I've commented it out for the time being.
-          //std::vector<index_t> invisible_vertices;
 
           for(size_t i=0; i<edgeSplitCnt; ++i){
             DirectedEdge<index_t> *vert = &allNewVertices[i];
@@ -385,8 +383,6 @@ template<typename real_t, int dim> class Refine{
                   break;
                 }
               }
-              //if(!visible)
-              //  invisible_vertices.push_back(vert->id);
             }else{
               // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
               // The latter is true only if both vertices of the original edge were halo vertices.
@@ -465,7 +461,6 @@ template<typename real_t, int dim> class Refine{
             }
           }
 
-          //_mesh->clear_invisible(invisible_vertices);
           _mesh->trim_halo();
         }
       }
@@ -2714,24 +2709,17 @@ template<typename real_t, int dim> class Refine{
 
         if(_mesh->node_owner[cid] != rank){
           // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-          // Only update them if the vertex is actually visible by *this* MPI process,
-          // i.e. if at least one of its neighbours is owned by *this* process.
-          for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[cid].begin(); neigh!=_mesh->NNList[cid].end(); ++neigh){
-            if(_mesh->is_owned_node(*neigh)){
-              Wedge wedge(cid, _mesh->get_coords(cid));
+          Wedge wedge(cid, _mesh->get_coords(cid));
 #pragma omp critical
-              cidRecv_additional[_mesh->node_owner[cid]].insert(wedge);
-              break;
-            }
-          }
+          cidRecv_additional[_mesh->node_owner[cid]].insert(wedge);
         }else{
           // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
           // The latter is true only if all vertices of the original element were halo vertices.
           if(_mesh->is_halo_node(n[0]) && _mesh->is_halo_node(n[1]) && _mesh->is_halo_node(n[2]) && _mesh->is_halo_node(n[3])){
             // Find which processes see this vertex
             std::set<int> processes;
-            for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[cid].begin(); neigh!=_mesh->NNList[cid].end(); ++neigh)
-              processes.insert(_mesh->node_owner[*neigh]);
+            for(int j=0; j<nloc; ++j)
+              processes.insert(_mesh->node_owner[n[j]]);
 
             processes.erase(rank);
 

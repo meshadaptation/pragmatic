@@ -1768,27 +1768,6 @@ template<typename real_t> class Mesh{
     send_halo.swap(send_halo_temp);
   }
 
-  void clear_invisible(std::vector<index_t>& invisible_vertices){
-    for(size_t i=0; i<invisible_vertices.size(); ++i){
-      index_t v = invisible_vertices[i];
-
-      // Traverse a copy of the vertex's NEList.
-      // We need a copy because erase_element modifies the original NEList.
-      std::set<index_t> NEList_copy = NEList[v];
-      for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
-        // If the vertex is invisible, then all elements adjacent to it are also invisible - remove them immediately.
-        erase_element(*eit);
-      }
-
-      // This vertex is by definition invisible, so remove it immediately. Update NNList of all neighbours.
-      for(typename std::vector<index_t>::const_iterator neigh_it = NNList[v].begin(); neigh_it != NNList[v].end(); ++neigh_it){
-        typename std::vector<index_t>::iterator it = std::find(NNList[*neigh_it].begin(), NNList[*neigh_it].end(), v);
-        NNList[*neigh_it].erase(it);
-      }
-      erase_vertex(v);
-    }
-  }
-
   void create_global_node_numbering(){
     if(num_processes>1){
 #ifdef HAVE_MPI
