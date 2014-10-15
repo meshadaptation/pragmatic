@@ -1380,8 +1380,7 @@ template<typename real_t> class Mesh{
   template<typename _real_t> friend class Smooth3D;
   template<typename _real_t> friend class Swapping2D;
   template<typename _real_t> friend class Swapping3D;
-  template<typename _real_t> friend class Coarsen2D;
-  template<typename _real_t> friend class Coarsen3D;
+  template<typename _real_t, int _dim> friend class Coarsen;
   template<typename _real_t, int _dim> friend class Refine;
   template<typename _real_t> friend class DeferredOperations;
   template<typename _real_t> friend class VTKTools;

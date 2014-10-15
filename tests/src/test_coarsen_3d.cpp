@@ -62,7 +62,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
    mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -78,7 +78,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
   
-  Coarsen3D<double> adapt(*mesh);
+  Coarsen<double,3> adapt(*mesh);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;
