@@ -2080,10 +2080,22 @@ template<typename real_t, int dim> class Refine{
       }
     }else{
       // We will choose the diagonal which leads to a 1:3 wedge refinement.
-      diag.edge.first = q1.edge.first;
-      diag.edge.second = q2.edge.first;
-      cross_diag.edge.first = (diag.edge.second == tr->id ? br->id : tr->id);
-      cross_diag.edge.second = (diag.edge.first == tl->id ? bl->id : tl->id);
+      if(q1.edge.first == bl->id){
+        assert(q2.edge.first == tr->id);
+        diag.edge.first = q1.edge.first;
+        diag.edge.second = q2.edge.first;
+      }else{
+        assert(q2.edge.first == br->id);
+        diag.edge.first = q2.edge.first;
+        diag.edge.second = q1.edge.first;
+      }
+      assert((diag.edge.first==bl->id && diag.edge.second==tr->id)
+          || (diag.edge.first==br->id && diag.edge.second==tl->id));
+
+      cross_diag.edge.first = (diag.edge.second == tr->id ? tl->id : tr->id);
+      cross_diag.edge.second = (diag.edge.first == br->id ? bl->id : br->id);
+      assert((cross_diag.edge.first==tl->id && cross_diag.edge.second==br->id)
+          || (cross_diag.edge.first==tr->id && cross_diag.edge.second==bl->id));
     }
 
     index_t bottom_triangle[] = {br->id, br->edge.first, bl->id};
@@ -2377,38 +2389,32 @@ template<typename real_t, int dim> class Refine{
 
       /*
        * 2 elements are formed by the three vertices of two connected
-       * diagonals plus a fourth vertex which can be found via the
-       * intersection on NNList of those three vertices. Any vertex which
-       * is part of a diagonal must be removed from the intersection and
-       * then the intersection will be left with one and only vertex.
+       * diagonals plus a fourth vertex which is the one vertex of top/
+       * bottom triangle which does not belong to any diagonal.
        *
        * 1 element is formed by the four vertices of two disjoint diagonals.
        */
       index_t v_top, v_bottom;
-      std::set<index_t> NNFirst, NNSecond, NNNST, NNNSB;
-      NNFirst.insert(_mesh->NNList[diagonals[middle].edge.first].begin(), _mesh->NNList[diagonals[middle].edge.first].end());
-      NNSecond.insert(_mesh->NNList[diagonals[middle].edge.second].begin(), _mesh->NNList[diagonals[middle].edge.second].end());
-      NNNST.insert(_mesh->NNList[non_shared_top].begin(), _mesh->NNList[non_shared_top].end());
-      NNNSB.insert(_mesh->NNList[non_shared_bottom].begin(), _mesh->NNList[non_shared_bottom].end());
-
-      std::set<index_t> intersection0, intersection1;
-      std::set_intersection(NNFirst.begin(), NNFirst.end(), NNSecond.begin(),
-          NNSecond.end(), std::inserter(intersection0, intersection0.begin()));
-      std::set_intersection(NNNST.begin(), NNNST.end(), intersection0.begin(),
-          intersection0.end(), std::inserter(intersection1, intersection1.begin()));
-      intersection1.erase(non_shared_bottom);
-      assert(intersection1.size()==1);
-      v_top = *intersection1.begin();
-
-      intersection1.clear();
-      std::set_intersection(NNNSB.begin(), NNNSB.end(), intersection0.begin(),
-          intersection0.end(), std::inserter(intersection1, intersection1.begin()));
-      intersection1.erase(non_shared_top);
-      assert(intersection1.size()==1);
-      v_bottom = *intersection1.begin();
 
       // diagonals[middle].edge.first is always one of the bottom vertices
       // diagonals[middle].edge.second is always one of the top vertices
+
+      for(int j=0; j<3; ++j){
+        if(top_triangle[j]!=diagonals[middle].edge.second && top_triangle[j]!=non_shared_top){
+          v_top = top_triangle[j];
+          assert(bottom_triangle[j] == diagonals[middle].edge.first);
+          break;
+        }
+      }
+
+      for(int j=0; j<3; ++j){
+        if(bottom_triangle[j]!=diagonals[middle].edge.first && bottom_triangle[j]!=non_shared_bottom){
+          v_bottom = bottom_triangle[j];
+          assert(top_triangle[j] == diagonals[middle].edge.second);
+          break;
+        }
+      }
+
       const int ele1[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, v_top};
       const int ele2[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, v_bottom, non_shared_bottom};
       const int ele3[] = {diagonals[middle].edge.first, diagonals[middle].edge.second, non_shared_top, non_shared_bottom};
@@ -2416,11 +2422,11 @@ template<typename real_t, int dim> class Refine{
       int bv_bottom, bnsb, bfirst;
       for(int j=0; j<3; ++j){
         if(v_bottom == bottom_triangle[j]){
-          bv_bottom = bndr[j];
+          bv_bottom = bndr[(j+1)%3];
         }else if(non_shared_bottom == bottom_triangle[j]){
-          bnsb = bndr[j];
+          bnsb = bndr[(j+1)%3];
         }else{
-          bfirst = bndr[j];
+          bfirst = bndr[(j+1)%3];
         }
       }
 

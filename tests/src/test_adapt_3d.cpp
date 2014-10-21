@@ -50,11 +50,23 @@
 #include "Smooth.h"
 #include "Swapping.h"
 
+#include <mpi.h>
+
 int main(int argc, char **argv){
+  int required_thread_support=MPI_THREAD_SINGLE;
+  int provided_thread_support;
+  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+  assert(required_thread_support==provided_thread_support);
+
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   size_t NElements = mesh->get_number_elements();
@@ -88,12 +100,15 @@ int main(int argc, char **argv){
   double L_up = 1.0; // sqrt(2);
   double L_low = L_up/2;
 
-  Coarsen3D<double> coarsen(*mesh);
+  Coarsen<double, 3> coarsen(*mesh);
   Smooth<double, 3> smooth(*mesh);
-  Refine3D<double> refine(*mesh);
+  Refine<double, 3> refine(*mesh);
   Swapping3D<double> swapping(*mesh);
   
   coarsen.coarsen(L_low, L_up);
+  std::cout<<"INFO: Verify quality after initial coarsen.\n";
+  assert(mesh->verify());
+  std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
   
   double L_max = mesh->maximal_edge_length();
   
@@ -102,16 +117,22 @@ int main(int argc, char **argv){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
+    std::cout<<"INFO: Verify quality after refine; but before coarsen.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+
     coarsen.coarsen(L_low, L_ref);
 
-    std::cout<<"INFO: Verify quality after refine/coarsen; but before swapping.\n";
-    mesh->verify();
+    std::cout<<"INFO: Verify quality after coarsen; but before swapping.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
     
     for(int j=0;j<10;j++)
-      swapping.swap(0.1);
+      swapping.swap(0.5);
 
     std::cout<<"INFO: Verify quality after swapping.\n";
-    mesh->verify();
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
     
     L_max = mesh->maximal_edge_length();
 
@@ -137,6 +158,8 @@ int main(int argc, char **argv){
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail"<<std::endl;
+
+  MPI_Finalize();
 
   return 0;
 }

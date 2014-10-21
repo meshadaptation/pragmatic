@@ -173,6 +173,11 @@ template<typename real_t> class Mesh{
 
   /// Add a new element
   index_t append_element(const index_t *n){
+    if(_ENList.size() < (NElements+1)*nloc){
+      _ENList.resize(2*NElements*nloc);
+      boundary.resize(2*NElements*nloc);
+    }
+
     for(size_t i=0;i<nloc;i++)
       _ENList[nloc*NElements+i] = n[i];
 
@@ -192,7 +197,7 @@ template<typename real_t> class Mesh{
       boundary.resize(NElements*3);
       std::fill(boundary.begin(), boundary.end(), -2);
       
-      // Create node-element adjancy list.      
+      // Create node-element adjacency list.
       std::vector< std::set<int> > NEList(NNodes);
       for(size_t i=0;i<NElements;i++){
         if(_ENList[i*3]==-1)
@@ -234,7 +239,7 @@ template<typename real_t> class Mesh{
       boundary.resize(NElements*4);
       std::fill(boundary.begin(), boundary.end(), -2);
       
-      // Create node-element adjancy list.      
+      // Create node-element adjacency list.
       std::vector< std::set<int> > NEList(NNodes);
       for(size_t i=0;i<NElements;i++){
         if(_ENList[i*4]==-1)
@@ -485,7 +490,8 @@ template<typename real_t> class Mesh{
 
     if(ndims==2){
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
 
           // Don't sum if it's not ours
@@ -518,10 +524,11 @@ template<typename real_t> class Mesh{
           long double s = 0.5*(a+b+c);
 
           total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
+#pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
 
@@ -555,95 +562,97 @@ template<typename real_t> class Mesh{
       }
     }else{ // 3D
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
-	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    // Don't sum if it's not ours
-	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
-	      continue;
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          for(int j=0;j<4;j++){
+            if(boundary[i*nloc+j]<=0)
+              continue;
+
+            int n1 = n[(j+1)%4];
+            int n2 = n[(j+2)%4];
+            int n3 = n[(j+3)%4];
+
+            // Don't sum if it's not ours
+            if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+              continue;
+
+            const double *x1 = get_coords(n1);
+            const double *x2 = get_coords(n2);
+            const double *x3 = get_coords(n3);
+
+            // Use Heron's Formula
+            long double a;
+            {
+              long double dx = (x1[0]-x2[0]);
+              long double dy = (x1[1]-x2[1]);
+              long double dz = (x1[2]-x2[2]);
+              a = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double b;
+            {
+              long double dx = (x1[0]-x3[0]);
+              long double dy = (x1[1]-x3[1]);
+              long double dz = (x1[2]-x3[2]);
+              b = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double c;
+            {
+              long double dx = (x2[0]-x3[0]);
+              long double dy = (x2[1]-x3[1]);
+              long double dz = (x2[2]-x3[2]);
+              c = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double s = 0.5*(a+b+c);
+
+            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
-	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
-	}
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          for(int j=0;j<4;j++){
+            if(boundary[i*nloc+j]<=0)
+              continue;
+
+            int n1 = n[(j+1)%4];
+            int n2 = n[(j+2)%4];
+            int n3 = n[(j+3)%4];
+
+            const double *x1 = get_coords(n1);
+            const double *x2 = get_coords(n2);
+            const double *x3 = get_coords(n3);
+
+            // Use Heron's Formula
+            long double a;
+            {
+              long double dx = (x1[0]-x2[0]);
+              long double dy = (x1[1]-x2[1]);
+              long double dz = (x1[2]-x2[2]);
+              a = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double b;
+            {
+              long double dx = (x1[0]-x3[0]);
+              long double dy = (x1[1]-x3[1]);
+              long double dz = (x1[2]-x3[2]);
+              b = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double c;
+            {
+              long double dx = (x2[0]-x3[0]);
+              long double dy = (x2[1]-x3[1]);
+              long double dz = (x2[2]-x3[2]);
+              c = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double s = 0.5*(a+b+c);
+
+            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          }
+        }
       }
     }
     return total_area;
@@ -658,6 +667,7 @@ template<typename real_t> class Mesh{
       std::cerr<<"ERROR: Cannot calculate volume in 2D\n"; 
     }else{ // 3D
       if(num_processes>1){
+#pragma omp parallel for reduction(+:total_volume)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
 	    
@@ -687,6 +697,7 @@ template<typename real_t> class Mesh{
 	
         MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
+#pragma omp parallel for reduction(+:total_volume)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
 
@@ -1377,7 +1388,6 @@ template<typename real_t> class Mesh{
  private:
   template<typename _real_t, int _dim> friend class MetricField;
   template<typename _real_t, int _dim> friend class Smooth;
-  template<typename _real_t> friend class Smooth3D;
   template<typename _real_t> friend class Swapping2D;
   template<typename _real_t> friend class Swapping3D;
   template<typename _real_t, int _dim> friend class Coarsen;
@@ -1610,6 +1620,12 @@ template<typename real_t> class Mesh{
   /// Create required adjacency lists.
   void create_adjacency(){
     int tid = pragmatic_thread_id();
+
+#pragma omp for schedule(static)
+    for(size_t i=0;i<NNodes;i++){
+      NNList[i].clear();
+      NEList[i].clear();
+    }
 
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)

@@ -136,6 +136,9 @@ template<typename real_t> class Swapping3D{
       }
     }
 
+    if(partialEEList.empty())
+      return;
+
     // Colour the graph and choose the maximal independent set.
     std::map<int , std::set<int> > graph;
     for(std::map<int, std::deque<int> >::const_iterator it=partialEEList.begin();it!=partialEEList.end();++it){

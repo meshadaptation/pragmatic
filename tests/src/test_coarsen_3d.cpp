@@ -59,8 +59,9 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
-   mesh->create_boundary();
+  //Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/test_refine_3d.vtu");
+  mesh->create_boundary();
 
   MetricField<double,3> metric_field(*mesh);
 
@@ -95,8 +96,28 @@ int main(int argc, char **argv){
   int nelements = mesh->get_number_elements();  
 
   if(verbose){
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+
     std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl;
+             <<"Number elements:       "<<nelements<<std::endl
+             <<"Quality mean:          "<<qmean<<std::endl
+             <<"Quality min:           "<<qmin<<std::endl;
+
+    long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
+
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
   }
 
   VTKTools<double>::export_vtu("../data/test_coarsen_3d", mesh);

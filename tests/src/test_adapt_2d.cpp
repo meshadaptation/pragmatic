@@ -73,7 +73,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
   mesh->create_boundary();
 
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.001;
@@ -101,9 +101,9 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double> coarsen(*mesh);
+  Coarsen<double,2> coarsen(*mesh);
   Smooth<double, 2> smooth(*mesh);
-  Refine2D<double> refine(*mesh);
+  Refine<double,2> refine(*mesh);
   Swapping2D<double> swapping(*mesh);
 
   time_adapt = get_wtime();

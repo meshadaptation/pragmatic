@@ -44,11 +44,6 @@
 #include <set>
 #include <vector>
 
-#include <pthread.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
 #endif
@@ -476,7 +471,7 @@ template<typename real_t, int dim> class Coarsen{
       return -1;
 
     // If this is not owned then return -1.
-    if(_mesh->is_owned_node(rm_vertex))
+    if(!_mesh->is_owned_node(rm_vertex))
       return -1;
 
     /* Sort the edges according to length. We want to collapse the
@@ -502,7 +497,7 @@ template<typename real_t, int dim> class Coarsen{
       /* Check the properties of new elements. If the
          new properties are not acceptable then continue. */
 
-      // Check volume/area of new elements.
+      // Check area/volume of new elements.
       double total_old_av=0;
       double total_new_av=0;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
@@ -584,10 +579,10 @@ template<typename real_t, int dim> class Coarsen{
     return target_vertex;
   }
 
-  /*! Kernel for perform coarsening.
+  /*! Kernel for performing coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
-  void coarsen_kernel(index_t rm_vertex, index_t target_vertex, size_t tid){
+  void coarsen_kernel(index_t rm_vertex, index_t target_vertex, int tid){
     std::set<index_t> deleted_elements;
     std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
@@ -605,7 +600,7 @@ template<typename real_t, int dim> class Coarsen{
 
       // Remove element from NEList of the other two vertices.
       size_t lrm_vertex;
-      index_t other_vertex;
+      std::vector<index_t> other_vertex;
       for(size_t i=0; i<nloc; ++i){
         index_t vid = _mesh->_ENList[eid*nloc+i];
         if(vid==rm_vertex){
@@ -615,7 +610,7 @@ template<typename real_t, int dim> class Coarsen{
 
           // If this vertex is neither rm_vertex nor target_vertex, it is one of the common neighbours.
           if(vid != target_vertex){
-            other_vertex = vid;
+            other_vertex.push_back(vid);
             common_patch.insert(vid);
           }
         }
@@ -624,19 +619,33 @@ template<typename real_t, int dim> class Coarsen{
       // Handle vertex collapsing onto boundary.
       if(_mesh->boundary[eid*nloc+lrm_vertex]>0){
         // Find element whose internal edge will be pulled into an external edge.
+        std::set<index_t> otherNE;
+        if(dim==2){
+          otherNE = _mesh->NEList[other_vertex[0]];
+        }else{
+          std::set_intersection(_mesh->NEList[other_vertex[0]].begin(), _mesh->NEList[other_vertex[0]].end(),
+              _mesh->NEList[other_vertex[1]].begin(), _mesh->NEList[other_vertex[1]].end(),
+              std::inserter(otherNE, otherNE.begin()));
+        }
         std::set<index_t> new_boundary_eid;
         std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
-            _mesh->NEList[other_vertex].begin(), _mesh->NEList[other_vertex].end(),
-            std::inserter(new_boundary_eid, new_boundary_eid.begin()));
+            otherNE.begin(), otherNE.end(), std::inserter(new_boundary_eid, new_boundary_eid.begin()));
 
         if(!new_boundary_eid.empty()){
           assert(new_boundary_eid.size()==1);
           index_t target_eid = *new_boundary_eid.begin();
-          for(int i=0;i<3;i++){
+          for(int i=0;i<nloc;i++){
             int nid=_mesh->_ENList[target_eid*nloc+i];
-            if(nid!=rm_vertex && nid!=other_vertex){
-              _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
-              break;
+            if(dim==2){
+              if(nid!=rm_vertex && nid!=other_vertex[0]){
+                _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
+                break;
+              }
+            }else{
+              if(nid!=rm_vertex && nid!=other_vertex[0] && nid!=other_vertex[1]){
+                _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
+                break;
+              }
             }
           }
         }
@@ -646,7 +655,7 @@ template<typename real_t, int dim> class Coarsen{
       _mesh->_ENList[eid*nloc] = -1;
     }
 
-    assert(common_patch.size() == deleted_elements.size());
+    assert((dim==2 && common_patch.size() == deleted_elements.size()) || (dim==3));
 
     // For all adjacent elements, replace rm_vertex with target_vertex in ENList.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){

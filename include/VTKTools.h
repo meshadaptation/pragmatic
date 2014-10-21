@@ -510,7 +510,7 @@ template<typename real_t> class VTKTools{
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
         ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
-	vtk_boundary->SetTuple3(i, mesh->boundary[i*3], mesh->boundary[i*3+1], mesh->boundary[i*3+2]);
+        vtk_boundary->SetTuple3(i, mesh->boundary[i*3], mesh->boundary[i*3+1], mesh->boundary[i*3+2]);
 
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]),
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2])));

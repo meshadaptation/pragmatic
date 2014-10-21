@@ -98,9 +98,9 @@ int main(int argc, char **argv){
   if(verbose)
     mesh->verify();
 
-  //mesh->defragment();
+  mesh->defragment();
 
-  //VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
+  VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
 
   delete mesh;
 
