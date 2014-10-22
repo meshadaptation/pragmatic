@@ -186,6 +186,23 @@ template<typename real_t> class Mesh{
     return get_number_elements()-1;
   }
 
+  /// Add a new element and boundary
+  index_t append_element(const index_t *n, const int *b){
+    if(_ENList.size() < (NElements+1)*nloc){
+      _ENList.resize(2*NElements*nloc);
+      boundary.resize(2*NElements*nloc);
+    }
+
+    for(size_t i=0;i<nloc;i++){
+      _ENList[nloc*NElements+i] = n[i];
+      boundary[nloc*NElements+i] = b[i];
+    }
+
+    ++NElements;
+
+    return get_number_elements()-1;
+  }
+
   void create_boundary(){
     assert(boundary.size()==0);
     
@@ -444,6 +461,9 @@ template<typename real_t> class Mesh{
       if(num_processes>1){
 #ifdef HAVE_MPI
         for(int i=0;i<NElements;i++){
+          if(_ENList[i*nloc] < 0)
+            continue;
+
           for(int j=0;j<3;j++){
             int n1 = _ENList[i*nloc+(j+1)%3];
             int n2 = _ENList[i*nloc+(j+2)%3];
@@ -461,6 +481,9 @@ template<typename real_t> class Mesh{
 #endif
       }else{
         for(int i=0;i<NElements;i++){
+          if(_ENList[i*nloc] < 0)
+            continue;
+
           for(int j=0;j<3;j++){
             if(boundary[i*nloc+j]>0){
               int n1 = _ENList[i*nloc+(j+1)%3];
@@ -493,6 +516,8 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           // Don't sum if it's not ours
           if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
@@ -531,6 +556,8 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           const double *x1 = get_coords(n[0]);
           const double *x2 = get_coords(n[1]);
@@ -565,6 +592,9 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
+
           for(int j=0;j<4;j++){
             if(boundary[i*nloc+j]<=0)
               continue;
@@ -614,6 +644,9 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
+
           for(int j=0;j<4;j++){
             if(boundary[i*nloc+j]<=0)
               continue;
@@ -670,6 +703,8 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_volume)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 	    
           // Don't sum if it's not ours
           if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
@@ -700,6 +735,8 @@ template<typename real_t> class Mesh{
 #pragma omp parallel for reduction(+:total_volume)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           const double *x0 = get_coords(n[0]);
           const double *x1 = get_coords(n[1]);
@@ -1388,8 +1425,7 @@ template<typename real_t> class Mesh{
  private:
   template<typename _real_t, int _dim> friend class MetricField;
   template<typename _real_t, int _dim> friend class Smooth;
-  template<typename _real_t> friend class Swapping2D;
-  template<typename _real_t> friend class Swapping3D;
+  template<typename _real_t, int _dim> friend class Swapping;
   template<typename _real_t, int _dim> friend class Coarsen;
   template<typename _real_t, int _dim> friend class Refine;
   template<typename _real_t> friend class DeferredOperations;

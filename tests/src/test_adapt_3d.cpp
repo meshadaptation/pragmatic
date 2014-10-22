@@ -103,12 +103,24 @@ int main(int argc, char **argv){
   Coarsen<double, 3> coarsen(*mesh);
   Smooth<double, 3> smooth(*mesh);
   Refine<double, 3> refine(*mesh);
-  Swapping3D<double> swapping(*mesh);
+  Swapping<double, 3> swapping(*mesh);
   
   coarsen.coarsen(L_low, L_up);
   std::cout<<"INFO: Verify quality after initial coarsen.\n";
   assert(mesh->verify());
   std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+  long double area = mesh->calculate_area();
+  long double volume = mesh->calculate_volume();
+  std::cout<<"Checking area == 6: ";
+  if(fabs(area-6)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (area="<<area<<")"<<std::endl;
+  std::cout<<"Checking volume == 1: ";
+  if(fabs(volume-1)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
   
   double L_max = mesh->maximal_edge_length();
   
@@ -120,19 +132,55 @@ int main(int argc, char **argv){
     std::cout<<"INFO: Verify quality after refine; but before coarsen.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
     coarsen.coarsen(L_low, L_ref);
 
     std::cout<<"INFO: Verify quality after coarsen; but before swapping.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
-    
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+
     for(int j=0;j<10;j++)
       swapping.swap(0.5);
 
     std::cout<<"INFO: Verify quality after swapping.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
     
     L_max = mesh->maximal_edge_length();
 
@@ -149,6 +197,18 @@ int main(int argc, char **argv){
   
   std::cout<<"After adaptivity:\n";
   mesh->verify();
+  area = mesh->calculate_area();
+  volume = mesh->calculate_volume();
+  std::cout<<"Checking area == 6: ";
+  if(fabs(area-6)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (area="<<area<<")"<<std::endl;
+  std::cout<<"Checking volume == 1: ";
+  if(fabs(volume-1)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
   
   VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
   

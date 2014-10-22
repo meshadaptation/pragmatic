@@ -136,7 +136,7 @@ class ElementProperty{
    * @param m metric tensor for first point.
    */
   template<int dim>
-  real_t length(const real_t x0[], const real_t x1[], const double m[]) const{
+  double length(const real_t x0[], const real_t x1[], const double m[]) const{
     if(dim==2){
       return length2d(x0, x1, m);
     }else{ //if(dim==3)

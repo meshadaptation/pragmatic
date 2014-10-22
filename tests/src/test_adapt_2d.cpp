@@ -101,10 +101,10 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen<double,2> coarsen(*mesh);
+  Coarsen<double, 2> coarsen(*mesh);
   Smooth<double, 2> smooth(*mesh);
-  Refine<double,2> refine(*mesh);
-  Swapping2D<double> swapping(*mesh);
+  Refine<double, 2> refine(*mesh);
+  Swapping<double, 2> swapping(*mesh);
 
   time_adapt = get_wtime();
 
@@ -115,14 +115,59 @@ int main(int argc, char **argv){
     
     tic = get_wtime();
     coarsen.coarsen(L_low, L_ref);
+    std::cout<<"INFO: Verify quality after coarsen.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Expecting perimeter == 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
     time_coarsen += get_wtime() - tic;
 
     tic = get_wtime();
     swapping.swap(0.7);
+    std::cout<<"INFO: Verify quality after swapping.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    perimeter = mesh->calculate_perimeter();
+    area = mesh->calculate_area();
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Expecting perimeter == 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
     time_swap += get_wtime() - tic;
 
     tic = get_wtime();
     refine.refine(L_ref);
+    std::cout<<"INFO: Verify quality after refinement.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    perimeter = mesh->calculate_perimeter();
+    area = mesh->calculate_area();
+    std::cout<<"Expecting area == 1: ";
+    if(fabs(area-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Expecting perimeter == 4: ";
+    if(fabs(perimeter-4)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
     time_refine += get_wtime() - tic;
     
     L_max = mesh->maximal_edge_length();

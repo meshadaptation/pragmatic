@@ -56,7 +56,7 @@ int main(){
       std::cout<<"fail\n";
     
     std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
-    if((sqrt(2.0)-ftriangle.length(fx1, fx2, fm))==0)
+    if((sqrt(2.0)-ftriangle.length<2>(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
@@ -80,7 +80,7 @@ int main(){
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
-    if((sqrt(2.0)-triangle.length(x1, x2, fm))==0)
+    if((sqrt(2.0)-triangle.length<2>(x1, x2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
@@ -116,13 +116,13 @@ int main(){
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
-    if((sqrtf(2.0)-ftetrahedron.length(fx1, fx2, fm))==0)
+    if((sqrt(2.0)-ftetrahedron.length<3>(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length3d:"<<std::endl;
-    if((sqrtf(2.0)-ftetrahedron.length3d(fx1, fx2, fm))==0)
+    if((sqrt(2.0)-ftetrahedron.length3d(fx1, fx2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
@@ -147,13 +147,13 @@ int main(){
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length:"<<std::endl;
-    if((sqrtf(2.0)-tetrahedron.length(x1, x2, fm))==0)
+    if((sqrt(2.0)-tetrahedron.length<3>(x1, x2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";
 
     std::cout<<"Test ElementProperty<double>::length3d:"<<std::endl;
-    if((sqrtf(2.0)-tetrahedron.length3d(x1, x2, fm))==0)
+    if((sqrt(2.0)-tetrahedron.length3d(x1, x2, fm))==0)
       std::cout<<"pass\n";
     else
       std::cout<<"fail\n";

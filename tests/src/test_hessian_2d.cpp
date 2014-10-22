@@ -67,7 +67,7 @@ int main(int argc, char **argv){
       psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
   }
   
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
   
   double tic = get_wtime();
   metric_field.add_field(&(psi[0]), 1.0);

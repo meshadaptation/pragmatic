@@ -621,8 +621,10 @@ template<typename real_t, int dim> class Coarsen{
         // Find element whose internal edge will be pulled into an external edge.
         std::set<index_t> otherNE;
         if(dim==2){
+          assert(other_vertex.size()==1);
           otherNE = _mesh->NEList[other_vertex[0]];
         }else{
+          assert(other_vertex.size()==2);
           std::set_intersection(_mesh->NEList[other_vertex[0]].begin(), _mesh->NEList[other_vertex[0]].end(),
               _mesh->NEList[other_vertex[1]].begin(), _mesh->NEList[other_vertex[1]].end(),
               std::inserter(otherNE, otherNE.begin()));
@@ -632,6 +634,8 @@ template<typename real_t, int dim> class Coarsen{
             otherNE.begin(), otherNE.end(), std::inserter(new_boundary_eid, new_boundary_eid.begin()));
 
         if(!new_boundary_eid.empty()){
+          // eid has been removed from NEList[rm_vertex],
+          // so new_boundary_eid contains only the other element.
           assert(new_boundary_eid.size()==1);
           index_t target_eid = *new_boundary_eid.begin();
           for(int i=0;i<nloc;i++){

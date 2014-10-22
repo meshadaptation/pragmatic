@@ -54,7 +54,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double, 3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
