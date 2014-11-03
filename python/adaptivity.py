@@ -286,7 +286,18 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
     assert(err < 2.0e-11 * area)
   return n_mesh
   
-def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=False):
+  
+def impose_maxN(metric, maxN):
+    gdim = metric.function_space().ufl_element().cell().geometric_dimension()
+    targetN = assemble(sqrt(det(metric))*dx)
+    fak = 1.
+    if targetN > maxN:
+      fak = (targetN/maxN)**(gdim/2)
+      metric.vector().set_local(metric.vector().array()/fak)
+      info('metric coarsened to meet target node number')
+    return [metric,fak]
+      
+def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=False, maxN=None):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()
@@ -298,8 +309,10 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=Fa
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
    metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
   metric = fix_CG1_metric(metric) #fixes negative eigenvalues
-  if grada:
+  if grada is not None:
       metric = gradate(metric,grada)
+  if maxN is not None:
+      [metric,fak] = impose_maxN(metric, maxN)
   
   # warn before generating huge mesh
   targetN = assemble(sqrt(det(metric))*dx)
@@ -554,12 +567,14 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
     raise FloatingPointError("Eigenvalues are zero")
   
   #compute metric
-  HH = analyt_rot(fulleig(eigL),eigR)
   exponent = -1.0/(2*p + n)
-  HH *= 1./eta*det**exponent 
+  eigL *= 1./eta*(det**exponent).repeat(eigL.shape[0]).reshape([eigL.shape[1],eigL.shape[0]]).T
   
+#  HH = analyt_rot(fulleig(eigL),eigR)
+#  HH *= 1./eta*det**exponent 
+#  [eigL,eigR] = analytic_eig(HH)  
+
   #enforce min and max contraints
-  [eigL,eigR] = analytic_eig(HH)
   if max_edge_length is not None:
     min_eigenvalue = 1.0/max_edge_length**2
     if eigL.flatten().min()<min_eigenvalue:
@@ -726,7 +741,7 @@ def analytic_eig(H, tol=1e-12):
       v2 = array([zeroC, onesC, zeroC])
       v3 = array([zeroC, zeroC, onesC])
       # A is not diagonal.                       
-      nI = p1 != 0
+      nI = (numpy.abs(p1) > tol**2)
       p1 = p1[nI]
       H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
       H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
@@ -774,6 +789,15 @@ def analytic_eig(H, tol=1e-12):
       eigR = array([v1[0,:],v1[1,:],v1[2,:],\
                     v2[0,:],v2[1,:],v2[2,:],\
                     v3[0,:],v3[1,:],v3[2,:]])
+      bad = (numpy.abs(analyt_rot(fulleig(eigL),eigR)-H).sum(0) > tol) | isnan(eigR).any(0) | isnan(eigL).any(0)
+      if any(bad):
+       log(INFO,'%0.0f problems in eigendecomposition' % bad.sum())
+       for i in numpy.where(bad)[0]:
+           [eigL_,eigR_] = pyeig(array([[H[0,i],H[1,i],H[3,i]],\
+                                        [H[1,i],H[2,i],H[4,i]],\
+                                        [H[3,i],H[4,i],H[5,i]]]))
+           eigL[:,i] = eigL_
+           eigR[:,i] = eigR_.T.flatten()
   return [eigL,eigR]
     
 def logexpmetric(Mp,logexp='log'):
@@ -918,8 +942,11 @@ def gradate(H, grada, itsolver=False):
 
 
 def c_cell_dofs(mesh,V):
-  if dolfin.__version__ >= '1.4.0':
-   return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
+  if dolfin.__version__ >= '1.3.0':
+   if V.ufl_element().is_cellwise_constant():
+    return arange(mesh.num_cells()*mesh.coordinates().shape[1]**2)
+   else:
+    return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
   else:
       #this function returns the degrees of freedom numbers in a cell
       code = """
