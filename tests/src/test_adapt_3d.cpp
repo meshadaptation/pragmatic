@@ -164,7 +164,7 @@ int main(int argc, char **argv){
       std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
     for(int j=0;j<10;j++)
-      swapping.swap(0.5);
+      swapping.swap(0.9);
 
     std::cout<<"INFO: Verify quality after swapping.\n";
     assert(mesh->verify());
