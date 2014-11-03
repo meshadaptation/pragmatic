@@ -65,7 +65,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double, 3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   size_t NElements = mesh->get_number_elements();
@@ -95,14 +95,14 @@ int main(int argc, char **argv){
   double L_up = 1.0;
   double L_low = L_up/2;
 
-  Coarsen3D<double> coarsen(*mesh);
+  Coarsen<double, 3> coarsen(*mesh);
   coarsen.coarsen(L_low, L_up);
   
   Smooth<double, 3> smooth(*mesh);
   
   double L_max = mesh->maximal_edge_length();
   double alpha = 0.95; //sqrt(2.0)*0.5;
-  Refine3D<double> refine(*mesh);
+  Refine<double, 3> refine(*mesh);
   for(size_t i=0;i<20;i++){
     double L_ref = std::max(alpha*L_max, L_up);
     

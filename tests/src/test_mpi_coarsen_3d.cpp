@@ -63,13 +63,18 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
   
+  bool verbose = false;
+  if(argc>1){
+    verbose = std::string(argv[1])=="-v";
+  }
+
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -77,12 +82,15 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), 1.0);
   metric_field.update_mesh();
   
-  Coarsen3D<double> adapt(*mesh);
+  Coarsen<double,3> adapt(*mesh);
 
   double tic = get_wtime();
   adapt.coarsen(0.4, sqrt(2.0));
   double toc = get_wtime();
   
+  if(verbose)
+    mesh->verify();
+
   mesh->defragment();
   
   VTKTools<double>::export_vtu("../data/test_mpi_coarsen_3d", mesh);

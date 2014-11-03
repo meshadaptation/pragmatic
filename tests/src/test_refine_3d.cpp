@@ -63,7 +63,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
   mesh->create_boundary();
 
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -74,29 +74,48 @@ int main(int argc, char **argv){
       pow(mesh->get_coords(i)[1], 4) + 
       pow(mesh->get_coords(i)[2], 4);
   
-  metric_field.add_field(&(psi[0]), 0.1);
+  metric_field.add_field(&(psi[0]), 0.001);
   metric_field.update_mesh();
   
-  Refine3D<double> adapt(*mesh);
+  Refine<double,3> adapt(*mesh);
 
   double tic = get_wtime();
-  adapt.refine(sqrt(2.0));
+  for(int i=0;i<5;i++)
+    adapt.refine(sqrt(2.0));
   double toc = get_wtime();
 
   if(verbose)
     mesh->verify();
 
   mesh->defragment();
-  
-  VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
-   
-  if(verbose){
-    int nelements = mesh->get_number_elements();
-    std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-             <<"Number elements:      "<<nelements<<std::endl;
-  }
 
-  std::cout<<"pass"<<std::endl;
+  VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
+
+  if(verbose){
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+    int nelements = mesh->get_number_elements();
+
+    std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
+             <<"Number elements:     "<<nelements<<std::endl
+             <<"Quality mean:        "<<qmean<<std::endl
+             <<"Quality min:         "<<qmin<<std::endl;
+
+    long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
+
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+  }
 
   delete mesh;
 

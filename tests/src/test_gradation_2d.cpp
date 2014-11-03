@@ -82,7 +82,7 @@ int main(int argc, char **argv){
       psi[i] = -1.0;
   }
   
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
   
   metric_field.add_field(&(psi[0]), 0.2);
 
@@ -95,10 +95,10 @@ int main(int argc, char **argv){
   double L_up = sqrt(2.0);
   double L_low = L_up/2;
 
-  Coarsen2D<double> coarsen(*mesh);  
+  Coarsen<double, 2> coarsen(*mesh);
   Smooth<double, 2> smooth(*mesh);
-  Refine2D<double> refine(*mesh);
-  Swapping2D<double> swapping(*mesh);
+  Refine<double, 2> refine(*mesh);
+  Swapping<double, 2> swapping(*mesh);
 
   coarsen.coarsen(L_low, L_up);
 

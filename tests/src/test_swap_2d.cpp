@@ -66,7 +66,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
   mesh->create_boundary();
   
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
   
   size_t NNodes = mesh->get_number_nodes();
   double eta=0.0001;
@@ -85,7 +85,7 @@ int main(int argc, char **argv){
   double qmean = mesh->get_qmean();
   double qmin = mesh->get_qmin();
   
-  Swapping2D<double> swapping(*mesh);
+  Swapping<double,2> swapping(*mesh);
   
   double tic = get_wtime();
   swapping.swap(0.95);

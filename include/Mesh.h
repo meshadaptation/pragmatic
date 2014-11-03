@@ -171,8 +171,30 @@ template<typename real_t> class Mesh{
 
   /// Add a new element
   index_t append_element(const index_t *n){
+    if(_ENList.size() < (NElements+1)*nloc){
+      _ENList.resize(2*NElements*nloc);
+      boundary.resize(2*NElements*nloc);
+    }
+
     for(size_t i=0;i<nloc;i++)
       _ENList[nloc*NElements+i] = n[i];
+
+    ++NElements;
+
+    return get_number_elements()-1;
+  }
+
+  /// Add a new element and boundary
+  index_t append_element(const index_t *n, const int *b){
+    if(_ENList.size() < (NElements+1)*nloc){
+      _ENList.resize(2*NElements*nloc);
+      boundary.resize(2*NElements*nloc);
+    }
+
+    for(size_t i=0;i<nloc;i++){
+      _ENList[nloc*NElements+i] = n[i];
+      boundary[nloc*NElements+i] = b[i];
+    }
 
     ++NElements;
 
@@ -190,90 +212,90 @@ template<typename real_t> class Mesh{
       boundary.resize(NElements*3);
       std::fill(boundary.begin(), boundary.end(), -2);
       
-      // Create node-element adjancy list.      
+      // Create node-element adjacency list.
       std::vector< std::set<int> > NEList(NNodes);
       for(size_t i=0;i<NElements;i++){
-	if(_ENList[i*3]==-1)
-	  continue;
-	
-	for(size_t j=0;j<3;j++)
-	  NEList[_ENList[i*3+j]].insert(i);
+        if(_ENList[i*3]==-1)
+          continue;
+
+        for(size_t j=0;j<3;j++)
+          NEList[_ENList[i*3+j]].insert(i);
       }
       
       // Check neighbourhood of each element
       for(size_t i=0;i<NElements;i++){
-	if(_ENList[i*3]==-1)
-	  continue;
-	
-	for(int j=0;j<3;j++){
-	  int n1 = _ENList[i*3+(j+1)%3];
-	  int n2 = _ENList[i*3+(j+2)%3];
-	  
-	  if(is_owned_node(n1)||is_owned_node(n2)){
-	    std::set<int> neighbours;
-	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
-			     NEList[n2].begin(), NEList[n2].end(),
-			     inserter(neighbours, neighbours.begin()));
-	    
-	    if(neighbours.size()==2){
-	      if(*neighbours.begin()==(int)i)
-		boundary[i*3+j] = *neighbours.rbegin();
-	      else
-		boundary[i*3+j] = *neighbours.begin();
-	    }
-	  }else{
-	    // This is a halo facet.
-	    boundary[i*3+j] = -1;
-	  }
-	}
+        if(_ENList[i*3]==-1)
+          continue;
+
+        for(int j=0;j<3;j++){
+          int n1 = _ENList[i*3+(j+1)%3];
+          int n2 = _ENList[i*3+(j+2)%3];
+
+          if(is_owned_node(n1)||is_owned_node(n2)){
+            std::set<int> neighbours;
+            set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                     NEList[n2].begin(), NEList[n2].end(),
+                     inserter(neighbours, neighbours.begin()));
+
+            if(neighbours.size()==2){
+              if(*neighbours.begin()==(int)i)
+                boundary[i*3+j] = *neighbours.rbegin();
+              else
+                boundary[i*3+j] = *neighbours.begin();
+            }
+          }else{
+            // This is a halo facet.
+            boundary[i*3+j] = -1;
+          }
+        }
       }
     }else{ // ndims==3
       // Initialise the boundary array
       boundary.resize(NElements*4);
       std::fill(boundary.begin(), boundary.end(), -2);
       
-      // Create node-element adjancy list.      
+      // Create node-element adjacency list.
       std::vector< std::set<int> > NEList(NNodes);
       for(size_t i=0;i<NElements;i++){
-	if(_ENList[i*4]==-1)
-	  continue;
-	
-	for(size_t j=0;j<4;j++)
-	  NEList[_ENList[i*4+j]].insert(i);
+        if(_ENList[i*4]==-1)
+          continue;
+
+        for(size_t j=0;j<4;j++)
+          NEList[_ENList[i*4+j]].insert(i);
       }
       
       // Check neighbourhood of each element
       for(size_t i=0;i<NElements;i++){
-	if(_ENList[i*4]==-1)
-	  continue;
-	
-	for(int j=0;j<4;j++){
-	  int n1 = _ENList[i*4+(j+1)%4];
-	  int n2 = _ENList[i*4+(j+2)%4];
-	  int n3 = _ENList[i*4+(j+3)%4];
+        if(_ENList[i*4]==-1)
+          continue;
 
-	  if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
-	    std::set<int> edge_neighbours;
-	    set_intersection(NEList[n1].begin(), NEList[n1].end(),
-			     NEList[n2].begin(), NEList[n2].end(),
-			     inserter(edge_neighbours, edge_neighbours.begin()));
-	    
-	    std::set<int> neighbours;
-	    set_intersection(NEList[n3].begin(), NEList[n3].end(),
-			     edge_neighbours.begin(), edge_neighbours.end(),
-			     inserter(neighbours, neighbours.begin()));
-	    
-	    if(neighbours.size()==2){
-	      if(*neighbours.begin()==(int)i)
-		boundary[i*4+j] = *neighbours.rbegin();
-	      else
-		boundary[i*4+j] = *neighbours.begin();
-	    }
-	  }else{
-	    // This is a halo facet.
-	    boundary[i*4+j] = -1;
-	  }
-	}
+        for(int j=0;j<4;j++){
+          int n1 = _ENList[i*4+(j+1)%4];
+          int n2 = _ENList[i*4+(j+2)%4];
+          int n3 = _ENList[i*4+(j+3)%4];
+
+          if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
+            std::set<int> edge_neighbours;
+            set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                     NEList[n2].begin(), NEList[n2].end(),
+                     inserter(edge_neighbours, edge_neighbours.begin()));
+
+            std::set<int> neighbours;
+            set_intersection(NEList[n3].begin(), NEList[n3].end(),
+                     edge_neighbours.begin(), edge_neighbours.end(),
+                     inserter(neighbours, neighbours.begin()));
+
+            if(neighbours.size()==2){
+              if(*neighbours.begin()==(int)i)
+                boundary[i*4+j] = *neighbours.rbegin();
+              else
+                boundary[i*4+j] = *neighbours.begin();
+            }
+          }else{
+            // This is a halo facet.
+            boundary[i*4+j] = -1;
+          }
+        }
       }
     }
     for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
@@ -435,35 +457,43 @@ template<typename real_t> class Mesh{
       long double total_length=0;
       
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  for(int j=0;j<3;j++){
-            int n1 = _ENList[i*nloc+(j+1)%3];
-	    int n2 = _ENList[i*nloc+(j+2)%3];
+#ifdef HAVE_MPI
+        for(int i=0;i<NElements;i++){
+          if(_ENList[i*nloc] < 0)
+            continue;
 
-	    if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
-	      long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-	      long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	      
-	      total_length += sqrt(dx*dx+dy*dy);
-	    }
-	  }
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-      }else{
-	for(int i=0;i<NElements;i++){
-	  for(int j=0;j<3;j++){
-	    if(boundary[i*nloc+j]>0){
-	      int n1 = _ENList[i*nloc+(j+1)%3];
-	      int n2 = _ENList[i*nloc+(j+2)%3];
-	    
+          for(int j=0;j<3;j++){
+            int n1 = _ENList[i*nloc+(j+1)%3];
+            int n2 = _ENList[i*nloc+(j+2)%3];
+
+            if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
               long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
               long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-	      
-	      total_length += sqrt(dx*dx+dy*dy);
-	    }
-	  }
-	}
+
+              total_length += sqrt(dx*dx+dy*dy);
+            }
+          }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
+      }else{
+        for(int i=0;i<NElements;i++){
+          if(_ENList[i*nloc] < 0)
+            continue;
+
+          for(int j=0;j<3;j++){
+            if(boundary[i*nloc+j]>0){
+              int n1 = _ENList[i*nloc+(j+1)%3];
+              int n2 = _ENList[i*nloc+(j+2)%3];
+
+                  long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+                  long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+
+              total_length += sqrt(dx*dx+dy*dy);
+            }
+          }
+        }
       }
       
       return total_length;
@@ -481,8 +511,11 @@ template<typename real_t> class Mesh{
 
     if(ndims==2){
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           // Don't sum if it's not ours
           if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
@@ -514,12 +547,15 @@ template<typename real_t> class Mesh{
           long double s = 0.5*(a+b+c);
 
           total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
+#pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
           const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           const double *x1 = get_coords(n[0]);
           const double *x2 = get_coords(n[1]);
@@ -551,95 +587,103 @@ template<typename real_t> class Mesh{
       }
     }else{ // 3D
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
-	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    // Don't sum if it's not ours
-	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
-	      continue;
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
-	}
-	
-	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
+
+          for(int j=0;j<4;j++){
+            if(boundary[i*nloc+j]<=0)
+              continue;
+
+            int n1 = n[(j+1)%4];
+            int n2 = n[(j+2)%4];
+            int n3 = n[(j+3)%4];
+
+            // Don't sum if it's not ours
+            if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+              continue;
+
+            const double *x1 = get_coords(n1);
+            const double *x2 = get_coords(n2);
+            const double *x3 = get_coords(n3);
+
+            // Use Heron's Formula
+            long double a;
+            {
+              long double dx = (x1[0]-x2[0]);
+              long double dy = (x1[1]-x2[1]);
+              long double dz = (x1[2]-x2[2]);
+              a = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double b;
+            {
+              long double dx = (x1[0]-x3[0]);
+              long double dy = (x1[1]-x3[1]);
+              long double dz = (x1[2]-x3[2]);
+              b = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double c;
+            {
+              long double dx = (x2[0]-x3[0]);
+              long double dy = (x2[1]-x3[1]);
+              long double dz = (x2[2]-x3[2]);
+              c = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double s = 0.5*(a+b+c);
+
+            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
-	  for(int j=0;j<4;j++){
-	    if(boundary[i*nloc+j]<=0)
-	      continue;
-	    
-	    int n1 = n[(j+1)%4];
-	    int n2 = n[(j+2)%4];
-	    int n3 = n[(j+3)%4];
-	    
-	    const double *x1 = get_coords(n1);
-	    const double *x2 = get_coords(n2);
-	    const double *x3 = get_coords(n3);
-	    
-	    // Use Heron's Formula
-	    long double a;
-	    {
-	      long double dx = (x1[0]-x2[0]);
-	      long double dy = (x1[1]-x2[1]);
-	      long double dz = (x1[2]-x2[2]);
-	      a = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double b;
-	    {
-	      long double dx = (x1[0]-x3[0]);
-	      long double dy = (x1[1]-x3[1]);
-	      long double dz = (x1[2]-x3[2]);
-	      b = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double c;
-	    {
-	      long double dx = (x2[0]-x3[0]);
-	      long double dy = (x2[1]-x3[1]);
-	      long double dz = (x2[2]-x3[2]);
-	      c = sqrt(dx*dx+dy*dy+dz*dz);
-	    }
-	    long double s = 0.5*(a+b+c);
-	    
-	    total_area += sqrt(s*(s-a)*(s-b)*(s-c));
-	  }
-	}
+#pragma omp parallel for reduction(+:total_area)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
+
+          for(int j=0;j<4;j++){
+            if(boundary[i*nloc+j]<=0)
+              continue;
+
+            int n1 = n[(j+1)%4];
+            int n2 = n[(j+2)%4];
+            int n3 = n[(j+3)%4];
+
+            const double *x1 = get_coords(n1);
+            const double *x2 = get_coords(n2);
+            const double *x3 = get_coords(n3);
+
+            // Use Heron's Formula
+            long double a;
+            {
+              long double dx = (x1[0]-x2[0]);
+              long double dy = (x1[1]-x2[1]);
+              long double dz = (x1[2]-x2[2]);
+              a = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double b;
+            {
+              long double dx = (x1[0]-x3[0]);
+              long double dy = (x1[1]-x3[1]);
+              long double dz = (x1[2]-x3[2]);
+              b = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double c;
+            {
+              long double dx = (x2[0]-x3[0]);
+              long double dy = (x2[1]-x3[1]);
+              long double dz = (x2[2]-x3[2]);
+              c = sqrt(dx*dx+dy*dy+dz*dz);
+            }
+            long double s = 0.5*(a+b+c);
+
+            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          }
+        }
       }
     }
     return total_area;
@@ -654,8 +698,11 @@ template<typename real_t> class Mesh{
       std::cerr<<"ERROR: Cannot calculate volume in 2D\n"; 
     }else{ // 3D
       if(num_processes>1){
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
+#pragma omp parallel for reduction(+:total_volume)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 	    
           // Don't sum if it's not ours
           if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
@@ -679,12 +726,15 @@ template<typename real_t> class Mesh{
           long double z03 = (x0[2] - x3[2]);
 
           total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
-	}
+        }
 	
-	MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+        MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       }else{
-	for(int i=0;i<NElements;i++){
-	  const index_t *n=get_element(i);
+#pragma omp parallel for reduction(+:total_volume)
+        for(int i=0;i<NElements;i++){
+          const index_t *n=get_element(i);
+          if(n[0] < 0)
+            continue;
 
           const double *x0 = get_coords(n[0]);
           const double *x1 = get_coords(n[1]);
@@ -1182,7 +1232,7 @@ template<typename real_t> class Mesh{
           if(active_cnt!=local_NNList[i].size()){
             valid_nnlist=false;
 
-            std::cerr<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
+            std::cerr<<std::endl<<"active_cnt!=local_NNList[i].size() "<<active_cnt<<", "<<local_NNList[i].size()<<std::endl;
             std::cerr<<"NNList["
                      <<i
                      <<"("
@@ -1268,9 +1318,11 @@ template<typename real_t> class Mesh{
         max_ele_area = std::max(max_ele_area, larea);
       }
 
+#ifdef HAVE_MPI
       MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+#endif
 
       if(rank==0){
         std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
@@ -1309,9 +1361,11 @@ template<typename real_t> class Mesh{
         max_ele_vol = std::max(max_ele_vol, lvolume);
       }
 
+#ifdef HAVE_MPI
       MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
       MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+#endif
 
       if(rank==0){
         std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
@@ -1335,39 +1389,6 @@ template<typename real_t> class Mesh{
 #endif
 
     return state;
-  }
-
-  // TODO - This function is here for compatibility with 3D
-  void get_global_node_numbering(std::vector<int>& NPNodes, std::vector<int> &lnn2gnn){
-    NPNodes.resize(num_processes);
-    if(num_processes>1){
-      NPNodes[rank] = NNodes - recv_halo.size();
-
-      // Allgather NPNodes
-      MPI_Allgather(&(NPNodes[rank]), 1, MPI_INT, &(NPNodes[0]), 1, MPI_INT, get_mpi_comm());
-
-      // Calculate the global numbering offset for this partition.
-      int gnn_offset=0;
-      for(int i=0;i<rank;i++)
-        gnn_offset+=NPNodes[i];
-
-      // Write global node numbering.
-      for(index_t i=0;i<(index_t)NNodes;i++){
-        if(recv_halo.count(i)){
-          lnn2gnn[i] = 0;
-        }else{
-          lnn2gnn[i] = gnn_offset++;
-        }
-      }
-
-      // Update GNN's for the halo nodes.
-      halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
-    }else{
-      NPNodes[0] = NNodes;
-      for(index_t i=0;i<(index_t)NNodes;i++){
-        lnn2gnn[i] = i;
-      }
-    }
   }
 
   void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
@@ -1400,27 +1421,14 @@ template<typename real_t> class Mesh{
   }
 
  private:
-  template<typename _real_t> friend class MetricField2D;
-  template<typename _real_t> friend class MetricField3D;
-  template<typename _real_t, int> friend class Smooth;
-  template<typename _real_t> friend class Swapping2D;
-  template<typename _real_t> friend class Swapping3D;
-  template<typename _real_t> friend class Coarsen2D;
-  template<typename _real_t> friend class Coarsen3D;
-  template<typename _real_t> friend class Refine2D;
-  template<typename _real_t> friend class Refine3D;
+  template<typename _real_t, int _dim> friend class MetricField;
+  template<typename _real_t, int _dim> friend class Smooth;
+  template<typename _real_t, int _dim> friend class Swapping;
+  template<typename _real_t, int _dim> friend class Coarsen;
+  template<typename _real_t, int _dim> friend class Refine;
+  template<typename _real_t> friend class DeferredOperations;
   template<typename _real_t> friend class VTKTools;
   template<typename _real_t> friend class CUDATools;
-
-  struct DeferredOperations{
-    std::vector<index_t> addNN; // addNN -> [i, n] : Add node n to NNList[i].
-    std::vector<index_t> remNN; // remNN -> [i, n] : Remove node n from NNList[i].
-    std::vector<index_t> addNE; // addNE -> [i, n] : Add element n to NEList[i].
-    std::vector<index_t> remNE; // remNE -> [i, n] : Remove element n from NEList[i].
-    std::vector<index_t> propagation_vector; // [i] : Mark Coarseninig::dynamic_vertex[i]=-2.
-    std::vector<index_t> propagation_set; // [i, n] : Mark Swapping::marked_edges[i].insert(n).
-    std::vector<index_t> reset_colour; // [i] : Set Colouring::node_colour[i]=-1.
-  };
 
   void _init(int _NNodes, int _NElements, const index_t *globalENList,
              const real_t *x, const real_t *y, const real_t *z,
@@ -1435,9 +1443,11 @@ template<typename real_t> class Mesh{
     MPI_Comm_size(_mpi_comm, &num_processes);
     MPI_Comm_rank(_mpi_comm, &rank);
 
-    // Assign the correct MPI data type to MPI_INDEX_T
+    // Assign the correct MPI data type to MPI_INDEX_T and MPI_REAL_T
     mpi_type_wrapper<index_t> mpi_index_t_wrapper;
     MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
+    mpi_type_wrapper<real_t> mpi_real_t_wrapper;
+    MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
 #endif
 
     nthreads = pragmatic_nthreads();
@@ -1547,7 +1557,6 @@ template<typename real_t> class Mesh{
     NEList.resize(NNodes);
     node_owner.resize(NNodes);
     this->lnn2gnn.resize(NNodes);
-    deferred_operations.resize(nthreads);
 
     // TODO I don't know whether this method makes sense anymore.
     // Enforce first-touch policy
@@ -1573,10 +1582,6 @@ template<typename real_t> class Mesh{
           _coords[i*3+2] = z[i];
         }
       }
-
-      // Each thread allocates nthreads DeferredOperations
-      // structs, one for each OMP thread.
-      deferred_operations[pragmatic_thread_id()].resize((defOp_scaling_factor*nthreads));
 
 #pragma omp single nowait
       {
@@ -1650,6 +1655,12 @@ template<typename real_t> class Mesh{
   void create_adjacency(){
     int tid = pragmatic_thread_id();
 
+#pragma omp for schedule(static)
+    for(size_t i=0;i<NNodes;i++){
+      NNList[i].clear();
+      NEList[i].clear();
+    }
+
     for(size_t i=0; i<NElements; i++){
       if(_ENList[i*nloc]<0)
         continue;
@@ -1683,115 +1694,6 @@ template<typename real_t> class Mesh{
 
       NNList[i].swap(*nnset);
       delete nnset;
-    }
-  }
-
-  /*
-   * Park & Miller (aka Lehmer) pseudo-random number generation. Possible bug if
-   * index_t is a datatype longer than 32 bits. However, in the context of a single
-   * MPI node, it is highly unlikely that index_t will ever need to be longer.
-   * A 64-bit datatype makes sense only for global node numbers, not local.
-   */
-  inline uint32_t hash(const uint32_t id) const{
-    return ((uint64_t)id * 279470273UL) % 4294967291UL;
-  }
-
-  inline void deferred_addNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(n);
-  }
-
-  inline void deferred_remNN(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(n);
-  }
-
-  inline void deferred_addNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(n);
-  }
-
-  inline void deferred_remNE(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(n);
-  }
-
-  inline void deferred_propagate_coarsening(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_vector.push_back(i);
-  }
-
-  inline void deferred_propagate_swapping(index_t i, index_t n, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(i);
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].propagation_set.push_back(n);
-  }
-
-  inline void deferred_reset_colour(index_t i, size_t tid){
-    deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].reset_colour.push_back(i);
-  }
-
-  void commit_deferred(size_t vtid){
-    for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][vtid];
-
-      // Commit removals from NNList
-      for(typename std::vector<index_t>::const_iterator it=pending.remNN.begin(); it!=pending.remNN.end(); it+=2){
-        typename std::vector<index_t>::iterator position;
-        position = std::find(NNList[*it].begin(), NNList[*it].end(), *(it+1));
-        assert(position != NNList[*it].end());
-        NNList[*it].erase(position);
-      }
-      pending.remNN.clear();
-
-      // Commit additions to NNList
-      for(typename std::vector<index_t>::const_iterator it=pending.addNN.begin(); it!=pending.addNN.end(); it+=2){
-        NNList[*it].push_back(*(it+1));
-      }
-      pending.addNN.clear();
-
-      // Commit removals from NEList
-      for(typename std::vector<index_t>::const_iterator it=pending.remNE.begin(); it!=pending.remNE.end(); it+=2){
-        NEList[*it].erase(*(it+1));
-      }
-      pending.remNE.clear();
-
-      // Commit additions to NEList
-      for(typename std::vector<index_t>::const_iterator it=pending.addNE.begin(); it!=pending.addNE.end(); it+=2){
-        NEList[*it].insert(*(it+1));
-      }
-      pending.addNE.clear();
-    }
-  }
-
-  void commit_coarsening_propagation(index_t *dynamic_vertex, size_t vtid){
-    for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][vtid];
-
-      for(typename std::vector<index_t>::const_iterator it=pending.propagation_vector.begin(); it!=pending.propagation_vector.end(); ++it)
-        dynamic_vertex[*it] = -2;
-
-      pending.propagation_vector.clear();
-    }
-  }
-
-  void commit_swapping_propagation(std::vector< std::set<index_t> >&marked_edges , size_t vtid){
-    for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][vtid];
-
-      for(typename std::vector<index_t>::const_iterator it=pending.propagation_set.begin(); it!=pending.propagation_set.end(); it+=2)
-        marked_edges[*it].insert(*(it+1));
-
-      pending.propagation_set.clear();
-    }
-  }
-
-  void commit_colour_reset(int *node_colour, size_t vtid){
-    for(int i=0; i<nthreads; ++i){
-      DeferredOperations& pending = deferred_operations[i][vtid];
-
-      for(typename std::vector<index_t>::const_iterator it=pending.reset_colour.begin(); it!=pending.reset_colour.end(); ++it)
-        node_colour[*it] = -1;
-
-      pending.reset_colour.clear();
     }
   }
 
@@ -1915,29 +1817,9 @@ template<typename real_t> class Mesh{
     send_halo.swap(send_halo_temp);
   }
 
-  void clear_invisible(std::vector<index_t>& invisible_vertices){
-    for(size_t i=0; i<invisible_vertices.size(); ++i){
-      index_t v = invisible_vertices[i];
-
-      // Traverse a copy of the vertex's NEList.
-      // We need a copy because erase_element modifies the original NEList.
-      std::set<index_t> NEList_copy = NEList[v];
-      for(typename std::set<index_t>::const_iterator eit = NEList_copy.begin(); eit != NEList_copy.end(); ++eit){
-        // If the vertex is invisible, then all elements adjacent to it are also invisible - remove them immediately.
-        erase_element(*eit);
-      }
-
-      // This vertex is by definition invisible, so remove it immediately. Update NNList of all neighbours.
-      for(typename std::vector<index_t>::const_iterator neigh_it = NNList[v].begin(); neigh_it != NNList[v].end(); ++neigh_it){
-        typename std::vector<index_t>::iterator it = std::find(NNList[*neigh_it].begin(), NNList[*neigh_it].end(), v);
-        NNList[*neigh_it].erase(it);
-      }
-      erase_vertex(v);
-    }
-  }
-
   void create_global_node_numbering(){
     if(num_processes>1){
+#ifdef HAVE_MPI
       // Calculate the global numbering offset for this partition.
       int gnn_offset;
       int NPNodes = NNodes - recv_halo.size();
@@ -1963,6 +1845,7 @@ template<typename real_t> class Mesh{
           node_owner[*it] = i;
         }
       }
+#endif
     }else{
       memset(&node_owner[0], 0, NNodes*sizeof(int));
       for(index_t i=0; i < (index_t) NNodes; i++)
@@ -1971,6 +1854,7 @@ template<typename real_t> class Mesh{
   }
 
   void create_gappy_global_numbering(size_t pNElements){
+#ifdef HAVE_MPI
     // We expect to have NElements_predict/2 nodes in the partition,
     // so let's reserve 10 times more space for global node numbers.
     index_t gnn_reserve = 5*pNElements;
@@ -1999,6 +1883,7 @@ template<typename real_t> class Mesh{
         recv_map[i][lnn2gnn[*it]] = *it;
       }
     }
+#endif
   }
 
   void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt){
@@ -2042,26 +1927,6 @@ template<typename real_t> class Mesh{
 #endif
   }
 
-  // This is used temporarily for 3D - it will be removed in the future.
-  inline index_t get_new_vertex(index_t n0, index_t n1,
-      std::vector< std::vector<index_t> > &refined_edges, const index_t *lnn2gnn) const{
-
-    if(lnn2gnn[n0]>lnn2gnn[n1]){
-      // Needs to be swapped because we want the lesser gnn first.
-      index_t tmp_n0=n0;
-      n0=n1;
-      n1=tmp_n0;
-    }
-
-    for(size_t i=0;i<NNList[n0].size();i++){
-      if(NNList[n0][i]==n1){
-        return refined_edges[n0][i];
-      }
-    }
-
-    return -1;
-  }
-
   size_t ndims, nloc, msize;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
@@ -2091,16 +1956,14 @@ template<typename real_t> class Mesh{
   std::set<index_t> send_halo, recv_halo;
   std::vector<int> node_owner;
   std::vector<index_t> lnn2gnn;
-  //Deferred operations
-  std::vector< std::vector<DeferredOperations> > deferred_operations;
-  static const int defOp_scaling_factor = 32;
 
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
   index_t gnn_offset;
 
-  // MPI data type for index_t
+  // MPI data type for index_t and real_t
   MPI_Datatype MPI_INDEX_T;
+  MPI_Datatype MPI_REAL_T;
 #endif
 };
 

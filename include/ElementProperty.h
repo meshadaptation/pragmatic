@@ -69,12 +69,12 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): dimension(2), inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+   orientation = 1;
+
    double A = area(x0, x1, x2);
-   if(A<0)
-     orientation = -1;
-   else
-     orientation = 1;
+    if(A<0)
+      orientation = -1;
   }
 
   /*! Constructor for 3D tetrahedral elements.
@@ -83,7 +83,9 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) : dimension(3), inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+    orientation = 1;
+
     double V = volume(x0, x1, x2, x3);
     if(V<0)
       orientation = -1;
@@ -133,10 +135,11 @@ class ElementProperty{
    * @param x1 coordinate at finish of line segment.
    * @param m metric tensor for first point.
    */
-  real_t length(const real_t x0[], const real_t x1[], const double m[]) const{
-    if(dimension==2){
+  template<int dim>
+  double length(const real_t x0[], const real_t x1[], const double m[]) const{
+    if(dim==2){
       return length2d(x0, x1, m);
-    }else{
+    }else{ //if(dim==3)
       return length3d(x0, x1, m);
     }
   }
@@ -534,7 +537,6 @@ class ElementProperty{
   const double lipnikov_const2d; // 12.0*sqrt(3.0);
   const double lipnikov_const3d; // pow(6.0, 4)*sqrt(2.0);
 
-  const int dimension;
   int orientation;
 };
 #endif

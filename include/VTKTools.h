@@ -63,7 +63,7 @@ typedef float vtkFloatingPointType;
 #include "Mesh.h"
 #include "MetricTensor.h"
 #include "ElementProperty.h"
-extern "C" { 
+extern "C" {
 #include "metis.h"
 }
 
@@ -390,27 +390,29 @@ template<typename real_t> class VTKTools{
       real_t mean_edge_length=0;
       real_t max_desired_edge_length=0;
       real_t min_desired_edge_length=DBL_MAX;
-      if(ndims==2){
+
+      if(ndims==2)
         for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
-          
-          MetricTensor2D<double> M(m);
+
+          MetricTensor<double,2> M(m);
 
           max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
           min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
         }
-      }else{
+      else if(ndims==3)
         for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin();it!=mesh->NNList[i].end();++it){
           double length = mesh->calc_edge_length(i, *it);
           mean_edge_length += length;
-          
-          MetricTensor3D<double> M(m);
+
+          MetricTensor<double,3> M(m);
 
           max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
           min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
         }
-      }
+
+
       mean_edge_length/=nedges;
       vtk_edge_length->SetTuple1(i, mean_edge_length);
       vtk_max_desired_length->SetTuple1(i, max_desired_edge_length);
@@ -508,7 +510,7 @@ template<typename real_t> class VTKTools{
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
         ug->InsertNextCell(VTK_TRIANGLE, 3, pts);
-	vtk_boundary->SetTuple3(i, mesh->boundary[i*3], mesh->boundary[i*3+1], mesh->boundary[i*3+2]);
+        vtk_boundary->SetTuple3(i, mesh->boundary[i*3], mesh->boundary[i*3+1], mesh->boundary[i*3+2]);
 
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]),
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2])));

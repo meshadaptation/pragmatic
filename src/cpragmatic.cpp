@@ -126,13 +126,13 @@ extern "C" {
 
     if(_pragmatic_metric_field==NULL){
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
+        MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
 	metric_field->add_field(psi, *error, *pnorm);
 	metric_field->update_mesh();
 	
         _pragmatic_metric_field = metric_field;
       }else{
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
+        MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
 	metric_field->add_field(psi, *error, *pnorm);
 	metric_field->update_mesh();
 
@@ -155,20 +155,20 @@ extern "C" {
 
     if(_pragmatic_metric_field==NULL){
       if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-        MetricField2D<double> *metric_field = new MetricField2D<double>(*mesh);
+        MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
         _pragmatic_metric_field = metric_field;
       }else{
-        MetricField3D<double> *metric_field = new MetricField3D<double>(*mesh);
+        MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
         _pragmatic_metric_field = metric_field;
       }
     }
 
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField2D<double> *)_pragmatic_metric_field)->set_metric(metric);
-      ((MetricField2D<double> *)_pragmatic_metric_field)->update_mesh();
+      ((MetricField<double,2> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,2> *)_pragmatic_metric_field)->update_mesh();
     }else{
-      ((MetricField3D<double> *)_pragmatic_metric_field)->set_metric(metric);
-      ((MetricField3D<double> *)_pragmatic_metric_field)->update_mesh();
+      ((MetricField<double,3> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,3> *)_pragmatic_metric_field)->update_mesh();
     }
   }
 
@@ -197,10 +197,10 @@ extern "C" {
     double L_low = L_up*0.5;
 
     if(ndims==2){
-      Coarsen2D<double> coarsen(*mesh);
+      Coarsen<double, 2> coarsen(*mesh);
       Smooth<double, 2> smooth(*mesh);
-      Refine2D<double> refine(*mesh);
-      Swapping2D<double> swapping(*mesh);
+      Refine<double, 2> refine(*mesh);
+      Swapping<double, 2> swapping(*mesh);
 
       double L_max = mesh->maximal_edge_length();
 
@@ -222,10 +222,10 @@ extern "C" {
 
       smooth.smooth(10);
     }else{
-      Coarsen3D<double> coarsen(*mesh);
+      Coarsen<double, 3> coarsen(*mesh);
       Smooth<double, 3> smooth(*mesh);
-      Refine3D<double> refine(*mesh);
-      Swapping3D<double> swapping(*mesh);
+      Refine<double, 3> refine(*mesh);
+      Swapping<double, 3> swapping(*mesh);
 
       coarsen.coarsen(L_low, L_up);
 
@@ -294,7 +294,7 @@ extern "C" {
       }
     }
   }
-
+/*
   void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn){
     std::vector<int> _NPNodes, _lnn2gnn;
     ((Mesh<double> *)_pragmatic_mesh)->get_global_node_numbering(_NPNodes, _lnn2gnn);
@@ -306,22 +306,22 @@ extern "C" {
     for(size_t i=0;i<len1;i++)
       lnn2gnn[i] = _lnn2gnn[i];
   }
-
+*/
   void pragmatic_get_metric(double *metric){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField2D<double> *)_pragmatic_metric_field)->get_metric(metric);
+      ((MetricField<double,2> *)_pragmatic_metric_field)->get_metric(metric);
     }else{
-      ((MetricField3D<double> *)_pragmatic_metric_field)->get_metric(metric);
+      ((MetricField<double,3> *)_pragmatic_metric_field)->get_metric(metric);
     }
   }
 
   void pragmatic_finalize(){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       if(_pragmatic_metric_field!=NULL)
-        delete (MetricField2D<double> *)_pragmatic_metric_field;
+        delete (MetricField<double,2> *)_pragmatic_metric_field;
     }else{
       if(_pragmatic_metric_field!=NULL)
-        delete (MetricField3D<double> *)_pragmatic_metric_field;
+        delete (MetricField<double,3> *)_pragmatic_metric_field;
     }
     _pragmatic_metric_field=NULL;
 

@@ -67,7 +67,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
   mesh->create_boundary();
 
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double, 2> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
   for(size_t i=0;i<NNodes;i++){
@@ -76,7 +76,7 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  Coarsen2D<double> adapt(*mesh);
+  Coarsen<double, 2> adapt(*mesh);
 
   double L_up = sqrt(2.0);
   double L_low = L_up*0.5;

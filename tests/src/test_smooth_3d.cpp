@@ -67,7 +67,7 @@ int main(int argc, char **argv){
   
   double pi = 3.14159265358979323846;
   
-  MetricField3D<double> metric_field(*mesh);
+  MetricField<double,3> metric_field(*mesh);
   
   size_t NNodes = mesh->get_number_nodes();
   

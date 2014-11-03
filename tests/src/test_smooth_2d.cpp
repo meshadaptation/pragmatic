@@ -65,7 +65,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/smooth_2d.vtu");
   mesh->create_boundary();
 
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
   
   size_t NNodes = mesh->get_number_nodes();
   

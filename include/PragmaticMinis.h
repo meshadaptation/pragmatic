@@ -77,58 +77,60 @@ int pragmatic_process_id(MPI_Comm comm){
 
 // Returns the original value of shared, while incrementing *shared by inc.
 size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc){
-  size_t old;
-
+size_t old;
 #if __FUJITSU
-  /*
-   * 'add' vs 'addx' --> 'addx' performs addition with carry,
-   * what we need is 'add'.
-   *
-   * 'casx' --> Register %0 is updated with the current value of the shared
-   * variable, no matter whether the comparison succeeds. Following that, it is
-   * obvious that we don't need to reload the shared variable from RAM into %g1
-   * at the next iteration of the loop, so "ldx [%1], %%g1" can be pushed
-   * outside the loop, therefore avoiding a redundant access to main memory per
-   * iteration of the loop. We just need to copy %0 to %g1.
-   *
-   * 'bne,pt' --> "pt" is a hint for the branch predictor meaning that the
-   * branch is expected NOT to be taken. The following 'mov' instruction is
-   * called "branch delayed instruction" and is executed TOGETHER with the
-   * preceeding branch instruction; we take advantage of this "instruction
-   * slot" to copy the updated value of the shared variable from %0 to %g1
-   * where it is expected to be found by the 'add'.
-   */
-  asm volatile(
-    "ldx [%1], %%g1;"
-    "retry:"
-    "add %%g1, %2, %0;"
-    "casx [%1], %%g1, %0;"
-    "cmp %0, %%g1;"
-    "bne,pn %%xcc, retry;"
-    " mov  %0, %%g1;"
-    :"=&r"(old)
-    :"p"(shared), "r"(inc)
-    :"%g1"
-  );
+/*
+* 'add' vs 'addx' --> 'addx' performs addition with carry,
+* what we need is 'add'.
+*
+* 'casx' --> Register %0 is updated with the current value of the shared
+* variable, no matter whether the comparison succeeds. Following that, it is
+* obvious that we don't need to reload the shared variable from RAM into %g1
+* at the next iteration of the loop, so "ldx [%1], %%g1" can be pushed
+* outside the loop, therefore avoiding a redundant access to main memory per
+* iteration of the loop. We just need to copy %0 to %g1.
+*
+* 'bne,pt' --> "pt" is a hint for the branch predictor meaning that the
+* branch is expected NOT to be taken. The following 'mov' instruction is
+* called "branch delayed instruction" and is executed TOGETHER with the
+* preceeding branch instruction; we take advantage of this "instruction
+* slot" to copy the updated value of the shared variable from %0 to %g1
+* where it is expected to be found by the 'add'.
+*/
+asm volatile(
+"ldx [%1], %%g1;"
+"retry:"
+"add %%g1, %2, %0;"
+"casx [%1], %%g1, %0;"
+"cmp %0, %%g1;"
+"bne,pn %%xcc, retry;"
+" mov %0, %%g1;"
+:"=&r"(old)
+:"p"(shared), "r"(inc)
+:"%g1"
+);
 #elif _OPENMP >= 201107
 #pragma omp atomic capture
-  {
-    old = *shared;
-    *shared += inc;
-  }
+{
+old = *shared;
+*shared += inc;
+}
 #else
-  old = __sync_fetch_and_add(shared, inc);
+old = __sync_fetch_and_add(shared, inc);
 #endif
-
-  return old;
+return old;
 }
 
-#ifdef __FUJITSU
-#define pragmatic_isnormal isnormal
-#define pragmatic_isnan isnan
-#else
+// Every element of "range" is in the form: {pair<size_t,size_t> range, int thread}
+typedef std::pair< std::pair<size_t, size_t>, int > range_element;
+bool pragmatic_range_element_comparator(range_element p1, range_element p2){
+  return p1.first.first < p2.first.first;
+}
+bool pragmatic_range_element_finder(range_element p1, range_element p2){
+  return p1.first.second <= p2.first.second;
+}
+
 #define pragmatic_isnormal std::isnormal
 #define pragmatic_isnan std::isnan
-#endif
 
 #endif

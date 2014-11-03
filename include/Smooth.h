@@ -116,16 +116,16 @@ template<typename real_t, int dim>
     int NElements = _mesh->get_number_elements();
     if(mpi_nparts>1){
       for(int i=0;i<NElements;i++){
-	const int *n=_mesh->get_element(i);
-	if(n[0]<0)
-	  continue;
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
 
-	for(size_t j=0;j<nloc;j++){
-	  if(!_mesh->is_owned_node(n[j])){
-	    halo_elements.push_back(i);
-	    break;
-	  }
-	}
+        for(size_t j=0;j<nloc;j++){
+          if(!_mesh->is_owned_node(n[j])){
+            halo_elements.push_back(i);
+            break;
+          }
+        }
       }
     }
 
@@ -145,62 +145,62 @@ template<typename real_t, int dim>
 #pragma omp parallel
     {
       for(int ic=1;ic<=max_colour;ic++){
-	if(colour_sets.count(ic)){
-	  int node_set_size = colour_sets[ic].size();
+        if(colour_sets.count(ic)){
+          int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(guided)
-	  for(int cn=0;cn<node_set_size;cn++){
-	    index_t node = colour_sets[ic][cn];
+          for(int cn=0;cn<node_set_size;cn++){
+            index_t node = colour_sets[ic][cn];
 
-	    if(smart_laplacian_kernel(node)){
-	      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		active_vertices[*it] = 1;
-	      }
-	    }
-	  }
-	}
+            if(smart_laplacian_kernel(node)){
+              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                active_vertices[*it] = 1;
+              }
+            }
+          }
+        }
 
-	if(mpi_nparts>1){
+        if(mpi_nparts>1){
 #pragma omp single
-	  {
-	    halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+          {
+            halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
 
-	    for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-	      update_quality(*ie);
-	  }
-	}
+            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+              update_quality(*ie);
+          }
+        }
       }
 
       for(int iter=1;iter<max_iterations;iter++){
-	for(int ic=1;ic<=max_colour;ic++){
-	  if(colour_sets.count(ic)){
-	    int node_set_size = colour_sets[ic].size();
+        for(int ic=1;ic<=max_colour;ic++){
+          if(colour_sets.count(ic)){
+            int node_set_size = colour_sets[ic].size();
 #pragma omp for schedule(guided)
-	    for(int cn=0;cn<node_set_size;cn++){
-	      index_t node = colour_sets[ic][cn];
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[ic][cn];
 
-	      // Only process if it is active.
-	      if(active_vertices[node]){
-		// Reset mask
-		active_vertices[node] = 0;
+              // Only process if it is active.
+              if(active_vertices[node]){
+                // Reset mask
+                active_vertices[node] = 0;
 
-		if(optimisation_linf_kernel(node)){
-		  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		    active_vertices[*it] = 1;
-		  }
-		}
-	      }
-	    }
-	  }
-	  if(mpi_nparts>1){
+                if(optimisation_linf_kernel(node)){
+                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                    active_vertices[*it] = 1;
+                  }
+                }
+              }
+            }
+          }
+          if(mpi_nparts>1){
 #pragma omp single
-	    {
-	      halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
-	      
-	      for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-		update_quality(*ie);
-	    }
-	  }
-	}
+            {
+              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+
+              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+                update_quality(*ie);
+            }
+          }
+        }
       }
     }
 
@@ -310,11 +310,11 @@ template<typename real_t, int dim>
       
       q[0] += m[0]*x + m[1]*y + m[2]*z;
       q[1] += m[1]*x + m[3]*y + m[4]*z;
-      q[2] += m[2]*x + m[4]*y + m[6]*z;
+      q[2] += m[2]*x + m[4]*y + m[5]*z;
 
       A[0] += m[0]; A[1] += m[1]; A[2] += m[2];
       A[4] += m[3]; A[5] += m[4];
-      A[8] += m[6];
+      A[8] += m[5];
     }
     A[3] = A[1];
     A[6] = A[2];
@@ -432,8 +432,8 @@ template<typename real_t, int dim>
       const index_t *n=_mesh->get_element(worst_element.second);
       size_t loc=0;
       for(;loc<3;loc++)
-	if(n[loc]==n0)
-	  break;
+        if(n[loc]==n0)
+          break;
       
       int n1 = n[(loc+1)%3];
       int n2 = n[(loc+2)%3];
@@ -447,7 +447,7 @@ template<typename real_t, int dim>
       assert(mag!=0);
       
       for(int i=0;i<2;i++)
-	search[i] = grad_w[i]/mag;
+        search[i] = grad_w[i]/mag;
     }
 
     // Estimate how far we move along this search path until we make
@@ -470,13 +470,13 @@ template<typename real_t, int dim>
 
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
       if(*it==worst_element.second)
-	continue;
+        continue;
 
       const index_t *n=_mesh->get_element(*it);
       size_t loc=0;
       for(;loc<3;loc++)
-	if(n[loc]==n0)
-	  break;
+        if(n[loc]==n0)
+          break;
 	
       int n1 = n[(loc+1)%3];
       int n2 = n[(loc+2)%3];
@@ -488,12 +488,12 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, m0, grad);
 	
       double new_alpha =
-	(quality[*it]-worst_element.first)/
-	((search[0]*grad_w[0]+search[1]*grad_w[1])-
-	 (search[0]*grad[0]+search[1]*grad[1]));
+          (quality[*it]-worst_element.first)/
+          ((search[0]*grad_w[0]+search[1]*grad_w[1])-
+          (search[0]*grad[0]+search[1]*grad[1]));
 
       if(new_alpha>0)
-	alpha = std::min(alpha, new_alpha);
+        alpha = std::min(alpha, new_alpha);
     }
     
     bool linf_update;
@@ -505,44 +505,43 @@ template<typename real_t, int dim>
       
       double new_x0[2];
       for(int i=0;i<2;i++){
-	new_x0[i] = x0[i] + alpha*search[i];
-	assert(std::isnormal(new_x0[i]));
+        new_x0[i] = x0[i] + alpha*search[i];
+        assert(std::isnormal(new_x0[i]));
       }
 
       double new_m0[3];
       bool valid = generate_location_2d(n0, new_x0, new_m0);
       
       if(!valid)
-	continue;
+        continue;
       
       // Need to check that we have not decreased the Linf norm. Start by assuming the best.
       linf_update = true;
       std::vector<double> new_quality;
       for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-	const index_t *n=_mesh->get_element(*it);
-	size_t loc=0;
-	for(;loc<3;loc++)
-	  if(n[loc]==n0)
-	    break;
+        const index_t *n=_mesh->get_element(*it);
+        size_t loc=0;
+        for(;loc<3;loc++)
+          if(n[loc]==n0)
+            break;
 	
-	int n1 = n[(loc+1)%3];
-	int n2 = n[(loc+2)%3];
-	
-	const double *x1 = _mesh->get_coords(n1);
-	const double *x2 = _mesh->get_coords(n2);
-	
-	const double *m1 = _mesh->get_metric(n1);
-	const double *m2 = _mesh->get_metric(n2);
-	
-	double new_q = property->lipnikov(new_x0, x1, x2,
-					  new_m0, m1, m2);
-	assert(std::isnormal(new_q));
-	new_quality.push_back(new_q);
-	
-	if(new_quality.back()<worst_element.first){
-	  linf_update = false;
-	  break;
-	}
+        int n1 = n[(loc+1)%3];
+        int n2 = n[(loc+2)%3];
+
+        const double *x1 = _mesh->get_coords(n1);
+        const double *x2 = _mesh->get_coords(n2);
+
+        const double *m1 = _mesh->get_metric(n1);
+        const double *m2 = _mesh->get_metric(n2);
+
+        double new_q = property->lipnikov(new_x0, x1, x2, new_m0, m1, m2);
+        assert(std::isnormal(new_q));
+        new_quality.push_back(new_q);
+
+        if(new_quality.back()<worst_element.first){
+          linf_update = false;
+          break;
+        }
       }
       
       if(!linf_update)
@@ -552,16 +551,16 @@ template<typename real_t, int dim>
       // go backwards and pop quality
       assert(_mesh->NEList[n0].size()==new_quality.size());
       for(typename std::set<index_t>::const_reverse_iterator it=_mesh->NEList[n0].rbegin();it!=_mesh->NEList[n0].rend();++it){
-	quality[*it] = new_quality.back();
-	new_quality.pop_back();
+        quality[*it] = new_quality.back();
+        new_quality.pop_back();
       }
       assert(new_quality.empty());
       
       for(size_t i=0;i<dim;i++)
-	_mesh->_coords[n0*dim+i] = new_x0[i];
+        _mesh->_coords[n0*dim+i] = new_x0[i];
       
       for(size_t i=0;i<msize;i++)
-	_mesh->metric[n0*msize+i] = new_m0[i];
+        _mesh->metric[n0*msize+i] = new_m0[i];
 
       break;
     }
@@ -577,7 +576,7 @@ template<typename real_t, int dim>
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
       if(quality[*it]<worst_element.first)
-	worst_element = std::pair<double, index_t>(quality[*it], *it);
+        worst_element = std::pair<double, index_t>(quality[*it], *it);
     }
     assert(worst_element.second!=-1);
     
@@ -591,31 +590,31 @@ template<typename real_t, int dim>
       const index_t *n=_mesh->get_element(worst_element.second);
       size_t loc=0;
       for(;loc<4;loc++)
-	if(n[loc]==n0)
-	  break;
+        if(n[loc]==n0)
+          break;
       
       int n1, n2, n3;
       switch(loc){
       case 0:
-	n1 = n[1];
-	n2 = n[2];
-	n3 = n[3];
-	break;
+        n1 = n[1];
+        n2 = n[2];
+        n3 = n[3];
+        break;
       case 1:
-	n1 = n[2];
-	n2 = n[0];
-	n3 = n[3];
-	break;
+        n1 = n[2];
+        n2 = n[0];
+        n3 = n[3];
+        break;
       case 2:
-	n1 = n[0];
-	n2 = n[1];
-	n3 = n[3];
-	break;
+        n1 = n[0];
+        n2 = n[1];
+        n3 = n[3];
+        break;
       case 3:
-	n1 = n[0];
-	n2 = n[2];
-	n3 = n[1];
-	break;
+        n1 = n[0];
+        n2 = n[2];
+        n3 = n[1];
+        break;
       }
       
       const double *x1 = _mesh->get_coords(n1);
@@ -626,67 +625,67 @@ template<typename real_t, int dim>
       
       double mag = sqrt(grad_w[0]*grad_w[0] + grad_w[1]*grad_w[1] + grad_w[2]*grad_w[2]);
       if(!std::isnormal(mag)){
-	std::cout<<"mag issues "<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
-	std::cout<<"This usually means that the metric field is rubbish\n";
+        std::cout<<"mag issues "<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
+        std::cout<<"This usually means that the metric field is rubbish\n";
       }
       assert(std::isnormal(mag));
       
       for(int i=0;i<3;i++)
-	search[i] = grad_w[i]/mag;
+        search[i] = grad_w[i]/mag;
     }
 
     // Estimate how far we move along this search path until we make
-    // another element of a simular quality to the current worst. This
-    // is effictively a simplex method for linear programming.
+    // another element of a similar quality to the current worst. This
+    // is effectively a simplex method for linear programming.
     double alpha;
     {
       double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
-	const double *x1 = _mesh->get_coords(*it);
+        const double *x1 = _mesh->get_coords(*it);
 	
-	bbox[0] = std::min(bbox[0], x1[0]);
-	bbox[1] = std::max(bbox[0], x1[0]);
-	
-	bbox[2] = std::min(bbox[1], x1[1]);
-	bbox[3] = std::max(bbox[1], x1[1]);
-	
-	bbox[4] = std::min(bbox[2], x1[2]);
-	bbox[5] = std::max(bbox[2], x1[2]);
+        bbox[0] = std::min(bbox[0], x1[0]);
+        bbox[1] = std::max(bbox[0], x1[0]);
+
+        bbox[2] = std::min(bbox[1], x1[1]);
+        bbox[3] = std::max(bbox[1], x1[1]);
+
+        bbox[4] = std::min(bbox[2], x1[2]);
+        bbox[5] = std::max(bbox[2], x1[2]);
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/6.0;
     }
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
       if(*it==worst_element.second)
-	continue;
+        continue;
 
       const index_t *n=_mesh->get_element(*it);
       size_t loc=0;
       for(;loc<4;loc++)
-	if(n[loc]==n0)
-	  break;
+        if(n[loc]==n0)
+          break;
 
       int n1, n2, n3;
       switch(loc){
       case 0:
-	n1 = n[1];
-	n2 = n[2];
-	n3 = n[3];
-	break;
+        n1 = n[1];
+        n2 = n[2];
+        n3 = n[3];
+        break;
       case 1:
-	n1 = n[2];
-	n2 = n[0];
-	n3 = n[3];
-	break;
+        n1 = n[2];
+        n2 = n[0];
+        n3 = n[3];
+        break;
       case 2:
-	n1 = n[0];
-	n2 = n[1];
-	n3 = n[3];
-	break;
+        n1 = n[0];
+        n2 = n[1];
+        n3 = n[3];
+        break;
       case 3:
-	n1 = n[0];
-	n2 = n[2];
-	n3 = n[1];
-	break;
+        n1 = n[0];
+        n2 = n[2];
+        n3 = n[1];
+        break;
       }
       
       const double *x1 = _mesh->get_coords(n1);
@@ -697,12 +696,12 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
 	
       double new_alpha =
-	(quality[*it]-worst_element.first)/
-	((search[0]*grad_w[0]+search[1]*grad_w[1]+search[2]*grad_w[2])-
-	 (search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]));
+          (quality[*it]-worst_element.first)/
+          ((search[0]*grad_w[0]+search[1]*grad_w[1]+search[2]*grad_w[2])-
+          (search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]));
 
       if(new_alpha>0)
-	alpha = std::min(alpha, new_alpha);
+        alpha = std::min(alpha, new_alpha);
     }
     
     bool linf_update;
@@ -714,87 +713,86 @@ template<typename real_t, int dim>
       
       double new_x0[3];
       for(int i=0;i<3;i++){
-	new_x0[i] = x0[i] + alpha*search[i];
+        new_x0[i] = x0[i] + alpha*search[i];
       }
 
       double new_m0[6];
       bool valid = generate_location_3d(n0, new_x0, new_m0);
       
       if(!valid)
-	continue;
+        continue;
 
       // Need to check that we have not decreased the Linf norm. Start by assuming the best.
       linf_update = true;
       std::vector<double> new_quality;
       for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-	const index_t *n=_mesh->get_element(*it);
-	size_t loc=0;
-	for(;loc<4;loc++)
-	  if(n[loc]==n0)
-	    break;
+        const index_t *n=_mesh->get_element(*it);
+        size_t loc=0;
+        for(;loc<4;loc++)
+          if(n[loc]==n0)
+            break;
 
-	int n1, n2, n3;
-	switch(loc){
-	case 0:
-	  n1 = n[1];
-	  n2 = n[2];
-	  n3 = n[3];
-	  break;
-	case 1:
-	  n1 = n[2];
-	  n2 = n[0];
-	  n3 = n[3];
-	  break;
-	case 2:
-	  n1 = n[0];
-	  n2 = n[1];
-	  n3 = n[3];
-	  break;
-	case 3:
-	  n1 = n[0];
-	  n2 = n[2];
-	  n3 = n[1];
-	  break;
-	}
+        int n1, n2, n3;
+        switch(loc){
+        case 0:
+          n1 = n[1];
+          n2 = n[2];
+          n3 = n[3];
+          break;
+        case 1:
+          n1 = n[2];
+          n2 = n[0];
+          n3 = n[3];
+          break;
+        case 2:
+          n1 = n[0];
+          n2 = n[1];
+          n3 = n[3];
+          break;
+        case 3:
+          n1 = n[0];
+          n2 = n[2];
+          n3 = n[1];
+          break;
+        }
 	
-	const double *x1 = _mesh->get_coords(n1);
-	const double *x2 = _mesh->get_coords(n2);
-	const double *x3 = _mesh->get_coords(n3);
-	
-	
-	const double *m1 = _mesh->get_metric(n1);
-	const double *m2 = _mesh->get_metric(n2);
-	const double *m3 = _mesh->get_metric(n3);
-	
-	double new_q = property->lipnikov(new_x0, x1, x2, x3,
-					  new_m0, m1, m2, m3);
+        const double *x1 = _mesh->get_coords(n1);
+        const double *x2 = _mesh->get_coords(n2);
+        const double *x3 = _mesh->get_coords(n3);
 
-	if(new_q>worst_element.first){
-	  new_quality.push_back(new_q);
-	}else{
-	  // This means that the linear approximation was not sufficient.
-	  linf_update = false;
-	  break;
-	}
+
+        const double *m1 = _mesh->get_metric(n1);
+        const double *m2 = _mesh->get_metric(n2);
+        const double *m3 = _mesh->get_metric(n3);
+
+        double new_q = property->lipnikov(new_x0, x1, x2, x3, new_m0, m1, m2, m3);
+
+        if(new_q>worst_element.first){
+          new_quality.push_back(new_q);
+        }else{
+          // This means that the linear approximation was not sufficient.
+          linf_update = false;
+          break;
+        }
       }
       
       if(!linf_update)
-	continue;
+        continue;
 
       // Update information
       // go backwards and pop quality
       assert(_mesh->NEList[n0].size()==new_quality.size());
       for(typename std::set<index_t>::const_reverse_iterator it=_mesh->NEList[n0].rbegin();it!=_mesh->NEList[n0].rend();++it){
-	quality[*it] = new_quality.back();
-	new_quality.pop_back();
+        quality[*it] = new_quality.back();
+        new_quality.pop_back();
       }
       assert(new_quality.empty());
       
       for(size_t i=0;i<dim;i++)
-	_mesh->_coords[n0*dim+i] = new_x0[i];
+        _mesh->_coords[n0*dim+i] = new_x0[i];
       
       for(size_t i=0;i<msize;i++)
-	_mesh->metric[n0*msize+i] = new_m0[i];
+        _mesh->metric[n0*msize+i] = new_m0[i];
 
       break;
     }
@@ -815,20 +813,20 @@ template<typename real_t, int dim>
     for(int i=0;i<NElements;i++){
       const int *n=_mesh->get_element(i);
       if(n[0]==-1)
-	continue;
+        continue;
   
       for(size_t j=0;j<nloc;j++){
-	if(_mesh->boundary[i*nloc+j]>0){
-	  for(size_t k=1;k<nloc;k++){
-	    is_boundary[n[(j+k)%3]] = true;
-	  }
-	}
+        if(_mesh->boundary[i*nloc+j]>0){
+          for(size_t k=1;k<nloc;k++){
+            is_boundary[n[(j+k)%nloc]] = true;
+          }
+        }
       }
     }
 
     for(int i=0;i<NNodes;i++){
       if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||is_boundary[i])
-	continue;
+        continue;
 
       colour_sets[colour[i]].push_back(i);
     }
@@ -840,14 +838,14 @@ template<typename real_t, int dim>
     {
 #pragma omp for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
-	const int *n=_mesh->get_element(i);
-	if(n[0]<0){
-	  quality[i] = 1.0;
-	  continue;
-	}
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0){
+          quality[i] = 1.0;
+          continue;
+        }
 
-	update_quality(i);
-	qsum+=quality[i];
+        update_quality(i);
+        qsum+=quality[i];
       }
     }
     good_q = qsum/NElements;
@@ -900,7 +898,7 @@ template<typename real_t, int dim>
       int iloc = 0;
 
       while(n[iloc]!=(int)n0){
-	iloc++;
+        iloc++;
       }
       int loc1 = (iloc+1)%3;
       int loc2 = (iloc+2)%3;
@@ -925,31 +923,31 @@ template<typename real_t, int dim>
       const index_t *n=_mesh->get_element(*ie);
       size_t loc=0;
       for(;loc<4;loc++)
-	if(n[loc]==n0)
-	  break;
+        if(n[loc]==n0)
+          break;
       
       int n1, n2, n3;
       switch(loc){
       case 0:
-	n1 = n[1];
-	n2 = n[2];
-	n3 = n[3];
-	break;
+        n1 = n[1];
+        n2 = n[2];
+        n3 = n[3];
+        break;
       case 1:
-	n1 = n[2];
-	n2 = n[0];
-	n3 = n[3];
-	break;
+        n1 = n[2];
+        n2 = n[0];
+        n3 = n[3];
+        break;
       case 2:
-	n1 = n[0];
-	n2 = n[1];
-	n3 = n[3];
-	break;
+        n1 = n[0];
+        n2 = n[1];
+        n3 = n[3];
+        break;
       case 3:
-	n1 = n[0];
-	n2 = n[2];
-	n3 = n[1];
-	break;
+        n1 = n[0];
+        n2 = n[2];
+        n3 = n[1];
+        break;
       }
       
       const double *x1 = _mesh->get_coords(n1);
@@ -982,18 +980,18 @@ template<typename real_t, int dim>
       const real_t *x1 = _mesh->get_coords(n[1]);
       const real_t *x2 = _mesh->get_coords(n[2]);
 
-      /* Check for inversion by looking at the area of element who
-	 node is being moved.*/
+      /* Check for inversion by looking at the area
+       * of the element whose node is being moved.*/
       real_t area;
       if(n[0]==node){
-	area = property->area(p, x1, x2);
+        area = property->area(p, x1, x2);
       }else if(n[1]==node){
-	area = property->area(x0, p, x2);
+        area = property->area(x0, p, x2);
       }else{
-	area = property->area(x0, x1, p);
+        area = property->area(x0, x1, p);
       }
       if(area<0)
-	return false;
+        return false;
 
       real_t L = property->area(x0, x1, x2);
 
@@ -1004,17 +1002,17 @@ template<typename real_t, int dim>
 
       real_t min_l = std::min(ll[0], std::min(ll[1], ll[2]));
       if(best_e==-1){
-	tol = min_l;
-	best_e = *ie;
-	for(size_t i=0;i<nloc;i++)
-	  l[i] = ll[i];
+        tol = min_l;
+        best_e = *ie;
+        for(size_t i=0;i<nloc;i++)
+          l[i] = ll[i];
       }else{
-	if(min_l>tol){
-	  tol = min_l;
-	  best_e = *ie;
-	  for(size_t i=0;i<nloc;i++)
-	    l[i] = ll[i];
-	}
+        if(min_l>tol){
+          tol = min_l;
+          best_e = *ie;
+          for(size_t i=0;i<nloc;i++)
+            l[i] = ll[i];
+        }
       }
     }
     assert(best_e!=-1);
@@ -1047,20 +1045,20 @@ template<typename real_t, int dim>
       const real_t *x2 = _mesh->get_coords(n[2]);
       const real_t *x3 = _mesh->get_coords(n[3]);
 
-      /* Check for inversion by looking at the volume of element who
-	 node is being moved.*/
+      /* Check for inversion by looking at the volume
+       * of element whose node is being moved.*/
       real_t volume;
       if(n[0]==node){
-	volume = property->volume(p, x1, x2, x3);
+        volume = property->volume(p, x1, x2, x3);
       }else if(n[1]==node){
-	volume = property->volume(x0, p, x2, x3);
+        volume = property->volume(x0, p, x2, x3);
       }else if(n[2]==node){
-	volume = property->volume(x0, x1, p, x3);
+        volume = property->volume(x0, x1, p, x3);
       }else{
-	volume = property->volume(x0, x1, x2, p);
+        volume = property->volume(x0, x1, x2, p);
       }
       if(volume<0)
-	return false;
+        return false;
 
       real_t L = property->volume(x0, x1, x2, x3);
 
@@ -1072,17 +1070,17 @@ template<typename real_t, int dim>
 
       real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
       if(best_e==-1){
-	tol = min_l;
-	best_e = *ie;
-	for(size_t i=0;i<nloc;i++)
-	  l[i] = ll[i];
+        tol = min_l;
+        best_e = *ie;
+        for(size_t i=0;i<nloc;i++)
+          l[i] = ll[i];
       }else{
-	if(min_l>tol){
-	  tol = min_l;
-	  best_e = *ie;
-	  for(size_t i=0;i<nloc;i++)
-	    l[i] = ll[i];
-	}
+        if(min_l>tol){
+          tol = min_l;
+          best_e = *ie;
+          for(size_t i=0;i<nloc;i++)
+            l[i] = ll[i];
+        }
       }
     }
     assert(best_e!=-1);

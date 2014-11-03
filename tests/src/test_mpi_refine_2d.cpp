@@ -69,7 +69,7 @@ int main(int argc, char **argv){
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
   mesh->create_boundary();
 
-  MetricField2D<double> metric_field(*mesh);
+  MetricField<double,2> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
 
@@ -82,7 +82,7 @@ int main(int argc, char **argv){
 
   VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
 
-  Refine2D<double> adapt(*mesh);
+  Refine<double,2> adapt(*mesh);
 
   double tic = get_wtime();
   for(int i=0;i<10;i++)

@@ -84,7 +84,7 @@ int main(int argc, char **argv){
   for(int t=0;t<51;t++){
     size_t NNodes = mesh->get_number_nodes();
 
-    MetricField2D<double> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
     std::vector<double> psi(NNodes);
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
@@ -110,10 +110,10 @@ int main(int argc, char **argv){
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
 
-    Coarsen2D<double> coarsen(*mesh);
-    Smooth<double, 2> smooth(*mesh);
-    Refine2D<double> refine(*mesh);
-    Swapping2D<double> swapping(*mesh);
+    Coarsen<double,2> coarsen(*mesh);
+    Smooth<double,2> smooth(*mesh);
+    Refine<double,2> refine(*mesh);
+    Swapping<double,2> swapping(*mesh);
 
     double tic, toc;
 
