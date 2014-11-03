@@ -46,6 +46,7 @@
 
 #include "Colour.h"
 #include "DeferredOperations.h"
+#include "Edge.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 

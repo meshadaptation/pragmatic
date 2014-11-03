@@ -197,10 +197,10 @@ extern "C" {
     double L_low = L_up*0.5;
 
     if(ndims==2){
-      Coarsen2D<double> coarsen(*mesh);
+      Coarsen<double, 2> coarsen(*mesh);
       Smooth<double, 2> smooth(*mesh);
       Refine<double, 2> refine(*mesh);
-      Swapping2D<double> swapping(*mesh);
+      Swapping<double, 2> swapping(*mesh);
 
       double L_max = mesh->maximal_edge_length();
 
@@ -222,10 +222,10 @@ extern "C" {
 
       smooth.smooth(10);
     }else{
-      Coarsen3D<double> coarsen(*mesh);
+      Coarsen<double, 3> coarsen(*mesh);
       Smooth<double, 3> smooth(*mesh);
       Refine<double, 3> refine(*mesh);
-      Swapping3D<double> swapping(*mesh);
+      Swapping<double, 3> swapping(*mesh);
 
       coarsen.coarsen(L_low, L_up);
 
@@ -294,7 +294,7 @@ extern "C" {
       }
     }
   }
-
+/*
   void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn){
     std::vector<int> _NPNodes, _lnn2gnn;
     ((Mesh<double> *)_pragmatic_mesh)->get_global_node_numbering(_NPNodes, _lnn2gnn);
@@ -306,7 +306,7 @@ extern "C" {
     for(size_t i=0;i<len1;i++)
       lnn2gnn[i] = _lnn2gnn[i];
   }
-
+*/
   void pragmatic_get_metric(double *metric){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       ((MetricField<double,2> *)_pragmatic_metric_field)->get_metric(metric);

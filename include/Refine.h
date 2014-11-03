@@ -519,8 +519,8 @@ template<typename real_t, int dim> class Refine{
     const real_t *x1 = _mesh->get_coords(n1);
     const double *m1 = _mesh->get_metric(n1);
 
-    real_t weight = 1.0/(1.0 + sqrt(property->length<dim>(x0, x1, m0)/
-        property->length<dim>(x0, x1, m1)));
+    real_t weight = 1.0/(1.0 + sqrt(property->template length<dim>(x0, x1, m0)/
+        property->template length<dim>(x0, x1, m1)));
 
     // Calculate position of new vertex and append it to OMP thread's temp storage
     for(size_t i=0;i<ndims;i++){
@@ -536,8 +536,8 @@ template<typename real_t, int dim> class Refine{
         std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                  <<"m0[i] = "<<m0[i]<<std::endl
                  <<"m1[i] = "<<m1[i]<<std::endl
-                 <<"property->length(x0, x1, m0) = "<<property->length<dim>(x0, x1, m0)<<std::endl
-                 <<"property->length(x0, x1, m1) = "<<property->length<dim>(x0, x1, m1)<<std::endl
+                 <<"property->length(x0, x1, m0) = "<<property->template length<dim>(x0, x1, m0)<<std::endl
+                 <<"property->length(x0, x1, m1) = "<<property->template length<dim>(x0, x1, m1)<<std::endl
                  <<"weight = "<<weight<<std::endl;
     }
   }

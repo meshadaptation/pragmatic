@@ -98,7 +98,7 @@ int main(int argc, char **argv){
   Coarsen<double, 2> coarsen(*mesh);
   Smooth<double, 2> smooth(*mesh);
   Refine<double, 2> refine(*mesh);
-  Swapping2D<double> swapping(*mesh);
+  Swapping<double, 2> swapping(*mesh);
 
   coarsen.coarsen(L_low, L_up);
 
