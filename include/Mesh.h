@@ -1637,7 +1637,7 @@ template<typename real_t> class Mesh{
           double volarea = property->volume(get_coords(n[0]),
                                             get_coords(n[1]),
                                             get_coords(n[2]),
-                                            get_coords(n[2]));
+                                            get_coords(n[3]));
 
           if(volarea<0)
             invert_element(i);
