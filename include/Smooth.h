@@ -545,7 +545,7 @@ template<typename real_t, int dim>
       }
       
       if(!linf_update)
-	continue;
+        continue;
       
       // Update information
       // go backwards and pop quality
