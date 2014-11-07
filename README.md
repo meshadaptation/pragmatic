@@ -9,7 +9,7 @@ anisotropically.
 
 The toolkit is written in C++ but also provides interfaces for Fortran. The 2D
 version has been interfaced with Dolfin (3D integration under development) and
-integration with PETSc/DMPlex is planed.  One of the design goals of PRAgMaTIc
+integration with PETSc/DMPlex is planned.  One of the design goals of PRAgMaTIc
 is to develop highly scalable algorithms for clusters of multi-core and
 many-core nodes. PRAgMaTIc uses OpenMP for thread parallelism and MPI for
 domain decomposition parallelisation.
