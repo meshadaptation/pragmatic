@@ -474,6 +474,10 @@ template<typename real_t, int dim> class Coarsen{
     if(!_mesh->is_owned_node(rm_vertex))
       return -1;
 
+    // For now, lock the halo
+    if(_mesh->is_halo_node(rm_vertex))
+      return -1;
+
     /* Sort the edges according to length. We want to collapse the
        shortest. If it is not possible to collapse the edge then move
        onto the next shortest.*/
