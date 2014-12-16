@@ -164,10 +164,10 @@ extern "C" {
     }
 
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
-      ((MetricField<double,2> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,2> *)_pragmatic_metric_field)->set_metric_full(metric);
       ((MetricField<double,2> *)_pragmatic_metric_field)->update_mesh();
     }else{
-      ((MetricField<double,3> *)_pragmatic_metric_field)->set_metric(metric);
+      ((MetricField<double,3> *)_pragmatic_metric_field)->set_metric_full(metric);
       ((MetricField<double,3> *)_pragmatic_metric_field)->update_mesh();
     }
   }
@@ -205,7 +205,7 @@ extern "C" {
       double L_max = mesh->maximal_edge_length();
 
       double alpha = sqrt(2.0)/2.0;
-      for(size_t i=0;i<10;i++){
+      for(size_t i=0;i<20;i++){
         double L_ref = std::max(alpha*L_max, L_up);
 
         coarsen.coarsen(L_low, L_ref);
@@ -214,13 +214,13 @@ extern "C" {
 
         L_max = mesh->maximal_edge_length();
 
-        if((L_max-L_up)<0.01)
+        if(L_max>1.0 && (L_max-L_up)<0.01)
           break;
       }
 
       mesh->defragment();
 
-      smooth.smooth(10);
+      smooth.smooth(20);
     }else{
       Coarsen<double, 3> coarsen(*mesh);
       Smooth<double, 3> smooth(*mesh);

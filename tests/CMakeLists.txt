@@ -14,9 +14,6 @@ TARGET_LINK_LIBRARIES(./bin/test_ElementProperty ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(./bin/test_swap_2d ./src/test_swap_2d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_swap_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(./bin/test_page_faults ./src/test_page_faults.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_page_faults ${PRAGMATIC_LIBRARIES})
-
 ADD_EXECUTABLE(./bin/test_mpi_coarsen_3d ./src/test_mpi_coarsen_3d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
@@ -49,9 +46,6 @@ TARGET_LINK_LIBRARIES(./bin/test_hessian_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_smooth_2d ./src/test_smooth_2d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_smooth_2d ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(./bin/test_gradation_2d ./src/test_gradation_2d.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/test_gradation_2d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(./bin/test_mpi_adapt_3d ./src/test_mpi_adapt_3d.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})

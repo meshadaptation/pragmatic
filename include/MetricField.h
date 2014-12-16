@@ -108,7 +108,7 @@ public:
     }
   }
 
-  /*! Set the metric tensor field.
+  /*! Set the metric tensor field. It is assumed that only the top triangle of the tensors are stored.
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
    */
   void set_metric(const real_t* metric){
@@ -119,6 +119,28 @@ public:
       _metric[i].set_metric(metric+i*(dim==2?3:6));
     }
   }
+
+  /*! Set the metric tensor field. It is assumed that the full form of the tensors are stored.
+   * @param metric is a pointer to the buffer where the metric field is to be copied from.
+   */
+  void set_metric_full(const real_t* metric){
+    if(_metric==NULL)
+      _metric = new MetricTensor<real_t,dim>[_NNodes];
+
+    real_t m[dim==2?3:6];
+    for(int i=0; i<_NNodes; i++){
+      if(dim==2){
+        m[0] = metric[i*4]; m[1] = metric[i*4+1];
+                            m[2] = metric[i*4+3];
+      }else{
+        m[0] = metric[i*9]; m[1] = metric[i*9+1]; m[2] = metric[i*9+2];
+                            m[3] = metric[i*9+4]; m[4] = metric[i*9+5];
+                                                  m[5] = metric[i*9+8];
+      }
+      _metric[i].set_metric(m);
+    }
+  }
+
 
   /*! Set the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field is to be copied from.
@@ -275,12 +297,21 @@ public:
             m_det = fabs(h[0]*h[2]-h[1]*h[1]);
           }else if(dim==3){
             /*|h[0] h[1] h[2]|
-              |h[3] h[4] h[5]|
-              |h[6] h[7] h[8]|*/
-            m_det = h[0]*(h[4]*h[8]-h[5]*h[7]) - h[1]*(h[3]*h[8]-h[5]*h[6]) + h[2]*(h[3]*h[7]-h[4]*h[6]);
+              |h[1] h[3] h[4]|
+              |h[2] h[4] h[5]|
+	      
+              sympy
+              h0,h1,h2,h3,h4,h5 = symbols("h[0], h[1], h[2], h[3], h[4], h[5]")
+              M = Matrix([[h0, h1, h2],
+                          [h1, h3, h4],
+                          [h2, h4, h5]])
+              print_ccode(det(M))
+            */
+            m_det = fabs(h[0]*h[3]*h[5] - h[0]*pow(h[4], 2) - pow(h[1], 2)*h[5] + 2*h[1]*h[2]*h[4] - pow(h[2], 2)*h[3]);
           }
 
-          double scaling_factor = eta * pow(m_det, -1.0 / (2.0 * p_norm + dim));
+          double scaling_factor = eta * pow(m_det+DBL_EPSILON, -1.0 / (2.0 * p_norm + dim));
+
           for(int j=0;j<(dim==2?3:6);j++)
             h[j] *= scaling_factor;
 
@@ -317,64 +348,6 @@ public:
     }
 
     delete [] Hessian;
-  }
-
-  /*! Apply gradation to the metric field.
-   * @param gradation specifies the required gradation factor (<=1.3 recommended).
-   */
-  void apply_gradation(real_t gradation){
-    // Form NNlist.
-    std::vector< std::set<index_t> > NNList( _NNodes );
-    for(int e=0; e<_NElements; e++){
-      // indices for element e start at _ENList[nloc*e]
-      const index_t *n=_mesh->get_element(e);
-      if(n[0]<0)
-        continue;
-
-      for(index_t i=0; i<(dim+1); i++){
-        for(index_t j=i+1; j<(dim+1); j++){
-          NNList[n[i]].insert(n[j]);
-          NNList[n[j]].insert(n[i]);
-        }
-      }
-    }
-
-    for(size_t cnt=0; cnt<100; cnt++){
-      for(index_t p=0; p<_NNodes; p++){
-        double Dp[dim], Vp[dim*dim], hp[dim];
-        std::set<index_t> adjacent_nodes = _mesh->get_node_patch(p);
-          
-        for(typename std::set<index_t>::const_iterator it=adjacent_nodes.begin(); it!=adjacent_nodes.end(); it++){
-          index_t q=*it;
-          
-          // Resize eigenvalues if necessary
-          real_t dx = _mesh->_coords[p*dim] - _mesh->_coords[q*dim];
-          real_t dy = _mesh->_coords[p*dim+1] - _mesh->_coords[q*dim+1];
-          real_t Lpq, dh;
-          if(dim==2){
-            Lpq = sqrt(dx*dx+dy*dy);
-          }else if(dim==3){
-            double dz = _mesh->_coords[p*dim+2] - _mesh->_coords[q*dim+2];
-            Lpq = sqrt(dx*dx+dy*dy+dz*dz);
-          }
-          dh=Lpq*gradation;
-
-          MetricTensor<real_t,dim> Mq(_metric[q]);
-          Mq.eigen_decomp(Dp, Vp);
-
-          for(int i=0; i<dim; ++i){
-            hp[i] = 1.0/sqrt(Dp[i]) + dh;
-            Dp[i] = 1.0/(hp[i]*hp[i]);
-          }
-            
-          Mq.eigen_undecomp(Dp, Vp);
-            
-          _metric[p].constrain(Mq.get_metric());
-        }
-      }
-    }
-
-    return;
   }
 
   /*! Apply maximum edge length constraint.
@@ -716,7 +689,6 @@ private:
   int _NNodes, _NElements;
   MetricTensor<real_t,dim>* _metric;
   Mesh<real_t>* _mesh;
-  double bbox[6];
 };
 
 #endif

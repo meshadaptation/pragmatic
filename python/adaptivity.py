@@ -40,7 +40,7 @@
 # Patrick Farrell    for mesh based metric used for coarsening.
 # James Maddinson    for the original version of Dolfin interface.
 # Davide Longoni     for p-norm function.
-# Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue and gradation
+# Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue
 
 """@package PRAgMaTIc
 
