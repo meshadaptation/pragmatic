@@ -40,7 +40,7 @@
 # Patrick Farrell    for mesh based metric used for coarsening.
 # James Maddinson    for the original version of Dolfin interface.
 # Davide Longoni     for p-norm function.
-# Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue and gradation
+# Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue
 
 """@package PRAgMaTIc
 
@@ -53,11 +53,9 @@ mesh and a metric tensor field which encodes desired mesh element size
 anisotropically.
 """
 
-import ctypes
-import ctypes.util
-
-import numpy, scipy.sparse, scipy.sparse.linalg
-from numpy import array, zeros, ones, any, arange
+import ctypes, ctypes.util, numpy, scipy.sparse, scipy.sparse.linalg
+from numpy import array, zeros, ones, any, arange, isnan
+from numpy.linalg import eig as pyeig
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -80,7 +78,7 @@ class ParameterException(Exception):
   pass
 
 try:
-#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kjensen/projects/pragmatic/src/.libs/libpragmatic.so")
+#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kristian/projects/grg/libpragmatic.so")
   _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
@@ -297,7 +295,7 @@ def impose_maxN(metric, maxN):
       info('metric coarsened to meet target node number')
     return [metric,fak]
       
-def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=False, maxN=None):
+def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=None, maxN=None):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers. 
   mesh = metric.function_space().mesh()

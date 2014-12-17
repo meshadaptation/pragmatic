@@ -1287,7 +1287,8 @@ template<typename real_t> class Mesh{
       if(rank==0) std::cout<<result;
     }
     if(ndims==2){
-      real_t area=0, min_ele_area=0, max_ele_area=0;
+      long double area=0, min_ele_area=0, max_ele_area=0;
+
       size_t i=0;
       for(;i<NElements;i++){
         const index_t *n=get_element(i);
@@ -1306,9 +1307,9 @@ template<typename real_t> class Mesh{
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
 
-        real_t larea = property->area(get_coords(n[0]),
-                                      get_coords(n[1]),
-                                      get_coords(n[2]));
+        long double larea = property->area(get_coords(n[0]),
+                                           get_coords(n[1]),
+                                           get_coords(n[2]));
         if(pragmatic_isnan(larea)){
           std::cerr<<"ERROR: Bad element "<<n[0]<<", "<<n[1]<<", "<<n[2]<<std::endl;
         }
@@ -1319,20 +1320,18 @@ template<typename real_t> class Mesh{
       }
 
 #ifdef HAVE_MPI
-      MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-      MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
-      MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
 #endif
 
       if(rank==0){
         std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
-        if(fabs(area-1.0)>1.0e-6)
-          state = false;
         std::cout<<"VERIFY: minimum element area...."<<min_ele_area<<std::endl;
         std::cout<<"VERIFY: maximum element area...."<<max_ele_area<<std::endl;
       }
     }else{
-      real_t volume=0, min_ele_vol=0, max_ele_vol=0;
+      long double volume=0, min_ele_vol=0, max_ele_vol=0;
       size_t i=0;
       for(;i<NElements;i++){
         const index_t *n=get_element(i);
@@ -1352,19 +1351,19 @@ template<typename real_t> class Mesh{
         if((mpi_ele_owner[i]!=rank) || (n[0]<0))
           continue;
 
-        real_t lvolume = property->volume(get_coords(n[0]),
-                                          get_coords(n[1]),
-                                          get_coords(n[2]),
-                                          get_coords(n[3]));
+        long double lvolume = property->volume(get_coords(n[0]),
+                                               get_coords(n[1]),
+                                               get_coords(n[2]),
+                                               get_coords(n[3]));
         volume += lvolume;
         min_ele_vol = std::min(min_ele_vol, lvolume);
         max_ele_vol = std::max(max_ele_vol, lvolume);
       }
 
 #ifdef HAVE_MPI
-      MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-      MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_DOUBLE, MPI_MIN, get_mpi_comm());
-      MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_DOUBLE, MPI_MAX, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
+      MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
 #endif
 
       if(rank==0){

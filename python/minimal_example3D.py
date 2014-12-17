@@ -8,7 +8,7 @@
 ### error level (eta) are optional input parameters
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, logproject, adapt
+from adaptivity import metric_pnorm, logproject, adapt
 from sympy import Symbol, diff
 from sympy import tanh as pytanh
 from sympy import cos as pysin

@@ -59,8 +59,7 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
-  //Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/test_refine_3d.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
   mesh->create_boundary();
 
   MetricField<double,3> metric_field(*mesh);

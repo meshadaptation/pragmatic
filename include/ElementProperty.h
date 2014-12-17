@@ -69,7 +69,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312), condition_const2d(20.784609690826528), condition_const3d(940.60406122874042){
    orientation = 1;
 
    double A = area(x0, x1, x2);
@@ -83,7 +83,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
- ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312){
+ ElementProperty(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3): inv2(0.5), inv3(1.0/3.0), inv4(0.25), inv6(1.0/6.0), lipnikov_const2d(20.784609690826528), lipnikov_const3d(1832.8207768355312), condition_const2d(20.784609690826528), condition_const3d(940.60406122874042){
     orientation = 1;
 
     double V = volume(x0, x1, x2, x3);
@@ -359,7 +359,7 @@ class ElementProperty{
     double invl = 1.0/l;
 
     // Volume
-    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
 
     // Volume in metric space
     double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
@@ -431,7 +431,7 @@ class ElementProperty{
     double invl = 1.0/l;
 
     // Volume
-    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - (x0[0] - x1[0])*(z03*y02 - z02*y03));
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
 
     // Volume in metric space
     double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
@@ -545,6 +545,165 @@ class ElementProperty{
     return sliver;
   }
 
+/*! Evaluates the 2D Condition number functional. The description for the
+   * functional is taken from: P. Knupp,
+   * Achieving finite element mesh quality via optimization,
+   * International Journal for Numerical Methods in Engineering, Vol. 48,
+   * No. 3, 2000, pp. 401 - 420.
+   *
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   * @param m0 2x2 metric tensor for first point.
+   * @param m1 2x2 metric tensor for second point.
+   * @param m2 2x2 metric tensor for third point.
+   */
+  double condition(const real_t *x0, const real_t *x1, const real_t *x2,
+                 const double *m0, const double *m1, const double *m2){
+    // Metric tensor averaged over the element
+    double m00 = (m0[0] + m1[0] + m2[0])*inv3;
+    double m01 = (m0[1] + m1[1] + m2[1])*inv3;
+    double m11 = (m0[2] + m1[2] + m2[2])*inv3;
+
+    return condition(x0, x1, x2, m00, m01, m11);
+  }
+
+
+/*! Evaluates the 2D Condition number functional. The description for the
+   * functional is taken from: P. Knupp,
+   * Achieving finite element mesh quality via optimization,
+   * International Journal for Numerical Methods in Engineering, Vol. 48,
+   * No. 3, 2000, pp. 401 - 420.
+   *
+   * @param x0 pointer to 2D position for first point in triangle.
+   * @param x1 pointer to 2D position for second point in triangle.
+   * @param x2 pointer to 2D position for third point in triangle.
+   * @param m00 metric index (0,0)
+   * @param m01 metric index (0,1)
+   * @param m11 metric index (1,1)
+   */
+  double condition(const real_t *x0, const real_t *x1, const real_t *x2,
+                 double m00, double m01, double m11){
+    // l is the length of the perimeter, measured in metric space
+    double x01 = x0[0] - x1[0];
+    double y01 = x0[1] - x1[1];
+    double x02 = x0[0] - x2[0];
+    double y02 = x0[1] - x2[1];
+    double x21 = x2[0] - x1[0];
+    double y21 = x2[1] - x1[1];
+
+    double l = y01*(y01*m11 + x01*m01) +
+           x01*(y01*m01 + x01*m00) +
+           y02*(y02*m11 + x02*m01) +
+           x02*(y02*m01 + x02*m00) +
+           y21*(y21*m11 + x21*m01) +
+           x21*(y21*m01 + x21*m00);
+
+    double invl = 1.0/l;
+
+    // Area in physical space
+    double a=orientation*inv2*(y02*x01 - y01*x02);
+
+    // Area in metric space
+    double a_m = a*sqrt(m00*m11 - m01*m01);
+
+    // Function
+    double quality = condition_const2d*a_m*invl;
+
+    return quality;
+  }
+
+/*! Evaluates the 3D condition number functional. The description for the
+   * functional is taken from: L. Freitag, P M Knupp,
+   * Tetrahedral mesh improvement via optimization of the element condition number,
+   * meshes, Int. J. for Num. Meth. in Eng., Vol. 53, No. 6, pp. 1377-1391
+   * (2002).
+   *
+   * @param x0 pointer to 3D position for first point in tetrahedral.
+   * @param x1 pointer to 3D position for second point in tetrahedral.
+   * @param x2 pointer to 3D position for third point in tetrahedral.
+   * @param x3 pointer to 3D position for third point in tetrahedral.
+   * @param m0 3x3 metric tensor for first point.
+   * @param m1 3x3 metric tensor for second point.
+   * @param m2 3x3 metric tensor for third point.
+   * @param m3 3x3 metric tensor for forth point.
+   */
+  double condition(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
+                  const double *m0, const double *m1, const double *m2, const double *m3){
+    // Metric tensor
+    double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
+    double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*inv4;
+    double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*inv4;
+    double m11 = (m0[3] + m1[3] + m2[3] + m3[3])*inv4;
+    double m12 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
+    double m22 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
+
+    // l is the length of the edges of the tet, in metric space
+    double z01 = (x0[2] - x1[2]);
+    double y01 = (x0[1] - x1[1]);
+    double x01 = (x0[0] - x1[0]);
+
+    double z12 = (x1[2] - x2[2]);
+    double y12 = (x1[1] - x2[1]);
+    double x12 = (x1[0] - x2[0]);
+
+    double z02 = (x0[2] - x2[2]);
+    double y02 = (x0[1] - x2[1]);
+    double x02 = (x0[0] - x2[0]);
+
+    double z03 = (x0[2] - x3[2]);
+    double y03 = (x0[1] - x3[1]);
+    double x03 = (x0[0] - x3[0]);
+
+    double z13 = (x1[2] - x3[2]);
+    double y13 = (x1[1] - x3[1]);
+    double x13 = (x1[0] - x3[0]);
+
+    double z23 = (x2[2] - x3[2]);
+    double y23 = (x2[1] - x3[1]);
+    double x23 = (x2[0] - x3[0]);
+
+    double dl0 = (z01*(z01*m22 + y01*m12 + x01*m02) + y01*(z01*m12 + y01*m11 + x01*m01) + x01*(z01*m02 + y01*m01 + x01*m00));
+    double dl1 = (z12*(z12*m22 + y12*m12 + x12*m02) + y12*(z12*m12 + y12*m11 + x12*m01) + x12*(z12*m02 + y12*m01 + x12*m00));
+    double dl2 = (z02*(z02*m22 + y02*m12 + x02*m02) + y02*(z02*m12 + y02*m11 + x02*m01) + x02*(z02*m02 + y02*m01 + x02*m00));
+    double dl3 = (z03*(z03*m22 + y03*m12 + x03*m02) + y03*(z03*m12 + y03*m11 + x03*m01) + x03*(z03*m02 + y03*m01 + x03*m00));
+    double dl4 = (z13*(z13*m22 + y13*m12 + x13*m02) + y13*(z13*m12 + y13*m11 + x13*m01) + x13*(z13*m02 + y13*m01 + x13*m00));
+    double dl5 = (z23*(z23*m22 + y23*m12 + x23*m02) + y23*(z23*m12 + y23*m11 + x23*m01) + x23*(z23*m02 + y23*m01 + x23*m00));
+
+    double l2 = dl0+dl1+dl2+dl3+dl4+dl5;
+    double invl2 = 1.0/l2;
+
+    // areas of the faces of the tet, in metric space (Sympy)
+    double tmp00 = (2.0*m00*m12 - 2.0*m01*m02);
+    double tmp11 = (-2.0*m01*m12 + 2.0*m02*m11);
+    double tmp22 = (-2.0*m01*m22 + 2.0*m02*m12);
+    double tmp01 = (m00*m11 - m01*m01);
+    double tmp02 = (m00*m22 - m02*m02);
+    double tmp12 = (m11*m22 - m12*m12);
+
+    double sq_area012 = tmp00*x01*x01*y02*z02 - tmp00*x01*x02*y01*z02 - tmp00*x01*x02*y02*z01 + tmp00*x02*x02*y01*z01 + tmp01*x01*x01*y02*y02 - 2.0*tmp01*x01*x02*y01*y02 + tmp01*x02*x02*y01*y01 + tmp02*x01*x01*z02*z02 - 2.0*tmp02*x01*x02*z01*z02 + tmp02*x02*x02*z01*z01 - tmp11*x01*y01*y02*z02 + tmp11*x01*y02*y02*z01 + tmp11*x02*y01*y01*z02 - tmp11*x02*y01*y02*z01 + tmp12*y01*y01*z02*z02 - 2.0*tmp12*y01*y02*z01*z02 + tmp12*y02*y02*z01*z01 - tmp22*x01*y01*z02*z02 + tmp22*x01*y02*z01*z02 + tmp22*x02*y01*z01*z02 - tmp22*x02*y02*z01*z01;
+
+    double sq_area013 = tmp00*x01*x01*y13*z13 - tmp00*x01*x13*y01*z13 - tmp00*x01*x13*y13*z01 + tmp00*x13*x13*y01*z01 + tmp01*x01*x01*y13*y13 - 2.0*tmp01*x01*x13*y01*y13 + tmp01*x13*x13*y01*y01 + tmp02*x01*x01*z13*z13 - 2.0*tmp02*x01*x13*z01*z13 + tmp02*x13*x13*z01*z01 - tmp11*x01*y01*y13*z13 + tmp11*x01*y13*y13*z01 + tmp11*x13*y01*y01*z13 - tmp11*x13*y01*y13*z01 + tmp12*y01*y01*z13*z13 - 2.0*tmp12*y01*y13*z01*z13 + tmp12*y13*y13*z01*z01 - tmp22*x01*y01*z13*z13 + tmp22*x01*y13*z01*z13 + tmp22*x13*y01*z01*z13 - tmp22*x13*y13*z01*z01;
+
+    double sq_area123 = tmp00*x12*x12*y23*z23 - tmp00*x12*x23*y12*z23 - tmp00*x12*x23*y23*z12 + tmp00*x23*x23*y12*z12 + tmp01*x12*x12*y23*y23 - 2.0*tmp01*x12*x23*y12*y23 + tmp01*x23*x23*y12*y12 + tmp02*x12*x12*z23*z23 - 2.0*tmp02*x12*x23*z12*z23 + tmp02*x23*x23*z12*z12 - tmp11*x12*y12*y23*z23 + tmp11*x12*y23*y23*z12 + tmp11*x23*y12*y12*z23 - tmp11*x23*y12*y23*z12 + tmp12*y12*y12*z23*z23 - 2.0*tmp12*y12*y23*z12*z23 + tmp12*y23*y23*z12*z12 - tmp22*x12*y12*z23*z23 + tmp22*x12*y23*z12*z23 + tmp22*x23*y12*z12*z23 - tmp22*x23*y23*z12*z12;
+
+    double sq_area023 = tmp00*x01*x01*y13*z13 - tmp00*x01*x13*y01*z13 - tmp00*x01*x13*y13*z01 + tmp00*x13*x13*y01*z01 + tmp01*x01*x01*y13*y13 - 2.0*tmp01*x01*x13*y01*y13 + tmp01*x13*x13*y01*y01 + tmp02*x01*x01*z13*z13 - 2.0*tmp02*x01*x13*z01*z13 + tmp02*x13*x13*z01*z01 - tmp11*x01*y01*y13*z13 + tmp11*x01*y13*y13*z01 + tmp11*x13*y01*y01*z13 - tmp11*x13*y01*y13*z01 + tmp12*y01*y01*z13*z13 - 2.0*tmp12*y01*y13*z01*z13 + tmp12*y13*y13*z01*z01 - tmp22*x01*y01*z13*z13 + tmp22*x01*y13*z01*z13 + tmp22*x13*y01*z01*z13 - tmp22*x13*y13*z01*z01;
+
+    double area2 = sq_area012 + sq_area013 + sq_area123 + sq_area023;
+    double invarea2 = 1.0/area2;
+
+    // Volume
+    double v=orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+
+    // Volume in metric space
+    double v_m = v*sqrt(((m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02));
+
+    // Function
+    double quality = condition_const3d * v_m * sqrt(invarea2*invl2);
+
+    return quality;
+  }
+
   int getOrientation() {
 	return orientation;
   }
@@ -557,6 +716,8 @@ class ElementProperty{
 
   const double lipnikov_const2d; // 12.0*sqrt(3.0);
   const double lipnikov_const3d; // pow(6.0, 4)*sqrt(2.0);
+  const double condition_const2d; // (4/sqrt(3))*3^2 = 12.0*sqrt(3.0)
+  const double condition_const3d; // (12/sqrt(2))*6*(4*(4/sqrt(3))) = 1152*sqrt(6)
 
   int orientation;
 };

@@ -1,7 +1,7 @@
 # Description
 PRAgMaTIc (Parallel anisotRopic Adaptive Mesh ToolkIt) provides 2D/3D
 anisotropic mesh adaptivity for meshes of simplexes. The target
-applications are finite element and finite volume methods although the
+applications are finite element and finite volume methods although
 it can also be used as a lossy compression algorithm for 2 and 3D data
 (e.g. image compression). It takes as its input the mesh and a metric
 tensor field which encodes desired mesh element size
@@ -9,7 +9,7 @@ anisotropically.
 
 The toolkit is written in C++ but also provides interfaces for Fortran. The 2D
 version has been interfaced with Dolfin (3D integration under development) and
-integration with PETSc/DMPlex is planed.  One of the design goals of PRAgMaTIc
+integration with PETSc/DMPlex is planned.  One of the design goals of PRAgMaTIc
 is to develop highly scalable algorithms for clusters of multi-core and
 many-core nodes. PRAgMaTIc uses OpenMP for thread parallelism and MPI for
 domain decomposition parallelisation.
