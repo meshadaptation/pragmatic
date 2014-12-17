@@ -42,6 +42,8 @@
 #include <set>
 #include <vector>
 
+#include <boost/unordered_set.hpp>
+
 #include <string.h>
 #include <inttypes.h>
 
@@ -130,6 +132,10 @@ template<typename real_t, int dim> class Refine{
    * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
    */
   void refine(real_t L_max){
+    refine(L_max, NULL);
+  }
+
+  void refine(real_t L_max, boost::unordered_set< DirectedEdge<index_t>, DirectedEdge<index_t> > *preList){
     size_t origNElements = _mesh->get_number_elements();
     size_t origNNodes = _mesh->get_number_nodes();
     size_t edgeSplitCnt = 0;
@@ -155,24 +161,36 @@ template<typename real_t, int dim> class Refine{
       newCoords[tid].clear(); newCoords[tid].reserve(ndims*reserve_size);
       newMetric[tid].clear(); newMetric[tid].reserve(msize*reserve_size);
 
-      /* Loop through all edges and select them for refinement if
-         its length is greater than L_max in transformed space. */
+      if(preList == NULL){
+        /* Loop through all edges and select them for refinement if
+           its length is greater than L_max in transformed space. */
 #pragma omp for schedule(guided) nowait
-      for(size_t i=0;i<origNNodes;++i){
-        for(size_t it=0;it<_mesh->NNList[i].size();++it){
-          index_t otherVertex = _mesh->NNList[i][it];
-          assert(otherVertex>=0);
+        for(size_t i=0;i<origNNodes;++i){
+          for(size_t it=0;it<_mesh->NNList[i].size();++it){
+            index_t otherVertex = _mesh->NNList[i][it];
+            assert(otherVertex>=0);
 
-          /* Conditional statement ensures that the edge length is only calculated once.
-           * By ordering the vertices according to their gnn, we ensure that all processes
-           * calculate the same edge length when they fall on the halo.
-           */
-          if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]){
-            double length = _mesh->calc_edge_length(i, otherVertex);
-            if(length>L_max){
-              ++splitCnt[tid];
-              refine_edge(i, otherVertex, tid);
+            /* Conditional statement ensures that the edge length is only calculated once.
+             * By ordering the vertices according to their gnn, we ensure that all processes
+             * calculate the same edge length when they fall on the halo.
+             */
+            if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]){
+              double length = _mesh->calc_edge_length(i, otherVertex);
+              if(length>L_max){
+                ++splitCnt[tid];
+                refine_edge(i, otherVertex, tid);
+              }
             }
+          }
+        }
+      }else{
+        /* Loop through the given list of edges */
+        // The list is expected to be very short, so there's no need to parallelise the loop
+#pragma omp master
+        {
+          for(typename boost::unordered_set< DirectedEdge<index_t> >::const_iterator it=preList->begin(); it!=preList->end(); ++it){
+            ++splitCnt[tid];
+            refine_edge(it->edge.first, it->edge.second, tid);
           }
         }
       }
@@ -201,9 +219,20 @@ template<typename real_t, int dim> class Refine{
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
 
       // Fix IDs of new vertices
-      assert(newVertices[tid].size()==splitCnt[tid]);
-      for(size_t i=0;i<splitCnt[tid];i++){
-        newVertices[tid][i].id = threadIdx[tid]+i;
+      if(preList == NULL){
+        assert(newVertices[tid].size()==splitCnt[tid]);
+        for(size_t i=0;i<splitCnt[tid];i++){
+          newVertices[tid][i].id = threadIdx[tid]+i;
+        }
+      }else{
+#pragma omp master
+        {
+          boost::unordered_set< DirectedEdge<index_t> >::const_iterator it;
+          int idx;
+          for(it=preList->begin(), idx=0; it!=preList->end(); ++it, ++idx){
+            newVertices[tid][idx].id = it->id;
+          }
+        }
       }
 
       // Accumulate all newVertices in a contiguous array
@@ -597,12 +626,6 @@ template<typename real_t, int dim> class Refine{
       break;
     }
   }
-
-#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
-  typedef boost::unordered_map<index_t, int> boundary_t;
-#else
-  typedef std::map<index_t, int> boundary_t;
-#endif
 
   void refine_element(size_t eid, int tid){
     if(dim==2){
@@ -2850,36 +2873,6 @@ template<typename real_t, int dim> class Refine{
         return 5;
     }
   }
-
-  // Struct used for sorting vertices by their coordinates. It's
-  // meant to be used by the 1:8 wedge refinement code to enforce
-  // consistent order of floating point arithmetic across MPI processes.
-  struct Coords_t{
-    real_t coords[3];
-
-    Coords_t(const real_t *x){
-      coords[0] = x[0];
-      coords[1] = x[1];
-      coords[2] = x[2];
-    }
-
-    /// Less-than operator
-    bool operator<(const Coords_t& in) const{
-      bool isLess;
-
-      for(int i=0; i<3; ++i){
-        if(coords[i] < in.coords[i]){
-          isLess=true;
-          break;
-        }else if(coords[i] > in.coords[i]){
-          isLess = false;
-          break;
-        }
-      }
-
-      return isLess;
-    }
-  };
 
   // Struct containing gnn's of the six vertices comprising a wedge. It is only
   // to be used for consistent sorting of centroidal vertices across MPI processes.

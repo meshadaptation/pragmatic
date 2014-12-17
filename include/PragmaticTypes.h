@@ -48,4 +48,10 @@ typedef boost::unordered_map<index_t, std::set<index_t> > SNEList_t;
 typedef std::map<index_t, std::set<index_t> > SNEList_t;
 #endif
 
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+  typedef boost::unordered_map<index_t, int> boundary_t;
+#else
+  typedef std::map<index_t, int> boundary_t;
+#endif
+
 #endif

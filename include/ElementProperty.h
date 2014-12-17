@@ -106,6 +106,25 @@ class ElementProperty{
     return orientation*inv2*(y02*x01 - y01*x02);
   }
 
+  /*! Calculate area of triangle in 3D space.
+   * @param x0 pointer to 3D position for first point in triangle.
+   * @param x1 pointer to 3D position for second point in triangle.
+   * @param x2 pointer to 3D position for third point in triangle.
+   */
+  real_t area3D(const real_t *x0, const real_t *x1, const real_t *x2) const{
+    real_t x01 = (x0[0] - x1[0]);
+    real_t y01 = (x0[1] - x1[1]);
+    real_t z01 = (x0[2] - x1[2]);
+
+    real_t x02 = (x0[0] - x2[0]);
+    real_t y02 = (x0[1] - x2[1]);
+    real_t z02 = (x0[2] - x2[2]);
+
+    return fabs(inv2*sqrt(pow((y01*z02 - z01*y02),2)+
+                          pow((z01*x02 - z01*z02),2)+
+                          pow((x01*y02 - y01*x02),2)));
+  }
+
   /*! Calculate volume of tetrahedron.
    * @param x0 pointer to 3D position for first point in triangle.
    * @param x1 pointer to 3D position for second point in triangle.
@@ -456,14 +475,16 @@ class ElementProperty{
     return;
   }
 
-  /*! Evaluates the sliver functional. Taken from Computer Methods in
-   * Applied Mechanics and Engineering Volume 194, Issues 48-49, 15
-   * November 2005, Pages 4915-4950
+  /*! Evaluates the sliver functional. Taken from:
+   * Frederic Alauzet, Xiangrong Li, E. Seegyoung Seol, Mark S. Shephard,
+   * "Parallel anisotropic 3D mesh adaptation by mesh modification",
+   * Engineering with Computers Volume 21, Issue 3, 2006, Pages 247-258, Springer-Verlag,
+   * http://dx.doi.org/10.1007/s00366-005-0009-3
    *
-   * @param x0 pointer to 3D position for first point in tetrahedral.
-   * @param x1 pointer to 3D position for second point in tetrahedral.
-   * @param x2 pointer to 3D position for third point in tetrahedral.
-   * @param x3 pointer to 3D position for third point in tetrahedral.
+   * @param x0 pointer to 3D position for first point in tetrahedron.
+   * @param x1 pointer to 3D position for second point in tetrahedron.
+   * @param x2 pointer to 3D position for third point in tetrahedron.
+   * @param x3 pointer to 3D position for fourth point in tetrahedron.
    * @param m0 3x3 metric tensor for first point.
    * @param m1 3x3 metric tensor for second point.
    * @param m2 3x3 metric tensor for third point.
@@ -475,9 +496,9 @@ class ElementProperty{
     double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
     double m01 = (m0[1] + m1[1] + m2[1] + m3[1])*inv4;
     double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*inv4;
-    double m11 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
-    double m12 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
-    double m22 = (m0[8] + m1[8] + m2[8] + m3[8])*inv4;
+    double m11 = (m0[3] + m1[3] + m2[3] + m3[3])*inv4;
+    double m12 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
+    double m22 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
 
     double z01 = (x0[2] - x1[2]);
     double y01 = (x0[1] - x1[1]);

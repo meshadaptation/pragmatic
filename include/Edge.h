@@ -38,6 +38,8 @@
 #ifndef H_EDGE
 #define H_EDGE
 
+#include <boost/functional/hash.hpp>
+
 /*! \brief Mesh edge object.
  */
 template<typename index_t> class Edge{
@@ -99,6 +101,7 @@ template<typename index_t> class Edge{
   template<typename _real_t, int _dim> friend class Coarsen;
   template<typename _real_t, int _dim> friend class Swapping;
   template<typename _real_t, int _dim> friend class Refine;
+  template<typename _real_t, int _dim> friend class Sliver;
 
  private:
 
@@ -153,6 +156,24 @@ template<typename index_t> class DirectedEdge{
     return this->edge != in.edge;
   }
 
+  /// Used as a hash function
+  std::size_t operator()(const DirectedEdge& in) const{
+    // Method by Johannes Goller as posted on Stackoverflow
+    using boost::hash_value;
+    using boost::hash_combine;
+
+    // Start with a hash value of 0.
+    std::size_t seed = 0;
+
+    // Modify 'seed' by XORing and bit-shifting in one member of DirectedEdge after the other:
+    hash_combine(seed,hash_value(in.edge.first));
+    hash_combine(seed,hash_value(in.edge.second));
+    hash_combine(seed,hash_value(in.id));
+
+    // Return the result.
+    return seed;
+  }
+
   /// Less-than operator
   bool operator<(const DirectedEdge& in) const{
     return this->edge < in.edge;
@@ -174,6 +195,7 @@ template<typename index_t> class DirectedEdge{
   template<typename _real_t, int _dim> friend class Coarsen;
   template<typename _real_t, int _dim> friend class Swapping;
   template<typename _real_t, int _dim> friend class Refine;
+  template<typename _real_t, int _dim> friend class Sliver;
 
  private:
   index_t id;

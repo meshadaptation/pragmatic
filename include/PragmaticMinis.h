@@ -133,4 +133,35 @@ bool pragmatic_range_element_finder(range_element p1, range_element p2){
 #define pragmatic_isnormal std::isnormal
 #define pragmatic_isnan std::isnan
 
+/* Struct used for sorting vertices by their coordinates. It's meant to be used
+ * by the 1:8 wedge refinement code and the Type-II sliver-fixing code to enforce
+ * consistent order of floating point arithmetic across MPI processes.
+ */
+struct Coords_t{
+  double coords[3];
+
+  Coords_t(const double *x){
+    coords[0] = x[0];
+    coords[1] = x[1];
+    coords[2] = x[2];
+  }
+
+  /// Less-than operator
+  bool operator<(const Coords_t& in) const{
+    bool isLess;
+
+    for(int i=0; i<3; ++i){
+      if(coords[i] < in.coords[i]){
+        isLess=true;
+        break;
+      }else if(coords[i] > in.coords[i]){
+        isLess = false;
+        break;
+      }
+    }
+
+    return isLess;
+  }
+};
+
 #endif

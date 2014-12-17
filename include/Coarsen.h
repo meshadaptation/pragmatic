@@ -52,7 +52,7 @@
 #include "ElementProperty.h"
 #include "Mesh.h"
 
-/*! \brief Performs 2D mesh coarsening.
+/*! \brief Performs mesh coarsening.
  *
  */
 
@@ -69,9 +69,15 @@ template<typename real_t, int dim> class Coarsen{
       if(n[0]<0)
         continue;
 
-      property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
-                                             _mesh->get_coords(n[1]),
-                                             _mesh->get_coords(n[2]));
+      if(dim==2)
+        property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
+                                               _mesh->get_coords(n[1]),
+                                               _mesh->get_coords(n[2]));
+      else
+        property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
+                                               _mesh->get_coords(n[1]),
+                                               _mesh->get_coords(n[2]),
+                                               _mesh->get_coords(n[3]));
 
       break;
     }
@@ -118,6 +124,10 @@ template<typename real_t, int dim> class Coarsen{
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
   void coarsen(real_t L_low, real_t L_max){
+    coarsen(L_low, L_max, NULL);
+  }
+
+  void coarsen(real_t L_low, real_t L_max, std::vector<index_t> *collapsePairs){
     size_t NNodes = _mesh->get_number_nodes();
 
     _L_low = L_low;
@@ -167,11 +177,18 @@ template<typename real_t, int dim> class Coarsen{
         GlobalActiveSet_size[0] = 0;
       }
 
-      // Mark all vertices for evaluation.
-#pragma omp for schedule(guided)
-      for(size_t i=0; i<NNodes; ++i){
-        dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+      if(collapsePairs == NULL){
+        // Mark all vertices for evaluation.
+  #pragma omp for schedule(guided)
+        for(size_t i=0; i<NNodes; ++i){
+          dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+        }
+      }else{
+        for(std::vector<index_t>::const_iterator it=collapsePairs->begin(); it!=collapsePairs->end(); it+=2){
+          dynamic_vertex[*it] = *(it+1);
+        }
       }
+
 
       // Variable for accessing GlobalActiveSet_size[rnd] and ind_set_size[rnd]
       int rnd = 2;
@@ -461,6 +478,8 @@ template<typename real_t, int dim> class Coarsen{
 
  private:
 
+  template<typename _real_t, int _dim> friend class Sliver;
+
   /*! Kernel for identifying what vertex (if any) rm_vertex should collapse onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should collapse onto, negative if no operation is to be performed.
@@ -472,6 +491,10 @@ template<typename real_t, int dim> class Coarsen{
 
     // If this is not owned then return -1.
     if(!_mesh->is_owned_node(rm_vertex))
+      return -1;
+
+    // For now, lock the halo
+    if(_mesh->is_halo_node(rm_vertex))
       return -1;
 
     /* Sort the edges according to length. We want to collapse the
@@ -491,81 +514,10 @@ template<typename real_t, int dim> class Coarsen{
       target_vertex = short_edges.begin()->second;
       short_edges.erase(short_edges.begin());
 
-      // Assume the best.
-      reject_collapse=false;
-
       /* Check the properties of new elements. If the
          new properties are not acceptable then continue. */
 
-      // Check area/volume of new elements.
-      double total_old_av=0;
-      double total_new_av=0;
-      for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-        const int *old_n=_mesh->get_element(*ee);
-
-        double old_av;
-        if(dim==2)
-          old_av = property->area(_mesh->get_coords(old_n[0]),
-                                  _mesh->get_coords(old_n[1]),
-                                  _mesh->get_coords(old_n[2]));
-        else
-          old_av = property->volume(_mesh->get_coords(old_n[0]),
-                                    _mesh->get_coords(old_n[1]),
-                                    _mesh->get_coords(old_n[2]),
-                                    _mesh->get_coords(old_n[3]));
-
-        total_old_av+=old_av;
-
-        // Skip if this element would be deleted under the operation.
-        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
-          continue;
-
-        // Create a copy of the proposed element
-        std::vector<int> n(nloc);
-        for(size_t i=0;i<nloc;i++){
-          int nid = old_n[i];
-          if(nid==rm_vertex)
-            n[i] = target_vertex;
-          else
-            n[i] = nid;
-        }
-
-        // Check the area/volume of this new element.
-        double new_av;
-        if(dim==2)
-          new_av = property->area(_mesh->get_coords(n[0]),
-                                  _mesh->get_coords(n[1]),
-                                  _mesh->get_coords(n[2]));
-        else
-          new_av = property->volume(_mesh->get_coords(n[0]),
-                                    _mesh->get_coords(n[1]),
-                                    _mesh->get_coords(n[2]),
-                                    _mesh->get_coords(n[3]));
-
-        total_new_av+=new_av;
-
-        // Reject inverted elements.
-        if(new_av<DBL_EPSILON){
-          reject_collapse=true;
-          break;
-        }
-      }
-
-      if(fabs(total_new_av-total_old_av)>DBL_EPSILON)
-        reject_collapse=true;
-
-      // Check if any of the new edges are longer than L_max.
-      if(!reject_collapse){
-        for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-          if(target_vertex==*nn)
-            continue;
-
-          if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
-            reject_collapse=true;
-            break;
-          }
-        }
-      }
+      reject_collapse = reject_move(rm_vertex, target_vertex, L_max);
 
       // If this edge is ok to collapse then jump out.
       if(!reject_collapse)
@@ -579,6 +531,86 @@ template<typename real_t, int dim> class Coarsen{
     return target_vertex;
   }
 
+  /*! Check the properties of the new elements that will be created if rm_vertex
+   * collapsed onto target_vertex. If the move is allowed, this function returns
+   * false, otherwise the move is rejected and the function returns true;
+   */
+  bool reject_move(index_t rm_vertex, index_t target_vertex, real_t L_max) const{
+    // Assume the best
+    bool reject = false;
+
+    // Check area/volume of new elements.
+    double total_old_av=0;
+    double total_new_av=0;
+    for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+      const int *old_n=_mesh->get_element(*ee);
+
+      double old_av;
+      if(dim==2)
+        old_av = property->area(_mesh->get_coords(old_n[0]),
+                                _mesh->get_coords(old_n[1]),
+                                _mesh->get_coords(old_n[2]));
+      else
+        old_av = property->volume(_mesh->get_coords(old_n[0]),
+                                  _mesh->get_coords(old_n[1]),
+                                  _mesh->get_coords(old_n[2]),
+                                  _mesh->get_coords(old_n[3]));
+
+      total_old_av+=old_av;
+
+      // Skip if this element would be deleted under the operation.
+      if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
+        continue;
+
+      // Create a copy of the proposed element
+      std::vector<int> n(nloc);
+      for(size_t i=0;i<nloc;i++){
+        int nid = old_n[i];
+        if(nid==rm_vertex)
+          n[i] = target_vertex;
+        else
+          n[i] = nid;
+      }
+
+      // Check the area/volume of this new element.
+      double new_av;
+      if(dim==2)
+        new_av = property->area(_mesh->get_coords(n[0]),
+                                _mesh->get_coords(n[1]),
+                                _mesh->get_coords(n[2]));
+      else
+        new_av = property->volume(_mesh->get_coords(n[0]),
+                                  _mesh->get_coords(n[1]),
+                                  _mesh->get_coords(n[2]),
+                                  _mesh->get_coords(n[3]));
+
+      total_new_av+=new_av;
+
+      // Reject inverted elements.
+      if(new_av<DBL_EPSILON){
+        reject=true;
+        break;
+      }
+    }
+
+    if(fabs(total_new_av-total_old_av)>DBL_EPSILON)
+      reject=true;
+
+    // Check if any of the new edges are longer than L_max.
+    if(!reject){
+      for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
+        if(target_vertex==*nn)
+          continue;
+
+        if(_mesh->calc_edge_length(target_vertex, *nn)>L_max){
+          reject=true;
+          break;
+        }
+      }
+    }
+
+    return reject;
+  }
   /*! Kernel for performing coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */

@@ -49,6 +49,7 @@
 #include "Refine.h"
 #include "Smooth.h"
 #include "Swapping.h"
+#include "Sliver.h"
 
 #include <mpi.h>
 
@@ -104,6 +105,7 @@ int main(int argc, char **argv){
   Smooth<double, 3> smooth(*mesh);
   Refine<double, 3> refine(*mesh);
   Swapping<double, 3> swapping(*mesh);
+  Sliver<double, 3> sliver(*mesh, refine, coarsen);
   
   coarsen.coarsen(L_low, L_up);
   std::cout<<"INFO: Verify quality after initial coarsen.\n";
@@ -129,7 +131,7 @@ int main(int argc, char **argv){
     double L_ref = std::max(alpha*L_max, L_up);
     
     refine.refine(L_ref);
-    std::cout<<"INFO: Verify quality after refine; but before coarsen.\n";
+    std::cout<<"INFO: Verify quality after refine.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
     area = mesh->calculate_area();
@@ -146,8 +148,7 @@ int main(int argc, char **argv){
       std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
     coarsen.coarsen(L_low, L_ref);
-
-    std::cout<<"INFO: Verify quality after coarsen; but before swapping.\n";
+    std::cout<<"INFO: Verify quality after coarsen.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
     area = mesh->calculate_area();
@@ -165,8 +166,24 @@ int main(int argc, char **argv){
 
     for(int j=0;j<10;j++)
       swapping.swap(0.9);
-
     std::cout<<"INFO: Verify quality after swapping.\n";
+    assert(mesh->verify());
+    std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+    std::cout<<"Checking area == 6: ";
+    if(fabs(area-6)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (area="<<area<<")"<<std::endl;
+    std::cout<<"Checking volume == 1: ";
+    if(fabs(volume-1)<DBL_EPSILON)
+      std::cout<<"pass"<<std::endl;
+    else
+      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+
+    sliver.fix(0.001);
+    std::cout<<"INFO: Verify quality after fixing slivers.\n";
     assert(mesh->verify());
     std::cout<<"Number elements: "<<mesh->get_number_elements()<<std::endl;
     area = mesh->calculate_area();

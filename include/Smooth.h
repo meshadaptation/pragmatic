@@ -59,7 +59,7 @@
 #include "MetricTensor.h"
 
 
-/*! \brief Applies Laplacian smoothen in metric space.
+/*! \brief Applies Laplacian smoothening in metric space.
  */
 template<typename real_t, int dim>
   class Smooth{
@@ -457,13 +457,13 @@ template<typename real_t, int dim>
     {
       double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
-	const double *x1 = _mesh->get_coords(*it);
-        
-	bbox[0] = std::min(bbox[0], x1[0]);
-	bbox[1] = std::max(bbox[0], x1[0]);
-        
-	bbox[2] = std::min(bbox[1], x1[1]);
-	bbox[3] = std::max(bbox[1], x1[1]);
+        const double *x1 = _mesh->get_coords(*it);
+
+        bbox[0] = std::min(bbox[0], x1[0]);
+        bbox[1] = std::max(bbox[0], x1[0]);
+
+        bbox[2] = std::min(bbox[1], x1[1]);
+        bbox[3] = std::max(bbox[1], x1[1]);
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2])/2.0;
     }
