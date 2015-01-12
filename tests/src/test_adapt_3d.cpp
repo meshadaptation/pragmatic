@@ -139,7 +139,7 @@ int main(int argc, char **argv){
     cout<<"step in quality-refine: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
 
     tic = get_wtime();
-    sliver.fix(0.001);
+    //sliver.fix(10E-5);
     time_sliver += get_wtime() - tic;
     cout<<"step in quality-sliver: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
 
