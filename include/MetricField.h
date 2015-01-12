@@ -439,15 +439,11 @@ public:
    * @param max_aspect_ratio maximum aspect ratio for elements.
    */
   void apply_max_aspect_ratio(real_t max_aspect_ratio){
-    if(dim==2){
 #pragma omp parallel
     {
 #pragma omp for schedule(static)
       for(int i=0;i<_NNodes;i++)
         _metric[i].limit_aspect_ratio(max_aspect_ratio);
-    }
-    }else if(dim==3){
-      std::cerr<<"ERROR: apply_max_aspect_ratio not yet implemented\n";
     }
   }
 

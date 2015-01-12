@@ -54,6 +54,17 @@
 
 #include <mpi.h>
 
+void cout_quality(const Mesh<double> *mesh, std::string operation){
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
+
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if(rank==0)
+    std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
+}
+
 int main(int argc, char **argv){
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
@@ -69,14 +80,14 @@ int main(int argc, char **argv){
   }
 
   // Benchmark times.
-  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_sliver=0, time_adapt=0, tic;
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
+  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/test_adapt_3d-0.vtu");
   mesh->create_boundary();
 
   MetricField<double,3> metric_field(*mesh);
 
   size_t NNodes = mesh->get_number_nodes();
-  double eta=0.01;
+  double eta=0.05;
 
   for(size_t i=0;i<NNodes;i++){
     double x = 2*mesh->get_coords(i)[0] - 1;
@@ -87,24 +98,18 @@ int main(int argc, char **argv){
                                                                                                                                                                                                                                 0};
 
     
-    for(int j=0;j<6;j++)
+    for(int j=0;j<5;j++)
       m[j]/=eta;
-    m[5] = 1.0; 
+    m[5] = 1.0;
     
     metric_field.set_metric(m, i);
   }
-  
+  metric_field.apply_max_aspect_ratio(10);  
   metric_field.update_mesh();
 
   VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-
-  if((rank==0)&&(verbose)) std::cout<<"Initial quality:\n"
-                                    <<"Quality mean:  "<<qmean<<std::endl
-                                    <<"Quality min:   "<<qmin<<std::endl;
-  //VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
+  cout_quality(mesh, "Initial quality");
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -120,42 +125,80 @@ int main(int argc, char **argv){
 
   double L_max = mesh->maximal_edge_length();
   double alpha = sqrt(2.0)/2;
+  double L_ref = std::max(alpha*L_max, L_up);
+
+  if(verbose)
+    std::cout<<"Phase I\n";
+
   for(size_t i=0;i<10;i++){
-    double L_ref = std::max(alpha*L_max, L_up);
-    
+    // Coarsen
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref);
+    coarsen.coarsen(L_low, L_ref, true);
     time_coarsen += get_wtime() - tic;
-    cout<<"step in quality-coarsen: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
 
-    tic = get_wtime();
-    swapping.swap(0.7);
-    time_swap += get_wtime() - tic;
-    cout<<"step in quality-swap: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
+    if(verbose)
+      cout_quality(mesh, "Coarsen");
 
+    // Refine
     tic = get_wtime();
     refine.refine(L_ref);
     time_refine += get_wtime() - tic;
-    cout<<"step in quality-refine: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
 
+    if(verbose)
+      cout_quality(mesh, "refine");
+
+    // Swap
     tic = get_wtime();
-    //sliver.fix(10E-5);
-    time_sliver += get_wtime() - tic;
-    cout<<"step in quality-sliver: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
+    swapping.swap(0.1);
+    time_swap += get_wtime() - tic;
 
+    if(verbose)
+      cout_quality(mesh, "Swap");
+
+    // Smooth
+    tic = get_wtime();
+    smooth.smooth(1);
+    time_smooth += get_wtime()-tic;
+
+    if(verbose)
+      cout_quality(mesh, "Smooth");
+
+    alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
     L_max = mesh->maximal_edge_length();
+    L_ref = std::max(alpha*L_max, L_up);
 
     if(L_max>1.0 and (L_max-L_up)<0.01)
       break;
   }
 
+ if(verbose)
+    std::cout<<"Phase II\n";
+
+  for(size_t i=0;i<5;i++){
+    tic = get_wtime();
+    coarsen.coarsen(L_up, L_up, true);
+    time_coarsen += get_wtime() - tic;
+    if(verbose)
+      cout_quality(mesh, "coarsen");
+
+    tic = get_wtime();
+    swapping.swap(0.7);
+    if(verbose)
+      cout_quality(mesh, "Swap");
+    time_swap += get_wtime() - tic;
+  
+    tic = get_wtime();
+    smooth.smooth(1);
+    if(verbose)
+      cout_quality(mesh, "Smooth");
+    time_smooth += get_wtime()-tic;
+  }
+
   double time_defrag = get_wtime();
   mesh->defragment();
   time_defrag = get_wtime()-time_defrag;
-
+  
   if(verbose){
-    if(rank==0)
-      std::cout<<"Basic quality:\n";
     mesh->verify();
 
     VTKTools<double>::export_vtu("../data/test_adapt_3d-basic", mesh);
@@ -165,7 +208,8 @@ int main(int argc, char **argv){
   smooth.smooth(20);
   time_smooth += get_wtime()-tic;
  
-  cout<<"step in quality-smooth: "<<mesh->get_qmean()<<" "<<mesh->get_qmin()<<std::endl;
+  if(verbose)
+    cout_quality(mesh, "Final smooth");
 
   time_adapt = get_wtime()-time_adapt;
 
@@ -177,8 +221,8 @@ int main(int argc, char **argv){
 
   VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
   
   long double volume = mesh->calculate_volume();
   long double area = mesh->calculate_area();
@@ -197,7 +241,7 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
+    std::cout<<"Expecting qmean>0.7, qmin>0.2: ";
     if((qmean>0.8)&&(qmin>0.2))
       std::cout<<"pass"<<std::endl;
     else

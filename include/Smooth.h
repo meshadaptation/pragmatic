@@ -44,6 +44,8 @@
 #include <map>
 #include <vector>
 #include <limits>
+#include <random>
+
 #include "Colour.h"
 
 #include <Eigen/Core>
@@ -75,7 +77,7 @@ template<typename real_t, int dim>
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
 
-    epsilon_q = 1.0e-6;
+    epsilon_q = DBL_EPSILON;
 
     // Set the orientation of elements.
     property = NULL;
@@ -151,7 +153,7 @@ template<typename real_t, int dim>
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
 
-            if(smart_laplacian_kernel(node)){
+            if(optimisation_linf_kernel(node)){
               for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
                 active_vertices[*it] = 1;
               }
@@ -400,6 +402,55 @@ template<typename real_t, int dim>
     }
     
     return true;
+  }
+
+  inline bool stocastic_3d_kernel(index_t node){
+    real_t p[3];
+    real_t r=0;
+    for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+      r += sqrt(pow(_mesh->_coords[node*3+0]-_mesh->_coords[(*it)*3+0],2)+
+		pow(_mesh->_coords[node*3+1]-_mesh->_coords[(*it)*3+1],2)+
+		pow(_mesh->_coords[node*3+2]-_mesh->_coords[(*it)*3+2],2));
+    }
+    r/=_mesh->NNList[node].size();
+    
+    std::default_random_engine generator;
+    std::normal_distribution<real_t> distribution(0.0, r*0.5);
+
+    bool valid = false;
+    real_t functional_orig = functional_Linf(node);
+    for(int hail_marys=0;hail_marys<1000;hail_marys++){
+      // Randomally jump to a new location in the neighbourhood.
+      for(int i=0;i<3;i++)
+	p[i] = _mesh->_coords[node*3+i]+distribution(generator);
+      
+      // Interpolate metric and check for inversion.
+      double mp[6];
+      bool lvalid = generate_location_3d(node, p, mp);
+      if(!lvalid)
+	continue;
+      
+      // Check to see if the position is an improvement.
+      real_t functional = functional_Linf(node, p, mp);
+      if(functional-functional_orig<epsilon_q)
+	continue;
+
+      // Otherwise accept.
+      valid = true;
+      for(size_t j=0;j<3;j++)
+	_mesh->_coords[node*3+j] = p[j];
+    
+      for(size_t j=0;j<6;j++)
+	_mesh->metric[node*6+j] = mp[j];
+    
+      // Reset quality cache.
+      for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
+	update_quality(*ie);
+
+      break;
+    }
+
+    return valid;
   }
 
   // l-infinity optimisation kernels

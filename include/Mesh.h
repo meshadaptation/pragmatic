@@ -933,16 +933,15 @@ template<typename real_t> class Mesh{
     return length;
   }
 
-  real_t maximal_edge_length(){
+  real_t maximal_edge_length() const{
     double L_max = 0;
 
     for(index_t i=0;i<(index_t) NNodes;i++){
-      if(is_owned_node(i) && (NNList[i].size()>0))
-        for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-          if(i<*it){ // Ensure that every edge length is only calculated once.
-            L_max = std::max(L_max, calc_edge_length(i, *it));
-          }
+      for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+        if(i<*it){ // Ensure that every edge length is only calculated once.
+          L_max = std::max(L_max, calc_edge_length(i, *it));
         }
+      }
     }
 
 #ifdef HAVE_MPI

@@ -322,7 +322,11 @@ public:
         evalues[1] = std::max(evalues[1], evalues[0]/(max_ratio*max_ratio));
       }
     }else{
-      std::cerr<<"ERROR: limit_aspect_ratio not yet implemented\n";
+      treal_t max_eigenvalue = std::max(evalues[0], std::max(evalues[1], evalues[2]));
+      treal_t min_eigenvalue = max_eigenvalue/(max_ratio*max_ratio);
+
+      for(int i=0;i<dim;i++)
+        evalues[i] = std::max(evalues[i], min_eigenvalue);
     }
     
     Eigen::Matrix<treal_t, dim, dim> Mc = evectors*evalues.asDiagonal()*evectors.transpose();
