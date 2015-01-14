@@ -80,7 +80,7 @@ int main(int argc, char **argv){
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/test_adapt_3d-0.vtu");
+  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
   mesh->create_boundary();
 
   MetricField<double,3> metric_field(*mesh);

@@ -270,7 +270,7 @@ template<typename real_t, int dim> class Coarsen{
             }
 
             if(defective){
-              conflicts.push_back(i);
+              conflicts.push_back(n);
 
               for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[n].begin(); jt!=_mesh->NNList[n].end(); ++jt){
                 if(dynamic_vertex[*jt]>=0){
@@ -388,7 +388,6 @@ template<typename real_t, int dim> class Coarsen{
                 range.push_back(range_element(range_indexer[t][set_no], t));
             }
             std::sort(range.begin(), range.end(), pragmatic_range_element_comparator);
-
 
 #pragma omp for schedule(guided)
             for(size_t idx=0; idx<ind_set_size[rnd][set_no]; ++idx){
@@ -541,6 +540,10 @@ template<typename real_t, int dim> class Coarsen{
       long double total_new_av=0;
       bool better=true;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+        // Skip if this element would be deleted under the operation.
+        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
+          continue;
+
         const int *old_n=_mesh->get_element(*ee);
 
         double old_av;
@@ -555,10 +558,6 @@ template<typename real_t, int dim> class Coarsen{
                                     _mesh->get_coords(old_n[3]));
 
         total_old_av+=old_av;
-
-        // Skip if this element would be deleted under the operation.
-        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
-          continue;
 
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
