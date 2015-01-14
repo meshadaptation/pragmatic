@@ -477,7 +477,7 @@ class ElementProperty{
     double m02 = (m0[2] + m1[2] + m2[2] + m3[2])*inv4;
     double m11 = (m0[3] + m1[3] + m2[3] + m3[3])*inv4;
     double m12 = (m0[4] + m1[4] + m2[4] + m3[4])*inv4;
-    double m22 = (m0[5] + m1[5] + m2[5] + m3[6])*inv4;
+    double m22 = (m0[5] + m1[5] + m2[5] + m3[5])*inv4;
 
     double z01 = (x0[2] - x1[2]);
     double y01 = (x0[1] - x1[1]);

@@ -250,7 +250,7 @@ template<typename real_t, int dim> class Coarsen{
           }
 
           // Continue colouring and coarsening
-          std::vector<size_t> conflicts;
+          std::vector<index_t> conflicts;
 
 #pragma omp for schedule(guided)
           for(size_t i=0; i<GlobalActiveSet_size[rnd]; ++i){
@@ -344,7 +344,7 @@ template<typename real_t, int dim> class Coarsen{
 
             size_t pos = pragmatic_omp_atomic_capture(&worklist_size[wl], conflicts.size());
 
-            memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(size_t));
+            memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(index_t));
 
             conflicts.clear();
 
