@@ -900,7 +900,7 @@ def analytic_eig(H, tol=1e-12):
           Hin[:,1,0] = H12; Hin[:,1,1] = H22; Hin[:,1,2] = H23
           Hin[:,2,0] = H13; Hin[:,2,1] = H23; Hin[:,2,2] = H33
   if numpy.__version__ >= "1.8.0":
-          [eigL,eigR] = eig(Hin)
+          [eigL,eigR] = pyeig(Hin)
           eigL = eigL.T
           eigR = eigR.reshape([len(H11),array(Hin.shape[1:3]).prod()]).T
   return [eigL,eigR]
