@@ -78,8 +78,8 @@ class ParameterException(Exception):
   pass
 
 try:
-#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kristian/projects/grg/libpragmatic.so")
-  _libpragmatic = ctypes.cdll.LoadLibrary("libpragmatic.so")
+#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kristian/projects/grg2/libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("../libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
@@ -115,13 +115,16 @@ def edge_lengths(M):
   return e
 
 def polyhedron_surfmesh(mesh):
-    cells = mesh.cells()
-    coords = mesh.coordinates()
     #this function calculates a surface mesh assuming a polyhedral geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
     #is provided by the user, but the user can load this function herself, use it, modify the output
     #and provide the modified surface mesh to adapt()
+    #INPUT : DOLFIN MESH
+    #OUTPUT: bfaces.shape = (n,3)
+    #OUTPUT: IDs.shape = (n,)
+    cells = mesh.cells()
+    coords = mesh.coordinates()
     ntri = len(cells)
     v1 = coords[cells[:,1],:]-coords[cells[:,0],:]
     v2 = coords[cells[:,2],:]-coords[cells[:,0],:]
@@ -185,13 +188,16 @@ def polyhedron_surfmesh(mesh):
     return [bfaces,IDs]
 
 def polygon_surfmesh(mesh):
-    cells = mesh.cells()
-    coords = mesh.coordinates()
-    #this function calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
-    #curved geometries and the output will have to be modified for problems colinear faces.
+    #calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
+    #curved geometries and the output will have to be modified for problems with colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
     #is provided by the user, but the user can load this function herself, use it, modify the output
     #and provide the modified surface mesh to adapt()
+    #INPUT : DOLFIN MESH
+    #OUTPUT: bfaces.shape = (n,2)
+    #OUTPUT: IDs.shape = (n,)
+    cells = mesh.cells()
+    coords = mesh.coordinates()
     ntri = len(cells)
     v1 = coords[cells[:,1],:]-coords[cells[:,0],:]
     v2 = coords[cells[:,2],:]-coords[cells[:,0],:]
@@ -242,9 +248,16 @@ def polygon_surfmesh(mesh):
     return [bfaces,IDs]
 
 def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
-  #this function generates a mesh 2D DOLFIN mesh given coordinates(nx,ny) and cells(n_enlist).
+  #this function generates a mesh 2D or 3D DOLFIN mesh given coordinates (nxy) and cells(n_enlist).
   #it is used in the adaptation, but can also be used in the context of debugging, i.e. if one
   #one saves the mesh coordinates and cells using pickle between iterations.
+  #INPUT : n_xy.shape = (2,N) or n_xy.shape = (3,N) for 2D and 3D, respectively.
+  #INPUT : n_enlist.shape = (3*M,) or n_enlist.shape = (4*M,)
+  #INPUT : mesh is the oldmesh used for checking area/volume conservation
+  #INPUT : dx, operator !? for arae/volume conservation check
+  #INPUT : debugon flag for checking area/volume preservation, 
+  #       should be off for curved geometries.
+  #OUTOUT: DOLFIN MESH
   startTime = time()
   nvtx = n_xy.shape[1]
   n_mesh = Mesh()
@@ -286,6 +299,12 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   
   
 def impose_maxN(metric, maxN):
+    #enforces complexity constraint on the
+    #INPUT : metric, DOLFIN SPD TENSOR VARIABLE
+    #INPUT : maxN upper complexity (~ number of nodes) constraint
+    #OUTPUT: metric, DOLFIN SPD TENSOR VARIABLE
+    #OUTPUT: fak, factor with which the metric was coarsened - usefull for
+    #throwing warnings
     gdim = metric.function_space().ufl_element().cell().geometric_dimension()
     targetN = assemble(sqrt(det(metric))*dx)
     fak = 1.
@@ -297,7 +316,31 @@ def impose_maxN(metric, maxN):
       
 def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=None, maxN=None):
   #this is the actual adapt function. It currently works with vertex 
-  #numbers rather than DOF numbers. 
+  #numbers rather than DOF numbers, but as of DOLFIN.__VERSION__ >= "1.3.0",
+  #there is no difference.
+  # INPUT : metric is a DG0 or CG1 SPD DOLFIN TENSOR VARIABLE or
+  #         a DOLFIN SCALAR VARIABLE. In the latter case metric_pnorm is called
+  #         to calculate a DOLFIN CG1 TENSOR VARIABLE
+  # INPUT : bfaces.shape = (n,2) or bfaces.shape = (n,3) is a list of edges or
+  #        faces for the mesh boundary. If not specified, it will be calculated 
+  #        using the polygon_surfmesh or polyhedron_surfmesh functions.
+  #        If specified, it should be together with
+  # INPUT : bfaces_IDs.shape = (n,), which gives each edge and face and ID, so 
+  #         that corners implicitly specified in 2D and edges in 3D. 
+  #         All corners can be specified this way in 3D, but it can require 
+  #         definition of dummy IDs, if the corner is in the middle of face and
+  #         thus only related to two IDs.
+  # INPUT : debugon=True (default) checks for conservation of area/volume
+  # INPUT : eta is the scaling factor used, if the metric input is a
+  #         SCALAR DOLFIN FUNCTION
+  # INPUT : grada enables gradation of the input metric, (1 for slight gradation,
+  #         2 for more etc... off by default)
+  # INPUT : maxN facilitates rescaling of the input metric to meet a 
+  #         mesh complexity constraint (~number of nodes). This can prevent
+  #         OUT OF MEMORY ERRORS in the context of direct solvers, but it can
+  #         also be headache for convergence analysis, which is why a warning
+  #         is thrown if the constraint is active
+  # OUTPUT: DOLFIN MESH
   mesh = metric.function_space().mesh()
   
   #check if input is not a metric
@@ -476,8 +519,9 @@ def consistent_interpolation(mesh, fields=[]):
     return n_mesh
 
 def fix_CG1_metric(Mp):
- #this function makes the eigenvalues of a metric positive (this property is
- #lost during the projection step)
+ #makes the eigenvalues of a metric positive (this property can be lost during 
+ #the projection step)
+ #INPUT and OUTPUT: DOLFIN TENSOR VARIABLE
  [H,cell2dof] = get_dofs(Mp)
  [eigL,eigR] = analytic_eig(H)
 # if any(lambda1<zeros(len(lambda2))) or any(lambda2<zeros(len(lambda2))):
@@ -488,10 +532,20 @@ def fix_CG1_metric(Mp):
  Mp.vector().set_local(out)
  return Mp   
 
-# p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
-# Computation, Volume 76, Number 257, January 2007, pp. 179-204.
-# the DG0 hessian can be extracted in three different ways (controlled CG0H option)
 def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ratio=10, p=2, CG1out=False, CG0H=3):
+  # p-norm scaling to the metric, as in Chen, Sun and Xu, Mathematics of
+  # Computation, Volume 76, Number 257, January 2007, pp. 179-204.
+  # INPUT : f, SCALAR DOLFIN VARIABLE
+  # INPUT : eta, scaling factor (0.04-0.005 are good values for engineering tolerances)
+  # INPUT : max_edge_length is an optional lower bound on the metric eigenvalues
+  # INPUT : min_edge_length is an optional upper bound on the metric eigenvalues
+  # INPUT : max_edge_ratio is an optional local lower bound on the metric eigenvalues,
+  #         which enforce a maximum ratio between the smaller and large eigenvalue
+  # INPUT : p is the interpolation norm to be minimised (default to 2)
+  # INPUT : CG1out enables projection of Hessian to CG1 space, such that this
+   #        projection does not have to be performed at a later stage
+  # INPUT : CG0H controls how a DG0 Hessian is extracted from a SCALAR DOLFIN CG2 VARIABLE
+  # OUTPUT: DOLFIN (CG1 or DG0) SPD TENSOR VARIABLE
   mesh = f.function_space().mesh()
   # Sanity checks
   if max_edge_ratio is not None and max_edge_ratio < 1.0:
@@ -541,6 +595,12 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
    H = project(H,TensorFunctionSpace(mesh,'CG',1))
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
+#  # add DOLFIN_EPS on the diagonal too avoid zero eigenvalues
+  HH[0,:] += DOLFIN_EPS*1e3
+  HH[2,:] += DOLFIN_EPS*1e3
+  if n==3: #3D
+   HH[5,:] += DOLFIN_EPS*1e3
+  
   # CALCULATE EIGENVALUES 
   [eigL,eigR] = analytic_eig(HH)
   
@@ -592,8 +652,15 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   return H
 
 def metric_ellipse(H1, H2, method='in', qualtesting=False):
-  #this function calculates the inner or outer ellipse (depending on the value of the method input)
-  #of two the two input metrics.
+  # calculates the inner or outer ellipse (depending on the value of the method input)
+  # of two the two input metrics.
+  # INPUT : H1 is a DOLFIN SPD TENSOR VARIABLE (CG1 or DG0)
+  # INPUT : H2 is a DOLFIN SPD TENSOR VARIABLE (CG1 or DG0)
+  # INPUT : method determines calculation method, 'in' for inner ellipse (default)
+  # INPUT : qualtesting flag that can be used to to trigger return of scalar a variable
+  #         that indicates if one ellipse is entirely within the other (-1,1) or if they
+  #         intersect (0)
+  # OUTPUT: H1, DOLFIN SPD TENSOR VARIABLE (CG1 or DG0)
   [HH1,cell2dof] = get_dofs(H1)
   [HH2,cell2dof] = get_dofs(H2)
   cbig = zeros((H1.vector().array()).size)
@@ -626,6 +693,9 @@ def metric_ellipse(H1, H2, method='in', qualtesting=False):
   return H1
 
 def get_dofs(H):
+  #converts a DOLFIN SPD TENSOR VARIABLE to a numpy array, see sym2asym for storage convention
+  #OUTPUT: argout.shape = (3,N) or argout.shape = (6,N) for 2D and 3D, respectively.
+  #INPUT : DOLFIN TENSOR VARIABLE 
   mesh = H.function_space().mesh()
   n = mesh.geometry().dim()
   if H.function_space().ufl_element().degree() == 0 and H.function_space().ufl_element().family()[0] == 'D':
@@ -649,6 +719,8 @@ def get_dofs(H):
    return [array([H11,H12,H22,H13,H23,H33]),cell2dof]
 
 def transpose_eigR(eigR):
+    #transposes a rotation matrix (eigenvectors)
+    #INPUT and OUTPUT: .shape = (4,N) or .shape = (9,N)
     if eigR.shape[0] == 4:
      return array([eigR[0,:],eigR[2,:],\
                    eigR[1,:],eigR[3,:]])
@@ -658,6 +730,10 @@ def transpose_eigR(eigR):
                    eigR[2,:],eigR[5,:],eigR[8,:]])
 
 def sym2asym(HH):
+    #converts between upper diagonal storage and full storage of a
+    #SPD tensor
+    #INPUT : HH.shape = (3,N) or HH.shape(6,N) for 2D and 3D, respectively.
+    #OUTPUT: argout.shape = (4,N) or outarg.shape(9,N) for 2D and 3D, respectively.
     if HH.shape[0] == 3:
         return array([HH[0,:],HH[1,:],\
                       HH[1,:],HH[2,:]])
@@ -667,6 +743,9 @@ def sym2asym(HH):
                       HH[3,:],HH[4,:],HH[5,:]])
 
 def fulleig(eigL):
+    #creates a diagonal tensor from a vector
+    #INPUT : eigL.shape = (2,N) or eigL.shape = (3,N) for 2D and 3D, respetively.
+    #OUTPUT: outarg.shape = (3,N) or outarg.shape = (6,N) for 2D and 3D, respectively.
     zeron = zeros(eigL.shape[1])
     if eigL.shape[0] == 2:
         return array([eigL[0,:],zeron,eigL[1,:]])
@@ -674,7 +753,11 @@ def fulleig(eigL):
         return array([eigL[0,:],zeron,eigL[1,:],zeron,zeron,eigL[2,:]])
         
 def analyt_rot(H,eigR):
-  #this function rotates a 2x2 symmetric matrix
+  #rotates a symmetric matrix, i.e. it calculates the tensor product
+  # R*h*R.T, where
+  #INPUT : H.shape = (3,N) or H.shape = (6,N) for 2D and 3D matrices, respectively.
+  #INPUT : eigR.shape = (2,N) or eigR.shape = (3,N) for 2D and 3D, respetively.
+  #OUTPUT: A.shape = (3,N) or A.shape = (6,N) for 2D and 3D, respectively
   if H.shape[0] == 3: #2D
    inds  = array([[0,1],[1,2]])
    indA = array([[0,1],[2,3]])
@@ -693,6 +776,11 @@ def analyt_rot(H,eigR):
   return A
 
 def prod_eig(H, eigL):
+    #calculates the tensor product of H and diag(eigL), where
+    #H is a tensor and eigL is a vector (diag(eigL) is a diagonal tensor).
+    #INPUT : H.shape = (3,N) or H.shape(6,N) for 2D and 3D, respectively and
+    #INPUT : eigL.shape = (2,N) or eigL.shape = (3,N) for 2D and 3D, respectively
+    #OUTPUT: argout.shape = (3,N) or argout.shape = (6,N) for 2D and 3Dm respectively    
     if H.shape[0] == 3:
         return array([H[0,:]*eigL[0,:], H[1,:]*numpy.sqrt(eigL[0,:]*eigL[1,:]), \
                                         H[2,:]*eigL[1,:]])
@@ -702,103 +790,135 @@ def prod_eig(H, eigL):
                                         H[5,:]*eigL[2,:]])
 
 def analytic_eig(H, tol=1e-12):
-  #this function calculates the eigenvalues and eigenvectors using explicit analytical
-  #expression for a 2x2 symmetric matrix. 
-  # numpy._version__>1.8.0 can do this more elegantly
+  #calculates the eigenvalues and eigenvectors using explicit analytical
+  #expression for an array of 2x2 and a 3x3 symmetric matrices.
+  #if numpy.__version__ >= "1.8.0", the vectorisation functionality of numpy.linalg.eig is used
+  #INPUT: H.shape = (3,N) or H.shape = (6,N) for 2x2 and 3x3, respectively. Refer to sym2asym for ordering convention
+  #       tol, is an optinal numerical tolerance for identifying diagonal matrices
+  #OUTPUT: eigL.shape = (2,N) or eigL.shape = (3,N) for 2x2 and 3x3, resptively.
+  #OUTPUT: eigR.shape = (4,N) or eigr.shape = (9,N) for 2x2 and 3x3, resptively. Refer to transpose_eigR for ordering convention
   H11 = H[0,:]
   H12 = H[1,:]
   H22 = H[2,:]
   onesC = ones(len(H11))
   if H.shape[0] == 3:
-      lambda1 = 0.5*(H11+H22-numpy.sqrt((H11-H22)**2+4*H12**2))
-      lambda2 = 0.5*(H11+H22+numpy.sqrt((H11-H22)**2+4*H12**2))        
-      v1x = ones(len(H11)); v1y = zeros(len(H11))
-      #identical eigenvalues
-      I2 = numpy.abs(lambda1-lambda2)<onesC*tol;
-      #diagonal matrix
-      I1 = numpy.abs(H12)<onesC*tol
-      lambda1[I1] = H11[I1]
-      lambda2[I1] = H22[I1]
-      #general case
-      nI = (I1==False)*(I2==False)
-      v1x[nI] = -H12[nI]
-      v1y[nI] = H11[nI]-lambda1[nI]
-      L1 = numpy.sqrt(v1x**2+v1y**2)
-      v1x /= L1
-      v1y /= L1
-      eigL = array([lambda1,lambda2])
-      eigR = array([v1x,v1y,-v1y,v1x])
+      if numpy.__version__ < "1.8.0":
+          lambda1 = 0.5*(H11+H22-numpy.sqrt((H11-H22)**2+4*H12**2))
+          lambda2 = 0.5*(H11+H22+numpy.sqrt((H11-H22)**2+4*H12**2))        
+          v1x = ones(len(H11)); v1y = zeros(len(H11))
+          #identical eigenvalues
+          I2 = numpy.abs(lambda1-lambda2)<onesC*tol;
+          #diagonal matrix
+          I1 = numpy.abs(H12)<onesC*tol
+          lambda1[I1] = H11[I1]
+          lambda2[I1] = H22[I1]
+          #general case
+          nI = (I1==False)*(I2==False)
+          v1x[nI] = -H12[nI]
+          v1y[nI] = H11[nI]-lambda1[nI]
+          L1 = numpy.sqrt(v1x**2+v1y**2)
+          v1x /= L1
+          v1y /= L1
+          eigL = array([lambda1,lambda2])
+          eigR = array([v1x,v1y,-v1y,v1x])
+      else:
+          Hin = zeros([len(H11),2,2])
+          Hin[:,0,0] = H11; Hin[:,0,1] = H12
+          Hin[:,1,0] = H12; Hin[:,1,1] = H22
   else: #3D
       H13 = H[3,:]
       H23 = H[4,:]
       H33 = H[5,:]
-      p1 = H12**2 + H13**2 + H23**2
-      zeroC = zeros(len(H11))
-      eig1 = array(H11); eig2 = array(H22); eig3 = array(H33) #do not modify input
-      v1 = array([onesC, zeroC, zeroC])
-      v2 = array([zeroC, onesC, zeroC])
-      v3 = array([zeroC, zeroC, onesC])
-      # A is not diagonal.                       
-      nI = (numpy.abs(p1) > tol**2)
-      p1 = p1[nI]
-      H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
-      H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
-      q = array((H11+H22+H33)/3.)
-      H11 /= q; H12 /= q; H22 /= q; H13 /= q; H23 /= q; H33 /= q
-      p1 /= q**2; qold = q; q = ones(len(H11))
-      p2 = (H11-q)**2 + (H22-q)**2 + (H33-q)**2 + 2.*p1
-      p = numpy.sqrt(p2 / 6.)
-      I = array([onesC,zeroC,onesC,zeroC,zeroC,onesC])#I = array([1., 0., 1., 0., 0., 1.]).repeat(len(H11)).reshape(6,len(H11)) #identity matrix
-      HH = array([H11,H12,H22,H13,H23,H33])
-      B = (1./p) * (HH-q.repeat(6).reshape(len(H11),6).T*I[:,nI]) 
-      #detB = B11*B22*B33+2*(B12*B23*B13)-B13*B22*B13-B12*B12*B33-B11*B23*B23
-      detB = B[0,:]*B[2,:]*B[5,:]+2*(B[1,:]*B[4,:]*B[3,:])-B[3,:]*B[2,:]*B[3,:]-B[1,:]*B[1,:]*B[5,:]-B[0,:]*B[4,:]*B[4,:]
-      
-      #calc r
-      r = detB / 2. 
-      rsmall = r<=-1.
-      rbig   = r>= 1.
-      rgood = (rsmall==False)*(rbig==False)
-      phi = zeros(len(H11))
-      phi[rsmall] = pi / 3. 
-      phi[rbig]   = 0. 
-      phi[rgood]  = numpy.arccos(r[rgood]) / 3.
-      
-      eig1[nI] = q + 2.*p*numpy.cos(phi)
-      eig3[nI] = q + 2.*p*numpy.cos(phi + (2.*pi/3.))
-      eig2[nI] = array(3.*q - eig1[nI] - eig3[nI])
-      eig1[nI] *= qold; eig2[nI] *= qold; eig3[nI] *= qold
-      v1[0,nI] = H22*H33 - H23**2 + eig1[nI]*(eig1[nI]-H33-H22)
-      v1[1,nI] = H12*(eig1[nI]-H33)+H13*H23
-      v1[2,nI] = H13*(eig1[nI]-H22)+H12*H23
-      v2[0,nI] = H12*(eig2[nI]-H33)+H23*H13
-      v2[1,nI] = H11*H33 - H13**2 + eig2[nI]*(eig2[nI]-H11-H33)
-      v2[2,nI] = H23*(eig2[nI]-H11)+H12*H13
-      v3[0,nI] = H13*(eig3[nI]-H22)+H23*H12
-      v3[1,nI] = H23*(eig3[nI]-H11)+H13*H12
-      v3[2,nI] = H11*H22 - H12**2 + eig3[nI]*(eig3[nI]-H11-H22)
-      L1 = numpy.sqrt((v1[:,nI]**2).sum(0))
-      L2 = numpy.sqrt((v2[:,nI]**2).sum(0))
-      L3 = numpy.sqrt((v3[:,nI]**2).sum(0))
-      v1[:,nI] /= L1.repeat(3).reshape(len(L1),3).T
-      v2[:,nI] /= L2.repeat(3).reshape(len(L1),3).T
-      v3[:,nI] /= L3.repeat(3).reshape(len(L1),3).T
-      eigL = array([eig1,eig2,eig3])
-      eigR = array([v1[0,:],v1[1,:],v1[2,:],\
-                    v2[0,:],v2[1,:],v2[2,:],\
-                    v3[0,:],v3[1,:],v3[2,:]])
-      bad = (numpy.abs(analyt_rot(fulleig(eigL),eigR)-H).sum(0) > tol) | isnan(eigR).any(0) | isnan(eigL).any(0)
-      if any(bad):
-       log(INFO,'%0.0f problems in eigendecomposition' % bad.sum())
-       for i in numpy.where(bad)[0]:
-           [eigL_,eigR_] = pyeig(array([[H[0,i],H[1,i],H[3,i]],\
-                                        [H[1,i],H[2,i],H[4,i]],\
-                                        [H[3,i],H[4,i],H[5,i]]]))
-           eigL[:,i] = eigL_
-           eigR[:,i] = eigR_.T.flatten()
+      if numpy.__version__ < "1.8.0":
+          p1 = H12**2 + H13**2 + H23**2
+          zeroC = zeros(len(H11))
+          eig1 = array(H11); eig2 = array(H22); eig3 = array(H33) #do not modify input
+          v1 = array([onesC, zeroC, zeroC])
+          v2 = array([zeroC, onesC, zeroC])
+          v3 = array([zeroC, zeroC, onesC])
+          # A is not diagonal.                       
+          nI = (numpy.abs(p1) > tol**2)
+          p1 = p1[nI]
+          H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
+          H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
+          q = array((H11+H22+H33)/3.)
+          H11 /= q; H12 /= q; H22 /= q; H13 /= q; H23 /= q; H33 /= q
+          p1 /= q**2; qold = q; q = ones(len(H11))
+          p2 = (H11-q)**2 + (H22-q)**2 + (H33-q)**2 + 2.*p1
+          p = numpy.sqrt(p2 / 6.)
+          I = array([onesC,zeroC,onesC,zeroC,zeroC,onesC])#I = array([1., 0., 1., 0., 0., 1.]).repeat(len(H11)).reshape(6,len(H11)) #identity matrix
+          HH = array([H11,H12,H22,H13,H23,H33])
+          B = (1./p) * (HH-q.repeat(6).reshape(len(H11),6).T*I[:,nI]) 
+          #detB = B11*B22*B33+2*(B12*B23*B13)-B13*B22*B13-B12*B12*B33-B11*B23*B23
+          detB = B[0,:]*B[2,:]*B[5,:]+2*(B[1,:]*B[4,:]*B[3,:])-B[3,:]*B[2,:]*B[3,:]-B[1,:]*B[1,:]*B[5,:]-B[0,:]*B[4,:]*B[4,:]
+          
+          #calc r
+          r = detB / 2. 
+          rsmall = r<=-1.
+          rbig   = r>= 1.
+          rgood = (rsmall==False)*(rbig==False)
+          phi = zeros(len(H11))
+          phi[rsmall] = pi / 3. 
+          phi[rbig]   = 0. 
+          phi[rgood]  = numpy.arccos(r[rgood]) / 3.
+          
+          eig1[nI] = q + 2.*p*numpy.cos(phi)
+          eig3[nI] = q + 2.*p*numpy.cos(phi + (2.*pi/3.))
+          eig2[nI] = array(3.*q - eig1[nI] - eig3[nI])
+          eig1[nI] *= qold; eig2[nI] *= qold; eig3[nI] *= qold
+          v1[0,nI] = H22*H33 - H23**2 + eig1[nI]*(eig1[nI]-H33-H22)
+          v1[1,nI] = H12*(eig1[nI]-H33)+H13*H23
+          v1[2,nI] = H13*(eig1[nI]-H22)+H12*H23
+          v2[0,nI] = H12*(eig2[nI]-H33)+H23*H13
+          v2[1,nI] = H11*H33 - H13**2 + eig2[nI]*(eig2[nI]-H11-H33)
+          v2[2,nI] = H23*(eig2[nI]-H11)+H12*H13
+          v3[0,nI] = H13*(eig3[nI]-H22)+H23*H12
+          v3[1,nI] = H23*(eig3[nI]-H11)+H13*H12
+          v3[2,nI] = H11*H22 - H12**2 + eig3[nI]*(eig3[nI]-H11-H22)
+          L1 = numpy.sqrt((v1[:,nI]**2).sum(0))
+          L2 = numpy.sqrt((v2[:,nI]**2).sum(0))
+          L3 = numpy.sqrt((v3[:,nI]**2).sum(0))
+          v1[:,nI] /= L1.repeat(3).reshape(len(L1),3).T
+          v2[:,nI] /= L2.repeat(3).reshape(len(L1),3).T
+          v3[:,nI] /= L3.repeat(3).reshape(len(L1),3).T
+          eigL = array([eig1,eig2,eig3])
+          eigR = array([v1[0,:],v1[1,:],v1[2,:],\
+                        v2[0,:],v2[1,:],v2[2,:],\
+                        v3[0,:],v3[1,:],v3[2,:]])
+          bad = (numpy.abs(analyt_rot(fulleig(eigL),eigR)-H).sum(0) > tol) | isnan(eigR).any(0) | isnan(eigL).any(0)
+          if any(bad):
+           log(INFO,'%0.0f problems in eigendecomposition' % bad.sum())
+           for i in numpy.where(bad)[0]:
+               [eigL_,eigR_] = pyeig(array([[H[0,i],H[1,i],H[3,i]],\
+                                            [H[1,i],H[2,i],H[4,i]],\
+                                            [H[3,i],H[4,i],H[5,i]]]))
+               eigL[:,i] = eigL_
+               eigR[:,i] = eigR_.T.flatten()
+      else:
+          Hin = zeros([len(H11),3,3])
+          Hin[:,0,0] = H11; Hin[:,0,1] = H12; Hin[:,0,2] = H13
+          Hin[:,1,0] = H12; Hin[:,1,1] = H22; Hin[:,1,2] = H23
+          Hin[:,2,0] = H13; Hin[:,2,1] = H23; Hin[:,2,2] = H33
+  if numpy.__version__ >= "1.8.0":
+          [eigL,eigR] = eig(Hin)
+          eigL = eigL.T
+          eigR = eigR.reshape([len(H11),array(Hin.shape[1:3]).prod()]).T
   return [eigL,eigR]
     
 def logexpmetric(Mp,logexp='log'):
+    #calculates various tensor transformations in the principal frame
+    #INPUT : DOLFIN TENSOR VARIABLE
+    #INPUT : logexp is an optinal argument specifying the transformation, 
+    #        valid values are:
+    #        'log'    , natural logarithm (default)
+    #        'exp'    , exponential
+    #        'inv'    , inverse
+    #        'sqr'    , square
+    #        'sqrt'   , square root
+    #        'sqrtinv', inverse square root
+    #        'sqrinv' , inverse square
+    
+    #OUTPUT: DOLFIN TENSOR VARIABLE
     [H,cell2dof] = get_dofs(Mp)
     [eigL,eigR] = analytic_eig(H)
     if logexp=='log':
@@ -823,6 +943,9 @@ def logexpmetric(Mp,logexp='log'):
     return Mp
 
 def minimum_eig(Mp):
+    # calculates the minimum eigenvalue of a DOLFIN TENSOR VARIABLE
+    # INPUT : DOLFIN TENSOR VARIABLE
+    # OUTPUT: DOLFIN SCALAR VARIABLE
     mesh = Mp.function_space().mesh()
     element = Mp.function_space().ufl_element()
     [H,cell2dof] = get_dofs(Mp)
@@ -841,12 +964,36 @@ def get_rot(Mp):
     return out
 
 def logproject(Mp):
+    # provides projection to a CG1 tensor space in log-space.
+    # That is,
+    # #1 An eigen decomposition is calculated for the input tensor
+    # #2 This is used to calculate the tensor logarithm
+    # #3 which is the projected onto the CG1 tensor space
+    # #4 Finally, the inverse operation, a tensor exponential is performed.
+    # This approach requires SPD input, but also preserves this attribute.
+    # INPUT : DOLFIN SPD TENSOR VARIABLE
+    # OUTPUT: DOLFIN SPD CG1 TENSOR VARIABLE
     mesh = Mp.function_space().mesh()
     logMp = project(logexpmetric(Mp),TensorFunctionSpace(mesh,'CG',1))
     return logexpmetric(logMp,logexp='exp')
 
 def mesh_metric(mesh):
-  # this function calculates a mesh metric (or perhaps a square inverse of that, see mesh_metric2...)
+  # calculates a mesh metric (that is it has unit of squared inverse length,
+  # use mesh_metric2 to get units of length)
+  # For each simplex, the function solves the linear problem
+  #
+  # |'L1x*L1x L1x*L1y L1y*L1y'| |'Mxy |   |'1'|
+  # | L2x*L2x L2x*L2y L2y*L2y | | Mxy | = | 1_|
+  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|, where
+  #
+  #L1x is p1x-p2x and p1x is the x-coordinate of the 1st vertex in the simplex.
+  #The problem is vectorised by construction of a block diagonal problem.
+  #INPUT : DOLFIN MESH
+  #OUTPUT: DOLFIN DG0 SPD TENSOR VARIABLE
+  #
+  #NOTE: For stabilising advective problems where the local velocity direction 
+  #      is vdir (unit length), the local element size, Lh, can be taken as 
+  #      htmp = dot(vdir,M); Lh = 1/sqrt(dot(htmp,htmp)), where M is the mesh metric
   cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
   cells = mesh.cells()
   coords = mesh.coordinates()
@@ -893,8 +1040,7 @@ def mesh_metric(mesh):
   return M
 
 def mesh_metric1(mesh):
-  #this is just the inverse of mesh_metric2, and it is useful for projecting the ellipse
-  #in a certain (velocity) direction, which is usefull for stabilization terms.
+  #this is just the inverse of mesh_metric2
   M = mesh_metric(mesh)
   #M = logexpmetric(M,logexp='sqrt')
   [MM,cell2dof] = get_dofs(M)
@@ -906,7 +1052,7 @@ def mesh_metric1(mesh):
   return M
 
 def mesh_metric2(mesh):
-  #this function calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
+  #calculates a metric field, which when divided by sqrt(3) corresponds to the steiner
   #ellipse for the individual elements, see the test case mesh_metric2_example
   #the sqrt(3) ensures that the unit element maps to the identity tensor
   M = mesh_metric(mesh)
@@ -920,7 +1066,7 @@ def mesh_metric2(mesh):
   return M
 
 def gradate(H, grada, itsolver=False):
-    #this function provides anisotropic Helm-holtz smoothing on the logarithm
+    # provides anisotropic Helm-holtz smoothing on the logarithm
     #of a metric based on the metric of the mesh times a scaling factor(grada)
     if itsolver:
         solverp = {"linear_solver": "cg", "preconditioner": "ilu"}
@@ -940,13 +1086,18 @@ def gradate(H, grada, itsolver=False):
 
 
 def c_cell_dofs(mesh,V):
+  #returns the degree of free numbers in each cell (for DG0 input) input or a each 
+  # vertex (CG1 input).
+  # INPUT : DOLFIN TENSOR VARIABLE (CG1 or DG0)
+  # OUTPUT: outarg.shape = (4*N,) or outarg.shape = (9*N,) 
+  # The DOLFIN storage CONVENTION was greatly simplified at 1.3.0 :
   if dolfin.__version__ >= '1.3.0':
    if V.ufl_element().is_cellwise_constant():
     return arange(mesh.num_cells()*mesh.coordinates().shape[1]**2)
    else:
     return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
   else:
-      #this function returns the degrees of freedom numbers in a cell
+      #returns the degrees of freedom numbers in a cell
       code = """
       void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
                      const std::vector<std::size_t>& cell_indices,
