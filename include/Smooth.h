@@ -422,30 +422,30 @@ template<typename real_t, int dim>
     for(int hail_marys=0;hail_marys<1000;hail_marys++){
       // Randomally jump to a new location in the neighbourhood.
       for(int i=0;i<3;i++)
-	p[i] = _mesh->_coords[node*3+i]+distribution(generator);
+        p[i] = _mesh->_coords[node*3+i]+distribution(generator);
       
       // Interpolate metric and check for inversion.
       double mp[6];
       bool lvalid = generate_location_3d(node, p, mp);
       if(!lvalid)
-	continue;
+        continue;
       
       // Check to see if the position is an improvement.
       real_t functional = functional_Linf(node, p, mp);
       if(functional-functional_orig<epsilon_q)
-	continue;
+        continue;
 
       // Otherwise accept.
       valid = true;
       for(size_t j=0;j<3;j++)
-	_mesh->_coords[node*3+j] = p[j];
+        _mesh->_coords[node*3+j] = p[j];
     
       for(size_t j=0;j<6;j++)
-	_mesh->metric[node*6+j] = mp[j];
+        _mesh->metric[node*6+j] = mp[j];
     
       // Reset quality cache.
       for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
-	update_quality(*ie);
+        update_quality(*ie);
 
       break;
     }
@@ -469,7 +469,7 @@ template<typename real_t, int dim>
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
       if(quality[*it]<worst_element.first)
-	worst_element = std::pair<double, index_t>(quality[*it], *it);
+        worst_element = std::pair<double, index_t>(quality[*it], *it);
     }
     assert(worst_element.second!=-1);
 
@@ -502,19 +502,19 @@ template<typename real_t, int dim>
     }
 
     // Estimate how far we move along this search path until we make
-    // another element of a simular quality to the current worst. This
-    // is effictively a simplex method for linear programming.
+    // another element of a similar quality to the current worst. This
+    // is effectively a simplex method for linear programming.
     double alpha;
     {
       double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
       for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
-	const double *x1 = _mesh->get_coords(*it);
+        const double *x1 = _mesh->get_coords(*it);
         
-	bbox[0] = std::min(bbox[0], x1[0]);
-	bbox[1] = std::max(bbox[0], x1[0]);
-        
-	bbox[2] = std::min(bbox[1], x1[1]);
-	bbox[3] = std::max(bbox[1], x1[1]);
+        bbox[0] = std::min(bbox[0], x1[0]);
+        bbox[1] = std::max(bbox[0], x1[0]);
+
+        bbox[2] = std::min(bbox[1], x1[1]);
+        bbox[3] = std::max(bbox[1], x1[1]);
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2])/2.0;
     }
@@ -1049,7 +1049,7 @@ template<typename real_t, int dim>
       real_t ll[3];
       ll[0] = property->area(p,  x1, x2)/L;
       ll[1] = property->area(x0, p,  x2)/L;
-      ll[2] = property->area(x0, x1, p)/L;
+      ll[2] = property->area(x0, x1, p )/L;
 
       real_t min_l = std::min(ll[0], std::min(ll[1], ll[2]));
       if(best_e==-1){
