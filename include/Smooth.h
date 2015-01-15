@@ -511,10 +511,10 @@ template<typename real_t, int dim>
         const double *x1 = _mesh->get_coords(*it);
         
         bbox[0] = std::min(bbox[0], x1[0]);
-        bbox[1] = std::max(bbox[0], x1[0]);
+        bbox[1] = std::max(bbox[1], x1[0]);
 
-        bbox[2] = std::min(bbox[1], x1[1]);
-        bbox[3] = std::max(bbox[1], x1[1]);
+        bbox[2] = std::min(bbox[2], x1[1]);
+        bbox[3] = std::max(bbox[3], x1[1]);
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2])/2.0;
     }
@@ -695,13 +695,13 @@ template<typename real_t, int dim>
         const double *x1 = _mesh->get_coords(*it);
 	
         bbox[0] = std::min(bbox[0], x1[0]);
-        bbox[1] = std::max(bbox[0], x1[0]);
+        bbox[1] = std::max(bbox[1], x1[0]);
 
-        bbox[2] = std::min(bbox[1], x1[1]);
-        bbox[3] = std::max(bbox[1], x1[1]);
+        bbox[2] = std::min(bbox[2], x1[1]);
+        bbox[3] = std::max(bbox[3], x1[1]);
 
-        bbox[4] = std::min(bbox[2], x1[2]);
-        bbox[5] = std::max(bbox[2], x1[2]);
+        bbox[4] = std::min(bbox[4], x1[2]);
+        bbox[5] = std::max(bbox[5], x1[2]);
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/6.0;
     }
