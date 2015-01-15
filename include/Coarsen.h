@@ -540,10 +540,6 @@ template<typename real_t, int dim> class Coarsen{
       long double total_new_av=0;
       bool better=true;
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
-        // Skip if this element would be deleted under the operation.
-        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
-          continue;
-
         const int *old_n=_mesh->get_element(*ee);
 
         double old_av;
@@ -558,6 +554,10 @@ template<typename real_t, int dim> class Coarsen{
                                     _mesh->get_coords(old_n[3]));
 
         total_old_av+=old_av;
+
+        // Skip if this element would be deleted under the operation.
+        if(_mesh->NEList[target_vertex].find(*ee)!=_mesh->NEList[target_vertex].end())
+          continue;
 
         // Create a copy of the proposed element
         std::vector<int> n(nloc);
