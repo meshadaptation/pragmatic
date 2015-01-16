@@ -596,10 +596,10 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
 #  # add DOLFIN_EPS on the diagonal too avoid zero eigenvalues
-  HH[0,:] += DOLFIN_EPS*1e3
-  HH[2,:] += DOLFIN_EPS*1e3
+  HH[0,:] += DOLFIN_EPS
+  HH[2,:] += DOLFIN_EPS
   if n==3: #3D
-   HH[5,:] += DOLFIN_EPS*1e3
+   HH[5,:] += DOLFIN_EPS
   
   # CALCULATE EIGENVALUES 
   [eigL,eigR] = analytic_eig(HH)
@@ -842,8 +842,8 @@ def analytic_eig(H, tol=1e-12):
           H11 = H11[nI]; H12 = H12[nI]; H22 = H22[nI];
           H13 = H13[nI]; H23 = H23[nI]; H33 = H33[nI];
           q = array((H11+H22+H33)/3.)
-          H11 /= q; H12 /= q; H22 /= q; H13 /= q; H23 /= q; H33 /= q
-          p1 /= q**2; qold = q; q = ones(len(H11))
+#          H11 /= q; H12 /= q; H22 /= q; H13 /= q; H23 /= q; H33 /= q
+#          p1 /= q**2; qold = q; q = ones(len(H11))
           p2 = (H11-q)**2 + (H22-q)**2 + (H33-q)**2 + 2.*p1
           p = numpy.sqrt(p2 / 6.)
           I = array([onesC,zeroC,onesC,zeroC,zeroC,onesC])#I = array([1., 0., 1., 0., 0., 1.]).repeat(len(H11)).reshape(6,len(H11)) #identity matrix
@@ -865,7 +865,7 @@ def analytic_eig(H, tol=1e-12):
           eig1[nI] = q + 2.*p*numpy.cos(phi)
           eig3[nI] = q + 2.*p*numpy.cos(phi + (2.*pi/3.))
           eig2[nI] = array(3.*q - eig1[nI] - eig3[nI])
-          eig1[nI] *= qold; eig2[nI] *= qold; eig3[nI] *= qold
+#          eig1[nI] *= qold; eig2[nI] *= qold; eig3[nI] *= qold
           v1[0,nI] = H22*H33 - H23**2 + eig1[nI]*(eig1[nI]-H33-H22)
           v1[1,nI] = H12*(eig1[nI]-H33)+H13*H23
           v1[2,nI] = H13*(eig1[nI]-H22)+H12*H23
