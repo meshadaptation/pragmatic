@@ -137,7 +137,9 @@ template<typename real_t, int dim>
 
     // First sweep through all vertices. Add vertices adjacent to any
     // vertex moved into the active_vertex list.
-    int max_colour = colour_sets.rbegin()->first;
+    int max_colour = 0;
+    if(!colour_sets.empty())
+      max_colour = colour_sets.rbegin()->first;
 #ifdef HAVE_MPI
     if(mpi_nparts>1){
       MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
@@ -1135,7 +1137,7 @@ template<typename real_t, int dim>
       }
     }
     assert(best_e!=-1);
-    assert(tol>-DBL_EPSILON);
+    assert(tol>-10*DBL_EPSILON);
 
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
