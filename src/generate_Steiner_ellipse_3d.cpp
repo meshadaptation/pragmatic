@@ -24,7 +24,9 @@ pow(x3[0] - x4[0], 2), pow(x3[1] - x4[1], 2), pow(x3[2] - x4[2], 2), (x3[1] - x4
 
   Eigen::Matrix<double, 6, 1> R;
   R<<1,1,1,1,1,1;
-  Eigen::Matrix<double, 6, 1> S = M.inverse()*R;
+  Eigen::Matrix<double, 6, 1> S;
+
+  M.svd().solve(R, &S);
 
   sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
                 sm[3] = S[1]; sm[4] = S[3];
