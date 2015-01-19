@@ -417,8 +417,6 @@ b[5]+=x*y;
    * pp. 179-204.
    */
   void add_field(const real_t* psi, const real_t target_error, int p_norm=-1){
-    real_t *Hessian = new real_t[_NNodes*(dim==2?3:6)];
-    
     bool add_to=true;
     if(_metric==NULL){
       add_to = false;
@@ -429,12 +427,14 @@ b[5]+=x*y;
 #pragma omp parallel
     {
       // Calculate Hessian at each point.
+      double h[dim==2?3:6];
+
       if(p_norm>0){
 #pragma omp for schedule(static) nowait
         for(int i=0; i<_NNodes; i++){
-          hessian_qls_kernel(psi, i, Hessian);
+          hessian_qls_kernel(psi, i, h);
           
-          double *h = Hessian+i*(dim==2?3:6), m_det;
+          double m_det;
           if(dim==2){
             /*|h[0] h[1]|
               |h[1] h[2]|*/
@@ -461,37 +461,28 @@ b[5]+=x*y;
 
           if(add_to){
             // Merge this metric with the existing metric field.
-            _metric[i].constrain(Hessian+i*(dim==2?3:6));
+            _metric[i].constrain(h);
           }else{
-            _metric[i].set_metric(Hessian+i*(dim==2?3:6));
+            _metric[i].set_metric(h);
           }
         }
       }else{
 #pragma omp for schedule(static)
         for(int i=0; i<_NNodes; i++){
-          hessian_qls_kernel(psi, i, Hessian);
+          hessian_qls_kernel(psi, i, h);
           
           for(int j=0; j<(dim==2?3:6); j++)
-            Hessian[i*(dim==2?3:6)+j] *= eta;
-        }
-      }
-
-      // Store metric
-      if(add_to){
-#pragma omp for schedule(static)
-        for(int i=0; i<_NNodes; i++){
-          // Merge this metric with the existing metric field.
-          _metric[i].constrain(Hessian+i*(dim==2?3:6));
-        }
-      }else{
-#pragma omp for schedule(static)
-        for(int i=0; i<_NNodes; i++){
-          _metric[i].set_metric(Hessian+i*(dim==2?3:6));
+            h[j] *= eta;
+	  
+	  if(add_to){
+            // Merge this metric with the existing metric field.
+            _metric[i].constrain(h);
+          }else{
+            _metric[i].set_metric(h);
+          }
         }
       }
     }
-
-    delete [] Hessian;
   }
 
   /*! Apply maximum edge length constraint.
@@ -702,7 +693,7 @@ b[5]+=x*y;
 
         real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
 
-	assert(det>0);
+	assert(det>-DBL_EPSILON);
         total_volume_metric += volume*sqrt(det);
       }
 
@@ -767,9 +758,9 @@ b[5]+=x*y;
       Eigen::Matrix<real_t, 6, 1> a = Eigen::Matrix<real_t, 6, 1>::Zero(6);
       A.svd().solve(b, &a);
 
-      Hessian[i*3  ] = 2*a[1]; // d2/dx2
-      Hessian[i*3+1] = a[2];   // d2/dxdy
-      Hessian[i*3+2] = 2*a[0]; // d2/dy2
+      Hessian[0] = 2*a[1]; // d2/dx2
+      Hessian[1] = a[2];   // d2/dxdy
+      Hessian[2] = 2*a[0]; // d2/dy2
 
     }else if(dim==3){
       // Form quadratic system to be solved. The quadratic fit is:
@@ -817,12 +808,12 @@ b[5]+=x*y;
       Eigen::Matrix<real_t, 10, 1> a = Eigen::Matrix<real_t, 10, 1>::Zero(10);
       A.svd().solve(b, &a);
 
-      Hessian[i*6  ] = a[4]*2.0; // d2/dx2
-      Hessian[i*6+1] = a[5];     // d2/dxdy
-      Hessian[i*6+2] = a[6];     // d2/dxdz
-      Hessian[i*6+3] = a[7]*2.0; // d2/dy2
-      Hessian[i*6+4] = a[8];     // d2/dydz
-      Hessian[i*6+5] = a[9]*2.0; // d2/dz2
+      Hessian[0] = a[4]*2.0; // d2/dx2
+      Hessian[1] = a[5];     // d2/dxdy
+      Hessian[2] = a[6];     // d2/dxdz
+      Hessian[3] = a[7]*2.0; // d2/dy2
+      Hessian[4] = a[8];     // d2/dydz
+      Hessian[5] = a[9]*2.0; // d2/dz2
     }
   }
 
