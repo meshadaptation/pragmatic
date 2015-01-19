@@ -23,10 +23,10 @@ M = Matrix([
 R=Matrix([[1], [1], [1], [1], [1], [1]])
 
 # http://en.wikipedia.org/wiki/Tetrahedron#Formulas_for_a_regular_tetrahedron
-tetrahedron = {x1[0]:1,  x1[1]:0,  x1[2]:-1/sqrt(2),
-               x2[0]:-1, x2[1]:0,  x2[2]:-1/sqrt(2),
-               x3[0]:0,  x3[1]:1,  x3[2]:1/sqrt(2), 
-               x4[0]:0,  x4[1]:-1, x4[2]:1/sqrt(2)}
+tetrahedron = {x1[0]:1,  x1[1]:0,  x1[2]:-4/sqrt(2),
+               x2[0]:-1, x2[1]:0,  x2[2]:-4/sqrt(2),
+               x3[0]:0,  x3[1]:2,  x3[2]:4/sqrt(2), 
+               x4[0]:0,  x4[1]:-2, x4[2]:4/sqrt(2)}
 
 Mi = M.evalf(subs=tetrahedron)
 
@@ -37,10 +37,10 @@ SteinerEllipse = Matrix([
     [Sxy, Syy, Syz],
     [Sxz, Syz, Szz]])
 
-#print("SteinerEllipse = ")
-#pprint(SteinerEllipse)
+print("SteinerEllipse = ")
+pprint(SteinerEllipse)
 
-if Sxx==0.25 and Syy==0.25 and Szz==0.25 and Syz==0.0 and Sxz==0.0 and Sxy==0.0:
+if Sxx==1./2**2 and Syy==1./4**2 and Szz==1./8**2 and Syz==0.0 and Sxz==0.0 and Sxy==0.0:
     print("pass")
 else:
     print("fail")
@@ -109,7 +109,9 @@ for i in range(6):
 src+="""
   Eigen::Matrix<double, 6, 1> R;
   R<<1,1,1,1,1,1;
-  Eigen::Matrix<double, 6, 1> S = M.inverse()*R;
+  Eigen::Matrix<double, 6, 1> S;
+
+  M.svd().solve(R, &S);
 
   sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
                 sm[3] = S[1]; sm[4] = S[3];
@@ -135,17 +137,17 @@ testsrc="""
 #include <%s>
 
 int main(){
-  double x1[]={1,  0, -1/sqrt(2)};
-  double x2[]={-1, 0,  -1/sqrt(2)};
-  double x3[]={0,  1,  1/sqrt(2)};  
-  double x4[]={0,  -1, 1/sqrt(2)};
+  double x1[]={ 1,  0, -4/sqrt(2)};
+  double x2[]={-1,  0, -4/sqrt(2)};
+  double x3[]={ 0,  2,  4/sqrt(2)};  
+  double x4[]={ 0, -2,  4/sqrt(2)};
   double sm[6];
   pragmatic::generate_Steiner_ellipse(x1, x2, x3, x4, sm);
 
   // Test
-  if(fabs(sm[0]-0.25)<DBL_EPSILON && fabs(sm[1])<DBL_EPSILON      && fabs(sm[2])<DBL_EPSILON &&
-                                     fabs(sm[3]-0.25)<DBL_EPSILON && fabs(sm[4])<DBL_EPSILON &&
-                                                                     fabs(sm[5]-0.25)<DBL_EPSILON){
+  if(fabs(sm[0]-1./sqrt(2))<DBL_EPSILON && fabs(sm[1])<DBL_EPSILON            && fabs(sm[2])<DBL_EPSILON &&
+                                           fabs(sm[3]-1./sqrt(4))<DBL_EPSILON && fabs(sm[4])<DBL_EPSILON &&
+                                                                                 fabs(sm[5]-1./sqrt(8))<DBL_EPSILON){
     std::cout<<"pass"<<std::endl;
   }else{
     std::cout<<"fail"<<std::endl;
