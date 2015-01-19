@@ -63,6 +63,9 @@ typedef float vtkFloatingPointType;
 #include "Mesh.h"
 #include "MetricTensor.h"
 #include "ElementProperty.h"
+
+#include "generate_Steiner_ellipse_3d.h"
+
 extern "C" {
 #include "metis.h"
 }
@@ -493,6 +496,14 @@ template<typename real_t> class VTKTools{
     vtk_quality->SetNumberOfTuples(NElements);
     vtk_quality->SetName("quality");
 
+   vtkDoubleArray *vtk_steiner=NULL;
+   if(ndims==3){
+     vtk_steiner = vtkDoubleArray::New();
+     vtk_steiner->SetNumberOfComponents(9);
+     vtk_steiner->SetNumberOfTuples(NElements);
+     vtk_steiner->SetName("Steiner");
+   }
+
     vtkDoubleArray *vtk_sliver = NULL;
     if(ndims==3){
       vtk_sliver = vtkDoubleArray::New();
@@ -523,6 +534,12 @@ template<typename real_t> class VTKTools{
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
         vtk_sliver->SetTuple1(k, property->sliver(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]),
                                                   mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
+
+        double sm[6];
+        pragmatic::generate_Steiner_ellipse(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), sm);
+        vtk_steiner->SetTuple9(k, sm[0], sm[1], sm[2],
+                                  sm[1], sm[3], sm[4],
+                                  sm[2], sm[4], sm[5]);
       }
 
       vtk_cell_numbering->SetTuple1(k, i);
@@ -535,6 +552,11 @@ template<typename real_t> class VTKTools{
 
     ug->GetCellData()->AddArray(vtk_quality);
     vtk_quality->Delete();
+
+    if(ndims==3){
+      ug->GetCellData()->AddArray(vtk_steiner);
+      vtk_steiner->Delete();
+    }
 
     ug->GetCellData()->AddArray(vtk_boundary);
     vtk_boundary->Delete();

@@ -52,6 +52,8 @@
 #include "Mesh.h"
 #include "ElementProperty.h"
 
+#include "generate_Steiner_ellipse_3d.h"
+
 #ifdef HAVE_MPI
 #include <mpi.h>
 #endif
@@ -94,6 +96,51 @@ public:
       delete [] _metric;
   }
   
+  void generate_Steiner_ellipse(double resolution_scaling_factor){
+    if(_metric==NULL)
+      _metric = new MetricTensor<real_t,dim>[_NNodes];
+
+    if(dim==2){
+      std::cerr<<"ERROR: void generate_Steiner_ellipse() not yet implemented in 2D.\n";
+      exit(-1);
+    }else{
+      std::vector<double> SteinerMetricField(_NElements*6);
+#pragma omp parallel
+      {
+#pragma omp for schedule(static)
+        for(int i=0; i<_NElements; i++){
+          const index_t *n=_mesh->get_element(i);
+
+          const real_t *x0 = _mesh->get_coords(n[0]);
+          const real_t *x1 = _mesh->get_coords(n[1]);
+          const real_t *x2 = _mesh->get_coords(n[2]);
+          const real_t *x3 = _mesh->get_coords(n[3]);
+
+          pragmatic::generate_Steiner_ellipse(x0, x1, x2, x3, SteinerMetricField.data()+i*6);
+        }
+
+	double alpha = pow(1.0/resolution_scaling_factor, 2);
+#pragma omp for schedule(static)
+        for(int i=0; i<_NNodes; i++){
+          double sm[6];
+          for(int j=0;j<6;j++)
+            sm[j] = 0.0;
+
+          for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[i].begin();ie!=_mesh->NEList[i].end();++ie){
+            for(int j=0;j<6;j++)
+              sm[j]+=SteinerMetricField[(*ie)*6+j];
+	  }
+
+          double scale = alpha/_mesh->NEList[i].size();
+          for(int j=0;j<6;j++)
+            sm[j]*=scale;
+
+          _metric[i].set_metric(sm);
+        }
+      }
+    }
+  }
+
   /*! Copy back the metric tensor field.
    * @param metric is a pointer to the buffer where the metric field can be copied.
    */
