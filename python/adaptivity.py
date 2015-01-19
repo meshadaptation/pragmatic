@@ -595,7 +595,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
    H = project(H,TensorFunctionSpace(mesh,'CG',1))
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
-#  # add DOLFIN_EPS on the diagonal too avoid zero eigenvalues
+  # add DOLFIN_EPS on the diagonal to avoid zero eigenvalues
   HH[0,:] += DOLFIN_EPS
   HH[2,:] += DOLFIN_EPS
   if n==3: #3D
