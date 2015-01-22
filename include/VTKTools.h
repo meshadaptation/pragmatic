@@ -44,6 +44,8 @@
 #include <vtkXMLPUnstructuredGridWriter.h>
 #include <vtkUnstructuredGrid.h>
 #include <vtkIntArray.h>
+#include <vtkIdTypeArray.h>
+#include <vtkUnsignedCharArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkCell.h>
 #include <vtkPoints.h>
@@ -298,24 +300,14 @@ template<typename real_t> class VTKTools{
   }
 
   static void export_vtu(const char *basename, const Mesh<real_t> *mesh, const real_t *psi=NULL){
-    size_t NElements_total = mesh->get_number_elements();
-    // Correct number of elements.
-    int mask_count = 0;
-    for(size_t i=0;i<NElements_total;i++){
-      const index_t *n = mesh->get_element(i);
-      if(n[0]<0)
-        mask_count++;
-    }
-    size_t NElements = NElements_total - mask_count;
-
+    size_t NElements = mesh->get_number_elements();
     size_t ndims = mesh->get_number_dimensions();
 
     // Set the orientation of elements.
     ElementProperty<real_t> *property = NULL;
-    for(size_t i=0;i<NElements_total;i++){
+    for(size_t i=0;i<NElements;i++){
       const int *n=mesh->get_element(i);
-      if(n[0]<0)
-        continue;
+      assert(n[0]>=0);
 
       if(ndims==2)
         property = new ElementProperty<real_t>(mesh->get_coords(n[0]),
@@ -512,11 +504,9 @@ template<typename real_t> class VTKTools{
       vtk_sliver->SetName("sliver");
     }
 
-    for(size_t i=0, k=0;i<NElements_total;i++){
+    for(size_t i=0, k=0;i<NElements;i++){
       const index_t *n = mesh->get_element(i);
-      if(n[0]<0){
-        continue;
-      }
+      assert(n[0]>=0);
 
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
@@ -566,10 +556,12 @@ template<typename real_t> class VTKTools{
       vtk_sliver->Delete();
     }
 
-    int nparts=1;
+    int rank=0, nparts=1;
 #ifdef HAVE_MPI
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 #endif
+
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".vtu");
@@ -582,11 +574,45 @@ template<typename real_t> class VTKTools{
       writer->Write();
 
       writer->Delete();
-    }else{
+    }
 #ifdef HAVE_MPI
-      int rank=0, nparts=1;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      MPI_Comm_size(MPI_COMM_WORLD, &nparts);
+     else{
+      // Set ghost levels
+      vtkUnsignedCharArray *vtk_ghost=vtkUnsignedCharArray::New();
+      vtk_ghost->SetNumberOfComponents(1);
+      vtk_ghost->SetNumberOfTuples(NElements);
+      vtk_ghost->SetName("vtkGhostLevels");
+
+      for(size_t i=0;i<NElements;i++){
+        const index_t *n = mesh->get_element(i);
+        int owner;
+        if(ndims==2)
+          owner=std::min(mesh->node_owner[n[0]], std::min(mesh->node_owner[n[1]], mesh->node_owner[n[2]]));
+        else
+          owner=std::min(std::min(mesh->node_owner[n[0]], mesh->node_owner[n[1]]), std::min(mesh->node_owner[n[2]], mesh->node_owner[n[3]]));
+
+        if(owner==rank){
+          vtk_ghost->SetTuple1(i, 0);
+        }else{
+          vtk_ghost->SetTuple1(i, 1);
+        }
+      }
+      ug->GetCellData()->AddArray(vtk_ghost);
+      vtk_ghost->Delete();
+
+      // Set GlobalIds
+      vtkIdTypeArray *vtk_gnn=vtkIdTypeArray::New();
+      vtk_gnn->SetNumberOfComponents(1);
+      vtk_gnn->SetNumberOfTuples(NNodes);
+      vtk_gnn->SetName("GlobalId");
+
+      for(size_t i=0;i<NNodes;i++){
+        vtk_gnn->SetTuple1(i, mesh->lnn2gnn[i]);
+      }
+      // ug->GetPointData()->AddArray(vtk_gnn);
+      // ug->GetPointData()->SetActiveGlobalIds("GlobalId");
+      ug->GetPointData()->SetGlobalIds(vtk_gnn);
+      vtk_gnn->Delete();
 
       vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
@@ -602,8 +628,9 @@ template<typename real_t> class VTKTools{
 #endif
       writer->Write();
       writer->Delete();
-#endif
     }
+#endif
+    
     ug->Delete();
     delete property;
 
