@@ -40,6 +40,7 @@
 
 #include <vtkCellType.h>
 #include <vtkXMLUnstructuredGridReader.h>
+#include <vtkXMLPUnstructuredGridReader.h>
 #include <vtkXMLUnstructuredGridWriter.h>
 #include <vtkXMLPUnstructuredGridWriter.h>
 #include <vtkUnstructuredGrid.h>
@@ -50,7 +51,9 @@
 #include <vtkCell.h>
 #include <vtkPoints.h>
 #include <vtkPointData.h>
+#include <vtkDataArray.h>
 #include <vtkCellData.h>
+#include <vtkSmartPointer.h>
 
 #ifndef vtkFloatingPointType
 #define vtkFloatingPointType vtkFloatingPointType
@@ -86,24 +89,60 @@ extern "C" {
  */
 template<typename real_t> class VTKTools{
  public:
-  static Mesh<real_t>* import_vtu(const char *filename){
-    vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-    reader->SetFileName(filename);
-    reader->Update();
+  static Mesh<real_t>* import_vtu(std::string filename){
+    vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
-    vtkUnstructuredGrid *ug = reader->GetOutput();
+    if(filename.substr(filename.find_last_of('.'))==".pvtu"){
+       vtkSmartPointer<vtkXMLPUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLPUnstructuredGridReader>::New();
+       reader->SetFileName(filename.c_str());
+       reader->Update();
+
+      ug->DeepCopy(reader->GetOutput());
+    }else{
+      vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
+      reader->SetFileName(filename.c_str());
+      reader->Update();
+
+      ug->DeepCopy(reader->GetOutput());
+    }
 
     size_t NNodes = ug->GetNumberOfPoints();
     size_t NElements = ug->GetNumberOfCells();
 
-    std::vector<real_t> x(NNodes),  y(NNodes), z(NNodes);
-    for(size_t i=0;i<NNodes;i++){
-      real_t r[3];
-      ug->GetPoints()->GetPoint(i, r);
-      x[i] = r[0];
-      y[i] = r[1];
-      z[i] = r[2];
+    std::map<int, int> renumber;
+    std::map<int, int> gnns;
+
+    std::vector<real_t> x,y,z;
+    int ncnt=0;
+    bool have_global_ids = ug->GetPointData()->GetArray("GlobalId")!=NULL;
+    if(have_global_ids){
+      for(size_t i=0;i<NNodes;i++){
+        int gnn = ug->GetPointData()->GetArray("GlobalId")->GetTuple1(i);
+        if(gnns.find(gnn)==gnns.end()){
+          gnns[gnn] = ncnt;;
+  	  renumber[i] = ncnt;
+  	  ncnt++;
+ 	
+ 	  real_t r[3];
+ 	  ug->GetPoints()->GetPoint(i, r);
+ 	  x.push_back(r[0]);
+ 	  y.push_back(r[1]);
+ 	  z.push_back(r[2]);
+        }else{
+          renumber[i] = gnns[gnn];
+        }
+      }
+    }else{
+      for(size_t i=0;i<NNodes;i++){
+        real_t r[3];
+        ug->GetPoints()->GetPoint(i, r);
+        x.push_back(r[0]);
+        y.push_back(r[1]);
+        z.push_back(r[2]);
+      }
     }
+
+    NNodes = x.size();
 
     int cell_type = ug->GetCell(0)->GetCellType();
 
@@ -122,13 +161,23 @@ template<typename real_t> class VTKTools{
 
     std::vector<int> ENList;
     for(size_t i=0;i<NElements;i++){
+      int ghost=0;
+      if(ug->GetCellData()->GetArray("vtkGhostLevels")!=NULL)
+        ghost = ug->GetCellData()->GetArray("vtkGhostLevels")->GetTuple1(i);
+
+      if(ghost>0)
+	continue;
+
       vtkCell *cell = ug->GetCell(i);
       assert(cell->GetCellType()==cell_type);
       for(int j=0;j<nloc;j++){
-        ENList.push_back(cell->GetPointId(j));
+        if(have_global_ids)
+          ENList.push_back(renumber[cell->GetPointId(j)]);
+        else
+          ENList.push_back(cell->GetPointId(j));
       }
     }
-    reader->Delete();
+    NElements = ENList.size()/nloc;
 
     int nparts=1;
     Mesh<real_t> *mesh=NULL;
@@ -631,7 +680,6 @@ template<typename real_t> class VTKTools{
     }
 #endif
     
-    ug->Delete();
     delete property;
 
     return;
