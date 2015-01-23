@@ -66,7 +66,8 @@ __all__ = ["_libpragmatic",
            "adapt",
            "edge_lengths",
            "mesh_metric",
-           "refine_metric"]
+           "refine_metric",
+           "metric_pnorm"]
 
 class InvalidArgumentException(TypeError):
   pass
