@@ -4,7 +4,7 @@
 ### illustrate the need for explicit definition corner nodes
 
 from dolfin import *
-from adaptivity2 import metric_pnorm, logproject, adapt, polyhedron_surfmesh
+from adaptivity import metric_pnorm, logproject, adapt, polyhedron_surfmesh
 import numpy
 
 set_log_level(INFO+1)
