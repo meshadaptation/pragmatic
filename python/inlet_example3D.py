@@ -23,7 +23,7 @@ def minimal_example3D(meshsz=20, Nadapt=10, dL=0.05, eta = 0.01, returnmesh=Fals
     
     def get_bnd_mesh(mesh):
         coords = mesh.coordinates()
-        [bfaces,bfaces_IDs] = polyhedron_surfmesh(mesh.cells(),coords)
+        [bfaces,bfaces_IDs] = polyhedron_surfmesh(mesh)
         bcoords = (coords[bfaces[:,0],:]+coords[bfaces[:,1],:]+coords[bfaces[:,2],:])/3.
         I = (bcoords[:,0] > 0.5-DOLFIN_EPS) & (bcoords[:,1] < dL) & (bcoords[:,1] > -dL) \
                                  & (bcoords[:,2] < dL) & (bcoords[:,2] > -dL)
@@ -77,6 +77,6 @@ def minimal_example3D(meshsz=20, Nadapt=10, dL=0.05, eta = 0.01, returnmesh=Fals
 
 
 if __name__=="__main__":
-# minimal_example3D(meshsz=10, dL=0.1, hax=True)
- minimal_example3D(meshsz=10, dL=0.1, hax=False)
+ minimal_example3D(meshsz=10, dL=0.1, hax=True)
+# minimal_example3D(meshsz=10, dL=0.1, hax=False)
  
