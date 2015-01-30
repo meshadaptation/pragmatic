@@ -89,7 +89,7 @@ def refine_metric(M, factor):
       value[:] = M(x) * (factor * factor)
       return
     def value_shape(self):
-      return (2, 2)
+      return M.ufl_shape
 
   space = M.function_space()
   M2 = interpolate(RefineExpression(), space)
