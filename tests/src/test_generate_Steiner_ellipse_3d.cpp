@@ -14,9 +14,9 @@ int main(){
   pragmatic::generate_Steiner_ellipse(x1, x2, x3, x4, sm);
 
   // Test
-  if(fabs(sm[0]-1./sqrt(2))<DBL_EPSILON && fabs(sm[1])<DBL_EPSILON            && fabs(sm[2])<DBL_EPSILON &&
-                                           fabs(sm[3]-1./sqrt(4))<DBL_EPSILON && fabs(sm[4])<DBL_EPSILON &&
-                                                                                 fabs(sm[5]-1./sqrt(8))<DBL_EPSILON){
+  if(fabs(sm[0]-1./4)<10*DBL_EPSILON && fabs(sm[1])<10*DBL_EPSILON       && fabs(sm[2])<10*DBL_EPSILON &&
+                                        fabs(sm[3]-1./16)<10*DBL_EPSILON && fabs(sm[4])<DBL_EPSILON &&
+                                                                            fabs(sm[5]-1./64)<10*DBL_EPSILON){
     std::cout<<"pass"<<std::endl;
   }else{
     std::cout<<"fail"<<std::endl;
