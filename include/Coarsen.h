@@ -69,9 +69,15 @@ template<typename real_t, int dim> class Coarsen{
       if(n[0]<0)
         continue;
 
-      property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
-                                             _mesh->get_coords(n[1]),
-                                             _mesh->get_coords(n[2]));
+      if(dim==2)
+        property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
+                                               _mesh->get_coords(n[1]),
+                                               _mesh->get_coords(n[2]));
+      else
+        property = new ElementProperty<real_t>(_mesh->get_coords(n[0]),
+                                               _mesh->get_coords(n[1]),
+                                               _mesh->get_coords(n[2]),
+                                               _mesh->get_coords(n[3]));
 
       break;
     }

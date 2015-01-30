@@ -182,13 +182,9 @@ int main(int argc, char **argv){
     if(verbose)
       cout_quality(mesh, "Quality after coarsening");
     
-    swapping.swap(0.3);
+    swapping.swap(0.1);
     if(verbose)
       cout_quality(mesh, "Quality after swapping");
-    
-    smooth.smooth(1);
-    if(verbose)
-      cout_quality(mesh, "Quality after smoothening");
   }
 
   mesh->defragment();

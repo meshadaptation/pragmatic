@@ -66,7 +66,8 @@ __all__ = ["_libpragmatic",
            "adapt",
            "edge_lengths",
            "mesh_metric",
-           "refine_metric"]
+           "refine_metric",
+           "metric_pnorm"]
 
 class InvalidArgumentException(TypeError):
   pass
@@ -78,7 +79,6 @@ class ParameterException(Exception):
   pass
 
 try:
-#  _libpragmatic = ctypes.cdll.LoadLibrary("/home/kristian/projects/grg2/libpragmatic.so")
   _libpragmatic = ctypes.cdll.LoadLibrary("../libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
@@ -902,7 +902,7 @@ def analytic_eig(H, tol=1e-12):
   if numpy.__version__ >= "1.8.0":
           [eigL,eigR] = pyeig(Hin)
           eigL = eigL.T
-          eigR = eigR.reshape([len(H11),array(Hin.shape[1:3]).prod()]).T
+          eigR = eigR.transpose([0,2,1]).reshape([len(H11),array(Hin.shape[1:3]).prod()]).T
   return [eigL,eigR]
     
 def logexpmetric(Mp,logexp='log'):

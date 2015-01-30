@@ -7,8 +7,8 @@ it can also be used as a lossy compression algorithm for 2 and 3D data
 tensor field which encodes desired mesh element size
 anisotropically.
 
-The toolkit is written in C++ but also provides interfaces for Fortran. The 2D
-version has been interfaced with Dolfin (3D integration under development) and
+The toolkit is written in C++ but also provides interfaces for Fortran. It 
+has been integrated with [FEniCS/Dolfin](http://fenicsproject.org) and
 integration with PETSc/DMPlex is planned.  One of the design goals of PRAgMaTIc
 is to develop highly scalable algorithms for clusters of multi-core and
 many-core nodes. PRAgMaTIc uses OpenMP for thread parallelism and MPI for

@@ -4,7 +4,7 @@
 ### The idea is to use the functionality in a multigrid algorithm.
 
 from dolfin import *
-from adaptivity import refine_metric, adapt, metric_pnorm
+from adaptivity import refine_metric, adapt, metric_pnorm, mesh_metric
 set_log_level(WARNING)
 
 def test_refine_metric():
@@ -23,7 +23,7 @@ def test_refine_metric():
   #Mp = metric_pnorm(f, mesh, eta, max_edge_ratio=5)
   #mesh = adapt(Mp)
 
-  if False:
+  if True:
     level = 0.5
     Mp = refine_metric(mesh_metric(mesh), level)
     new_mesh1 = adapt(Mp)

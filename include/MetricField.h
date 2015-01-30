@@ -378,7 +378,7 @@ b[5]+=x*y;
 
     // In 2D, the number of nodes is ~ 1/2 the number of elements.
     // In 3D, the number of nodes is ~ 1/6 the number of elements.
-    size_t pNNodes = pNElements/(dim==2?2:6);
+    size_t pNNodes = std::max(pNElements/(dim==2?2:6), _mesh->get_number_nodes());
 
     _mesh->_ENList.resize(pNElements*(dim+1));
     _mesh->boundary.resize(pNElements*(dim+1));

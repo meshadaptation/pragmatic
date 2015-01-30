@@ -40,15 +40,20 @@
 
 #include <vtkCellType.h>
 #include <vtkXMLUnstructuredGridReader.h>
+#include <vtkXMLPUnstructuredGridReader.h>
 #include <vtkXMLUnstructuredGridWriter.h>
 #include <vtkXMLPUnstructuredGridWriter.h>
 #include <vtkUnstructuredGrid.h>
 #include <vtkIntArray.h>
+#include <vtkIdTypeArray.h>
+#include <vtkUnsignedCharArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkCell.h>
 #include <vtkPoints.h>
 #include <vtkPointData.h>
+#include <vtkDataArray.h>
 #include <vtkCellData.h>
+#include <vtkSmartPointer.h>
 
 #ifndef vtkFloatingPointType
 #define vtkFloatingPointType vtkFloatingPointType
@@ -63,8 +68,6 @@ typedef float vtkFloatingPointType;
 #include "Mesh.h"
 #include "MetricTensor.h"
 #include "ElementProperty.h"
-
-#include "generate_Steiner_ellipse_3d.h"
 
 extern "C" {
 #include "metis.h"
@@ -84,24 +87,60 @@ extern "C" {
  */
 template<typename real_t> class VTKTools{
  public:
-  static Mesh<real_t>* import_vtu(const char *filename){
-    vtkXMLUnstructuredGridReader *reader = vtkXMLUnstructuredGridReader::New();
-    reader->SetFileName(filename);
-    reader->Update();
+  static Mesh<real_t>* import_vtu(std::string filename){
+    vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
-    vtkUnstructuredGrid *ug = reader->GetOutput();
+    if(filename.substr(filename.find_last_of('.'))==".pvtu"){
+       vtkSmartPointer<vtkXMLPUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLPUnstructuredGridReader>::New();
+       reader->SetFileName(filename.c_str());
+       reader->Update();
+
+      ug->DeepCopy(reader->GetOutput());
+    }else{
+      vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
+      reader->SetFileName(filename.c_str());
+      reader->Update();
+
+      ug->DeepCopy(reader->GetOutput());
+    }
 
     size_t NNodes = ug->GetNumberOfPoints();
     size_t NElements = ug->GetNumberOfCells();
 
-    std::vector<real_t> x(NNodes),  y(NNodes), z(NNodes);
-    for(size_t i=0;i<NNodes;i++){
-      real_t r[3];
-      ug->GetPoints()->GetPoint(i, r);
-      x[i] = r[0];
-      y[i] = r[1];
-      z[i] = r[2];
+    std::map<int, int> renumber;
+    std::map<int, int> gnns;
+
+    std::vector<real_t> x,y,z;
+    int ncnt=0;
+    bool have_global_ids = ug->GetPointData()->GetArray("GlobalId")!=NULL;
+    if(have_global_ids){
+      for(size_t i=0;i<NNodes;i++){
+        int gnn = ug->GetPointData()->GetArray("GlobalId")->GetTuple1(i);
+        if(gnns.find(gnn)==gnns.end()){
+          gnns[gnn] = ncnt;;
+  	  renumber[i] = ncnt;
+  	  ncnt++;
+ 	
+ 	  real_t r[3];
+ 	  ug->GetPoints()->GetPoint(i, r);
+ 	  x.push_back(r[0]);
+ 	  y.push_back(r[1]);
+ 	  z.push_back(r[2]);
+        }else{
+          renumber[i] = gnns[gnn];
+        }
+      }
+    }else{
+      for(size_t i=0;i<NNodes;i++){
+        real_t r[3];
+        ug->GetPoints()->GetPoint(i, r);
+        x.push_back(r[0]);
+        y.push_back(r[1]);
+        z.push_back(r[2]);
+      }
     }
+
+    NNodes = x.size();
 
     int cell_type = ug->GetCell(0)->GetCellType();
 
@@ -120,13 +159,23 @@ template<typename real_t> class VTKTools{
 
     std::vector<int> ENList;
     for(size_t i=0;i<NElements;i++){
+      int ghost=0;
+      if(ug->GetCellData()->GetArray("vtkGhostLevels")!=NULL)
+        ghost = ug->GetCellData()->GetArray("vtkGhostLevels")->GetTuple1(i);
+
+      if(ghost>0)
+	continue;
+
       vtkCell *cell = ug->GetCell(i);
       assert(cell->GetCellType()==cell_type);
       for(int j=0;j<nloc;j++){
-        ENList.push_back(cell->GetPointId(j));
+        if(have_global_ids)
+          ENList.push_back(renumber[cell->GetPointId(j)]);
+        else
+          ENList.push_back(cell->GetPointId(j));
       }
     }
-    reader->Delete();
+    NElements = ENList.size()/nloc;
 
     int nparts=1;
     Mesh<real_t> *mesh=NULL;
@@ -298,24 +347,14 @@ template<typename real_t> class VTKTools{
   }
 
   static void export_vtu(const char *basename, const Mesh<real_t> *mesh, const real_t *psi=NULL){
-    size_t NElements_total = mesh->get_number_elements();
-    // Correct number of elements.
-    int mask_count = 0;
-    for(size_t i=0;i<NElements_total;i++){
-      const index_t *n = mesh->get_element(i);
-      if(n[0]<0)
-        mask_count++;
-    }
-    size_t NElements = NElements_total - mask_count;
-
+    size_t NElements = mesh->get_number_elements();
     size_t ndims = mesh->get_number_dimensions();
 
     // Set the orientation of elements.
     ElementProperty<real_t> *property = NULL;
-    for(size_t i=0;i<NElements_total;i++){
+    for(size_t i=0;i<NElements;i++){
       const int *n=mesh->get_element(i);
-      if(n[0]<0)
-        continue;
+      assert(n[0]>=0);
 
       if(ndims==2)
         property = new ElementProperty<real_t>(mesh->get_coords(n[0]),
@@ -370,6 +409,7 @@ template<typename real_t> class VTKTools{
     vtk_min_desired_length->SetNumberOfTuples(NNodes);
     vtk_min_desired_length->SetName("min_desired_edge_length");
 
+#pragma omp parallel for
     for(size_t i=0;i<NNodes;i++){
       const real_t *r = mesh->get_coords(i);
       const double *m = mesh->get_metric(i);
@@ -496,27 +536,9 @@ template<typename real_t> class VTKTools{
     vtk_quality->SetNumberOfTuples(NElements);
     vtk_quality->SetName("quality");
 
-   vtkDoubleArray *vtk_steiner=NULL;
-   if(ndims==3){
-     vtk_steiner = vtkDoubleArray::New();
-     vtk_steiner->SetNumberOfComponents(9);
-     vtk_steiner->SetNumberOfTuples(NElements);
-     vtk_steiner->SetName("Steiner");
-   }
-
-    vtkDoubleArray *vtk_sliver = NULL;
-    if(ndims==3){
-      vtk_sliver = vtkDoubleArray::New();
-      vtk_sliver->SetNumberOfComponents(1);
-      vtk_sliver->SetNumberOfTuples(NElements);
-      vtk_sliver->SetName("sliver");
-    }
-
-    for(size_t i=0, k=0;i<NElements_total;i++){
+    for(size_t i=0, k=0;i<NElements;i++){
       const index_t *n = mesh->get_element(i);
-      if(n[0]<0){
-        continue;
-      }
+      assert(n[0]>=0);
 
       if(ndims==2){
         vtkIdType pts[] = {n[0], n[1], n[2]};
@@ -532,14 +554,6 @@ template<typename real_t> class VTKTools{
 
         vtk_quality->SetTuple1(k, property->lipnikov(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]),
                                                      mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
-        vtk_sliver->SetTuple1(k, property->sliver(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]),
-                                                  mesh->get_metric(n[0]), mesh->get_metric(n[1]), mesh->get_metric(n[2]), mesh->get_metric(n[3])));
-
-        double sm[6];
-        pragmatic::generate_Steiner_ellipse(mesh->get_coords(n[0]), mesh->get_coords(n[1]), mesh->get_coords(n[2]), mesh->get_coords(n[3]), sm);
-        vtk_steiner->SetTuple9(k, sm[0], sm[1], sm[2],
-                                  sm[1], sm[3], sm[4],
-                                  sm[2], sm[4], sm[5]);
       }
 
       vtk_cell_numbering->SetTuple1(k, i);
@@ -553,23 +567,15 @@ template<typename real_t> class VTKTools{
     ug->GetCellData()->AddArray(vtk_quality);
     vtk_quality->Delete();
 
-    if(ndims==3){
-      ug->GetCellData()->AddArray(vtk_steiner);
-      vtk_steiner->Delete();
-    }
-
     ug->GetCellData()->AddArray(vtk_boundary);
     vtk_boundary->Delete();
 
-    if(vtk_sliver){
-      ug->GetCellData()->AddArray(vtk_sliver);
-      vtk_sliver->Delete();
-    }
-
-    int nparts=1;
+    int rank=0, nparts=1;
 #ifdef HAVE_MPI
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 #endif
+
     if(nparts==1){
       vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".vtu");
@@ -582,11 +588,45 @@ template<typename real_t> class VTKTools{
       writer->Write();
 
       writer->Delete();
-    }else{
+    }
 #ifdef HAVE_MPI
-      int rank=0, nparts=1;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      MPI_Comm_size(MPI_COMM_WORLD, &nparts);
+     else{
+      // Set ghost levels
+      vtkUnsignedCharArray *vtk_ghost=vtkUnsignedCharArray::New();
+      vtk_ghost->SetNumberOfComponents(1);
+      vtk_ghost->SetNumberOfTuples(NElements);
+      vtk_ghost->SetName("vtkGhostLevels");
+
+      for(size_t i=0;i<NElements;i++){
+        const index_t *n = mesh->get_element(i);
+        int owner;
+        if(ndims==2)
+          owner=std::min(mesh->node_owner[n[0]], std::min(mesh->node_owner[n[1]], mesh->node_owner[n[2]]));
+        else
+          owner=std::min(std::min(mesh->node_owner[n[0]], mesh->node_owner[n[1]]), std::min(mesh->node_owner[n[2]], mesh->node_owner[n[3]]));
+
+        if(owner==rank){
+          vtk_ghost->SetTuple1(i, 0);
+        }else{
+          vtk_ghost->SetTuple1(i, 1);
+        }
+      }
+      ug->GetCellData()->AddArray(vtk_ghost);
+      vtk_ghost->Delete();
+
+      // Set GlobalIds
+      vtkIdTypeArray *vtk_gnn=vtkIdTypeArray::New();
+      vtk_gnn->SetNumberOfComponents(1);
+      vtk_gnn->SetNumberOfTuples(NNodes);
+      vtk_gnn->SetName("GlobalId");
+
+      for(size_t i=0;i<NNodes;i++){
+        vtk_gnn->SetTuple1(i, mesh->lnn2gnn[i]);
+      }
+      // ug->GetPointData()->AddArray(vtk_gnn);
+      // ug->GetPointData()->SetActiveGlobalIds("GlobalId");
+      ug->GetPointData()->SetGlobalIds(vtk_gnn);
+      vtk_gnn->Delete();
 
       vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
@@ -602,9 +642,9 @@ template<typename real_t> class VTKTools{
 #endif
       writer->Write();
       writer->Delete();
-#endif
     }
-    ug->Delete();
+#endif
+    
     delete property;
 
     return;
