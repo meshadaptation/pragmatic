@@ -11,7 +11,7 @@
 from dolfin import *
 from pylab import hold, show, axis
 from pylab import plot as pyplot
-from numpy import array, linspace, linalg, diag
+from numpy import array, linspace, linalg, diag, cross
 from numpy import cos as pycos
 from numpy import sin as pysin
 from numpy import sqrt as pysqrt
@@ -20,25 +20,12 @@ from adaptivity import metric_pnorm, mesh_metric, adapt, mesh_metric2
 set_log_level(WARNING)
 
 def test_mesh_metric():
-    #make non structured mesh
-    meshsz = 40
-    mesh = RectangleMesh(-0.5,-0.5,0.5,0.5,1*meshsz,1*meshsz,"left/right")
-    hd = Constant(1e-2)
-    testsol = 'tanh(x[0]/' + str(float(hd)) + ')' #tanh(x[0]/hd)
-    ddtestsol = '2*'+testsol+'*(1-pow('+testsol+',2))/'+str(float(hd)**2)
-    V = FunctionSpace(mesh, "CG" ,2); dis = TrialFunction(V); dus = TestFunction(V); u = Function(V)
-    R = interpolate(Expression(ddtestsol),V)
-    a = inner(grad(dis), grad(dus))*dx
-    L = R*dus*dx
-    solve(a == L, u, [])
-    eta = 0.01; H = metric_pnorm(u, eta, max_edge_ratio=50)
-    #Mp =  project(H,  TensorFunctionSpace(mesh, "CG", 1))
-    mesh = adapt(H)
-
+    mesh = RectangleMesh(0,0,1,1,20,20)
+    mesh = adapt(interpolate(Constant(((10.,0.),(0.,10.))),TensorFunctionSpace(mesh,'CG',1)))
     #extract mesh metric
     MpH = mesh_metric2(mesh)
     # Plot element i
-    i = 40; t = linspace(0,2*pi,101)
+    i = 20; t = linspace(0,2*pi,101)
     ind = MpH.function_space().dofmap().cell_dofs(i)
     thecell = mesh.cells()[i]
     centerxy = mesh.coordinates()[thecell,:].mean(0).repeat(3).reshape([2,3]).T
@@ -52,6 +39,28 @@ def test_mesh_metric():
     hold('on'); pyplot(elxy[:,0],elxy[:,1],'-r'); hold('off'); axis('equal')
     print('triangle area: %0.6f, ellipse axis product(*3*sqrt(3)/4): %0.6f' % (pyabs(linalg.det(array([cxy[1,:]-cxy[0,:],cxy[2,:]-cxy[0,:]])))/2,v[0]*v[1]*3*sqrt(3)/4))
     show()
+    
+def test_mesh_metric3D():    
+    mesh = BoxMesh(0,0,0,1,1,1,20,20,20)
+    mesh = adapt(interpolate(Constant(((100.,0.,0.),(0.,100.,0.),(0.,0.,100.))),TensorFunctionSpace(mesh,'CG',1)))
+    
+    #extract mesh metric
+    MpH = mesh_metric2(mesh)
+    for i in range(0,40):
+        thecell = mesh.cells()[i]
+        ind = MpH.function_space().dofmap().cell_dofs(i)
+        coords = mesh.coordinates()[thecell,:]
+        r1 = coords[1,:]-coords[0,:]
+        r2 = coords[2,:]-coords[0,:]
+        r3 = coords[0:3,:].mean(0)-coords[3,:]
+        r12c = cross(r2,r1)/6.
+        det1234 = pyabs((r12c*r3).sum())
+        
+        H = MpH.vector().gather(ind).reshape(3,3)# H = array([[H[1],H[0]],[H[0],H[2]]])
+        [v,w] = linalg.eig(H)
+        print('tetrahedron volume: %0.6f, ellipsoid axis product(*sqrt(2)/12): %0.6f' % (det1234,v.prod()*sqrt(2)/12))
+        print v.prod()*sqrt(2)/12/(det1234)
 
 if __name__=="__main__":
- test_mesh_metric()
+# test_mesh_metric()
+ test_mesh_metric3D()
