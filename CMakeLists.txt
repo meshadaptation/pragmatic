@@ -17,8 +17,19 @@ if(VTK_FOUND)
   include(${VTK_USE_FILE})
   set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
 endif()
+ 
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+elseif(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+else()
+        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated -std=c++0x")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated")
 
 FIND_PACKAGE(MPI REQUIRED)
 if(MPI_FOUND)
@@ -62,7 +73,7 @@ add_subdirectory(tests EXCLUDE_FROM_ALL)
 install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
 install(FILES libpragmatic.so DESTINATION lib)
 
-ADD_EXECUTABLE(./bin/coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp src/generate_Steiner_ellipse_3d.cpp)
+ADD_EXECUTABLE(./bin/coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp)
 TARGET_LINK_LIBRARIES(./bin/coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
 
 

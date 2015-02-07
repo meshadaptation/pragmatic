@@ -33,42 +33,22 @@
  *  SUCH DAMAGE.
  */
 
-#ifndef MPI_TOOLS_H
-#define MPI_TOOLS_H
-
-#include <mpi.h>
-
-// Template MPI data types.
-// Method by Justin Holewinski: http://jholewinski.org/blog/the-beauty-of-c-templates/
-
-template <typename TYPE>
-struct mpi_type_wrapper {
-  const MPI_Datatype mpi_type;
-  mpi_type_wrapper();
-};
+#include "mpi_tools.h"
 
 // Explicit instantiation for `char'
-template <> mpi_type_wrapper<char>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<char>::mpi_type_wrapper() : mpi_type(MPI_CHAR) {}
 // Explicit instantiation for `float'
-template <> mpi_type_wrapper<float>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<float>::mpi_type_wrapper() : mpi_type(MPI_FLOAT) {}
 // Explicit instantiation for `double'
-template <> mpi_type_wrapper<double>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<double>::mpi_type_wrapper() : mpi_type(MPI_DOUBLE) {}
 // Explicit instantiation for `short'
-template <> mpi_type_wrapper<short>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<short>::mpi_type_wrapper() : mpi_type(MPI_SHORT) {}
 // Explicit instantiation for `int'
-template <> mpi_type_wrapper<int>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<int>::mpi_type_wrapper() : mpi_type(MPI_INT) {}
 // Explicit instantiation for `long'
-template <> mpi_type_wrapper<long>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<long>::mpi_type_wrapper() : mpi_type(MPI_LONG) {}
 // Explicit instantiation for `unsigned long'
-template <> mpi_type_wrapper<unsigned long>::mpi_type_wrapper();
-
+template <> mpi_type_wrapper<unsigned long>::mpi_type_wrapper() : mpi_type(MPI_UNSIGNED_LONG) {}
 // Explicit instantiation for `long long'
-template <> mpi_type_wrapper<long long>::mpi_type_wrapper();
+template <> mpi_type_wrapper<long long>::mpi_type_wrapper() : mpi_type(MPI_LONG_LONG) {}
 
-#endif

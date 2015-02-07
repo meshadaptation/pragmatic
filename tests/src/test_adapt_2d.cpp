@@ -232,7 +232,7 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_other<<"\n";
 
     std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
-    if((qmean>0.8)&&(qmin>0.2))
+    if((qmean>0.8)&&(qmin>0.1))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
