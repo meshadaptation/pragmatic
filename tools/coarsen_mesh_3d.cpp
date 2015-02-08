@@ -46,6 +46,7 @@
 #include "Coarsen.h"
 #include "Smooth.h"
 #include "Swapping.h"
+#include "ticker.h"
 
 #include <mpi.h>
 
@@ -160,7 +161,10 @@ int main(int argc, char **argv){
 
   MetricField<double,3> metric_field(*mesh);
 
+  double time_metric = get_wtime();
   metric_field.generate_mesh_metric(factor);
+  time_metric = (get_wtime() - time_metric);
+
   metric_field.update_mesh();
 
   if(verbose){
@@ -174,24 +178,34 @@ int main(int argc, char **argv){
   Smooth<double, 3> smooth(*mesh);
   Swapping<double, 3> swapping(*mesh);
 
+  double time_coarsen=0, time_swapping=0;
   for(size_t i=0;i<5;i++){
     if(verbose)
       std::cout<<"INFO: Sweep "<<i<<std::endl;
     
+    double tic = get_wtime();
     coarsen.coarsen(L_up, L_up, true);
+    time_coarsen += (get_wtime()-tic);
     if(verbose)
       cout_quality(mesh, "Quality after coarsening");
     
+    tic = get_wtime();
     swapping.swap(0.1);
+    time_swapping += (get_wtime()-tic);
     if(verbose)
       cout_quality(mesh, "Quality after swapping");
   }
 
   mesh->defragment();
   
+  double time_smooth=get_wtime();
   smooth.smooth(20);
+  time_smooth = (get_wtime() - time_smooth);
   if(verbose)
     cout_quality(mesh, "Quality after final smoothening");
+
+  if(verbose)
+    std::cout<<"Times for metric, coarsen, swapping, smoothing = "<<time_metric<<", "<<time_coarsen<<", "<<time_swapping<<", "<<time_smooth<<std::endl;
 
   if(outfilename.size()==0)
     VTKTools<double>::export_vtu("scaled_mesh_3d", mesh);

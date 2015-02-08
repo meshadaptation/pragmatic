@@ -11,7 +11,6 @@ FOREACH(item ${src_lite})
     LIST(REMOVE_ITEM src_lite ${item})
   ENDIF(${item} MATCHES "cpragmatic.cpp")
 ENDFOREACH(item)
-list(APPEND src_lite "./src/ticker.cpp")
 MESSAGE(STATUS "str_cite ${src_lite}")
 
 ADD_EXECUTABLE(./bin/test_generate_Steiner_ellipse_3d ./src/test_generate_Steiner_ellipse_3d.cpp ${src_lite})
