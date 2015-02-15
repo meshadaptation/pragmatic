@@ -15,7 +15,7 @@ FIND_PACKAGE(VTK REQUIRED)
 if(VTK_FOUND)
   add_definitions(-DHAVE_VTK)
   include(${VTK_USE_FILE})
-  set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
+  set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkImaging vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
 endif()
  
 include(CheckCXXCompilerFlag)
@@ -76,4 +76,6 @@ install(FILES libpragmatic.so DESTINATION lib)
 ADD_EXECUTABLE(./bin/coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(./bin/coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
 
+ADD_EXECUTABLE(./bin/jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
+TARGET_LINK_LIBRARIES(./bin/jpeg2mesh ${PRAGMATIC_LIBRARIES})
 
