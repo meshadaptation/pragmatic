@@ -184,10 +184,13 @@ public:
    * @param perserved_small_edges when true causes small edge lengths to be preserved (default). Otherwise long edge are perserved.
    */
   void constrain(const treal_t* M_in, bool perserved_small_edges=true){
-    for(size_t i=0; i<(dim==2?3:6); i++)
-      if(pragmatic_isnan(M_in[i]))
+    for(size_t i=0; i<(dim==2?3:6); i++){
+      if(pragmatic_isnan(M_in[i])){
+	std::cerr<<"WARNING: encountered NAN in "<<__FILE__<<", "<<__LINE__<<std::endl;
         return;
-    
+      }
+    }
+
     MetricTensor<treal_t,dim> metric(M_in);
 
     // Make the tensor with the smallest aspect ratio the reference space Mr.
@@ -206,9 +209,17 @@ public:
     Eigen::Matrix<treal_t, dim, 1> evalues1 = solver1.eigenvalues().real().cwise().abs();
     
     treal_t aspect_r;
-    if(dim==2)
+    if(dim==2){
       aspect_r = std::min(evalues1[0], evalues1[1])/
         std::max(evalues1[0], evalues1[1]);
+
+      // Just replace metric if it is foobar
+      if(!std::isnormal(aspect_r)){
+	for(int i=0;i<3;i++)
+	  _metric[i] = M_in[i];
+	return;
+      }
+    }
     else if(dim==3)
       aspect_r = std::min(std::min(evalues1[0], evalues1[1]), evalues1[2])/
         std::max(std::max(evalues1[0], evalues1[1]), evalues1[2]);
@@ -472,7 +483,7 @@ public:
   }
 
 private:
- treal_t _metric[dim==2?3:(dim==3?6:-1)];
+  treal_t _metric[dim==2?3:(dim==3?6:-1)];
 };
 
 template<typename treal_t, int dim>

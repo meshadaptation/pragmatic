@@ -78,7 +78,8 @@ public:
     _NNodes = mesh.get_number_nodes();
     _NElements = mesh.get_number_elements();
     _mesh = &mesh;
-    
+    _metric = NULL;
+
     rank = 0;
     nprocs = 1;
 #ifdef HAVE_MPI
@@ -86,7 +87,41 @@ public:
     MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
 #endif
     
-    _metric = NULL;
+    double bbox[dim*2];
+    for(int i=0;i<dim;i++){
+      bbox[i*dim] = DBL_MAX;
+      bbox[i*dim+1] = -DBL_MAX;
+    }
+#pragma omp parallel
+    {
+      double lbbox[dim*2];
+      for(int i=0;i<dim;i++){
+	lbbox[i*dim] = DBL_MAX;
+	lbbox[i*dim+1] = -DBL_MAX;
+      }
+#pragma omp for schedule(static)
+      for(int i=0; i<_NNodes; i++){
+	const real_t *x = _mesh->get_coords(i);
+
+	for(int j=0;j<dim;j++){
+	  lbbox[j*dim] = std::min(lbbox[j*dim], x[j]);
+	  lbbox[j*dim+1] = std::max(lbbox[j*dim+1], x[j]);
+	}
+      }
+      
+#pragma omp critical
+      {
+	for(int j=0;j<dim;j++){
+	  bbox[j*dim] = std::min(lbbox[j*dim], bbox[j*dim]);
+	  bbox[j*dim+1] = std::max(lbbox[j*dim+1], bbox[j*dim+1]);
+	}
+      }
+    }
+    double max_extent = bbox[1]-bbox[0];
+    for(int j=1;j<dim;j++)
+      max_extent = std::max(max_extent, bbox[j*dim+1]-bbox[j*dim]);
+
+    min_eigenvalue = 1.0/pow(max_extent, 2);
   }
   
   /*! Default destructor.
@@ -162,13 +197,13 @@ void fit_ellipsoid(int i, real_t *sm){
       A[18]+=pow(x, 2)*y*z; A[19]+=pow(y, 3)*z; A[20]+=y*pow(z, 3); A[21]+=pow(y, 2)*pow(z, 2); A[22]+=x*y*pow(z, 2); A[23]+=x*pow(y, 2)*z; 
       A[24]+=pow(x, 3)*z; A[25]+=x*pow(y, 2)*z; A[26]+=x*pow(z, 3); A[27]+=x*y*pow(z, 2); A[28]+=pow(x, 2)*pow(z, 2); A[29]+=pow(x, 2)*y*z; 
       A[30]+=pow(x, 3)*y; A[31]+=x*pow(y, 3); A[32]+=x*y*pow(z, 2); A[33]+=x*pow(y, 2)*z; A[34]+=pow(x, 2)*y*z; A[35]+=pow(x, 2)*pow(y, 2); 
-b[0]+=pow(x, 2);
-b[1]+=pow(y, 2);
-b[2]+=pow(z, 2);
-b[3]+=y*z;
-b[4]+=x*z;
-b[5]+=x*y;
 
+      b[0]+=pow(x, 2);
+      b[1]+=pow(y, 2);
+      b[2]+=pow(z, 2);
+      b[3]+=y*z;
+      b[4]+=x*z;
+      b[5]+=x*y;
     }
   }
 
@@ -422,7 +457,7 @@ b[5]+=x*y;
       add_to = false;
       _metric = new MetricTensor<real_t,dim>[_NNodes];
     }
-
+    
     real_t eta = 1.0/target_error;
 #pragma omp parallel
     {
@@ -456,8 +491,19 @@ b[5]+=x*y;
 
           double scaling_factor = eta * pow(m_det+DBL_EPSILON, -1.0 / (2.0 * p_norm + dim));
 
-          for(int j=0;j<(dim==2?3:6);j++)
-            h[j] *= scaling_factor;
+	  if(std::isnormal(scaling_factor)){
+	    for(int j=0;j<(dim==2?3:6);j++)
+	      h[j] *= scaling_factor;
+	  }else{
+	    if(dim==2){
+	      h[0] = min_eigenvalue; h[1] = 0.0;
+	                             h[2] = min_eigenvalue;
+	    }else{
+	      h[0] = min_eigenvalue; h[1] = 0.0;            h[2] = 0.0;
+	                             h[3] = min_eigenvalue; h[4] = 0.0;
+				                            h[5] = min_eigenvalue;
+	    }
+	  }
 
           if(add_to){
             // Merge this metric with the existing metric field.
@@ -723,7 +769,7 @@ b[5]+=x*y;
   
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, real_t *Hessian){
-    int min_patch_size = (dim==2?6:15); // In 3D, 10 is the minimum but can give crappy results.
+    int min_patch_size = (dim==2?12:20); // In 3D, 10 is the minimum but can give crappy results.
 
     std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
     patch.insert(i);
@@ -822,6 +868,7 @@ private:
   int _NNodes, _NElements;
   MetricTensor<real_t,dim>* _metric;
   Mesh<real_t>* _mesh;
+  double min_eigenvalue;
 };
 
 #endif

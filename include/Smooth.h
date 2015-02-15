@@ -559,7 +559,8 @@ template<typename real_t, int dim>
       double new_x0[2];
       for(int i=0;i<2;i++){
         new_x0[i] = x0[i] + alpha*search[i];
-        assert(std::isnormal(new_x0[i]));
+        if(!std::isnormal(new_x0[i]))
+          return false;
       }
 
       double new_m0[3];
@@ -588,10 +589,9 @@ template<typename real_t, int dim>
         const double *m2 = _mesh->get_metric(n2);
 
         double new_q = property->lipnikov(new_x0, x1, x2, new_m0, m1, m2);
-        assert(std::isnormal(new_q));
         new_quality.push_back(new_q);
 
-        if(new_quality.back()<worst_element.first){
+        if(!std::isnormal(new_q) || new_quality.back()<worst_element.first){
           linf_update = false;
           break;
         }
