@@ -47,6 +47,7 @@
 #include <vtkIntArray.h>
 #include <vtkIdTypeArray.h>
 #include <vtkUnsignedCharArray.h>
+#include <vtkUnsignedIntArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkCell.h>
 #include <vtkPoints.h>
@@ -54,6 +55,12 @@
 #include <vtkDataArray.h>
 #include <vtkCellData.h>
 #include <vtkSmartPointer.h>
+
+#include <vtkJPEGReader.h>
+#include <vtkImageData.h>
+#include <vtkDataSetTriangleFilter.h>
+#include <vtkImageGaussianSmooth.h>
+#include <vtkImageAnisotropicDiffusion2D.h>
 
 #ifndef vtkFloatingPointType
 #define vtkFloatingPointType vtkFloatingPointType
@@ -369,42 +376,42 @@ template<typename real_t> class VTKTools{
     }
 
     // Create VTU object to write out.
-    vtkUnstructuredGrid *ug = vtkUnstructuredGrid::New();
+    vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
-    vtkPoints *vtk_points = vtkPoints::New();
+    vtkSmartPointer<vtkPoints> vtk_points = vtkSmartPointer<vtkPoints>::New();
     size_t NNodes = mesh->get_number_nodes();
     vtk_points->SetNumberOfPoints(NNodes);
 
-    vtkDoubleArray *vtk_psi = NULL;
+    vtkSmartPointer<vtkDoubleArray> vtk_psi = NULL;
 
     if(psi!=NULL){
-      vtk_psi = vtkDoubleArray::New();
+      vtk_psi = vtkSmartPointer<vtkDoubleArray>::New();
       vtk_psi->SetNumberOfComponents(1);
       vtk_psi->SetNumberOfTuples(NNodes);
       vtk_psi->SetName("psi");
     }
 
-    vtkIntArray *vtk_node_numbering = vtkIntArray::New();
+    vtkSmartPointer<vtkIntArray> vtk_node_numbering = vtkSmartPointer<vtkIntArray>::New();
     vtk_node_numbering->SetNumberOfComponents(1);
     vtk_node_numbering->SetNumberOfTuples(NNodes);
     vtk_node_numbering->SetName("nid");
 
-    vtkDoubleArray *vtk_metric = vtkDoubleArray::New();
+    vtkSmartPointer<vtkDoubleArray> vtk_metric = vtkSmartPointer<vtkDoubleArray>::New();
     vtk_metric->SetNumberOfComponents(ndims*ndims);
     vtk_metric->SetNumberOfTuples(NNodes);
     vtk_metric->SetName("Metric");
 
-    vtkDoubleArray *vtk_edge_length = vtkDoubleArray::New();
+    vtkSmartPointer<vtkDoubleArray> vtk_edge_length = vtkSmartPointer<vtkDoubleArray>::New();
     vtk_edge_length->SetNumberOfComponents(1);
     vtk_edge_length->SetNumberOfTuples(NNodes);
     vtk_edge_length->SetName("mean_edge_length");
 
-    vtkDoubleArray *vtk_max_desired_length = vtkDoubleArray::New();
+    vtkSmartPointer<vtkDoubleArray> vtk_max_desired_length = vtkSmartPointer<vtkDoubleArray>::New();
     vtk_max_desired_length->SetNumberOfComponents(1);
     vtk_max_desired_length->SetNumberOfTuples(NNodes);
     vtk_max_desired_length->SetName("max_desired_edge_length");
 
-    vtkDoubleArray *vtk_min_desired_length = vtkDoubleArray::New();
+    vtkSmartPointer<vtkDoubleArray> vtk_min_desired_length = vtkSmartPointer<vtkDoubleArray>::New();
     vtk_min_desired_length->SetNumberOfComponents(1);
     vtk_min_desired_length->SetNumberOfTuples(NNodes);
     vtk_min_desired_length->SetName("min_desired_edge_length");
@@ -463,30 +470,17 @@ template<typename real_t> class VTKTools{
     }
 
     ug->SetPoints(vtk_points);
-    vtk_points->Delete();
-
     if(vtk_psi!=NULL){
       ug->GetPointData()->AddArray(vtk_psi);
-      vtk_psi->Delete();
     }
-
     ug->GetPointData()->AddArray(vtk_node_numbering);
-    vtk_node_numbering->Delete();
-
     ug->GetPointData()->AddArray(vtk_metric);
-    vtk_metric->Delete();
-
     ug->GetPointData()->AddArray(vtk_edge_length);
-    vtk_edge_length->Delete();
-
     ug->GetPointData()->AddArray(vtk_max_desired_length);
-    vtk_max_desired_length->Delete();
-
     ug->GetPointData()->AddArray(vtk_min_desired_length);
-    vtk_min_desired_length->Delete();
 
     // Create a point data array to illustrate the boundary nodes.
-    vtkIntArray *vtk_boundary_nodes = vtkIntArray::New();
+    vtkSmartPointer<vtkIntArray> vtk_boundary_nodes = vtkSmartPointer<vtkIntArray>::New();
     vtk_boundary_nodes->SetNumberOfComponents(1);
     vtk_boundary_nodes->SetNumberOfTuples(NNodes);
     vtk_boundary_nodes->SetName("BoundaryNodes");
@@ -516,14 +510,13 @@ template<typename real_t> class VTKTools{
       }
     }
     ug->GetPointData()->AddArray(vtk_boundary_nodes);
-    vtk_boundary_nodes->Delete();
 
-    vtkIntArray *vtk_cell_numbering = vtkIntArray::New();
+    vtkSmartPointer<vtkIntArray> vtk_cell_numbering = vtkSmartPointer<vtkIntArray>::New();
     vtk_cell_numbering->SetNumberOfComponents(1);
     vtk_cell_numbering->SetNumberOfTuples(NElements);
     vtk_cell_numbering->SetName("eid");
 
-    vtkIntArray *vtk_boundary = vtkIntArray::New();
+    vtkSmartPointer<vtkIntArray> vtk_boundary = vtkSmartPointer<vtkIntArray>::New();
     if(ndims==2)
       vtk_boundary->SetNumberOfComponents(3);
     else
@@ -531,7 +524,7 @@ template<typename real_t> class VTKTools{
     vtk_boundary->SetNumberOfTuples(NElements);
     vtk_boundary->SetName("Boundary");
 
-    vtkDoubleArray *vtk_quality = vtkDoubleArray::New();
+    vtkSmartPointer<vtkDoubleArray> vtk_quality = vtkSmartPointer<vtkDoubleArray>::New();
     vtk_quality->SetNumberOfComponents(1);
     vtk_quality->SetNumberOfTuples(NElements);
     vtk_quality->SetName("quality");
@@ -562,13 +555,8 @@ template<typename real_t> class VTKTools{
     }
 
     ug->GetCellData()->AddArray(vtk_cell_numbering);
-    vtk_cell_numbering->Delete();
-
     ug->GetCellData()->AddArray(vtk_quality);
-    vtk_quality->Delete();
-
     ug->GetCellData()->AddArray(vtk_boundary);
-    vtk_boundary->Delete();
 
     int rank=0, nparts=1;
 #ifdef HAVE_MPI
@@ -577,7 +565,7 @@ template<typename real_t> class VTKTools{
 #endif
 
     if(nparts==1){
-      vtkXMLUnstructuredGridWriter *writer = vtkXMLUnstructuredGridWriter::New();
+      vtkSmartPointer<vtkXMLUnstructuredGridWriter> writer = vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
       std::string filename = std::string(basename)+std::string(".vtu");
       writer->SetFileName(filename.c_str());
 #if VTK_MAJOR_VERSION < 6
@@ -586,13 +574,11 @@ template<typename real_t> class VTKTools{
       writer->SetInputData(ug);
 #endif
       writer->Write();
-
-      writer->Delete();
     }
 #ifdef HAVE_MPI
      else{
       // Set ghost levels
-      vtkUnsignedCharArray *vtk_ghost=vtkUnsignedCharArray::New();
+      vtkSmartPointer<vtkUnsignedCharArray> vtk_ghost = vtkSmartPointer<vtkUnsignedCharArray>::New();
       vtk_ghost->SetNumberOfComponents(1);
       vtk_ghost->SetNumberOfTuples(NElements);
       vtk_ghost->SetName("vtkGhostLevels");
@@ -612,10 +598,9 @@ template<typename real_t> class VTKTools{
         }
       }
       ug->GetCellData()->AddArray(vtk_ghost);
-      vtk_ghost->Delete();
 
       // Set GlobalIds
-      vtkIdTypeArray *vtk_gnn=vtkIdTypeArray::New();
+      vtkSmartPointer<vtkIdTypeArray> vtk_gnn = vtkSmartPointer<vtkIdTypeArray>::New();
       vtk_gnn->SetNumberOfComponents(1);
       vtk_gnn->SetNumberOfTuples(NNodes);
       vtk_gnn->SetName("GlobalId");
@@ -626,9 +611,8 @@ template<typename real_t> class VTKTools{
       // ug->GetPointData()->AddArray(vtk_gnn);
       // ug->GetPointData()->SetActiveGlobalIds("GlobalId");
       ug->GetPointData()->SetGlobalIds(vtk_gnn);
-      vtk_gnn->Delete();
 
-      vtkXMLPUnstructuredGridWriter *writer = vtkXMLPUnstructuredGridWriter::New();
+      vtkSmartPointer<vtkXMLPUnstructuredGridWriter> writer = vtkSmartPointer<vtkXMLPUnstructuredGridWriter>::New();
       std::string filename = std::string(basename)+std::string(".pvtu");
       writer->SetFileName(filename.c_str());
       writer->SetNumberOfPieces(nparts);
@@ -641,7 +625,6 @@ template<typename real_t> class VTKTools{
       writer->SetInputData(ug);
 #endif
       writer->Write();
-      writer->Delete();
     }
 #endif
     
