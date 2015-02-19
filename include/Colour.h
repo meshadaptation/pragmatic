@@ -56,7 +56,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void greedy(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+  static void greedy(size_t NNodes, const std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
     char max_colour=64;
 
     // Colour first active node.
@@ -99,7 +99,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void GebremedhinManne(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+  static void GebremedhinManne(size_t NNodes, const std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
 
     int max_iterations = 128;
     std::vector<bool> conflicts_exist(max_iterations, false);;
@@ -175,6 +175,8 @@ class Colour{
     char K=15; // Initialise guess at number
     
     assert(NNodes==colour.size());
+    
+    bool serialize=false;
 
 #pragma omp parallel firstprivate(NNodes)
     {
@@ -194,7 +196,10 @@ class Colour{
       }
       
       for(int k=0;k<max_iterations;k++){
-        assert(K<64);
+        if(K==64){
+          serialize = true;
+          break;
+        }
 
 	std::vector<char> colour_deck;
 	for(int i=0;i<K;i++)
@@ -256,20 +261,11 @@ class Colour{
               break;
             }
           }
-          //if(conflict[i]){
-          //  std::cerr<<(int)colour[i]<<"("<<i<<") :: ";
-          //  for(std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it)
-          //    std::cerr<<(int)colour[*it]<<"("<<*it<<") ";
-          //  std::cerr<<std::endl;
-          //}
         }
 	
 #pragma omp single
 	{	  
 	  MPI_Allreduce(MPI_IN_PLACE, &(conflicts_exist[k]), 1, MPI_INT, MPI_SUM, comm);
-	  
-          //if(rank==0)
-          //  std::cerr<<(int)K<<", "<<k<<" :: "<<conflicts_exist[k]<<std::endl;
 
 	  // If progress has stagnated then lift the limit on chromatic number.
 	  if(k>=K && conflicts_exist[k-K]==conflicts_exist[k]){
@@ -282,7 +278,18 @@ class Colour{
 	if(conflicts_exist[k]==0)
 	  break;
       }
-    } 
+    }
+ 
+    // 
+    if(serialize){
+      int nranks;
+      MPI_Comm_size(comm, &nranks);
+
+      halo_update<char, 1>(comm, send, recv, colour);
+    
+      for(int i=0;i<nranks;i++)
+        repair(NNodes, NNList, colour);
+    }
   }
 
   /*! This routine repairs the colouring - based on the second and
@@ -291,7 +298,7 @@ class Colour{
    * @param NNList Node-Node-adjancy-List, i.e. the undirected graph to be coloured.
    * @param colour array that the node colouring is copied into.
    */
-  static void repair(size_t NNodes, std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
+  static void repair(size_t NNodes, const std::vector< std::vector<index_t> > &NNList, std::vector<char> &colour){
     // Phase 2: find conflicts
     std::vector<size_t> conflicts;
 #pragma omp for schedule(static, 64)
