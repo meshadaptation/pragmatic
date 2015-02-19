@@ -89,37 +89,37 @@ public:
     
     double bbox[dim*2];
     for(int i=0;i<dim;i++){
-      bbox[i*dim] = DBL_MAX;
-      bbox[i*dim+1] = -DBL_MAX;
+      bbox[i*2] = DBL_MAX;
+      bbox[i*2+1] = -DBL_MAX;
     }
 #pragma omp parallel
     {
       double lbbox[dim*2];
       for(int i=0;i<dim;i++){
-	lbbox[i*dim] = DBL_MAX;
-	lbbox[i*dim+1] = -DBL_MAX;
+	lbbox[i*2] = DBL_MAX;
+	lbbox[i*2+1] = -DBL_MAX;
       }
 #pragma omp for schedule(static)
       for(int i=0; i<_NNodes; i++){
 	const real_t *x = _mesh->get_coords(i);
 
 	for(int j=0;j<dim;j++){
-	  lbbox[j*dim] = std::min(lbbox[j*dim], x[j]);
-	  lbbox[j*dim+1] = std::max(lbbox[j*dim+1], x[j]);
+	  lbbox[j*2] = std::min(lbbox[j*2], x[j]);
+	  lbbox[j*2+1] = std::max(lbbox[j*2+1], x[j]);
 	}
       }
       
 #pragma omp critical
       {
 	for(int j=0;j<dim;j++){
-	  bbox[j*dim] = std::min(lbbox[j*dim], bbox[j*dim]);
-	  bbox[j*dim+1] = std::max(lbbox[j*dim+1], bbox[j*dim+1]);
+	  bbox[j*2] = std::min(lbbox[j*2], bbox[j*2]);
+	  bbox[j*2+1] = std::max(lbbox[j*2+1], bbox[j*2+1]);
 	}
       }
     }
     double max_extent = bbox[1]-bbox[0];
     for(int j=1;j<dim;j++)
-      max_extent = std::max(max_extent, bbox[j*dim+1]-bbox[j*dim]);
+      max_extent = std::max(max_extent, bbox[j*2+1]-bbox[j*2]);
 
     min_eigenvalue = 1.0/pow(max_extent, 2);
   }
@@ -769,7 +769,7 @@ void fit_ellipsoid(int i, real_t *sm){
   
   /// Least squared Hessian recovery.
   void hessian_qls_kernel(const real_t *psi, int i, real_t *Hessian){
-    int min_patch_size = (dim==2?12:20); // In 3D, 10 is the minimum but can give crappy results.
+    int min_patch_size = (dim==2?6:15); // In 3D, 10 is the minimum but can give crappy results.
 
     std::set<index_t> patch = _mesh->get_node_patch(i, min_patch_size);
     patch.insert(i);
