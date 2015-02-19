@@ -199,7 +199,8 @@ int main(int argc, char **argv){
   mesh->defragment();
   
   double time_smooth=get_wtime();
-  smooth.smooth(20);
+  smooth.smart_laplacian(20);
+  smooth.optimisation_linf(20);
   time_smooth = (get_wtime() - time_smooth);
   if(verbose)
     cout_quality(mesh, "Quality after final smoothening");

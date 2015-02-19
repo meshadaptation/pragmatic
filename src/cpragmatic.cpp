@@ -220,7 +220,8 @@ extern "C" {
 
       mesh->defragment();
 
-      smooth.smooth(20);
+      smooth.smart_laplacian(20);
+      smooth.optimisation_linf(20);
     }else{
       Coarsen<double, 3> coarsen(*mesh);
       Smooth<double, 3> smooth(*mesh);
@@ -247,7 +248,8 @@ extern "C" {
 
       mesh->defragment();
 
-      smooth.smooth(10);
+      smooth.smart_laplacian(10);
+      smooth.optimisation_linf(10);
     }
   }
 

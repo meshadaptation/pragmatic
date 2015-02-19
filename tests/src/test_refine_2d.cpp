@@ -112,13 +112,13 @@ int main(int argc, char **argv){
 
   if(rank==0){
     std::cout<<"Expecting perimeter == 4: ";
-    if(fabs(perimeter-4)<DBL_EPSILON)
+    if(fabs(perimeter-4)<4*DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
 
     std::cout<<"Expecting area == 1: ";
-    if(fabs(area-1)<DBL_EPSILON)
+    if(fabs(area-1)<2*DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

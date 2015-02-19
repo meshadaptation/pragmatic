@@ -91,31 +91,30 @@ int main(int argc, char **argv){
 
   VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
 
-  if(verbose){
-    double qmean = mesh->get_qmean();
-    double qmin = mesh->get_qmin();
-    int nelements = mesh->get_number_elements();
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
+  int nelements = mesh->get_number_elements();
 
+  if(verbose)
     std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
              <<"Number elements:     "<<nelements<<std::endl
              <<"Quality mean:        "<<qmean<<std::endl
              <<"Quality min:         "<<qmin<<std::endl;
 
-    long double area = mesh->calculate_area();
-    long double volume = mesh->calculate_volume();
+  long double area = mesh->calculate_area();
+  long double volume = mesh->calculate_volume();
 
-    std::cout<<"Checking area == 6: ";
-    if(fabs(area-6)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (area="<<area<<")"<<std::endl;
+  std::cout<<"Checking area == 6: ";
+  if(fabs(area-6)<6*DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (area="<<area<<")"<<std::endl;
 
-    std::cout<<"Checking volume == 1: ";
-    if(fabs(volume-1)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
-  }
+  std::cout<<"Checking volume == 1: ";
+  if(fabs(volume-1)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
   delete mesh;
 

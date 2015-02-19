@@ -107,15 +107,164 @@ template<typename real_t, int dim>
     delete property;
   }
 
-  // Smooth the mesh.
-  void smooth(int max_iterations=10, double quality_tol=-1.0){
+  // Smart laplacian mesh smoothing.
+  void smart_laplacian(int max_iterations=10, double quality_tol=-1.0){
+    // Calculate all element qualities
+    int NElements = _mesh->get_number_elements();
+    quality.resize(NElements);
+
+    double qsum=0;
+#pragma omp parallel
+    {
+#pragma omp for schedule(guided) reduction(+:qsum)
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0){
+          quality[i] = 1.0;
+          continue;
+        }
+
+        update_quality(i);
+        qsum+=quality[i];
+      }
+    }
+    good_q = qsum/NElements;
+
     if(quality_tol>0)
       good_q = quality_tol;
 
     init_cache();
 
     std::vector<int> halo_elements;
+    if(mpi_nparts>1){
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
+
+        for(size_t j=0;j<nloc;j++){
+          if(!_mesh->is_owned_node(n[j])){
+            halo_elements.push_back(i);
+            break;
+          }
+        }
+      }
+    }
+
+    // Use this to keep track of vertices that are still to be visited.
+    int NNodes = _mesh->get_number_nodes();
+    std::vector<int> active_vertices(NNodes, 0);
+
+    // Find the maximum colour across partitions
+    int max_colour = 0;
+    if(!colour_sets.empty())
+      max_colour = colour_sets.rbegin()->first;
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+    }
+#endif
+    
+    // First sweep through all vertices. Add vertices adjacent to any
+    // vertex moved into the active_vertex list.
+#pragma omp parallel
+    {
+      for(int ic=0;ic<=max_colour;ic++){
+        if(colour_sets.count(ic)){
+          int node_set_size = colour_sets[ic].size();
+#pragma omp for schedule(guided)
+          for(int cn=0;cn<node_set_size;cn++){
+            index_t node = colour_sets[ic][cn];
+	    active_vertices[node] = 0;
+
+	    if(smart_laplacian_kernel(node)){
+	      active_vertices[node] = 1;
+	      
+	      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+		active_vertices[*it] = 1;
+	      }
+	    }
+          }
+        }
+	
+        if(mpi_nparts>1){
+#pragma omp single
+          {
+            halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+
+            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+              update_quality(*ie);
+          }
+        }
+      }
+
+      for(int iter=1;iter<max_iterations;iter++){
+        for(int ic=0;ic<=max_colour;ic++){
+          if(colour_sets.count(ic)){
+            int node_set_size = colour_sets[ic].size();
+#pragma omp for schedule(guided)
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[ic][cn];
+
+              // Only process if it is active.
+              if(active_vertices[node]){
+		active_vertices[node] = 0;
+		
+		if(smart_laplacian_kernel(node)){
+		  active_vertices[node] = 1;
+		  
+		  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+		    active_vertices[*it] = 1;
+		  }
+		}
+              }
+            }
+          }
+          if(mpi_nparts>1){
+#pragma omp single
+            {
+              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+
+              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
+                update_quality(*ie);
+            }
+          }
+        }
+      }
+    }
+
+    return;
+  }
+
+  // Linf optimisation based smoothing..
+  void optimisation_linf(int max_iterations=10, double quality_tol=-1.0){
+    // Calculate all element qualities
     int NElements = _mesh->get_number_elements();
+    quality.resize(NElements);
+
+    double qsum=0;
+#pragma omp parallel
+    {
+#pragma omp for schedule(guided) reduction(+:qsum)
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0){
+          quality[i] = 1.0;
+          continue;
+        }
+
+        update_quality(i);
+        qsum+=quality[i];
+      }
+    }
+    good_q = qsum/NElements;
+
+    if(quality_tol>0)
+      good_q = quality_tol;
+
+    init_cache();
+
+    std::vector<int> halo_elements;
     if(mpi_nparts>1){
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
@@ -154,15 +303,18 @@ template<typename real_t, int dim>
 #pragma omp for schedule(guided)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
+	    active_vertices[node] = 0;
 
-            if(optimisation_linf_kernel(node)){
-              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                active_vertices[*it] = 1;
-              }
-            }
+	    if(optimisation_linf_kernel(node)){
+	      active_vertices[node] = 1;
+	      
+	      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+		active_vertices[*it] = 1;
+	      }
+	    }
           }
         }
-
+	
         if(mpi_nparts>1){
 #pragma omp single
           {
@@ -184,14 +336,15 @@ template<typename real_t, int dim>
 
               // Only process if it is active.
               if(active_vertices[node]){
-                // Reset mask
-                active_vertices[node] = 0;
-
-                if(optimisation_linf_kernel(node)){
-                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                    active_vertices[*it] = 1;
-                  }
-                }
+		active_vertices[node] = 0;
+		
+		if(optimisation_linf_kernel(node)){
+		  active_vertices[node] = 1;
+		  
+		  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+		    active_vertices[*it] = 1;
+		  }
+		}
               }
             }
           }
@@ -211,24 +364,91 @@ template<typename real_t, int dim>
     return;
   }
 
+  // Laplacian smoothing
+  void laplacian(int max_iterations=10){
+    init_cache();
+    
+    std::vector<int> halo_elements;
+    int NElements = _mesh->get_number_elements();
+    if(mpi_nparts>1){
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]<0)
+          continue;
+
+        for(size_t j=0;j<nloc;j++){
+          if(!_mesh->is_owned_node(n[j])){
+            halo_elements.push_back(i);
+            break;
+          }
+        }
+      }
+    }
+
+    // Sweep through all vertices.
+    int max_colour = 0;
+    if(!colour_sets.empty())
+      max_colour = colour_sets.rbegin()->first;
+#ifdef HAVE_MPI
+    if(mpi_nparts>1){
+      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
+    }
+#endif
+
+#pragma omp parallel
+    {
+      for(int iter=1;iter<max_iterations;iter++){
+        for(int ic=1;ic<=max_colour;ic++){
+          if(colour_sets.count(ic)){
+            int node_set_size = colour_sets[ic].size();
+#pragma omp for schedule(guided)
+            for(int cn=0;cn<node_set_size;cn++){
+              index_t node = colour_sets[ic][cn];
+	      
+	      laplacian_kernel(node);
+            }
+          }
+          if(mpi_nparts>1){
+#pragma omp single
+            {
+              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+            }
+          }
+        }
+      }
+    }
+    
+    return;
+  }
+
  private:
 
   // Laplacian smooth kernels
   inline bool laplacian_kernel(index_t node){
+    bool update;
     if(dim==2)
-      return laplacian_2d_kernel(node);
+      update = laplacian_2d_kernel(node);
     else
-      return laplacian_3d_kernel(node);
+      update = laplacian_3d_kernel(node);
+
+    return update;
   }
   
   inline bool laplacian_2d_kernel(index_t node){
     real_t p[2];
-    bool valid = laplacian_2d_kernel(node, p);
-    if(!valid)
-      return false;
+    laplacian_2d_kernel(node, p);
     
     double mp[3];
-    valid = generate_location_2d(node, p, mp);
+    bool valid = generate_location_2d(node, p, mp);
+    if(!valid){
+      // Try the mid point.
+      for(size_t j=0;j<2;j++)
+	p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
+      
+      valid = generate_location_2d(node, p, mp);
+    }
+    
+    // Give up
     if(!valid)
       return false;
     
@@ -243,12 +463,17 @@ template<typename real_t, int dim>
   
   inline bool laplacian_3d_kernel(index_t node){
     real_t p[3];
-    bool valid =laplacian_3d_kernel(node, p);
-    if(!valid)
-      return false;
+    laplacian_3d_kernel(node, p);
     
     double mp[6];
-    valid = generate_location_3d(node, p, mp);
+    bool valid = generate_location_3d(node, p, mp);
+    if(!valid){
+      // Try the mid point.
+      for(size_t j=0;j<3;j++)
+	p[j] = 0.5*(p[j] +  _mesh->_coords[node*3+j]);
+      
+      valid = generate_location_3d(node, p, mp);
+    }
     if(!valid)
       return false;
     
@@ -261,7 +486,7 @@ template<typename real_t, int dim>
     return true;
   }
   
-  inline bool laplacian_2d_kernel(index_t node, real_t *p){
+  inline void laplacian_2d_kernel(index_t node, real_t *p){
     std::set<index_t> patch(_mesh->get_node_patch(node));
     
     real_t x0 = get_x(node);
@@ -270,11 +495,14 @@ template<typename real_t, int dim>
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(2, 2);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
     
-    const real_t *m = _mesh->get_metric(node);
+    const real_t *m0 = _mesh->get_metric(node);
     for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
       real_t x = get_x(*il)-x0;
       real_t y = get_y(*il)-y0;
       
+      const real_t *m1 = _mesh->get_metric(*il);
+      double m[] = {0.5*(m0[0]+m1[0]), 0.5*(m0[1]+m1[1]), 0.5*(m0[2]+m1[2])};
+
       q[0] += (m[0]*x + m[1]*y);
       q[1] += (m[1]*x + m[2]*y);
       
@@ -293,10 +521,10 @@ template<typename real_t, int dim>
     p[0] += x0;
     p[1] += y0;
     
-    return true;
+    return;
   }
   
-  bool laplacian_3d_kernel(index_t node, real_t *p){
+  inline void laplacian_3d_kernel(index_t node, real_t *p){
     std::set<index_t> patch(_mesh->get_node_patch(node));
     
     real_t x0 = get_x(node);
@@ -306,12 +534,17 @@ template<typename real_t, int dim>
     Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
     
-    const real_t *m = _mesh->get_metric(node);
+    const real_t *m0 = _mesh->get_metric(node);
     for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
       real_t x = get_x(*il)-x0;
       real_t y = get_y(*il)-y0;
       real_t z = get_z(*il)-z0;
       
+      const real_t *m1 = _mesh->get_metric(*il);
+      double m[] = {0.5*(m0[0]+m1[0]), 0.5*(m0[1]+m1[1]), 0.5*(m0[2]+m1[2]),
+		                       0.5*(m0[3]+m1[3]), 0.5*(m0[4]+m1[4]),
+		                                          0.5*(m0[5]+m1[5])};
+
       q[0] += m[0]*x + m[1]*y + m[2]*z;
       q[1] += m[1]*x + m[3]*y + m[4]*z;
       q[2] += m[2]*x + m[4]*y + m[5]*z;
@@ -335,24 +568,35 @@ template<typename real_t, int dim>
     p[1] += y0;
     p[2] += z0;
 
-    return true;
+    return;
   }
 
   // Smart Laplacian kernels
   inline bool smart_laplacian_kernel(index_t node){
+    bool update;
     if(dim==2)
-      return smart_laplacian_2d_kernel(node);
+      update = smart_laplacian_2d_kernel(node);
     else
-      return smart_laplacian_3d_kernel(node);
+      update = smart_laplacian_3d_kernel(node);
+    
+    return update;
   }
   
   bool smart_laplacian_2d_kernel(index_t node){
     real_t p[2];
-    if(!laplacian_2d_kernel(node, p))
-      return false;
+    laplacian_2d_kernel(node, p);
 
     double mp[3];
     bool valid = generate_location_2d(node, p, mp);
+    if(!valid){
+      // Try the mid point.
+      for(size_t j=0;j<2;j++)
+	p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
+      
+      valid = generate_location_2d(node, p, mp);
+    }
+    
+    // Give up
     if(!valid)
       return false;
 
@@ -368,21 +612,24 @@ template<typename real_t, int dim>
     for(size_t j=0;j<3;j++)
       _mesh->metric[node*3+j] = mp[j];
     
-    // Reset quality cache.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      update_quality(*ie);
-    }
-
     return true;
   }
 
   inline bool smart_laplacian_3d_kernel(index_t node){
     real_t p[3];
-    if(!laplacian_3d_kernel(node, p))
-      return false;
+    laplacian_3d_kernel(node, p);
     
     double mp[6];
     bool valid = generate_location_3d(node, p, mp);
+    if(!valid){
+      // Try the mid point.
+      for(size_t j=0;j<3;j++)
+	p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
+      
+      valid = generate_location_3d(node, p, mp);
+    }
+    
+    // Give up
     if(!valid)
       return false;
     
@@ -398,69 +645,19 @@ template<typename real_t, int dim>
     for(size_t j=0;j<6;j++)
       _mesh->metric[node*6+j] = mp[j];
     
-    // Reset quality cache.
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      update_quality(*ie);
-    }
-    
     return true;
   }
 
-  inline bool stocastic_3d_kernel(index_t node){
-    real_t p[3];
-    real_t r=0;
-    for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-      r += sqrt(pow(_mesh->_coords[node*3+0]-_mesh->_coords[(*it)*3+0],2)+
-		pow(_mesh->_coords[node*3+1]-_mesh->_coords[(*it)*3+1],2)+
-		pow(_mesh->_coords[node*3+2]-_mesh->_coords[(*it)*3+2],2));
-    }
-    r/=_mesh->NNList[node].size();
-    
-    std::default_random_engine generator;
-    std::normal_distribution<real_t> distribution(0.0, r*0.5);
-
-    bool valid = false;
-    real_t functional_orig = functional_Linf(node);
-    for(int hail_marys=0;hail_marys<1000;hail_marys++){
-      // Randomally jump to a new location in the neighbourhood.
-      for(int i=0;i<3;i++)
-        p[i] = _mesh->_coords[node*3+i]+distribution(generator);
-      
-      // Interpolate metric and check for inversion.
-      double mp[6];
-      bool lvalid = generate_location_3d(node, p, mp);
-      if(!lvalid)
-        continue;
-      
-      // Check to see if the position is an improvement.
-      real_t functional = functional_Linf(node, p, mp);
-      if(functional-functional_orig<epsilon_q)
-        continue;
-
-      // Otherwise accept.
-      valid = true;
-      for(size_t j=0;j<3;j++)
-        _mesh->_coords[node*3+j] = p[j];
-    
-      for(size_t j=0;j<6;j++)
-        _mesh->metric[node*6+j] = mp[j];
-    
-      // Reset quality cache.
-      for(typename std::set<index_t>::iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie)
-        update_quality(*ie);
-
-      break;
-    }
-
-    return valid;
-  }
-
   // l-infinity optimisation kernels
-  inline bool optimisation_linf_kernel(index_t n0){
+  inline bool optimisation_linf_kernel(index_t node){
+    bool update;
     if(dim==2)
-      return optimisation_linf_2d_kernel(n0);
+      update = optimisation_linf_2d_kernel(node);
     else
-      return optimisation_linf_3d_kernel(n0);
+      update = optimisation_linf_3d_kernel(node);
+    
+    return update;
+    
   }
 
   inline bool optimisation_linf_2d_kernel(index_t n0){
@@ -883,25 +1080,6 @@ template<typename real_t, int dim>
 
       colour_sets[colour[i]].push_back(i);
     }
-
-    quality.resize(NElements);
-
-    double qsum=0;
-#pragma omp parallel
-    {
-#pragma omp for schedule(guided) reduction(+:qsum)
-      for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0){
-          quality[i] = 1.0;
-          continue;
-        }
-
-        update_quality(i);
-        qsum+=quality[i];
-      }
-    }
-    good_q = qsum/NElements;
 
     return;
   }

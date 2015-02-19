@@ -116,7 +116,8 @@ int main(int argc, char **argv){
 
   mesh->defragment();
   
-  smooth.smooth();
+  smooth.smart_laplacian(10);
+  smooth.optimisation_linf(10);
 
   VTKTools<double>::export_vtu("../data/test_mpi_adapt_3d", mesh);
   

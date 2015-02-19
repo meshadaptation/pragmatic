@@ -155,7 +155,7 @@ int main(int argc, char **argv){
 
     // Smooth
     tic = get_wtime();
-    smooth.smooth(1);
+    smooth.smart_laplacian(1);
     time_smooth += get_wtime()-tic;
 
     if(verbose)
@@ -187,7 +187,7 @@ int main(int argc, char **argv){
     time_swap += get_wtime() - tic;
   
     tic = get_wtime();
-    smooth.smooth(1);
+    smooth.smart_laplacian(1);
     if(verbose)
       cout_quality(mesh, "Smooth");
     time_smooth += get_wtime()-tic;
@@ -204,7 +204,8 @@ int main(int argc, char **argv){
   }
 
   tic = get_wtime();
-  smooth.smooth(20);
+  smooth.smart_laplacian(20);
+  smooth.optimisation_linf(20);
   time_smooth += get_wtime()-tic;
  
   if(verbose)
@@ -240,8 +241,8 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    std::cout<<"Expecting qmean>0.7, qmin>0.2: ";
-    if((qmean>0.8)&&(qmin>0.2))
+    std::cout<<"Expecting qmean>0.4, qmin>0.01: ";
+    if((qmean>0.4)&&(qmin>0.01))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
@@ -253,7 +254,7 @@ int main(int argc, char **argv){
       std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
     std::cout<<"Expecting area == 6: ";
-    if(fabs(area-6)<DBL_EPSILON)
+    if(fabs(area-6)<6*DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (area="<<area<<")"<<std::endl;
