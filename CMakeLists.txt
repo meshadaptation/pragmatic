@@ -5,7 +5,11 @@ PROJECT(PRAgMaTIc)
 set (PRAgMaTIc_VERSION_MAJOR 1)
 set (PRAgMaTIc_VERSION_MINOR 3)
 
-set (CMAKE_MODULE_PATH CMake/Modules ${CMAKE_MODULE_PATH})
+set (CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake/Modules ${CMAKE_MODULE_PATH})
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 enable_language(CXX)
 enable_language(C)
@@ -73,9 +77,9 @@ add_subdirectory(tests EXCLUDE_FROM_ALL)
 install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
 install(FILES libpragmatic.so DESTINATION lib)
 
-ADD_EXECUTABLE(./bin/coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
+ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(./bin/jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(./bin/jpeg2mesh ${PRAGMATIC_LIBRARIES})
+ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
 
