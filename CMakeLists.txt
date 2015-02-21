@@ -75,7 +75,7 @@ target_link_libraries(pragmatic metis)
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
 install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
-install(FILES libpragmatic.so DESTINATION lib)
+install(FILES lib/libpragmatic.so DESTINATION lib)
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
