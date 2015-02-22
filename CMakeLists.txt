@@ -15,11 +15,11 @@ enable_language(CXX)
 enable_language(C)
 
 set (PRAGMATIC_LIBRARIES)
-FIND_PACKAGE(VTK REQUIRED)
+FIND_PACKAGE(VTK REQUIRED NO_MODULE)
 if(VTK_FOUND)
   add_definitions(-DHAVE_VTK)
   include(${VTK_USE_FILE})
-  set (PRAGMATIC_LIBRARIES vtkIO vtkGraphics vtkImaging vtkFiltering vtkCommon vtksys ${PRAGMATIC_LIBRARIES})
+  set (PRAGMATIC_LIBRARIES ${VTK_LIBRARIES} ${PRAGMATIC_LIBRARIES})
 endif()
  
 include(CheckCXXCompilerFlag)
