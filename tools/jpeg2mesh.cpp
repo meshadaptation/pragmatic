@@ -157,16 +157,25 @@ int main(int argc, char **argv){
   vtkSmartPointer<vtkImageGaussianSmooth> gsmooth = vtkSmartPointer<vtkImageGaussianSmooth>::New();
   gsmooth->SetStandardDeviation(9);
   gsmooth->SetDimensionality(2);
+#if VTK_MAJOR_VERSION < 6
   gsmooth->SetInput(reader->GetOutput());
+#else
+  gsmooth->SetInputConnection(reader->GetOutputPort());
+#endif
   gsmooth->Update();
-  vtkImageData *image = gsmooth->GetOutput();
-  // vtkImageData *image = reader->GetOutput();
 
   // Convert image to triangulated unstructured grid
   vtkSmartPointer<vtkDataSetTriangleFilter> image2ug = vtkSmartPointer<vtkDataSetTriangleFilter>::New();
-  image2ug->SetInput(image);
+#if VTK_MAJOR_VERSION < 6
+  image2ug->SetInput(gsmooth->GetOutput());
+#else
+  image2ug->SetInputConnection(gsmooth->GetOutputPort());
+#endif
+
   vtkUnstructuredGrid *ug = image2ug->GetOutput();
+#if VTK_MAJOR_VERSION < 6
   ug->Update();
+#endif
   
   size_t NNodes = ug->GetNumberOfPoints();
   std::vector<double> x(NNodes),y(NNodes), imageR(NNodes), imageG(NNodes), imageB(NNodes);
