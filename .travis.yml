@@ -1,4 +1,7 @@
 language: cpp
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -y libvtk5-dev libvtk5.8
 compiler:
   - gcc
   - clang
