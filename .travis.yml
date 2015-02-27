@@ -8,5 +8,10 @@ compiler:
   - gcc
   - clang
 # Change this to your needs
-script: cmake . && make && make -c tests test
+script:
+  - cmake .
+  - make
+  - cd tests/
+  - make
+  - make test
 
