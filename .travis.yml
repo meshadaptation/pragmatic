@@ -4,9 +4,9 @@ before_install:
   - sudo apt-get install -y libvtk5-dev libvtk5.8
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
   - sudo apt-get install -y libparmetis-dev
+install: travis_wait mvn install
 compiler:
   - gcc
-  - clang
 # Change this to your needs
 script:
   - mkdir build
@@ -15,5 +15,5 @@ script:
   - make
   - cd tests/
   - make
-  - make test
+  - travis_wait make test
 
