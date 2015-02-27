@@ -38,6 +38,7 @@
 #ifndef SMOOTH_H
 #define SMOOTH_H
 
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -175,15 +176,15 @@ template<typename real_t, int dim>
 #pragma omp for schedule(guided)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
-	    active_vertices[node] = 0;
+            active_vertices[node] = 0;
 
-	    if(smart_laplacian_kernel(node)){
-	      active_vertices[node] = 1;
+            if(smart_laplacian_kernel(node)){
+              active_vertices[node] = 1;
 	      
-	      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		active_vertices[*it] = 1;
-	      }
-	    }
+              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                active_vertices[*it] = 1;
+              }
+            }
           }
         }
 	
@@ -208,15 +209,15 @@ template<typename real_t, int dim>
 
               // Only process if it is active.
               if(active_vertices[node]){
-		active_vertices[node] = 0;
-		
-		if(smart_laplacian_kernel(node)){
-		  active_vertices[node] = 1;
-		  
-		  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		    active_vertices[*it] = 1;
-		  }
-		}
+                active_vertices[node] = 0;
+
+                if(smart_laplacian_kernel(node)){
+                  active_vertices[node] = 1;
+
+                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                    active_vertices[*it] = 1;
+                  }
+                }
               }
             }
           }
@@ -303,15 +304,15 @@ template<typename real_t, int dim>
 #pragma omp for schedule(guided)
           for(int cn=0;cn<node_set_size;cn++){
             index_t node = colour_sets[ic][cn];
-	    active_vertices[node] = 0;
+            active_vertices[node] = 0;
 
-	    if(optimisation_linf_kernel(node)){
-	      active_vertices[node] = 1;
-	      
-	      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		active_vertices[*it] = 1;
-	      }
-	    }
+            if(optimisation_linf_kernel(node)){
+              active_vertices[node] = 1;
+
+              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                active_vertices[*it] = 1;
+              }
+            }
           }
         }
 	
@@ -336,15 +337,15 @@ template<typename real_t, int dim>
 
               // Only process if it is active.
               if(active_vertices[node]){
-		active_vertices[node] = 0;
-		
-		if(optimisation_linf_kernel(node)){
-		  active_vertices[node] = 1;
-		  
-		  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-		    active_vertices[*it] = 1;
-		  }
-		}
+                active_vertices[node] = 0;
+
+                if(optimisation_linf_kernel(node)){
+                  active_vertices[node] = 1;
+
+                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
+                    active_vertices[*it] = 1;
+                  }
+                }
               }
             }
           }
@@ -366,10 +367,24 @@ template<typename real_t, int dim>
 
   // Laplacian smoothing
   void laplacian(int max_iterations=10){
-    init_cache();
+    int NNodes = _mesh->get_number_nodes();
+    int NElements = _mesh->get_number_elements();
+    std::vector<bool> is_boundary(NNodes, false);
+    for(int i=0;i<NElements;i++){
+      const int *n=_mesh->get_element(i);
+      if(n[0]==-1)
+        continue;
+
+      for(size_t j=0;j<nloc;j++){
+        if(_mesh->boundary[i*nloc+j]>0){
+          for(size_t k=1;k<nloc;k++){
+            is_boundary[n[(j+k)%nloc]] = true;
+          }
+        }
+      }
+    }
     
     std::vector<int> halo_elements;
-    int NElements = _mesh->get_number_elements();
     if(mpi_nparts>1){
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
@@ -385,7 +400,88 @@ template<typename real_t, int dim>
       }
     }
 
+    std::vector< std::atomic<unsigned int> > vLocks(_mesh->NNodes);
     // Sweep through all vertices.
+#pragma omp parallel
+    {
+#pragma omp for
+      for(unsigned int i=0; i<_mesh->NNodes; ++i){
+        vLocks[i].store(0, std::memory_order_relaxed);
+      }
+
+      std::vector<index_t> retry, new_retry;
+#pragma omp for schedule(guided) nowait
+      for(index_t node=0; node<_mesh->get_number_nodes(); ++node){
+        if((!_mesh->is_owned_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
+          continue;
+
+        bool abort = false;
+        std::vector<index_t> locks_held;
+
+        int oldval = vLocks[node].load(std::memory_order_relaxed);
+        if((oldval & 1) != 0)
+          continue;
+        vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        locks_held.push_back(node);
+
+        for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin(); it!=_mesh->NNList[node].end(); ++it){
+          int oldval = vLocks[*it].load(std::memory_order_relaxed);
+          if((oldval & 1) != 0){
+            abort = true;
+            break;
+          }
+          vLocks[*it].fetch_or(1, std::memory_order_acq_rel);
+          locks_held.push_back(*it);
+        }
+
+        if(!abort)
+          laplacian_kernel(node);
+        else
+          retry.push_back(node);
+
+        for(typename std::vector<index_t>::const_iterator it=locks_held.begin(); it!=locks_held.end(); ++it){
+          vLocks[*it].store(0, std::memory_order_release);
+        }
+      }
+
+      while(retry.size()>0){
+        new_retry.clear();
+
+        for(typename std::vector<index_t>::const_iterator r=retry.begin(); r!=retry.end(); ++r){
+          index_t node = *r;
+          bool abort = false;
+          std::vector<index_t> locks_held;
+
+          int oldval = vLocks[node].load(std::memory_order_relaxed);
+          if((oldval & 1) != 0)
+            continue;
+          vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          locks_held.push_back(node);
+
+          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin(); it!=_mesh->NNList[node].end(); ++it){
+            int oldval = vLocks[*it].load(std::memory_order_relaxed);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
+            }
+            vLocks[*it].fetch_or(1, std::memory_order_acq_rel);
+            locks_held.push_back(*it);
+          }
+
+          if(!abort)
+            laplacian_kernel(node);
+          else
+            new_retry.push_back(node);
+
+          for(typename std::vector<index_t>::const_iterator it=locks_held.begin(); it!=locks_held.end(); ++it){
+            vLocks[*it].store(0, std::memory_order_release);
+          }
+        }
+
+        retry.swap(new_retry);
+      }
+    }
+/*
     int max_colour = 0;
     if(!colour_sets.empty())
       max_colour = colour_sets.rbegin()->first;
@@ -404,8 +500,8 @@ template<typename real_t, int dim>
 #pragma omp for schedule(guided)
             for(int cn=0;cn<node_set_size;cn++){
               index_t node = colour_sets[ic][cn];
-	      
-	      laplacian_kernel(node);
+
+              laplacian_kernel(node);
             }
           }
           if(mpi_nparts>1){
@@ -417,6 +513,7 @@ template<typename real_t, int dim>
         }
       }
     }
+*/
     
     return;
   }
