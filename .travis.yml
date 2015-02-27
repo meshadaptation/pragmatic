@@ -9,7 +9,9 @@ compiler:
   - clang
 # Change this to your needs
 script:
-  - cmake .
+  - mkdir build
+  - cd build
+  - cmake ..
   - make
   - cd tests/
   - make
