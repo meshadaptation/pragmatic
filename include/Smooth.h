@@ -383,7 +383,8 @@ template<typename real_t, int dim>
         }
       }
     }
-    
+
+/*
     std::vector<int> halo_elements;
     if(mpi_nparts>1){
       for(int i=0;i<NElements;i++){
@@ -399,39 +400,37 @@ template<typename real_t, int dim>
         }
       }
     }
+*/
 
-    std::vector< std::atomic<unsigned int> > vLocks(_mesh->NNodes);
+    std::vector< std::atomic<unsigned int> > vLocks(NNodes);
     // Sweep through all vertices.
 #pragma omp parallel
     {
 #pragma omp for
-      for(unsigned int i=0; i<_mesh->NNodes; ++i){
+      for(unsigned int i=0; i<NNodes; ++i){
         vLocks[i].store(0, std::memory_order_relaxed);
       }
 
       std::vector<index_t> retry, new_retry;
 #pragma omp for schedule(guided) nowait
-      for(index_t node=0; node<_mesh->get_number_nodes(); ++node){
-        if((!_mesh->is_owned_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
+      for(index_t node=0; node<NNodes; ++node){
+        if((_mesh->is_halo_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
           continue;
 
         bool abort = false;
-        std::vector<index_t> locks_held;
 
-        int oldval = vLocks[node].load(std::memory_order_relaxed);
-        if((oldval & 1) != 0)
+        int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        if((oldval & 1) != 0){
+          retry.push_back(node);
           continue;
-        vLocks[node].fetch_or(1, std::memory_order_acq_rel);
-        locks_held.push_back(node);
+        }
 
-        for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin(); it!=_mesh->NNList[node].end(); ++it){
-          int oldval = vLocks[*it].load(std::memory_order_relaxed);
+        for(auto& it : _mesh->NNList[node]){
+          int oldval = vLocks[it].load(std::memory_order_acquire);
           if((oldval & 1) != 0){
             abort = true;
             break;
           }
-          vLocks[*it].fetch_or(1, std::memory_order_acq_rel);
-          locks_held.push_back(*it);
         }
 
         if(!abort)
@@ -439,33 +438,27 @@ template<typename real_t, int dim>
         else
           retry.push_back(node);
 
-        for(typename std::vector<index_t>::const_iterator it=locks_held.begin(); it!=locks_held.end(); ++it){
-          vLocks[*it].store(0, std::memory_order_release);
-        }
+        vLocks[node].store(0, std::memory_order_release);
       }
 
       while(retry.size()>0){
         new_retry.clear();
 
-        for(typename std::vector<index_t>::const_iterator r=retry.begin(); r!=retry.end(); ++r){
-          index_t node = *r;
+        for(auto& node : retry){
           bool abort = false;
-          std::vector<index_t> locks_held;
 
-          int oldval = vLocks[node].load(std::memory_order_relaxed);
-          if((oldval & 1) != 0)
+          int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            new_retry.push_back(node);
             continue;
-          vLocks[node].fetch_or(1, std::memory_order_acq_rel);
-          locks_held.push_back(node);
+          }
 
-          for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin(); it!=_mesh->NNList[node].end(); ++it){
-            int oldval = vLocks[*it].load(std::memory_order_relaxed);
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it].load(std::memory_order_acquire);
             if((oldval & 1) != 0){
               abort = true;
               break;
             }
-            vLocks[*it].fetch_or(1, std::memory_order_acq_rel);
-            locks_held.push_back(*it);
           }
 
           if(!abort)
@@ -473,9 +466,7 @@ template<typename real_t, int dim>
           else
             new_retry.push_back(node);
 
-          for(typename std::vector<index_t>::const_iterator it=locks_held.begin(); it!=locks_held.end(); ++it){
-            vLocks[*it].store(0, std::memory_order_release);
-          }
+          vLocks[node].store(0, std::memory_order_release);
         }
 
         retry.swap(new_retry);

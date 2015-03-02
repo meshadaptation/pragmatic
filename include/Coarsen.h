@@ -39,6 +39,7 @@
 #define COARSEN_H
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <limits>
 #include <set>
@@ -83,22 +84,7 @@ template<typename real_t, int dim> class Coarsen{
     }
 
     nnodes_reserve = 0;
-    nthreads = pragmatic_nthreads();
-
     dynamic_vertex = NULL;
-
-    for(int i=0; i<3; ++i){
-      worklist[i] = NULL;
-    }
-
-    node_colour = NULL;
-
-    for(int i=0; i<3; ++i)
-      ind_set_size[i].resize(max_colour, 0);
-    ind_sets.resize(nthreads, std::vector< std::vector<index_t> >(max_colour));
-    range_indexer.resize(nthreads, std::vector< std::pair<size_t,size_t> >(max_colour, std::pair<size_t,size_t>(0,0)));
-
-    def_ops = new DeferredOperations<real_t>(_mesh, nthreads, defOp_scaling_factor);
   }
 
   /// Default destructor.
@@ -108,16 +94,6 @@ template<typename real_t, int dim> class Coarsen{
 
     if(dynamic_vertex!=NULL)
       delete[] dynamic_vertex;
-
-    if(node_colour!=NULL)
-      delete[] node_colour;
-
-    for(int i=0; i<3; ++i){
-      if(worklist[i] != NULL)
-        delete[] worklist[i];
-    }
-
-    delete def_ops;
   }
 
   /*! Perform coarsening.
@@ -137,331 +113,106 @@ template<typename real_t, int dim> class Coarsen{
         delete [] dynamic_vertex;
 
       dynamic_vertex = new index_t[NNodes];
-
-      GlobalActiveSet.resize(NNodes);
-
-      for(int i=0; i<3; ++i){
-        if(worklist[i] != NULL)
-          delete[] worklist[i];
-        worklist[i] = new index_t[NNodes];
-      }
-
-      if(node_colour!=NULL)
-        delete[] node_colour;
-
-      node_colour = new int[NNodes];
     }
+
+    std::vector< std::atomic<unsigned int> > vLocks(NNodes);
 
 #pragma omp parallel
     {
-      const int tid = pragmatic_thread_id();
-
-      // Thread-private array of forbidden colours
-      std::vector<index_t> forbiddenColours(max_colour, std::numeric_limits<index_t>::max());
-
-      /* dynamic_vertex[i] >= 0 :: target to collapse node i
-       * dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
-       * dynamic_vertex[i] = -2 :: recalculate collapse - this is how propagation is implemented
-       */
-
-#pragma omp single nowait
-      memset(node_colour, 0, NNodes * sizeof(int));
-
-#pragma omp single nowait
-      {
-        for(int i=0; i<max_colour; ++i)
-          ind_set_size[0][i] = 0;
-        GlobalActiveSet_size[0] = 0;
+#pragma omp for
+      for(unsigned int i=0; i<NNodes; ++i){
+        vLocks[i].store(0, std::memory_order_relaxed);
+        dynamic_vertex[i] = -2;
       }
 
-      // Mark all vertices for evaluation.
-#pragma omp for schedule(guided)
-      for(size_t i=0; i<NNodes; ++i){
-        dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
+      // Vector "retry" is used to store both aborted vertices and propagated vertices.
+      std::vector<index_t> retry, new_retry;
+#pragma omp for schedule(guided) nowait
+      for(index_t node=0; node<NNodes; ++node){
+        bool abort = false;
+        std::vector<index_t> locks_held;
+
+        int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        if((oldval & 1) != 0){
+          retry.push_back(node);
+          continue;
+        }
+        locks_held.push_back(node);
+
+        for(auto& it : _mesh->NNList[node]){
+          int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            abort = true;
+            break;
+          }
+          locks_held.push_back(it);
+        }
+
+        if(!abort){
+          index_t target = coarsen_identify_kernel(node, L_low, L_max);
+          if(target>=0){
+            for(auto& it : _mesh->NNList[node]){
+              retry.push_back(it);
+              dynamic_vertex[it] = -2;
+            }
+            coarsen_kernel(node, target);
+            dynamic_vertex[node] = -1;
+          }
+        }
+        else
+          retry.push_back(node);
+
+        for(auto& it : locks_held){
+          vLocks[it].store(0, std::memory_order_release);
+        }
       }
 
-      // Variable for accessing GlobalActiveSet_size[rnd] and ind_set_size[rnd]
-      int rnd = 2;
+      while(retry.size()>0){
+        new_retry.clear();
 
-      bool first_time = true;
-      do{
-        // Switch to the next round
-        rnd = (rnd+1)%3;
+        for(auto& node : retry){
+          bool abort = false;
+          std::vector<index_t> locks_held;
 
-        // Prepare worklists for conflict resolution.
-        // Reset GlobalActiveSet_size and ind_set_size for next (not this!) round.
-#pragma omp single nowait
-        {
-          for(int i=0; i<3; ++i)
-            worklist_size[i] = 0;
-
-          int next_rnd = (rnd+1)%3;
-          for(int i=0; i<max_colour; ++i)
-            ind_set_size[next_rnd][i] = 0;
-          GlobalActiveSet_size[next_rnd] = 0;
-        }
-
-        if(!first_time){
-#pragma omp for schedule(guided)
-          for(size_t i=0; i<NNodes; ++i){
-            if(dynamic_vertex[i] == -2){
-              dynamic_vertex[i] = coarsen_identify_kernel(i, L_low, L_max);
-            }
-            node_colour[i] = 0;
+          int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            new_retry.push_back(node);
+            continue;
           }
-        }else
-          first_time = false;
+          locks_held.push_back(node);
 
-#pragma omp barrier
-        // Colour the active sub-mesh
-        std::vector<index_t> local_coloured;
-#pragma omp for schedule(guided)
-        for(size_t i=0; i<NNodes; ++i){
-          if(dynamic_vertex[i]>=0){
-            /*
-             * Create subNNList for vertex i and also execute the first parallel
-             * loop of RokosGorman colouring. This way, two time-consuming barriers,
-             * the one at the end of the aforementioned loop and the one a few lines
-             * below this comment, are merged into one.
-             */
-            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[i].begin(); jt!=_mesh->NNList[i].end(); ++jt){
-              if(dynamic_vertex[*jt]>=0){
-                forbiddenColours[node_colour[*jt]] = (index_t) i;
-              }
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
+            }
+            locks_held.push_back(it);
+          }
 
-              for(size_t j=0; j<forbiddenColours.size(); ++j){
-                if(forbiddenColours[j] != (index_t) i){
-                  node_colour[i] = (int) j;
-                  break;
+          if(!abort){
+            if(dynamic_vertex[node] == -2){
+              index_t target = coarsen_identify_kernel(node, L_low, L_max);
+              if(target>=0){
+                for(auto& it : _mesh->NNList[node]){
+                  new_retry.push_back(it);
+                  dynamic_vertex[it] = -2;
                 }
+                coarsen_kernel(node, target);
+                dynamic_vertex[node] = -1;
               }
             }
+          }
+          else
+            new_retry.push_back(node);
 
-            local_coloured.push_back(i);
+          for(auto& it : locks_held){
+            vLocks[it].store(0, std::memory_order_release);
           }
         }
 
-        if(local_coloured.size()>0){
-          size_t pos;
-          pos = pragmatic_omp_atomic_capture(&GlobalActiveSet_size[rnd], local_coloured.size());
-          memcpy(&GlobalActiveSet[pos], &local_coloured[0], local_coloured.size() * sizeof(index_t));
-        }
-
-#pragma omp barrier
-        if(GlobalActiveSet_size[rnd]>0){
-          for(int set_no=0; set_no<max_colour; ++set_no){
-            ind_sets[tid][set_no].clear();
-            range_indexer[tid][set_no].first = std::numeric_limits<size_t>::infinity();
-            range_indexer[tid][set_no].second = std::numeric_limits<size_t>::infinity();
-          }
-
-          // Continue colouring and coarsening
-          std::vector<index_t> conflicts;
-
-#pragma omp for schedule(guided)
-          for(size_t i=0; i<GlobalActiveSet_size[rnd]; ++i){
-            bool defective = false;
-            index_t n = GlobalActiveSet[i];
-            for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[n].begin(); jt!=_mesh->NNList[n].end(); ++jt){
-              if(dynamic_vertex[*jt]>=0){
-                if(node_colour[n] == node_colour[*jt]){
-                  // No need to mark both vertices as defectively coloured.
-                  // Just mark the one with the lesser ID.
-                  if(n < *jt){
-                    defective = true;
-                    break;
-                  }
-                }
-              }
-            }
-
-            if(defective){
-              conflicts.push_back(n);
-
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[n].begin(); jt!=_mesh->NNList[n].end(); ++jt){
-                if(dynamic_vertex[*jt]>=0){
-                  int c = node_colour[*jt];
-                  forbiddenColours[c] = n;
-                }
-              }
-
-              for(size_t j=0; j<forbiddenColours.size(); j++){
-                if(forbiddenColours[j] != n){
-                  node_colour[n] = (int) j;
-                  break;
-                }
-              }
-            }else{
-              ind_sets[tid][node_colour[n]].push_back(n);
-            }
-          }
-
-          size_t pos;
-          pos = pragmatic_omp_atomic_capture(&worklist_size[0], conflicts.size());
-
-          memcpy(&worklist[0][pos], &conflicts[0], conflicts.size() * sizeof(index_t));
-
-          conflicts.clear();
-#pragma omp barrier
-
-          int wl = 0;
-
-          while(worklist_size[wl]){
-#pragma omp for schedule(guided)
-            for(size_t item=0; item<worklist_size[wl]; ++item){
-              index_t n = worklist[wl][item];
-              bool defective = false;
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[n].begin(); jt!=_mesh->NNList[n].end(); ++jt){
-                if(dynamic_vertex[*jt]>=0){
-                  if(node_colour[n] == node_colour[*jt]){
-                    // No need to mark both vertices as defectively coloured.
-                    // Just mark the one with the lesser ID.
-                    if(n < *jt){
-                      defective = true;
-                      break;
-                    }
-                  }
-                }
-              }
-
-              if(defective){
-                conflicts.push_back(n);
-
-                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[n].begin(); jt!=_mesh->NNList[n].end(); ++jt){
-                  if(dynamic_vertex[*jt]>=0){
-                    int c = node_colour[*jt];
-                    forbiddenColours[c] = n;
-                  }
-                }
-
-                for(size_t j=0; j<forbiddenColours.size(); j++){
-                  if(forbiddenColours[j] != n){
-                    node_colour[n] = j;
-                    break;
-                  }
-                }
-              }else{
-                ind_sets[tid][node_colour[n]].push_back(n);
-              }
-            }
-
-            // Switch worklist
-            wl = (wl+1)%3;
-
-            size_t pos = pragmatic_omp_atomic_capture(&worklist_size[wl], conflicts.size());
-
-            memcpy(&worklist[wl][pos], &conflicts[0], conflicts.size() * sizeof(index_t));
-
-            conflicts.clear();
-
-            // Clear the next worklist
-#pragma omp single
-            {
-              worklist_size[(wl+1)%3] = 0;
-            }
-          }
-
-          for(int set_no=0; set_no<max_colour; ++set_no){
-            if(ind_sets[tid][set_no].size()>0){
-              range_indexer[tid][set_no].first = pragmatic_omp_atomic_capture(&ind_set_size[rnd][set_no], ind_sets[tid][set_no].size());
-              range_indexer[tid][set_no].second = range_indexer[tid][set_no].first + ind_sets[tid][set_no].size();
-            }
-          }
-
-#pragma omp barrier
-          /* Start processing independent sets. After processing each set, colouring
-           * might be invalid. More precisely, it's the target vertices whose colours
-           * might clash with their neighbours' colours. To avoid hazards, we just
-           * un-colour these vertices if their colour clashes with the colours of
-           * their new neighbours. Being a neighbour of a removed vertex, the target
-           * vertex will be marked for re-evaluation during coarsening of rm_vertex,
-           * i.e. dynamic_vertex[target_target] == -2, so it will get a chance to be
-           * processed at the next iteration of the do...while loop, when a new
-           * colouring of the active sub-mesh will have been established. This is an
-           * optimised approach compared to only processing the maximal independent
-           * set and then discarding the other colours and looping all over again -
-           * at least we make use of the existing colouring as much as possible.
-           */
-
-          for(int set_no=0; set_no<max_colour; ++set_no){
-            if(ind_set_size[rnd][set_no] == 0)
-              continue;
-
-            // Sort range indexer
-            std::vector<range_element> range;
-            for(int t=0; t<nthreads; ++t){
-              if(range_indexer[t][set_no].first != range_indexer[t][set_no].second)
-                range.push_back(range_element(range_indexer[t][set_no], t));
-            }
-            std::sort(range.begin(), range.end(), pragmatic_range_element_comparator);
-
-#pragma omp for schedule(guided)
-            for(size_t idx=0; idx<ind_set_size[rnd][set_no]; ++idx){
-              // Find which vertex corresponds to idx.
-              index_t rm_vertex = -1;
-              std::vector<range_element>::iterator ele = std::lower_bound(range.begin(), range.end(),
-                  range_element(std::pair<size_t,size_t> (idx,idx), 0), pragmatic_range_element_finder);
-              assert(ele != range.end());
-              assert(idx >= range_indexer[ele->second][set_no].first && idx < range_indexer[ele->second][set_no].second);
-              rm_vertex = ind_sets[ele->second][set_no][idx - range_indexer[ele->second][set_no].first];
-              assert(rm_vertex>=0);
-
-              // If the node has been un-coloured, skip it.
-              if(node_colour[rm_vertex] != set_no)
-                continue;
-
-              /* If this rm_vertex is marked for re-evaluation, it means that the
-               * local neighbourhood has changed since coarsen_identify_kernel was
-               * called for this vertex. Call coarsen_identify_kernel again.
-               * Obviously, this check is redundant for set_no=0.
-               */
-
-              if(dynamic_vertex[rm_vertex] == -2)
-                dynamic_vertex[rm_vertex] = coarsen_identify_kernel(rm_vertex, L_low, L_max);
-
-              if(dynamic_vertex[rm_vertex] < 0)
-                continue;
-
-              index_t target_vertex = dynamic_vertex[rm_vertex];
-
-              // Mark neighbours for re-evaluation.
-              for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt)
-                def_ops->propagate_coarsening(*jt, tid);
-
-              // Un-colour target_vertex if its colour clashes with any of its new neighbours.
-              if(node_colour[target_vertex] >= 0){
-                for(typename std::vector<index_t>::const_iterator jt=_mesh->NNList[rm_vertex].begin();jt!=_mesh->NNList[rm_vertex].end();++jt){
-                  if(*jt != target_vertex){
-                    if(node_colour[*jt] == node_colour[target_vertex]){
-                      def_ops->reset_colour(target_vertex, tid);
-                      break;
-                    }
-                  }
-                }
-              }
-
-              // Mark rm_vertex as inactive.
-              dynamic_vertex[rm_vertex] = -1;
-
-              // Coarsen the edge.
-              coarsen_kernel(rm_vertex, target_vertex, tid);
-            }
-
-#pragma omp for schedule(guided)
-            for(size_t vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid){
-              for(int i=0; i<nthreads; ++i){
-                def_ops->commit_remNN(i, vtid);
-                def_ops->commit_addNN(i, vtid);
-                def_ops->commit_remNE(i, vtid);
-                def_ops->commit_addNE(i, vtid);
-                def_ops->commit_repEN(i, vtid);
-                def_ops->commit_coarsening_propagation(dynamic_vertex, i, vtid);
-                def_ops->commit_colour_reset(node_colour, i, vtid);
-              }
-            }
-          }
-        }
-      }while(GlobalActiveSet_size[rnd]>0);
+        retry.swap(new_retry);
+      }
     }
   }
 
@@ -470,6 +221,10 @@ template<typename real_t, int dim> class Coarsen{
   /*! Kernel for identifying what vertex (if any) rm_vertex should collapse onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should collapse onto, negative if no operation is to be performed.
+   *
+   * dynamic_vertex[i] >= 0 :: target to collapse node i
+   * dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
+   * dynamic_vertex[i] = -2 :: recalculate collapse - this is how propagation is implemented
    */
   int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const{
     // Cannot delete if already deleted.
@@ -646,7 +401,7 @@ template<typename real_t, int dim> class Coarsen{
   /*! Kernel for performing coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
-  void coarsen_kernel(index_t rm_vertex, index_t target_vertex, int tid){
+  void coarsen_kernel(index_t rm_vertex, index_t target_vertex){
     std::set<index_t> deleted_elements;
     std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
@@ -670,7 +425,7 @@ template<typename real_t, int dim> class Coarsen{
         if(vid==rm_vertex){
           lrm_vertex = i;
         }else{
-          def_ops->remNE(vid, eid, tid);
+          _mesh->NEList[vid].erase(eid);
 
           // If this vertex is neither rm_vertex nor target_vertex, it is one of the common neighbours.
           if(vid != target_vertex){
@@ -729,24 +484,25 @@ template<typename real_t, int dim> class Coarsen{
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       for(size_t i=0;i<nloc;i++){
         if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
-          def_ops->repEN(nloc*(*ee)+i, target_vertex, tid);
+          _mesh->_ENList[nloc*(*ee)+i] = target_vertex;
           break;
         }
       }
 
       // Add element to target_vertex's NEList.
-      def_ops->addNE(target_vertex, *ee, tid);
+      _mesh->NEList[target_vertex].insert(*ee);
     }
 
     // Update surrounding NNList.
     common_patch.insert(target_vertex);
     for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      def_ops->remNN(*nn, rm_vertex, tid);
+      typename std::vector<index_t>::iterator it = std::find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
+      _mesh->NNList[*nn].erase(it);
 
       // Find all entries pointing back to rm_vertex and update them to target_vertex.
       if(common_patch.count(*nn)==0){
-        def_ops->addNN(*nn, target_vertex, tid);
-        def_ops->addNN(target_vertex, *nn, tid);
+        _mesh->NNList[*nn].push_back(target_vertex);
+        _mesh->NNList[target_vertex].push_back(*nn);
       }
     }
 
@@ -759,30 +515,12 @@ template<typename real_t, int dim> class Coarsen{
   size_t nnodes_reserve;
   index_t *dynamic_vertex;
 
-  // Colouring
-  int *node_colour;
-  static const int max_colour = (dim==2?16:64);
-  std::vector<index_t> GlobalActiveSet;
-  size_t GlobalActiveSet_size[3];
-  std::vector<size_t> ind_set_size[3];
-  std::vector< std::vector< std::vector<index_t> > > ind_sets;
-  std::vector< std::vector< std::pair<size_t,size_t> > > range_indexer;
-
-  // Used for iterative colouring
-  index_t* worklist[3];
-  size_t worklist_size[3];
-
-  DeferredOperations<real_t>* def_ops;
-  static const int defOp_scaling_factor = 4;
-
   real_t _L_low, _L_max;
   bool delete_slivers;
 
   const static size_t ndims=dim;
   const static size_t nloc=dim+1;
   const static size_t msize=(dim==2?3:6);
-
-  int nthreads;
 };
 
 #endif
