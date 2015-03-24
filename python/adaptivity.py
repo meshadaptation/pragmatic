@@ -55,7 +55,7 @@ anisotropically.
 
 import ctypes, ctypes.util, numpy, scipy.sparse, scipy.sparse.linalg
 from numpy import array, zeros, ones, any, arange, isnan
-from numpy.linalg import eig as pyeig
+from numpy.linalg import eigh as pyeig
 from dolfin import *
 
 __all__ = ["_libpragmatic",
