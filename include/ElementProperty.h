@@ -96,7 +96,7 @@ class ElementProperty{
    * @param x1 pointer to 2D position for second point in triangle.
    * @param x2 pointer to 2D position for third point in triangle.
    */
-  real_t area(const real_t *x0, const real_t *x1, const real_t *x2) const{
+ inline real_t area(const real_t *x0, const real_t *x1, const real_t *x2) const{
     real_t x01 = (x0[0] - x1[0]);
     real_t y01 = (x0[1] - x1[1]);
     
@@ -112,7 +112,7 @@ class ElementProperty{
    * @param x2 pointer to 3D position for third point in triangle.
    * @param x3 pointer to 3D position for forth point in triangle.
    */
-  real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
+ inline real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
 
     real_t x01 = (x0[0] - x1[0]);
     real_t x02 = (x0[0] - x2[0]);
@@ -136,7 +136,7 @@ class ElementProperty{
    * @param m metric tensor for first point.
    */
   template<int dim>
-  double length(const real_t x0[], const real_t x1[], const double m[]) const{
+  inline double length(const real_t x0[], const real_t x1[], const double m[]) const{
     if(dim==2){
       return length2d(x0, x1, m);
     }else{ //if(dim==3)
@@ -150,7 +150,7 @@ class ElementProperty{
    * @param x1 coordinate at finish of line segment.
    * @param m metric tensor for first point.
    */
-  static double length2d(const real_t x0[], const real_t x1[], const double m[]){
+  static inline double length2d(const real_t x0[], const real_t x1[], const double m[]){
     double x=x0[0] - x1[0];
     double y=x0[1] - x1[1];
     
@@ -165,7 +165,7 @@ class ElementProperty{
    * @param x1 coordinate at finish of line segment.
    * @param m metric tensor for first point.
    */
-  static double length3d(const real_t x0[], const real_t x1[], const double m[]){
+  static inline double length3d(const real_t x0[], const real_t x1[], const double m[]){
     double x=x0[0] - x1[0];
     double y=x0[1] - x1[1];
     double z=x0[2] - x1[2];
@@ -192,7 +192,7 @@ class ElementProperty{
    * @param m1 2x2 metric tensor for second point.
    * @param m2 2x2 metric tensor for third point.
    */
-  double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
+  inline double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
 		  const double *m0, const double *m1, const double *m2){
     // Metric tensor averaged over the element
     double m00 = (m0[0] + m1[0] + m2[0])*inv3;
@@ -215,7 +215,7 @@ class ElementProperty{
    * @param m01 metric index (0,1)
    * @param m11 metric index (1,1)
    */
-  double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
+  inline double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2,
                  double m00, double m01, double m11){
     // l is the length of the perimeter, measured in metric space
     double x01 = x0[0] - x1[0];
@@ -251,7 +251,7 @@ class ElementProperty{
   }
 
   // Gradient of lipnikov functional n0 using a central difference approximation.
-  void lipnikov_grad(int moving,
+  inline void lipnikov_grad(int moving,
 		     const double *x0, const double *x1, const double *x2,
 		     const double *m0,
 		     double *grad){
@@ -294,7 +294,7 @@ class ElementProperty{
    * @param m2 3x3 metric tensor for third point.
    * @param m3 3x3 metric tensor for forth point.
    */
-  double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
+  inline double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                   const double *m0, const double *m1, const double *m2, const double *m3){
     // Metric tensor
     double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
@@ -366,7 +366,7 @@ class ElementProperty{
    * @param x3 pointer to 3D position for third point in tetrahedral.
    * @param m0 3x3 metric tensor for first point.
    */
-  double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
+  inline double lipnikov(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                   const double *m0){
     // Metric tensor
     double m00 = m0[0];
@@ -428,7 +428,7 @@ class ElementProperty{
 
 
   // Gradient of lipnikov functional n0 using a central difference approximation.
-  void lipnikov_grad(int moving,
+  inline void lipnikov_grad(int moving,
 		     const double *x0, const double *x1, const double *x2, const double *x3,
 		     const double *m0,
 		     double *grad){
@@ -469,7 +469,7 @@ class ElementProperty{
    * @param m2 3x3 metric tensor for third point.
    * @param m3 3x3 metric tensor for forth point.
    */
-  real_t sliver(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
+  inline real_t sliver(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                 const double *m0, const double *m1, const double *m2, const double *m3){
     // Metric tensor
     double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
@@ -537,7 +537,7 @@ class ElementProperty{
    * @param m1 2x2 metric tensor for second point.
    * @param m2 2x2 metric tensor for third point.
    */
-  double condition(const real_t *x0, const real_t *x1, const real_t *x2,
+  inline double condition(const real_t *x0, const real_t *x1, const real_t *x2,
                  const double *m0, const double *m1, const double *m2){
     // Metric tensor averaged over the element
     double m00 = (m0[0] + m1[0] + m2[0])*inv3;
@@ -561,7 +561,7 @@ class ElementProperty{
    * @param m01 metric index (0,1)
    * @param m11 metric index (1,1)
    */
-  double condition(const real_t *x0, const real_t *x1, const real_t *x2,
+  inline double condition(const real_t *x0, const real_t *x1, const real_t *x2,
                  double m00, double m01, double m11){
     // l is the length of the perimeter, measured in metric space
     double x01 = x0[0] - x1[0];
@@ -607,7 +607,7 @@ class ElementProperty{
    * @param m2 3x3 metric tensor for third point.
    * @param m3 3x3 metric tensor for forth point.
    */
-  double condition(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
+  inline double condition(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3,
                   const double *m0, const double *m1, const double *m2, const double *m3){
     // Metric tensor
     double m00 = (m0[0] + m1[0] + m2[0] + m3[0])*inv4;
@@ -683,7 +683,7 @@ class ElementProperty{
     return quality;
   }
 
-  int getOrientation() {
+  inline int getOrientation() {
 	return orientation;
   }
 

@@ -47,8 +47,6 @@
 #include <limits>
 #include <random>
 
-#include "Colour.h"
-
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <errno.h>
@@ -110,23 +108,29 @@ template<typename real_t, int dim>
 
   // Smart laplacian mesh smoothing.
   void smart_laplacian(int max_iterations=10, double quality_tol=-1.0){
-    // Calculate all element qualities
+    int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
-    quality.resize(NElements);
-
+    std::vector<bool> is_boundary(NNodes, false);
     double qsum=0;
+
 #pragma omp parallel
     {
 #pragma omp for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
-          quality[i] = 1.0;
+          _mesh->quality[i] = 1.0;
           continue;
         }
+        qsum+=_mesh->quality[i];
 
-        update_quality(i);
-        qsum+=quality[i];
+        for(size_t j=0;j<nloc;j++){
+          if(_mesh->boundary[i*nloc+j]>0){
+            for(size_t k=1;k<nloc;k++){
+              is_boundary[n[(j+k)%nloc]] = true;
+            }
+          }
+        }
       }
     }
     good_q = qsum/NElements;
@@ -134,102 +138,104 @@ template<typename real_t, int dim>
     if(quality_tol>0)
       good_q = quality_tol;
 
-    init_cache();
-
-    std::vector<int> halo_elements;
-    if(mpi_nparts>1){
-      for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
-
-        for(size_t j=0;j<nloc;j++){
-          if(!_mesh->is_owned_node(n[j])){
-            halo_elements.push_back(i);
-            break;
-          }
-        }
-      }
-    }
-
     // Use this to keep track of vertices that are still to be visited.
-    int NNodes = _mesh->get_number_nodes();
-    std::vector<int> active_vertices(NNodes, 0);
+    std::vector<int> active_vertices(NNodes, 1);
 
-    // Find the maximum colour across partitions
-    int max_colour = 0;
-    if(!colour_sets.empty())
-      max_colour = colour_sets.rbegin()->first;
-#ifdef HAVE_MPI
-    if(mpi_nparts>1){
-      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-    }
-#endif
-    
+    if(vLocks.size() < NNodes)
+      vLocks.resize(NNodes);
+
     // First sweep through all vertices. Add vertices adjacent to any
     // vertex moved into the active_vertex list.
 #pragma omp parallel
     {
-      for(int ic=0;ic<=max_colour;ic++){
-        if(colour_sets.count(ic)){
-          int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(guided)
-          for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[ic][cn];
-            active_vertices[node] = 0;
+      std::vector<index_t> retry, next_retry;
 
-            if(smart_laplacian_kernel(node)){
-              active_vertices[node] = 1;
-	      
-              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                active_vertices[*it] = 1;
-              }
+      int iter=0;
+      while((iter++) < max_iterations){
+#pragma omp for schedule(guided) nowait
+        for(index_t node=0; node<NNodes; ++node){
+          if((_mesh->is_halo_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
+            continue;
+
+          if(active_vertices[node] == 0)
+            continue;
+
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            retry.push_back(node);
+            continue;
+          }
+          if(active_vertices[node] != 1){
+            vLocks[node]._a.store(0, std::memory_order_release);
+            continue;
+          }
+
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
             }
           }
-        }
-	
-        if(mpi_nparts>1){
-#pragma omp single
-          {
-            halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
 
-            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-              update_quality(*ie);
+          if(!abort){
+            if(smart_laplacian_kernel(node)){
+              for(auto& it : _mesh->NNList[node]){
+                active_vertices[it] = 1;
+              }
+            }
+            active_vertices[node] = 0;
           }
+          else
+            retry.push_back(node);
+
+          vLocks[node]._a.store(0, std::memory_order_release);
         }
-      }
 
-      for(int iter=1;iter<max_iterations;iter++){
-        for(int ic=0;ic<=max_colour;ic++){
-          if(colour_sets.count(ic)){
-            int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(guided)
-            for(int cn=0;cn<node_set_size;cn++){
-              index_t node = colour_sets[ic][cn];
+        while(retry.size()>0){
+          next_retry.clear();
 
-              // Only process if it is active.
-              if(active_vertices[node]){
-                active_vertices[node] = 0;
+          for(auto& node : retry){
+            if(active_vertices[node] == 0)
+              continue;
 
-                if(smart_laplacian_kernel(node)){
-                  active_vertices[node] = 1;
+            bool abort = false;
 
-                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                    active_vertices[*it] = 1;
-                  }
+            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              next_retry.push_back(node);
+              continue;
+            }
+            if(active_vertices[node] != 1){
+              vLocks[node]._a.store(0, std::memory_order_release);
+              continue;
+            }
+
+            for(auto& it : _mesh->NNList[node]){
+              int oldval = vLocks[it]._a.load(std::memory_order_acquire);
+              if((oldval & 1) != 0){
+                abort = true;
+                break;
+              }
+            }
+
+            if(!abort){
+              if(smart_laplacian_kernel(node)){
+                for(auto& it : _mesh->NNList[node]){
+                  active_vertices[it] = 1;
                 }
               }
+              active_vertices[node] = 0;
             }
-          }
-          if(mpi_nparts>1){
-#pragma omp single
-            {
-              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+            else
+              next_retry.push_back(node);
 
-              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-                update_quality(*ie);
-            }
+            vLocks[node]._a.store(0, std::memory_order_release);
           }
+
+          retry.swap(next_retry);
         }
       }
     }
@@ -239,23 +245,29 @@ template<typename real_t, int dim>
 
   // Linf optimisation based smoothing..
   void optimisation_linf(int max_iterations=10, double quality_tol=-1.0){
-    // Calculate all element qualities
+    int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
-    quality.resize(NElements);
-
+    std::vector<bool> is_boundary(NNodes, false);
     double qsum=0;
+
 #pragma omp parallel
     {
 #pragma omp for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
-          quality[i] = 1.0;
+          _mesh->quality[i] = 1.0;
           continue;
         }
+        qsum+=_mesh->quality[i];
 
-        update_quality(i);
-        qsum+=quality[i];
+        for(size_t j=0;j<nloc;j++){
+          if(_mesh->boundary[i*nloc+j]>0){
+            for(size_t k=1;k<nloc;k++){
+              is_boundary[n[(j+k)%nloc]] = true;
+            }
+          }
+        }
       }
     }
     good_q = qsum/NElements;
@@ -263,101 +275,104 @@ template<typename real_t, int dim>
     if(quality_tol>0)
       good_q = quality_tol;
 
-    init_cache();
-
-    std::vector<int> halo_elements;
-    if(mpi_nparts>1){
-      for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
-
-        for(size_t j=0;j<nloc;j++){
-          if(!_mesh->is_owned_node(n[j])){
-            halo_elements.push_back(i);
-            break;
-          }
-        }
-      }
-    }
-
     // Use this to keep track of vertices that are still to be visited.
-    int NNodes = _mesh->get_number_nodes();
-    std::vector<int> active_vertices(NNodes, 0);
+    std::vector<int> active_vertices(NNodes, 1);
+
+    if(vLocks.size() < NNodes)
+      vLocks.resize(NNodes);
 
     // First sweep through all vertices. Add vertices adjacent to any
     // vertex moved into the active_vertex list.
-    int max_colour = 0;
-    if(!colour_sets.empty())
-      max_colour = colour_sets.rbegin()->first;
-#ifdef HAVE_MPI
-    if(mpi_nparts>1){
-      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-    }
-#endif
-
 #pragma omp parallel
     {
-      for(int ic=1;ic<=max_colour;ic++){
-        if(colour_sets.count(ic)){
-          int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(guided)
-          for(int cn=0;cn<node_set_size;cn++){
-            index_t node = colour_sets[ic][cn];
-            active_vertices[node] = 0;
+      std::vector<index_t> retry, next_retry;
 
-            if(optimisation_linf_kernel(node)){
-              active_vertices[node] = 1;
+      int iter=0;
+      while((iter++) < max_iterations){
+#pragma omp for schedule(guided) nowait
+        for(index_t node=0; node<NNodes; ++node){
+          if((_mesh->is_halo_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
+            continue;
 
-              for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                active_vertices[*it] = 1;
-              }
+          if(active_vertices[node] == 0)
+            continue;
+
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            retry.push_back(node);
+            continue;
+          }
+          if(active_vertices[node] != 1){
+            vLocks[node]._a.store(0, std::memory_order_release);
+            continue;
+          }
+
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
             }
           }
-        }
-	
-        if(mpi_nparts>1){
-#pragma omp single
-          {
-            halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
 
-            for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-              update_quality(*ie);
+          if(!abort){
+            if(optimisation_linf_kernel(node)){
+              for(auto& it : _mesh->NNList[node]){
+                active_vertices[it] = 1;
+              }
+            }
+            active_vertices[node] = 0;
           }
+          else
+            retry.push_back(node);
+
+          vLocks[node]._a.store(0, std::memory_order_release);
         }
-      }
 
-      for(int iter=1;iter<max_iterations;iter++){
-        for(int ic=1;ic<=max_colour;ic++){
-          if(colour_sets.count(ic)){
-            int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(guided)
-            for(int cn=0;cn<node_set_size;cn++){
-              index_t node = colour_sets[ic][cn];
+        while(retry.size()>0){
+          next_retry.clear();
 
-              // Only process if it is active.
-              if(active_vertices[node]){
-                active_vertices[node] = 0;
+          for(auto& node : retry){
+            if(active_vertices[node] == 0)
+              continue;
 
-                if(optimisation_linf_kernel(node)){
-                  active_vertices[node] = 1;
+            bool abort = false;
 
-                  for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[node].begin();it!=_mesh->NNList[node].end();++it){
-                    active_vertices[*it] = 1;
-                  }
+            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              next_retry.push_back(node);
+              continue;
+            }
+            if(active_vertices[node] != 1){
+              vLocks[node]._a.store(0, std::memory_order_release);
+              continue;
+            }
+
+            for(auto& it : _mesh->NNList[node]){
+              int oldval = vLocks[it]._a.load(std::memory_order_acquire);
+              if((oldval & 1) != 0){
+                abort = true;
+                break;
+              }
+            }
+
+            if(!abort){
+              if(optimisation_linf_kernel(node)){
+                for(auto& it : _mesh->NNList[node]){
+                  active_vertices[it] = 1;
                 }
               }
+              active_vertices[node] = 0;
             }
-          }
-          if(mpi_nparts>1){
-#pragma omp single
-            {
-              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
+            else
+              next_retry.push_back(node);
 
-              for(std::vector<int>::const_iterator ie=halo_elements.begin();ie!=halo_elements.end();++ie)
-                update_quality(*ie);
-            }
+            vLocks[node]._a.store(0, std::memory_order_release);
           }
+
+          retry.swap(next_retry);
         }
       }
     }
@@ -370,48 +385,29 @@ template<typename real_t, int dim>
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
     std::vector<bool> is_boundary(NNodes, false);
-    for(int i=0;i<NElements;i++){
-      const int *n=_mesh->get_element(i);
-      if(n[0]==-1)
-        continue;
 
-      for(size_t j=0;j<nloc;j++){
-        if(_mesh->boundary[i*nloc+j]>0){
-          for(size_t k=1;k<nloc;k++){
-            is_boundary[n[(j+k)%nloc]] = true;
-          }
-        }
-      }
-    }
+    if(vLocks.size() < NNodes)
+      vLocks.resize(NNodes);
 
-/*
-    std::vector<int> halo_elements;
-    if(mpi_nparts>1){
-      for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0)
-          continue;
-
-        for(size_t j=0;j<nloc;j++){
-          if(!_mesh->is_owned_node(n[j])){
-            halo_elements.push_back(i);
-            break;
-          }
-        }
-      }
-    }
-*/
-
-    std::vector< std::atomic<unsigned int> > vLocks(NNodes);
     // Sweep through all vertices.
 #pragma omp parallel
     {
-#pragma omp for
-      for(unsigned int i=0; i<NNodes; ++i){
-        vLocks[i].store(0, std::memory_order_relaxed);
+#pragma omp for schedule(guided)
+      for(int i=0;i<NElements;i++){
+        const int *n=_mesh->get_element(i);
+        if(n[0]==-1)
+          continue;
+
+        for(size_t j=0;j<nloc;j++){
+          if(_mesh->boundary[i*nloc+j]>0){
+            for(size_t k=1;k<nloc;k++){
+              is_boundary[n[(j+k)%nloc]] = true;
+            }
+          }
+        }
       }
 
-      std::vector<index_t> retry, new_retry;
+      std::vector<index_t> retry, next_retry;
 #pragma omp for schedule(guided) nowait
       for(index_t node=0; node<NNodes; ++node){
         if((_mesh->is_halo_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
@@ -419,14 +415,14 @@ template<typename real_t, int dim>
 
         bool abort = false;
 
-        int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
         if((oldval & 1) != 0){
           retry.push_back(node);
           continue;
         }
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it].load(std::memory_order_acquire);
+          int oldval = vLocks[it]._a.load(std::memory_order_acquire);
           if((oldval & 1) != 0){
             abort = true;
             break;
@@ -438,23 +434,23 @@ template<typename real_t, int dim>
         else
           retry.push_back(node);
 
-        vLocks[node].store(0, std::memory_order_release);
+        vLocks[node]._a.store(0, std::memory_order_release);
       }
 
       while(retry.size()>0){
-        new_retry.clear();
+        next_retry.clear();
 
         for(auto& node : retry){
           bool abort = false;
 
-          int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
           if((oldval & 1) != 0){
-            new_retry.push_back(node);
+            next_retry.push_back(node);
             continue;
           }
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it].load(std::memory_order_acquire);
+            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
             if((oldval & 1) != 0){
               abort = true;
               break;
@@ -464,47 +460,14 @@ template<typename real_t, int dim>
           if(!abort)
             laplacian_kernel(node);
           else
-            new_retry.push_back(node);
+            next_retry.push_back(node);
 
-          vLocks[node].store(0, std::memory_order_release);
+          vLocks[node]._a.store(0, std::memory_order_release);
         }
 
-        retry.swap(new_retry);
+        retry.swap(next_retry);
       }
     }
-/*
-    int max_colour = 0;
-    if(!colour_sets.empty())
-      max_colour = colour_sets.rbegin()->first;
-#ifdef HAVE_MPI
-    if(mpi_nparts>1){
-      MPI_Allreduce(MPI_IN_PLACE, &max_colour, 1, MPI_INT, MPI_MAX, _mesh->get_mpi_comm());
-    }
-#endif
-
-#pragma omp parallel
-    {
-      for(int iter=1;iter<max_iterations;iter++){
-        for(int ic=1;ic<=max_colour;ic++){
-          if(colour_sets.count(ic)){
-            int node_set_size = colour_sets[ic].size();
-#pragma omp for schedule(guided)
-            for(int cn=0;cn<node_set_size;cn++){
-              index_t node = colour_sets[ic][cn];
-
-              laplacian_kernel(node);
-            }
-          }
-          if(mpi_nparts>1){
-#pragma omp single
-            {
-              halo_update<real_t, dim, dim==2?3:6>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->_coords, _mesh->metric);
-            }
-          }
-        }
-      }
-    }
-*/
     
     return;
   }
@@ -531,7 +494,7 @@ template<typename real_t, int dim>
     if(!valid){
       // Try the mid point.
       for(size_t j=0;j<2;j++)
-	p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
+        p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
       
       valid = generate_location_2d(node, p, mp);
     }
@@ -546,6 +509,9 @@ template<typename real_t, int dim>
     for(size_t j=0;j<3;j++)
       _mesh->metric[node*3+j] = mp[j];
     
+    for(auto& e : _mesh->NEList[node])
+      update_quality_2d(e);
+
     return true;
   }
   
@@ -571,6 +537,9 @@ template<typename real_t, int dim>
     for(size_t j=0;j<6;j++)
       _mesh->metric[node*6+j] = mp[j];
     
+    for(auto& e : _mesh->NEList[node])
+      update_quality_3d(e);
+
     return true;
   }
   
@@ -670,7 +639,7 @@ template<typename real_t, int dim>
     return update;
   }
   
-  bool smart_laplacian_2d_kernel(index_t node){
+  inline bool smart_laplacian_2d_kernel(index_t node){
     real_t p[2];
     laplacian_2d_kernel(node, p);
 
@@ -679,7 +648,7 @@ template<typename real_t, int dim>
     if(!valid){
       // Try the mid point.
       for(size_t j=0;j<2;j++)
-	p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
+        p[j] = 0.5*(p[j] +  _mesh->_coords[node*2+j]);
       
       valid = generate_location_2d(node, p, mp);
     }
@@ -700,6 +669,9 @@ template<typename real_t, int dim>
     for(size_t j=0;j<3;j++)
       _mesh->metric[node*3+j] = mp[j];
     
+    for(auto& e : _mesh->NEList[node])
+      update_quality_2d(e);
+
     return true;
   }
 
@@ -733,6 +705,9 @@ template<typename real_t, int dim>
     for(size_t j=0;j<6;j++)
       _mesh->metric[node*6+j] = mp[j];
     
+    for(auto& e : _mesh->NEList[node])
+      update_quality_3d(e);
+
     return true;
   }
 
@@ -755,8 +730,8 @@ template<typename real_t, int dim>
     // Find the worst element.
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(quality[*it]<worst_element.first)
-        worst_element = std::pair<double, index_t>(quality[*it], *it);
+      if(_mesh->quality[*it]<worst_element.first)
+        worst_element = std::pair<double, index_t>(_mesh->quality[*it], *it);
     }
     assert(worst_element.second!=-1);
 
@@ -826,7 +801,7 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, m0, grad);
 	
       double new_alpha =
-          (quality[*it]-worst_element.first)/
+          (_mesh->quality[*it]-worst_element.first)/
           ((search[0]*grad_w[0]+search[1]*grad_w[1])-
           (search[0]*grad[0]+search[1]*grad[1]));
 
@@ -889,7 +864,7 @@ template<typename real_t, int dim>
       // go backwards and pop quality
       assert(_mesh->NEList[n0].size()==new_quality.size());
       for(typename std::set<index_t>::const_reverse_iterator it=_mesh->NEList[n0].rbegin();it!=_mesh->NEList[n0].rend();++it){
-        quality[*it] = new_quality.back();
+        _mesh->quality[*it] = new_quality.back();
         new_quality.pop_back();
       }
       assert(new_quality.empty());
@@ -899,6 +874,9 @@ template<typename real_t, int dim>
       
       for(size_t i=0;i<msize;i++)
         _mesh->metric[n0*msize+i] = new_m0[i];
+
+      for(auto& e : _mesh->NEList[n0])
+        update_quality_2d(e);
 
       break;
     }
@@ -913,8 +891,8 @@ template<typename real_t, int dim>
     // Find the worst element.
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
     for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(quality[*it]<worst_element.first)
-        worst_element = std::pair<double, index_t>(quality[*it], *it);
+      if(_mesh->quality[*it]<worst_element.first)
+        worst_element = std::pair<double, index_t>(_mesh->quality[*it], *it);
     }
     assert(worst_element.second!=-1);
     
@@ -1034,7 +1012,7 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
 	
       double new_alpha =
-          (quality[*it]-worst_element.first)/
+          (_mesh->quality[*it]-worst_element.first)/
           ((search[0]*grad_w[0]+search[1]*grad_w[1]+search[2]*grad_w[2])-
           (search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]));
 
@@ -1121,7 +1099,7 @@ template<typename real_t, int dim>
       // go backwards and pop quality
       assert(_mesh->NEList[n0].size()==new_quality.size());
       for(typename std::set<index_t>::const_reverse_iterator it=_mesh->NEList[n0].rbegin();it!=_mesh->NEList[n0].rend();++it){
-        quality[*it] = new_quality.back();
+        _mesh->quality[*it] = new_quality.back();
         new_quality.pop_back();
       }
       assert(new_quality.empty());
@@ -1132,44 +1110,13 @@ template<typename real_t, int dim>
       for(size_t i=0;i<msize;i++)
         _mesh->metric[n0*msize+i] = new_m0[i];
 
+      for(auto& e : _mesh->NEList[n0])
+        update_quality_3d(e);
+
       break;
     }
   
     return linf_update;
-  }
-
-  void init_cache(){
-    colour_sets.clear();
-
-    int NNodes = _mesh->get_number_nodes();
-    std::vector<char> colour(NNodes);
-
-    Colour::GebremedhinManne(MPI_COMM_WORLD, NNodes, _mesh->NNList, _mesh->send, _mesh->recv, _mesh->node_owner, colour);
-
-    int NElements = _mesh->get_number_elements();
-    std::vector<bool> is_boundary(NNodes, false);
-    for(int i=0;i<NElements;i++){
-      const int *n=_mesh->get_element(i);
-      if(n[0]==-1)
-        continue;
-  
-      for(size_t j=0;j<nloc;j++){
-        if(_mesh->boundary[i*nloc+j]>0){
-          for(size_t k=1;k<nloc;k++){
-            is_boundary[n[(j+k)%nloc]] = true;
-          }
-        }
-      }
-    }
-
-    for(int i=0;i<NNodes;i++){
-      if((colour[i]<0)||(!_mesh->is_owned_node(i))||(_mesh->NNList[i].empty())||is_boundary[i])
-        continue;
-
-      colour_sets[colour[i]].push_back(i);
-    }
-
-    return;
   }
 
   inline real_t get_x(index_t nid){
@@ -1193,7 +1140,7 @@ template<typename real_t, int dim>
     double patch_quality = std::numeric_limits<double>::max();
 
     for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      patch_quality = std::min(patch_quality, quality[*ie]);
+      patch_quality = std::min(patch_quality, _mesh->quality[*ie]);
     }
 
     return patch_quality;
@@ -1285,7 +1232,7 @@ template<typename real_t, int dim>
     return functional;
   }
 
-  bool generate_location_2d(index_t node, const real_t *p, double *mp){
+  inline bool generate_location_2d(index_t node, const real_t *p, double *mp){
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1};
     int best_e=-1;
@@ -1349,7 +1296,7 @@ template<typename real_t, int dim>
     return true;
   }
 
-  bool generate_location_3d(index_t node, const real_t *p, double *mp){
+  inline bool generate_location_3d(index_t node, const real_t *p, double *mp){
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1, -1};
     int best_e=-1;
@@ -1436,7 +1383,7 @@ template<typename real_t, int dim>
     const double *m1 = _mesh->get_metric(n[1]);
     const double *m2 = _mesh->get_metric(n[2]);
 
-    quality[element] = property->lipnikov(x0, x1, x2,
+    _mesh->quality[element] = property->lipnikov(x0, x1, x2,
 					  m0, m1, m2);
     return;
   }
@@ -1454,20 +1401,19 @@ template<typename real_t, int dim>
     const double *m2 = _mesh->get_metric(n[2]);
     const double *m3 = _mesh->get_metric(n[3]);
 
-    quality[element] = property->lipnikov(x0, x1, x2, x3,
+    _mesh->quality[element] = property->lipnikov(x0, x1, x2, x3,
 					  m0, m1, m2, m3);
     return;
   }
 
   Mesh<real_t> *_mesh;
   ElementProperty<real_t> *property;
+  std::vector<atomwrapper> vLocks;
 
   const size_t nloc, msize;
 
   int mpi_nparts, rank;
   real_t good_q, epsilon_q;
-  std::vector<real_t> quality;
-  std::map<int, std::vector<index_t> > colour_sets;
 };
 
 #endif

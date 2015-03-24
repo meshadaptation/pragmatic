@@ -359,6 +359,7 @@ void fit_ellipsoid(int i, real_t *sm){
 
     _mesh->_ENList.resize(pNElements*(dim+1));
     _mesh->boundary.resize(pNElements*(dim+1));
+    _mesh->quality.resize(pNElements);
     _mesh->_coords.resize(pNNodes*dim);
     _mesh->metric.resize(pNNodes*(dim==2?3:6));
     _mesh->NNList.resize(pNNodes);
@@ -417,6 +418,7 @@ void fit_ellipsoid(int i, real_t *sm){
 
     _mesh->_ENList.resize(pNElements*(dim+1));
     _mesh->boundary.resize(pNElements*(dim+1));
+    _mesh->quality.resize(pNElements);
     _mesh->_coords.resize(pNNodes*dim);
     _mesh->metric.resize(pNNodes*(dim==2?3:6));
     _mesh->NNList.resize(pNNodes);
@@ -739,7 +741,7 @@ void fit_ellipsoid(int i, real_t *sm){
 
         real_t det = (m11*m22 - m12*m12)*m00 - (m01*m22 - m02*m12)*m01 + (m01*m12 - m02*m11)*m02;
 
-	assert(det>-DBL_EPSILON);
+        assert(det>-DBL_EPSILON);
         total_volume_metric += volume*sqrt(det);
       }
 

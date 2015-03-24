@@ -49,7 +49,6 @@
 #include <boost/unordered_map.hpp>
 #endif
 
-#include "DeferredOperations.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
 
@@ -84,16 +83,13 @@ template<typename real_t, int dim> class Coarsen{
     }
 
     nnodes_reserve = 0;
-    dynamic_vertex = NULL;
+    delete_slivers = false;
   }
 
   /// Default destructor.
   ~Coarsen(){
     if(property!=NULL)
       delete property;
-
-    if(dynamic_vertex!=NULL)
-      delete[] dynamic_vertex;
   }
 
   /*! Perform coarsening.
@@ -109,30 +105,23 @@ template<typename real_t, int dim> class Coarsen{
     if(nnodes_reserve<NNodes){
       nnodes_reserve = NNodes;
 
-      if(dynamic_vertex!=NULL)
-        delete [] dynamic_vertex;
+      dynamic_vertex.resize(NNodes, -1);
 
-      dynamic_vertex = new index_t[NNodes];
+      vLocks.resize(NNodes);
     }
-
-    std::vector< std::atomic<unsigned int> > vLocks(NNodes);
 
 #pragma omp parallel
     {
-#pragma omp for
-      for(unsigned int i=0; i<NNodes; ++i){
-        vLocks[i].store(0, std::memory_order_relaxed);
-        dynamic_vertex[i] = -2;
-      }
-
-      // Vector "retry" is used to store both aborted vertices and propagated vertices.
-      std::vector<index_t> retry, new_retry;
+      // Vector "retry" is used to store aborted vertices.
+      // Vector "round" is used to store propagated vertices.
+      std::vector<index_t> retry, next_retry;
+      std::vector<index_t> this_round, next_round;
+      std::vector<index_t> locks_held;
 #pragma omp for schedule(guided) nowait
       for(index_t node=0; node<NNodes; ++node){
         bool abort = false;
-        std::vector<index_t> locks_held;
 
-        int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
         if((oldval & 1) != 0){
           retry.push_back(node);
           continue;
@@ -140,7 +129,7 @@ template<typename real_t, int dim> class Coarsen{
         locks_held.push_back(node);
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+          int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
           if((oldval & 1) != 0){
             abort = true;
             break;
@@ -152,37 +141,40 @@ template<typename real_t, int dim> class Coarsen{
           index_t target = coarsen_identify_kernel(node, L_low, L_max);
           if(target>=0){
             for(auto& it : _mesh->NNList[node]){
-              retry.push_back(it);
+              next_round.push_back(it);
               dynamic_vertex[it] = -2;
             }
             coarsen_kernel(node, target);
-            dynamic_vertex[node] = -1;
           }
+          dynamic_vertex[node] = -1;
         }
         else
           retry.push_back(node);
 
         for(auto& it : locks_held){
-          vLocks[it].store(0, std::memory_order_release);
+          vLocks[it]._a.store(0, std::memory_order_release);
         }
+        locks_held.clear();
       }
 
       while(retry.size()>0){
-        new_retry.clear();
+        next_retry.clear();
 
         for(auto& node : retry){
-          bool abort = false;
-          std::vector<index_t> locks_held;
+          if(dynamic_vertex[node] == -1)
+            continue;
 
-          int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
           if((oldval & 1) != 0){
-            new_retry.push_back(node);
+            next_retry.push_back(node);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
             if((oldval & 1) != 0){
               abort = true;
               break;
@@ -191,27 +183,133 @@ template<typename real_t, int dim> class Coarsen{
           }
 
           if(!abort){
-            if(dynamic_vertex[node] == -2){
+            index_t target = coarsen_identify_kernel(node, L_low, L_max);
+            if(target>=0){
+              for(auto& it : _mesh->NNList[node]){
+                next_round.push_back(it);
+                dynamic_vertex[it] = -2;
+              }
+              coarsen_kernel(node, target);
+            }
+            dynamic_vertex[node] = -1;
+          }
+          else
+            next_retry.push_back(node);
+
+          for(auto& it : locks_held){
+            vLocks[it]._a.store(0, std::memory_order_release);
+          }
+          locks_held.clear();
+        }
+
+        retry.swap(next_retry);
+      }
+
+      while(!next_round.empty()){
+        this_round.swap(next_round);
+        next_round.clear();
+
+        for(auto& node : this_round){
+          if(dynamic_vertex[node] == -1)
+            continue;
+
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            retry.push_back(node);
+            continue;
+          }
+          if(dynamic_vertex[node] != -2){
+            vLocks[node]._a.store(0, std::memory_order_release);
+            continue;
+          }
+          locks_held.push_back(node);
+
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
+            }
+            locks_held.push_back(it);
+          }
+
+          if(!abort){
+            index_t target = coarsen_identify_kernel(node, L_low, L_max);
+            if(target>=0){
+              for(auto& it : _mesh->NNList[node]){
+                next_round.push_back(it);
+                dynamic_vertex[it] = -2;
+              }
+              coarsen_kernel(node, target);
+            }
+            dynamic_vertex[node] = -1;
+          }
+          else
+            retry.push_back(node);
+
+          for(auto& it : locks_held){
+            vLocks[it]._a.store(0, std::memory_order_release);
+          }
+          locks_held.clear();
+        }
+
+        while(retry.size()>0){
+          next_retry.clear();
+
+          for(auto& node : retry){
+            if(dynamic_vertex[node] == -1)
+              continue;
+
+            bool abort = false;
+
+            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              next_retry.push_back(node);
+              continue;
+            }
+            if(dynamic_vertex[node] != -2){
+              vLocks[node]._a.store(0, std::memory_order_release);
+              continue;
+            }
+            locks_held.push_back(node);
+
+            for(auto& it : _mesh->NNList[node]){
+              int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
+              if((oldval & 1) != 0){
+                abort = true;
+                break;
+              }
+              locks_held.push_back(it);
+            }
+
+            if(!abort){
               index_t target = coarsen_identify_kernel(node, L_low, L_max);
               if(target>=0){
                 for(auto& it : _mesh->NNList[node]){
-                  new_retry.push_back(it);
+                  next_round.push_back(it);
                   dynamic_vertex[it] = -2;
                 }
                 coarsen_kernel(node, target);
-                dynamic_vertex[node] = -1;
               }
+              dynamic_vertex[node] = -1;
             }
-          }
-          else
-            new_retry.push_back(node);
+            else
+              next_retry.push_back(node);
 
-          for(auto& it : locks_held){
-            vLocks[it].store(0, std::memory_order_release);
+            for(auto& it : locks_held){
+              vLocks[it]._a.store(0, std::memory_order_release);
+            }
+            locks_held.clear();
           }
+
+          retry.swap(next_retry);
         }
 
-        retry.swap(new_retry);
+        if(next_round.empty()){
+          // TODO: Try to steal work
+        }
       }
     }
   }
@@ -221,19 +319,15 @@ template<typename real_t, int dim> class Coarsen{
   /*! Kernel for identifying what vertex (if any) rm_vertex should collapse onto.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    * Returns the node ID that rm_vertex should collapse onto, negative if no operation is to be performed.
-   *
-   * dynamic_vertex[i] >= 0 :: target to collapse node i
-   * dynamic_vertex[i] = -1 :: node inactive (deleted/locked)
-   * dynamic_vertex[i] = -2 :: recalculate collapse - this is how propagation is implemented
    */
-  int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const{
+  inline int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const{
     // Cannot delete if already deleted.
     if(_mesh->NNList[rm_vertex].empty())
       return -1;
 
     // If this is not owned then return -1.
-    if(!_mesh->is_owned_node(rm_vertex))
-      return -1;
+    // if(!_mesh->is_owned_node(rm_vertex))
+    //   return -1;
 
     // For now, lock the halo
     if(_mesh->is_halo_node(rm_vertex))
@@ -241,36 +335,16 @@ template<typename real_t, int dim> class Coarsen{
 
     //
     bool delete_with_extreme_prejudice = false;
-    double q_linf;
     if(delete_slivers && dim==3){
       std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();
-      const int *n=_mesh->get_element(*ee);
-
-      q_linf = property->lipnikov(_mesh->get_coords(n[0]),
-                                  _mesh->get_coords(n[1]),
-                                  _mesh->get_coords(n[2]),
-                                  _mesh->get_coords(n[3]),
-                                  _mesh->get_metric(n[0]),
-                                  _mesh->get_metric(n[1]),
-                                  _mesh->get_metric(n[2]),
-                                  _mesh->get_metric(n[3]));
+      double q_linf = _mesh->quality[*ee];
       ++ee;
-      for(;ee!=_mesh->NEList[rm_vertex].end();++ee){
-        n=_mesh->get_element(*ee);
 
-        q_linf = std::min(q_linf, property->lipnikov(_mesh->get_coords(n[0]),
-                                                     _mesh->get_coords(n[1]),
-                                                     _mesh->get_coords(n[2]),
-                                                     _mesh->get_coords(n[3]),
-                                                     _mesh->get_metric(n[0]),
-                                                     _mesh->get_metric(n[1]),
-                                                     _mesh->get_metric(n[2]),
-                                                     _mesh->get_metric(n[3])));
+      for(;ee!=_mesh->NEList[rm_vertex].end();++ee)
+        q_linf = std::min(q_linf, _mesh->quality[*ee]);
 
-      }
-      if(q_linf<1.0e-6){
+      if(q_linf<1.0e-6)
         delete_with_extreme_prejudice = true;
-      }
     }
 
     /* Sort the edges according to length. We want to collapse the
@@ -303,6 +377,7 @@ template<typename real_t, int dim> class Coarsen{
       for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
         const int *old_n=_mesh->get_element(*ee);
 
+        double q_linf = _mesh->quality[*ee];
         double old_av;
         if(dim==2)
           old_av = property->area(_mesh->get_coords(old_n[0]),
@@ -401,7 +476,7 @@ template<typename real_t, int dim> class Coarsen{
   /*! Kernel for performing coarsening.
    * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
    */
-  void coarsen_kernel(index_t rm_vertex, index_t target_vertex){
+  inline void coarsen_kernel(index_t rm_vertex, index_t target_vertex){
     std::set<index_t> deleted_elements;
     std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                      _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
@@ -480,7 +555,7 @@ template<typename real_t, int dim> class Coarsen{
 
     assert((dim==2 && common_patch.size() == deleted_elements.size()) || (dim==3));
 
-    // For all adjacent elements, replace rm_vertex with target_vertex in ENList.
+    // For all adjacent elements, replace rm_vertex with target_vertex in ENList and update quality.
     for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
       for(size_t i=0;i<nloc;i++){
         if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
@@ -488,6 +563,8 @@ template<typename real_t, int dim> class Coarsen{
           break;
         }
       }
+
+      _mesh->template update_quality<dim>(*ee);
 
       // Add element to target_vertex's NEList.
       _mesh->NEList[target_vertex].insert(*ee);
@@ -513,7 +590,8 @@ template<typename real_t, int dim> class Coarsen{
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;
-  index_t *dynamic_vertex;
+  std::vector<index_t> dynamic_vertex;
+  std::vector<atomwrapper> vLocks;
 
   real_t _L_low, _L_max;
   bool delete_slivers;

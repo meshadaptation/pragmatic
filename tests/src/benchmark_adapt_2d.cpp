@@ -151,7 +151,9 @@ int main(int argc, char **argv){
       mesh->defragment();
       
       tic = get_wtime();
-      smooth.smooth(10);
+      if(I>0)
+        smooth.smart_laplacian(I*10, 1.0);
+      smooth.optimisation_linf(10);
       toc = get_wtime();
       if(t>0) time_smooth += (toc-tic);
       if(t>0) time_adapt += (toc-tic);

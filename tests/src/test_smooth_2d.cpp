@@ -78,8 +78,7 @@ int main(int argc, char **argv){
     double d = std::min(1-fabs(x), 1-fabs(y));
     
     double hx = h0 - (h1-h0)*(d-1);
-    double m[] = {1.0/pow(hx, 2), 0,
-                                  1.0/pow(hx, 2)};
+    double m[] = {1.0/pow(hx, 2), 0, 1.0/pow(hx, 2)};
     
     metric_field.set_metric(m, i);
   }

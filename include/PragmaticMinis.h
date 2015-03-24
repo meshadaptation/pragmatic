@@ -46,6 +46,7 @@
 
 // Definition of size_t
 #include <cstdlib>
+#include <atomic>
 
 int pragmatic_nthreads(){
 #ifdef _OPENMP
@@ -121,14 +122,17 @@ old = __sync_fetch_and_add(shared, inc);
 return old;
 }
 
-// Every element of "range" is in the form: {pair<size_t,size_t> range, int thread}
-typedef std::pair< std::pair<size_t, size_t>, int > range_element;
-bool pragmatic_range_element_comparator(range_element p1, range_element p2){
-  return p1.first.first < p2.first.first;
-}
-bool pragmatic_range_element_finder(range_element p1, range_element p2){
-  return p1.first.second <= p2.first.second;
-}
+struct atomwrapper
+{
+  std::atomic<unsigned int> _a;
+
+  atomwrapper(){
+    _a.store(0, std::memory_order_relaxed);
+  }
+
+  atomwrapper(const atomwrapper &other)
+    :_a(other._a.load()) {}
+};
 
 #define pragmatic_isnormal std::isnormal
 #define pragmatic_isnan std::isnan

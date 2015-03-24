@@ -75,3 +75,5 @@ TARGET_LINK_LIBRARIES(test_smooth_3d ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(test_adapt_3d ${PRAGMATIC_TEST_SRC}/test_adapt_3d.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_adapt_3d ${PRAGMATIC_LIBRARIES})
 
+ADD_EXECUTABLE(benchmark_adapt_2d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_2d.cpp ${src_lite})
+TARGET_LINK_LIBRARIES(benchmark_adapt_2d ${PRAGMATIC_LIBRARIES})

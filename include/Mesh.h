@@ -174,27 +174,11 @@ template<typename real_t> class Mesh{
     if(_ENList.size() < (NElements+1)*nloc){
       _ENList.resize(2*NElements*nloc);
       boundary.resize(2*NElements*nloc);
+      quality.resize(2*NElements);
     }
 
     for(size_t i=0;i<nloc;i++)
       _ENList[nloc*NElements+i] = n[i];
-
-    ++NElements;
-
-    return get_number_elements()-1;
-  }
-
-  /// Add a new element and boundary
-  index_t append_element(const index_t *n, const int *b){
-    if(_ENList.size() < (NElements+1)*nloc){
-      _ENList.resize(2*NElements*nloc);
-      boundary.resize(2*NElements*nloc);
-    }
-
-    for(size_t i=0;i<nloc;i++){
-      _ENList[nloc*NElements+i] = n[i];
-      boundary[nloc*NElements+i] = b[i];
-    }
 
     ++NElements;
 
@@ -355,51 +339,51 @@ template<typename real_t> class Mesh{
   }
 
   /// Return a pointer to the element-node list.
-  const index_t *get_element(size_t eid) const{
+  inline const index_t *get_element(size_t eid) const{
     return &(_ENList[eid*nloc]);
   }
 
   /// Return copy of element-node list.
-  void get_element(size_t eid, index_t *ele) const{
+  inline void get_element(size_t eid, index_t *ele) const{
     for(size_t i=0;i<nloc;i++)
       ele[i] = _ENList[eid*nloc+i];
   }
 
   /// Return the number of nodes in the mesh.
-  size_t get_number_nodes() const{
+  inline size_t get_number_nodes() const{
     return NNodes;
   }
 
   /// Return the number of elements in the mesh.
-  size_t get_number_elements() const{
+  inline size_t get_number_elements() const{
     return NElements;
   }
 
   /// Return the number of spatial dimensions.
-  size_t get_number_dimensions() const{
+  inline size_t get_number_dimensions() const{
     return ndims;
   }
 
   /// Return positions vector.
-  const real_t *get_coords(index_t nid) const{
+  inline const real_t *get_coords(index_t nid) const{
     return &(_coords[nid*ndims]);
   }
 
   /// Return copy of the coordinate.
-  void get_coords(index_t nid, real_t *x) const{
+  inline void get_coords(index_t nid, real_t *x) const{
     for(size_t i=0;i<ndims;i++)
       x[i] = _coords[nid*ndims+i];
     return;
   }
 
   /// Return metric at that vertex.
-  const double *get_metric(index_t nid) const{
+  inline const double *get_metric(index_t nid) const{
     assert(metric.size()>0);
     return &(metric[nid*msize]);
   }
 
   /// Return copy of metric.
-  void get_metric(index_t nid, double *m) const{
+  inline void get_metric(index_t nid, double *m) const{
     assert(metric.size()>0);
     for(size_t i=0;i<msize;i++)
       m[i] = metric[nid*msize+i];
@@ -407,12 +391,12 @@ template<typename real_t> class Mesh{
   }
 
   /// Returns true if the node is in any of the partitioned elements.
-  bool is_halo_node(index_t nid) const{
+  inline bool is_halo_node(index_t nid) const{
     return (node_owner[nid]!= rank || send_halo.count(nid)>0);
   }
 
   /// Returns true if the node is assigned to the local partition.
-  bool is_owned_node(index_t nid) const{
+  inline bool is_owned_node(index_t nid) const{
     return node_owner[nid] == rank;
   }
 
@@ -1060,6 +1044,7 @@ template<typename real_t> class Mesh{
     std::vector<real_t> defrag_coords(NNodes*ndims);
     std::vector<double> defrag_metric(NNodes*msize);
     std::vector<int> defrag_boundary(NElements*nloc);
+    std::vector<double> defrag_quality(NElements);
 
     // This first touch is to bind memory locally.
 #pragma omp parallel
@@ -1087,6 +1072,7 @@ template<typename real_t> class Mesh{
         defrag_ENList[new_eid*nloc+j] = new_nid;
         defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
       }
+      defrag_quality[new_eid] = quality[old_eid];
     }
 
     // Second sweep writes node data with new numbering.
@@ -1103,6 +1089,7 @@ template<typename real_t> class Mesh{
 
     memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
     memcpy(&boundary[0], &defrag_boundary[0], NElements*nloc*sizeof(int));
+    memcpy(&quality[0], &defrag_quality[0], NElements*sizeof(double));
     memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
     memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));
 
@@ -1549,6 +1536,7 @@ template<typename real_t> class Mesh{
     }
 
     _ENList.resize(NElements*nloc);
+    quality.resize(NElements);
     _coords.resize(NNodes*ndims);
     metric.resize(NNodes*msize);
     NNList.resize(NNodes);
@@ -1615,7 +1603,7 @@ template<typename real_t> class Mesh{
 
       if(ndims==2){
 #pragma omp for schedule(static)
-        for(size_t i=1;i<(size_t)NElements;i++){
+        for(size_t i=0;i<(size_t)NElements;i++){
           const int *n=get_element(i);
           assert(n[0]>=0);
 
@@ -1625,10 +1613,12 @@ template<typename real_t> class Mesh{
 
           if(volarea<0)
             invert_element(i);
+
+          update_quality<2>(i);
         }
       }else{
 #pragma omp for schedule(static)
-        for(size_t i=1;i<(size_t)NElements;i++){
+        for(size_t i=0;i<(size_t)NElements;i++){
           const int *n=get_element(i);
           assert(n[0]>=0);
 
@@ -1639,6 +1629,8 @@ template<typename real_t> class Mesh{
 
           if(volarea<0)
             invert_element(i);
+
+          update_quality<3>(i);
         }
       }
 
@@ -1925,6 +1917,44 @@ template<typename real_t> class Mesh{
 #endif
   }
 
+  template<int dim>
+  inline double calculate_quality(const index_t* n){
+    if(dim==2){
+      const double *x0 = get_coords(n[0]);
+      const double *x1 = get_coords(n[1]);
+      const double *x2 = get_coords(n[2]);
+
+      const double *m0 = get_metric(n[0]);
+      const double *m1 = get_metric(n[1]);
+      const double *m2 = get_metric(n[2]);
+
+      return property->lipnikov(x0, x1, x2, m0, m1, m2);
+    }else{
+      const double *x0 = get_coords(n[0]);
+      const double *x1 = get_coords(n[1]);
+      const double *x2 = get_coords(n[2]);
+      const double *x3 = get_coords(n[3]);
+
+      const double *m0 = get_metric(n[0]);
+      const double *m1 = get_metric(n[1]);
+      const double *m2 = get_metric(n[2]);
+      const double *m3 = get_metric(n[3]);
+
+      return property->lipnikov(x0, x1, x2, x3, m0, m1, m2, m3);
+    }
+  }
+
+  template<int dim>
+  inline void update_quality(index_t element){
+    const index_t *n=get_element(element);
+
+    if(dim==2){
+      quality[element] = calculate_quality<2>(n);
+    }else{
+      quality[element] = calculate_quality<3>(n);
+    }
+  }
+
   size_t ndims, nloc, msize;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
@@ -1933,6 +1963,9 @@ template<typename real_t> class Mesh{
 
   // Boundary Label
   std::vector<int> boundary;
+
+  // Quality
+  std::vector<double> quality;
 
   // Adjacency lists
   std::vector< std::set<index_t> > NEList;

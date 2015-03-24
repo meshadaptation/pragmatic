@@ -88,6 +88,7 @@ template<typename real_t, int dim> class Refine{
     newVertices.resize(nthreads);
     newElements.resize(nthreads);
     newBoundaries.resize(nthreads);
+    newQualities.resize(nthreads);
     newCoords.resize(nthreads);
     newMetric.resize(nthreads);
 
@@ -315,9 +316,10 @@ template<typename real_t, int dim> class Refine{
 
       // Start element refinement.
       splitCnt[tid] = 0;
-      newElements[tid].clear(); newBoundaries[tid].clear();
+      newElements[tid].clear(); newBoundaries[tid].clear(); newQualities[tid].clear();
       newElements[tid].reserve(dim*dim*origNElements/nthreads);
       newBoundaries[tid].reserve(dim*dim*origNElements/nthreads);
+      newQualities[tid].reserve(origNElements/nthreads);
 
 #pragma omp for schedule(guided) nowait
       for(size_t eid=0; eid<origNElements; ++eid){
@@ -341,12 +343,14 @@ template<typename real_t, int dim> class Refine{
         if(_mesh->_ENList.size()<_mesh->NElements*nloc){
           _mesh->_ENList.resize(_mesh->NElements*nloc);
           _mesh->boundary.resize(_mesh->NElements*nloc);
+          _mesh->quality.resize(_mesh->NElements);
         }
       }
 
       // Append new elements to the mesh and commit deferred operations
       memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
       memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
+      memcpy(&_mesh->quality[threadIdx[tid]], &newQualities[tid][0], splitCnt[tid]*sizeof(double));
 
       // Commit deferred operations.
 #pragma omp for schedule(guided)
@@ -501,7 +505,7 @@ template<typename real_t, int dim> class Refine{
 
  private:
 
-  void refine_edge(index_t n0, index_t n1, int tid){
+  inline void refine_edge(index_t n0, index_t n1, int tid){
     if(_mesh->lnn2gnn[n0] > _mesh->lnn2gnn[n1]){
       // Needs to be swapped because we want the lesser gnn first.
       index_t tmp_n0=n0;
@@ -542,7 +546,7 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  void refine_facet(index_t eid, const index_t *facet, int tid){
+  inline void refine_facet(index_t eid, const index_t *facet, int tid){
     const index_t *n=_mesh->get_element(eid);
 
     index_t newVertex[3] = {-1, -1, -1};
@@ -604,7 +608,7 @@ template<typename real_t, int dim> class Refine{
   typedef std::map<index_t, int> boundary_t;
 #endif
 
-  void refine_element(size_t eid, int tid){
+  inline void refine_element(size_t eid, int tid){
     if(dim==2){
       /*
        *************************
@@ -654,7 +658,7 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  void refine2D_1(const index_t *newVertex, int eid, int tid){
+  inline void refine2D_1(const index_t *newVertex, int eid, int tid){
     // Single edge split.
 
     const int *n=_mesh->get_element(eid);
@@ -715,7 +719,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 1;
   }
 
-  void refine2D_2(const index_t *newVertex, int eid, int tid){
+  inline void refine2D_2(const index_t *newVertex, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -793,7 +797,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 2;
   }
 
-  void refine2D_3(const index_t *newVertex, int eid, int tid){
+  inline void refine2D_3(const index_t *newVertex, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -850,7 +854,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 3;
   }
 
-  void refine3D_1(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_1(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -894,7 +898,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 1;
   }
 
-  void refine3D_2(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_2(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -1031,7 +1035,7 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  void refine3D_3(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_3(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -1424,7 +1428,7 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  void refine3D_4(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_4(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -1942,7 +1946,7 @@ template<typename real_t, int dim> class Refine{
     }
   }
 
-  void refine3D_5(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_5(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -2151,7 +2155,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 3;
   }
 
-  void refine3D_6(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
+  inline void refine3D_6(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid){
     const int *n=_mesh->get_element(eid);
     const int *boundary=&(_mesh->boundary[eid*nloc]);
 
@@ -2295,7 +2299,7 @@ template<typename real_t, int dim> class Refine{
     splitCnt[tid] += 7;
   }
 
-  void refine_wedge(const index_t top_triangle[], const index_t bottom_triangle[],
+  inline void refine_wedge(const index_t top_triangle[], const index_t bottom_triangle[],
       const int bndr[], DirectedEdge<index_t>* third_diag, int eid, int tid){
     /*
      * bndr[] must contain the boundary values for each side of the wedge:
@@ -2773,6 +2777,9 @@ template<typename real_t, int dim> class Refine{
       newElements[tid].push_back(elem[i]);
       newBoundaries[tid].push_back(boundary[i]);
     }
+
+    double q = _mesh->template calculate_quality<dim>(elem);
+    newQualities[tid].push_back(q);
   }
 
   inline void replace_element(const index_t eid, const index_t *n, const int *boundary){
@@ -2805,6 +2812,8 @@ template<typename real_t, int dim> class Refine{
       _mesh->_ENList[eid*nloc+i]=n[i];
       _mesh->boundary[eid*nloc+i]=boundary[i];
     }
+
+    _mesh->template update_quality<dim>(eid);
   }
 
   inline size_t edgeNumber(index_t eid, index_t v1, index_t v2) const{
@@ -2900,6 +2909,7 @@ template<typename real_t, int dim> class Refine{
   std::vector< std::vector<double> > newMetric;
   std::vector< std::vector<index_t> > newElements;
   std::vector< std::vector<int> > newBoundaries;
+  std::vector< std::vector<double> > newQualities;
   std::vector<index_t> new_vertices_per_element;
 
   std::vector<size_t> threadIdx, splitCnt;

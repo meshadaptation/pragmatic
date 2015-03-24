@@ -45,11 +45,17 @@
 #include <set>
 #include <vector>
 
-#include "Colour.h"
-#include "DeferredOperations.h"
 #include "Edge.h"
 #include "ElementProperty.h"
 #include "Mesh.h"
+
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+#include <boost/unordered_map.hpp>
+  typedef boost::unordered_map< index_t, std::set<index_t> > propagation_map;
+#else
+#include <map>
+  typedef std::map< index_t, std::set<index_t> > propagation_map;
+#endif
 
 /*! \brief Performs edge/face swapping.
  *
@@ -82,12 +88,8 @@ template<typename real_t, int dim> class Swapping{
     }
 
     nnodes_reserve = 0;
+    ENList_lock.store(0, std::memory_order_relaxed);
     nthreads = pragmatic_nthreads();
-
-    if(dim==3){
-      newElements.resize(nthreads);
-      newBoundaries.resize(nthreads);
-    }
   }
 
   /// Default destructor.
@@ -97,16 +99,6 @@ template<typename real_t, int dim> class Swapping{
   }
 
   void swap(real_t quality_tolerance){
-    if(dim==2)
-      swap2d(quality_tolerance);
-    else
-      swap3d(quality_tolerance);
-  }
-
-
- private:
-
-  void swap2d(real_t quality_tolerance){
     size_t NNodes = _mesh->get_number_nodes();
     size_t NElements = _mesh->get_number_elements();
 
@@ -115,47 +107,23 @@ template<typename real_t, int dim> class Swapping{
     if(nnodes_reserve<NNodes){
       nnodes_reserve = NNodes;
 
-      quality.resize(NElements);
       marked_edges.resize(NNodes);
-    }
 
-    std::vector< std::atomic<unsigned int> > vLocks(NNodes);
+      vLocks.resize(NNodes);
+    }
 
 #pragma omp parallel
     {
-#pragma omp for nowait
-      for(unsigned int i=0; i<NNodes; ++i){
-        vLocks[i].store(0, std::memory_order_relaxed);
-        marked_edges[i].clear();
-      }
-
-      // Cache the element qualities. Really need to make this
-      // persistent within Mesh. Also, initialise marked_edges.
-#pragma omp for schedule(guided)
-      for(size_t i=0; i<NElements; ++i){
-        const int *n=_mesh->get_element(i);
-        if(n[0]>=0){
-          const real_t *x0 = _mesh->get_coords(n[0]);
-          const real_t *x1 = _mesh->get_coords(n[1]);
-          const real_t *x2 = _mesh->get_coords(n[2]);
-
-          quality[i] = property->lipnikov(x0, x1, x2,
-                                          _mesh->get_metric(n[0]),
-                                          _mesh->get_metric(n[1]),
-                                          _mesh->get_metric(n[2]));
-        }else{
-          quality[i] = 0.0;
-        }
-      }
-
-      // Vector "retry" is used to store both aborted vertices and propagated vertices.
-      std::vector<index_t> retry, new_retry;
+      // Vector "retry" is used to store aborted vertices.
+      // Vector "round" is used to store propagated vertices.
+      std::vector<index_t> retry, next_retry;
+      std::vector<index_t> this_round, next_round;
+      std::vector<index_t> locks_held;
 #pragma omp for schedule(guided) nowait
       for(index_t node=0; node<NNodes; ++node){
         bool abort = false;
-        std::vector<index_t> locks_held;
 
-        int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
         if((oldval & 1) != 0){
           retry.push_back(node);
           continue;
@@ -163,7 +131,7 @@ template<typename real_t, int dim> class Swapping{
         locks_held.push_back(node);
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+          int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
           if((oldval & 1) != 0){
             abort = true;
             break;
@@ -174,31 +142,26 @@ template<typename real_t, int dim> class Swapping{
         if(!abort){
           std::set< Edge<index_t> > active_edges;
           for(auto& ele : _mesh->NEList[node]){
-            if(quality[ele] < min_Q){
+            if(_mesh->quality[ele] < min_Q){
               const index_t* n = _mesh->get_element(ele);
               for(int i=0; i<nloc; ++i){
-                if(n[i] != node)
+                if(node < n[i])
                   active_edges.insert(Edge<index_t>(node, n[i]));
               }
             }
           }
 
           for(auto& edge : active_edges){
-            index_t i = edge.edge.first;
-            index_t j = edge.edge.second;
-            bool swapped = swap_kernel2d(const_cast<Edge<index_t>&>(edge));
+            marked_edges[edge.edge.first].erase(edge.edge.second);
+            propagation_map pMap;
+            bool swapped = swap_kernel(edge, pMap);
 
             if(swapped){
-              index_t k = edge.edge.first;
-              index_t l = edge.edge.second;
-
-              Edge<index_t> lateralEdges[] = {
-                  Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-              // Propagate the operation
-              for(size_t ee=0; ee<4; ++ee){
-                marked_edges[lateralEdges[ee].edge.first].insert(lateralEdges[ee].edge.second);
-                retry.push_back(lateralEdges[ee].edge.first);
+              for(auto& entry : pMap){
+                for(auto& v : entry.second){
+                  marked_edges[entry.first].insert(v);
+                  next_round.push_back(entry.first);
+                }
               }
             }
           }
@@ -207,26 +170,29 @@ template<typename real_t, int dim> class Swapping{
           retry.push_back(node);
 
         for(auto& it : locks_held){
-          vLocks[it].store(0, std::memory_order_release);
+          vLocks[it]._a.store(0, std::memory_order_release);
         }
+        locks_held.clear();
       }
 
       while(retry.size()>0){
-        new_retry.clear();
+        next_retry.clear();
 
         for(auto& node : retry){
-          bool abort = false;
-          std::vector<index_t> locks_held;
+          if(marked_edges[node].empty())
+            continue;
 
-          int oldval = vLocks[node].fetch_or(1, std::memory_order_acq_rel);
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
           if((oldval & 1) != 0){
-            new_retry.push_back(node);
+            next_retry.push_back(node);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it].fetch_or(1, std::memory_order_acq_rel);
+            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
             if((oldval & 1) != 0){
               abort = true;
               break;
@@ -235,153 +201,182 @@ template<typename real_t, int dim> class Swapping{
           }
 
           if(!abort){
-            if(!marked_edges[node].empty()){
-              std::set<index_t> marked_edges_copy = marked_edges[node];
-              marked_edges[node].clear();
+            std::set<index_t> marked_edges_copy = marked_edges[node];
+            marked_edges[node].clear();
 
-              for(auto& target : marked_edges_copy){
-                Edge<index_t> edge(node, target);
-                index_t i = edge.edge.first;
-                index_t j = edge.edge.second;
-                bool swapped = swap_kernel2d(edge);
+            for(auto& target : marked_edges_copy){
+              Edge<index_t> edge(node, target);
+              propagation_map pMap;
+              marked_edges[edge.edge.first].erase(edge.edge.second);
+              bool swapped = swap_kernel(edge, pMap);
 
-                if(swapped){
-                  index_t k = edge.edge.first;
-                  index_t l = edge.edge.second;
-
-                  Edge<index_t> lateralEdges[] = {
-                      Edge<index_t>(i, k), Edge<index_t>(i, l), Edge<index_t>(j, k), Edge<index_t>(j, l)};
-
-                  // Propagate the operation
-                  for(size_t ee=0; ee<4; ++ee){
-                    marked_edges[lateralEdges[ee].edge.first].insert(lateralEdges[ee].edge.second);
-                    new_retry.push_back(lateralEdges[ee].edge.first);
+              if(swapped){
+                for(auto& entry : pMap){
+                  for(auto& v : entry.second){
+                    marked_edges[entry.first].insert(v);
+                    next_round.push_back(entry.first);
                   }
                 }
               }
             }
           }
           else
-            new_retry.push_back(node);
+            next_retry.push_back(node);
 
           for(auto& it : locks_held){
-            vLocks[it].store(0, std::memory_order_release);
+            vLocks[it]._a.store(0, std::memory_order_release);
           }
+          locks_held.clear();
         }
 
-        retry.swap(new_retry);
+        retry.swap(next_retry);
+      }
+
+      while(!next_round.empty()){
+        this_round.swap(next_round);
+        next_round.clear();
+
+        for(auto& node : this_round){
+          if(marked_edges[node].empty())
+            continue;
+
+          bool abort = false;
+
+          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+          if((oldval & 1) != 0){
+            retry.push_back(node);
+            continue;
+          }
+          if(marked_edges[node].empty()){
+            vLocks[node]._a.store(0, std::memory_order_release);
+            continue;
+          }
+          locks_held.push_back(node);
+
+          for(auto& it : _mesh->NNList[node]){
+            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              abort = true;
+              break;
+            }
+            locks_held.push_back(it);
+          }
+
+          if(!abort){
+            std::set< Edge<index_t> > active_edges;
+            for(auto& ele : _mesh->NEList[node]){
+              if(_mesh->quality[ele] < min_Q){
+                const index_t* n = _mesh->get_element(ele);
+                for(int i=0; i<nloc; ++i){
+                  if(node < n[i])
+                    active_edges.insert(Edge<index_t>(node, n[i]));
+                }
+              }
+            }
+
+            for(auto& edge : active_edges){
+              marked_edges[edge.edge.first].erase(edge.edge.second);
+              propagation_map pMap;
+              bool swapped = swap_kernel(edge, pMap);
+
+              if(swapped){
+                for(auto& entry : pMap){
+                  for(auto& v : entry.second){
+                    marked_edges[entry.first].insert(v);
+                    next_round.push_back(entry.first);
+                  }
+                }
+              }
+            }
+          }
+          else
+            retry.push_back(node);
+
+          for(auto& it : locks_held){
+            vLocks[it]._a.store(0, std::memory_order_release);
+          }
+          locks_held.clear();
+        }
+
+        while(retry.size()>0){
+          next_retry.clear();
+
+          for(auto& node : retry){
+            if(marked_edges[node].empty())
+              continue;
+
+            bool abort = false;
+
+            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
+            if((oldval & 1) != 0){
+              next_retry.push_back(node);
+              continue;
+            }
+            if(marked_edges[node].empty()){
+              vLocks[node]._a.store(0, std::memory_order_release);
+              continue;
+            }
+            locks_held.push_back(node);
+
+            for(auto& it : _mesh->NNList[node]){
+              int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
+              if((oldval & 1) != 0){
+                abort = true;
+                break;
+              }
+              locks_held.push_back(it);
+            }
+
+            if(!abort){
+              std::set<index_t> marked_edges_copy = marked_edges[node];
+              marked_edges[node].clear();
+
+              for(auto& target : marked_edges_copy){
+                Edge<index_t> edge(node, target);
+                propagation_map pMap;
+                marked_edges[edge.edge.first].erase(edge.edge.second);
+                bool swapped = swap_kernel(edge, pMap);
+
+                if(swapped){
+                  for(auto& entry : pMap){
+                    for(auto& v : entry.second){
+                      marked_edges[entry.first].insert(v);
+                      next_round.push_back(entry.first);
+                    }
+                  }
+                }
+              }
+            }
+            else
+              next_retry.push_back(node);
+
+            for(auto& it : locks_held){
+              vLocks[it]._a.store(0, std::memory_order_release);
+            }
+            locks_held.clear();
+          }
+
+          retry.swap(next_retry);
+        }
+
+        if(next_round.empty()){
+          // TODO: Try to steal work
+        }
       }
     }
   }
 
+ private:
+
+  inline bool swap_kernel(const Edge<index_t>& edge, propagation_map& pMap){
+    if(dim==2)
+      return swap_kernel2d(edge, pMap);
+    else
+      return swap_kernel3d(edge, pMap);
+  }
+
+  /*
   void swap3d(real_t Q_min){
-    // Cache the element quality's.
-    size_t NElements = _mesh->get_number_elements();
-    std::vector<real_t> quality(NElements, -1);
-#pragma omp parallel
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<(int)NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0){
-          quality[i] = 0.0;
-          continue;
-        }
-
-        const real_t *x0 = _mesh->get_coords(n[0]);
-        const real_t *x1 = _mesh->get_coords(n[1]);
-        const real_t *x2 = _mesh->get_coords(n[2]);
-        const real_t *x3 = _mesh->get_coords(n[3]);
-
-        quality[i] = property->lipnikov(x0, x1, x2, x3,
-                                        _mesh->get_metric(n[0]),
-                                        _mesh->get_metric(n[1]),
-                                        _mesh->get_metric(n[2]),
-                                        _mesh->get_metric(n[3]));
-      }
-    }
-
-    std::map<int, std::deque<int> > partialEEList;
-    for(size_t i=0;i<NElements;i++){
-      // Check this is not deleted.
-      const int *n=_mesh->get_element(i);
-      if(n[0]<0)
-        continue;
-
-      // Only start storing information for poor elements.
-      if(quality[i]<Q_min){
-        bool is_halo = false;
-        for(int j=0; j<nloc; ++j){
-          if(_mesh->is_halo_node(n[j])){
-            is_halo = true;
-            break;
-          }
-        }
-        if(is_halo)
-          continue;
-
-        partialEEList[i].resize(4);
-        std::fill(partialEEList[i].begin(), partialEEList[i].end(), -1);
-
-        for(size_t j=0;j<4;j++){
-          std::set<index_t> intersection12;
-          set_intersection(_mesh->NEList[n[(j+1)%4]].begin(), _mesh->NEList[n[(j+1)%4]].end(),
-                           _mesh->NEList[n[(j+2)%4]].begin(), _mesh->NEList[n[(j+2)%4]].end(),
-                           inserter(intersection12, intersection12.begin()));
-
-          std::set<index_t> EE;
-          set_intersection(intersection12.begin(),intersection12.end(),
-                           _mesh->NEList[n[(j+3)%4]].begin(), _mesh->NEList[n[(j+3)%4]].end(),
-                           inserter(EE, EE.begin()));
-
-          for(typename std::set<index_t>::const_iterator it=EE.begin();it!=EE.end();++it){
-            if(*it != (index_t)i){
-              partialEEList[i][j] = *it;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    if(partialEEList.empty())
-      return;
-
-    // Colour the graph and choose the maximal independent set.
-    std::map<int , std::set<int> > graph;
-    for(std::map<int, std::deque<int> >::const_iterator it=partialEEList.begin();it!=partialEEList.end();++it){
-      for(std::deque<int>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
-        graph[*jt].insert(it->first);
-        graph[it->first].insert(*jt);
-      }
-    }
-
-    std::deque<int> renumber(graph.size());
-    std::map<int, int> irenumber;
-    // std::vector<size_t> nedges(graph.size());
-    size_t loc=0;
-    for(std::map<int , std::set<int> >::const_iterator it=graph.begin();it!=graph.end();++it){
-      // nedges[loc] = it->second.size();
-      renumber[loc] = it->first;
-      irenumber[it->first] = loc;
-      loc++;
-    }
-
-    std::vector< std::vector<index_t> > NNList(graph.size());
-    for(std::map<int , std::set<int> >::const_iterator it=graph.begin();it!=graph.end();++it){
-      for(std::set<int>::const_iterator jt=it->second.begin();jt!=it->second.end();++jt){
-        NNList[irenumber[it->first]].push_back(irenumber[*jt]);
-      }
-    }
-    std::vector<char> colour(graph.size());
-    Colour::greedy(graph.size(), NNList, colour);
-
-    // Assume colour 0 will be the maximal independent set.
-
-    int max_colour=colour[0];
-    for(size_t i=1;i<graph.size();i++)
-      max_colour = std::max(max_colour, (int)colour[i]);
-
     // Process face-to-edge swap.
     for(int c=0;c<max_colour;c++){
       for(size_t i=0;i<graph.size();i++){
@@ -543,659 +538,14 @@ template<typename real_t, int dim> class Swapping{
         }
       }
     }
-
-    // Process edge-face swaps.
-    for(int c=0;c<max_colour;c++){
-      for(size_t i=0;i<graph.size();i++){
-        int eid0 = renumber[i];
-
-        if(colour[i]==c && (partialEEList.count(eid0)>0)){
-
-          // Check this is not deleted.
-          const int *n=_mesh->get_element(eid0);
-          if(n[0]<0)
-            continue;
-
-          bool toxic=false, swapped=false;
-          for(int k=0;(k<3)&&(!toxic)&&(!swapped);k++){
-            for(int l=k+1;l<4;l++){
-              Edge<index_t> edge = Edge<index_t>(n[k], n[l]);
-
-              std::set<index_t> neigh_elements;
-              set_intersection(_mesh->NEList[n[k]].begin(), _mesh->NEList[n[k]].end(),
-                               _mesh->NEList[n[l]].begin(), _mesh->NEList[n[l]].end(),
-                               inserter(neigh_elements, neigh_elements.begin()));
-
-              double min_quality = quality[eid0];
-              std::vector<index_t> constrained_edges_unsorted;
-              std::map<int, std::map<index_t, int> > b;
-              std::vector<int> element_order, e_to_eid;
-
-              for(typename std::set<index_t>::const_iterator it=neigh_elements.begin();it!=neigh_elements.end();++it){
-                min_quality = std::min(min_quality, quality[*it]);
-
-                const int *m=_mesh->get_element(*it);
-                if(m[0]<0){
-                  toxic=true;
-                  break;
-                }
-
-                e_to_eid.push_back(*it);
-
-                for(int j=0;j<4;j++){
-                  if((m[j]!=n[k])&&(m[j]!=n[l])){
-                    constrained_edges_unsorted.push_back(m[j]);
-                  }else if(m[j] == n[k]){
-                    b[*it][n[k]] = _mesh->boundary[nloc*(*it)+j];
-                  }else{ // if(m[j] == n[l])
-                    b[*it][n[l]] = _mesh->boundary[nloc*(*it)+j];
-                  }
-                }
-              }
-
-              if(toxic)
-                break;
-
-              size_t nelements = neigh_elements.size();
-              assert(nelements*2==constrained_edges_unsorted.size());
-              assert(b.size() == nelements);
-
-              // Sort edges.
-              std::vector<index_t> constrained_edges;
-              std::vector<bool> sorted(nelements, false);
-              constrained_edges.push_back(constrained_edges_unsorted[0]);
-              constrained_edges.push_back(constrained_edges_unsorted[1]);
-              element_order.push_back(e_to_eid[0]);
-              for(size_t j=1;j<nelements;j++){
-                for(size_t e=1;e<nelements;e++){
-                  if(sorted[e])
-                    continue;
-                  if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2]){
-                    constrained_edges.push_back(constrained_edges_unsorted[e*2]);
-                    constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
-                    element_order.push_back(e_to_eid[e]);
-                    sorted[e]=true;
-                    break;
-                  }else if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2+1]){
-                    constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
-                    constrained_edges.push_back(constrained_edges_unsorted[e*2]);
-                    element_order.push_back(e_to_eid[e]);
-                    sorted[e]=true;
-                    break;
-                  }
-                }
-              }
-
-              if(*constrained_edges.begin() != *constrained_edges.rbegin()){
-                toxic = true;
-                break;
-              }
-              assert(element_order.size() == nelements);
-
-              std::vector< std::vector<index_t> > new_elements;
-              std::vector< std::vector<int> > new_boundaries;
-              if(nelements==3){
-                // This is the 3-element to 2-element swap.
-                new_elements.resize(1);
-                new_boundaries.resize(1);
-
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[0].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[0].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[0].push_back(0);
-              }else if(nelements==4){
-                // This is the 4-element to 4-element swap.
-                new_elements.resize(2);
-                new_boundaries.resize(2);
-
-                // Option 1.
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[0].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                // Option 2
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(n[l]);
-                new_boundaries[1].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(n[l]);
-                new_boundaries[1].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[1].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(n[k]);
-                new_boundaries[1].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[1].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(n[k]);
-                new_boundaries[1].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[1].push_back(0);
-              }else if(nelements==5){
-                // This is the 5-element to 6-element swap.
-                new_elements.resize(5);
-                new_boundaries.resize(5);
-
-                // Option 1
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                // Option 2
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[8]);
-                new_elements[1].push_back(n[l]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[1].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(constrained_edges[8]);
-                new_elements[1].push_back(n[l]);
-                new_boundaries[1].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(n[l]);
-                new_boundaries[1].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[0]);
-                new_elements[1].push_back(constrained_edges[8]);
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(n[k]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[1].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[8]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(n[k]);
-                new_boundaries[1].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-
-                new_elements[1].push_back(constrained_edges[2]);
-                new_elements[1].push_back(constrained_edges[6]);
-                new_elements[1].push_back(constrained_edges[4]);
-                new_elements[1].push_back(n[k]);
-                new_boundaries[1].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[1].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[1].push_back(0);
-                new_boundaries[1].push_back(0);
-
-                // Option 3
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[0]);
-                new_elements[2].push_back(constrained_edges[2]);
-                new_elements[2].push_back(n[l]);
-                new_boundaries[2].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[2].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[8]);
-                new_elements[2].push_back(constrained_edges[0]);
-                new_elements[2].push_back(n[l]);
-                new_boundaries[2].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[6]);
-                new_elements[2].push_back(constrained_edges[8]);
-                new_elements[2].push_back(n[l]);
-                new_boundaries[2].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[2].push_back(0);
-
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[2]);
-                new_elements[2].push_back(constrained_edges[0]);
-                new_elements[2].push_back(n[k]);
-                new_boundaries[2].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[2].push_back(0);
-
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[0]);
-                new_elements[2].push_back(constrained_edges[8]);
-                new_elements[2].push_back(n[k]);
-                new_boundaries[2].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-
-                new_elements[2].push_back(constrained_edges[4]);
-                new_elements[2].push_back(constrained_edges[8]);
-                new_elements[2].push_back(constrained_edges[6]);
-                new_elements[2].push_back(n[k]);
-                new_boundaries[2].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[2].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[2].push_back(0);
-                new_boundaries[2].push_back(0);
-
-                // Option 4
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[2]);
-                new_elements[3].push_back(constrained_edges[4]);
-                new_elements[3].push_back(n[l]);
-                new_boundaries[3].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[3].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[0]);
-                new_elements[3].push_back(constrained_edges[2]);
-                new_elements[3].push_back(n[l]);
-                new_boundaries[3].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[8]);
-                new_elements[3].push_back(constrained_edges[0]);
-                new_elements[3].push_back(n[l]);
-                new_boundaries[3].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[3].push_back(0);
-
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[4]);
-                new_elements[3].push_back(constrained_edges[2]);
-                new_elements[3].push_back(n[k]);
-                new_boundaries[3].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[3].push_back(0);
-
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[2]);
-                new_elements[3].push_back(constrained_edges[0]);
-                new_elements[3].push_back(n[k]);
-                new_boundaries[3].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-
-                new_elements[3].push_back(constrained_edges[6]);
-                new_elements[3].push_back(constrained_edges[0]);
-                new_elements[3].push_back(constrained_edges[8]);
-                new_elements[3].push_back(n[k]);
-                new_boundaries[3].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[3].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[3].push_back(0);
-                new_boundaries[3].push_back(0);
-
-                // Option 5
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[0]);
-                new_elements[4].push_back(constrained_edges[2]);
-                new_elements[4].push_back(n[l]);
-                new_boundaries[4].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[4].push_back(0);
-
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[2]);
-                new_elements[4].push_back(constrained_edges[4]);
-                new_elements[4].push_back(n[l]);
-                new_boundaries[4].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[4]);
-                new_elements[4].push_back(constrained_edges[6]);
-                new_elements[4].push_back(n[l]);
-                new_boundaries[4].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[4].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[2]);
-                new_elements[4].push_back(constrained_edges[0]);
-                new_elements[4].push_back(n[k]);
-                new_boundaries[4].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[4].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[4]);
-                new_elements[4].push_back(constrained_edges[2]);
-                new_elements[4].push_back(n[k]);
-                new_boundaries[4].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(0);
-
-                new_elements[4].push_back(constrained_edges[8]);
-                new_elements[4].push_back(constrained_edges[6]);
-                new_elements[4].push_back(constrained_edges[4]);
-                new_elements[4].push_back(n[k]);
-                new_boundaries[4].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[4].push_back(0);
-                new_boundaries[4].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[4].push_back(0);
-              }else if(nelements==6){
-                // This is the 6-element to 8-element swap.
-                new_elements.resize(1);
-                new_boundaries.resize(1);
-
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[5]][n[k]]);
-                new_boundaries[0].push_back(b[element_order[0]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(b[element_order[3]][n[k]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[2]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[1]][n[k]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(n[l]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[4]][n[k]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[0]);
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(b[element_order[5]][n[l]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[0]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[6]);
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[3]][n[l]]);
-                new_boundaries[0].push_back(b[element_order[2]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[2]);
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(b[element_order[1]][n[l]]);
-                new_boundaries[0].push_back(0);
-
-                new_elements[0].push_back(constrained_edges[4]);
-                new_elements[0].push_back(constrained_edges[10]);
-                new_elements[0].push_back(constrained_edges[8]);
-                new_elements[0].push_back(n[k]);
-                new_boundaries[0].push_back(b[element_order[4]][n[l]]);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-                new_boundaries[0].push_back(0);
-              }else{
-                continue;
-              }
-
-              nelements = new_elements[0].size()/4;
-
-              // Check new minimum quality.
-              std::vector<double> new_min_quality(new_elements.size());
-              std::vector< std::vector<double> > newq(new_elements.size());
-              int best_option;
-              for(int invert=0;invert<2;invert++){
-                best_option=0;
-                for(size_t option=0;option<new_elements.size();option++){
-                  newq[option].resize(nelements);
-                  for(size_t j=0;j<nelements;j++){
-                    newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
-                                                         _mesh->get_coords(new_elements[option][j*4+1]),
-                                                         _mesh->get_coords(new_elements[option][j*4+2]),
-                                                         _mesh->get_coords(new_elements[option][j*4+3]),
-                                                         _mesh->get_metric(new_elements[option][j*4+0]),
-                                                         _mesh->get_metric(new_elements[option][j*4+1]),
-                                                         _mesh->get_metric(new_elements[option][j*4+2]),
-                                                         _mesh->get_metric(new_elements[option][j*4+3]));
-                  }
-
-                  new_min_quality[option] = newq[option][0];
-                  for(size_t j=0;j<nelements;j++)
-                    new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
-                }
-
-
-                for(size_t option=1;option<new_elements.size();option++){
-                  if(new_min_quality[option]>new_min_quality[best_option]){
-                    best_option = option;
-                  }
-                }
-
-                if(new_min_quality[best_option] < 0.0){
-                  // Invert elements.
-                  std::vector< std::vector<index_t> >::iterator it, bit;
-                  for(it=new_elements.begin(), bit=new_boundaries.begin(); it!=new_elements.end(); ++it, ++bit){
-                    for(size_t j=0;j<nelements;j++){
-                      index_t stash_id = (*it)[j*4];
-                      (*it)[j*4] = (*it)[j*4+1];
-                      (*it)[j*4+1] = stash_id;
-                      int stash_b = (*bit)[j*4];
-                      (*bit)[j*4] = (*bit)[j*4+1];
-                      (*bit)[j*4+1] = stash_b;
-                    }
-                  }
-
-                  continue;
-                }
-                break;
-              }
-
-              if(new_min_quality[best_option] <= min_quality)
-                continue;
-
-              // Update NNList
-              std::vector<index_t>::iterator vit = std::find(_mesh->NNList[n[k]].begin(), _mesh->NNList[n[k]].end(), n[l]);
-              assert(vit != _mesh->NNList[n[k]].end());
-              _mesh->NNList[n[k]].erase(vit);
-              vit = std::find(_mesh->NNList[n[l]].begin(), _mesh->NNList[n[l]].end(), n[k]);
-              assert(vit != _mesh->NNList[n[l]].end());
-              _mesh->NNList[n[l]].erase(vit);
-
-              // Remove old elements.
-              for(typename std::set<index_t>::const_iterator it=neigh_elements.begin();it!=neigh_elements.end();++it)
-                _mesh->erase_element(*it);
-
-              // Add new elements.
-              for(size_t j=0;j<nelements;j++){
-                int eid = _mesh->append_element(&(new_elements[best_option][j*4]), &(new_boundaries[best_option][j*4]));
-                quality.push_back(newq[best_option][j]);
-
-                for(int p=0; p<nloc; ++p){
-                  index_t v1 = new_elements[best_option][j*4+p];
-                  _mesh->NEList[v1].insert(eid);
-
-                  for(int q=p+1; q<nloc; ++q){
-                    index_t v2 = new_elements[best_option][j*4+q];
-                    std::vector<index_t>::iterator vit = std::find(_mesh->NNList[v1].begin(), _mesh->NNList[v1].end(), v2);
-                    if(vit == _mesh->NNList[v1].end()){
-                      _mesh->NNList[v1].push_back(v2);
-                      _mesh->NNList[v2].push_back(v1);
-                    }
-                  }
-                }
-              }
-
-              swapped = true;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    return;
   }
+  */
 
-  bool swap_kernel2d(Edge<index_t>& edge){
+  inline bool swap_kernel2d(const Edge<index_t>& edge, propagation_map& pMap){
     index_t i = edge.edge.first;
     index_t j = edge.edge.second;
 
-    if(_mesh->is_halo_node(i)&& _mesh->is_halo_node(j))
+    if(_mesh->is_halo_node(i) && _mesh->is_halo_node(j))
       return false;
 
     // Find the two elements sharing this edge
@@ -1217,6 +567,9 @@ template<typename real_t, int dim> class Swapping{
 
     index_t eid0 = intersection[0];
     index_t eid1 = intersection[1];
+
+    if(_mesh->quality[eid0] > min_Q && _mesh->quality[eid1] > min_Q)
+      return false;
 
     const index_t *n = _mesh->get_element(eid0);
     int n_off=-1;
@@ -1261,13 +614,13 @@ template<typename real_t, int dim> class Swapping{
                                    _mesh->get_metric(m_swap[0]),
                                    _mesh->get_metric(m_swap[1]),
                                    _mesh->get_metric(m_swap[2]));
-    real_t worst_q = std::min(quality[eid0], quality[eid1]);
+    real_t worst_q = std::min(_mesh->quality[eid0], _mesh->quality[eid1]);
     real_t new_worst_q = std::min(q0, q1);
 
     if(new_worst_q>worst_q){
       // Cache new quality measures.
-      quality[eid0] = q0;
-      quality[eid1] = q1;
+      _mesh->quality[eid0] = q0;
+      _mesh->quality[eid1] = q1;
 
       // Update NNList
       typename std::vector<index_t>::iterator it;
@@ -1299,8 +652,10 @@ template<typename real_t, int dim> class Swapping{
         _mesh->boundary[eid1*nloc+cnt] = bm_swap[cnt];
       }
 
-      edge.edge.first = std::min(k, l);
-      edge.edge.second = std::max(k, l);
+      pMap[std::min(i, k)].insert(std::max(i, k));
+      pMap[std::min(i, l)].insert(std::max(i, l));
+      pMap[std::min(j, k)].insert(std::max(j, k));
+      pMap[std::min(j, l)].insert(std::max(j, l));
 
       return true;
     }
@@ -1308,34 +663,700 @@ template<typename real_t, int dim> class Swapping{
     return false;
   }
 
-  inline void append_element(const index_t *elem, const int *boundary, const size_t tid){
-    for(size_t i=0; i<nloc; ++i){
-      newElements[tid].push_back(elem[i]);
-      newBoundaries[tid].push_back(boundary[i]);
-    }
-  }
+  inline bool swap_kernel3d(const Edge<index_t>& edge, propagation_map& pMap){
+    index_t nk = edge.edge.first;
+    index_t nl = edge.edge.second;
 
-  inline void replace_element(const index_t eid, const index_t *n, const int *boundary){
-    for(size_t i=0;i<nloc;i++){
-      _mesh->_ENList[eid*nloc+i]=n[i];
-      _mesh->boundary[eid*nloc+i]=boundary[i];
+    if(_mesh->is_halo_node(nk) && _mesh->is_halo_node(nl))
+      return false;
+
+    std::set<index_t> neigh_elements;
+    set_intersection(_mesh->NEList[nk].begin(), _mesh->NEList[nk].end(),
+                     _mesh->NEList[nl].begin(), _mesh->NEList[nl].end(),
+                     inserter(neigh_elements, neigh_elements.begin()));
+
+    bool abort = true;
+    for(auto& e : neigh_elements){
+      if(_mesh->quality[e] < min_Q){
+        abort = false;
+        break;
+      }
     }
+
+    if(abort)
+      return false;
+
+    double min_quality = 1.0;
+    std::vector<index_t> constrained_edges_unsorted;
+    std::map<int, std::map<index_t, int> > b;
+    std::vector<int> element_order, e_to_eid;
+
+    for(auto& it : neigh_elements){
+      min_quality = std::min(min_quality, _mesh->quality[it]);
+
+      const int *m=_mesh->get_element(it);
+      if(m[0]<0){
+        return false;
+      }
+
+      e_to_eid.push_back(it);
+
+      for(int j=0;j<4;j++){
+        if((m[j]!=nk)&&(m[j]!=nl)){
+          constrained_edges_unsorted.push_back(m[j]);
+        }else if(m[j] == nk){
+          b[it][nk] = _mesh->boundary[nloc*(it)+j];
+        }else{ // if(m[j] == nl)
+          b[it][nl] = _mesh->boundary[nloc*(it)+j];
+        }
+      }
+    }
+
+    size_t nelements = neigh_elements.size();
+    assert(nelements*2==constrained_edges_unsorted.size());
+    assert(b.size() == nelements);
+
+    // Sort edges.
+    std::vector<index_t> constrained_edges;
+    std::vector<bool> sorted(nelements, false);
+    constrained_edges.push_back(constrained_edges_unsorted[0]);
+    constrained_edges.push_back(constrained_edges_unsorted[1]);
+    element_order.push_back(e_to_eid[0]);
+    for(size_t j=1;j<nelements;j++){
+      for(size_t e=1;e<nelements;e++){
+        if(sorted[e])
+          continue;
+        if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2]){
+          constrained_edges.push_back(constrained_edges_unsorted[e*2]);
+          constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
+          element_order.push_back(e_to_eid[e]);
+          sorted[e]=true;
+          break;
+        }else if(*constrained_edges.rbegin()==constrained_edges_unsorted[e*2+1]){
+          constrained_edges.push_back(constrained_edges_unsorted[e*2+1]);
+          constrained_edges.push_back(constrained_edges_unsorted[e*2]);
+          element_order.push_back(e_to_eid[e]);
+          sorted[e]=true;
+          break;
+        }
+      }
+    }
+
+    if(*constrained_edges.begin() != *constrained_edges.rbegin()){
+      return false;
+    }
+    assert(element_order.size() == nelements);
+
+    double orig_vol = 0.0;
+    for(auto& ele : neigh_elements){
+      const index_t* n = _mesh->get_element(ele);
+      orig_vol += property->volume(_mesh->get_coords(n[0]), _mesh->get_coords(n[1]),
+          _mesh->get_coords(n[2]), _mesh->get_coords(n[3]));
+    }
+
+    if(nelements>3)
+      return false;
+    std::vector< std::vector<index_t> > new_elements;
+    std::vector< std::vector<int> > new_boundaries;
+    if(nelements==3){
+      // This is the 3-element to 2-element swap.
+      new_elements.resize(1);
+      new_boundaries.resize(1);
+
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(b[element_order[1]][nk]);
+      new_boundaries[0].push_back(b[element_order[2]][nk]);
+      new_boundaries[0].push_back(b[element_order[0]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(b[element_order[2]][nl]);
+      new_boundaries[0].push_back(b[element_order[1]][nl]);
+      new_boundaries[0].push_back(b[element_order[0]][nl]);
+      new_boundaries[0].push_back(0);
+    }else if(nelements==4){
+      // This is the 4-element to 4-element swap.
+      new_elements.resize(2);
+      new_boundaries.resize(2);
+
+      // Option 1.
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[3]][nk]);
+      new_boundaries[0].push_back(b[element_order[0]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(b[element_order[2]][nk]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[1]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(b[element_order[3]][nl]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[0]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[2]][nl]);
+      new_boundaries[0].push_back(b[element_order[1]][nl]);
+      new_boundaries[0].push_back(0);
+
+      // Option 2
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(nl);
+      new_boundaries[1].push_back(b[element_order[1]][nk]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(b[element_order[0]][nk]);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(nl);
+      new_boundaries[1].push_back(b[element_order[2]][nk]);
+      new_boundaries[1].push_back(b[element_order[3]][nk]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(nk);
+      new_boundaries[1].push_back(b[element_order[1]][nl]);
+      new_boundaries[1].push_back(b[element_order[0]][nl]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(nk);
+      new_boundaries[1].push_back(b[element_order[2]][nl]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(b[element_order[3]][nl]);
+      new_boundaries[1].push_back(0);
+    }else if(nelements==5){
+      // This is the 5-element to 6-element swap.
+      new_elements.resize(5);
+      new_boundaries.resize(5);
+
+      // Option 1
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(b[element_order[1]][nk]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[0]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[2]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(b[element_order[4]][nk]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[3]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[1]][nl]);
+      new_boundaries[0].push_back(b[element_order[0]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[2]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[4]][nl]);
+      new_boundaries[0].push_back(b[element_order[3]][nl]);
+      new_boundaries[0].push_back(0);
+
+      // Option 2
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[8]);
+      new_elements[1].push_back(nl);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(b[element_order[4]][nk]);
+      new_boundaries[1].push_back(b[element_order[0]][nk]);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(constrained_edges[8]);
+      new_elements[1].push_back(nl);
+      new_boundaries[1].push_back(b[element_order[3]][nk]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(nl);
+      new_boundaries[1].push_back(b[element_order[2]][nk]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(b[element_order[1]][nk]);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[0]);
+      new_elements[1].push_back(constrained_edges[8]);
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(nk);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(b[element_order[0]][nl]);
+      new_boundaries[1].push_back(b[element_order[4]][nl]);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[8]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(nk);
+      new_boundaries[1].push_back(b[element_order[3]][nl]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+
+      new_elements[1].push_back(constrained_edges[2]);
+      new_elements[1].push_back(constrained_edges[6]);
+      new_elements[1].push_back(constrained_edges[4]);
+      new_elements[1].push_back(nk);
+      new_boundaries[1].push_back(b[element_order[2]][nl]);
+      new_boundaries[1].push_back(b[element_order[1]][nl]);
+      new_boundaries[1].push_back(0);
+      new_boundaries[1].push_back(0);
+
+      // Option 3
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[0]);
+      new_elements[2].push_back(constrained_edges[2]);
+      new_elements[2].push_back(nl);
+      new_boundaries[2].push_back(b[element_order[0]][nk]);
+      new_boundaries[2].push_back(b[element_order[1]][nk]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[8]);
+      new_elements[2].push_back(constrained_edges[0]);
+      new_elements[2].push_back(nl);
+      new_boundaries[2].push_back(b[element_order[4]][nk]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[6]);
+      new_elements[2].push_back(constrained_edges[8]);
+      new_elements[2].push_back(nl);
+      new_boundaries[2].push_back(b[element_order[3]][nk]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(b[element_order[2]][nk]);
+      new_boundaries[2].push_back(0);
+
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[2]);
+      new_elements[2].push_back(constrained_edges[0]);
+      new_elements[2].push_back(nk);
+      new_boundaries[2].push_back(b[element_order[0]][nl]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(b[element_order[1]][nl]);
+      new_boundaries[2].push_back(0);
+
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[0]);
+      new_elements[2].push_back(constrained_edges[8]);
+      new_elements[2].push_back(nk);
+      new_boundaries[2].push_back(b[element_order[4]][nl]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+
+      new_elements[2].push_back(constrained_edges[4]);
+      new_elements[2].push_back(constrained_edges[8]);
+      new_elements[2].push_back(constrained_edges[6]);
+      new_elements[2].push_back(nk);
+      new_boundaries[2].push_back(b[element_order[3]][nl]);
+      new_boundaries[2].push_back(b[element_order[2]][nl]);
+      new_boundaries[2].push_back(0);
+      new_boundaries[2].push_back(0);
+
+      // Option 4
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[2]);
+      new_elements[3].push_back(constrained_edges[4]);
+      new_elements[3].push_back(nl);
+      new_boundaries[3].push_back(b[element_order[1]][nk]);
+      new_boundaries[3].push_back(b[element_order[2]][nk]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[0]);
+      new_elements[3].push_back(constrained_edges[2]);
+      new_elements[3].push_back(nl);
+      new_boundaries[3].push_back(b[element_order[0]][nk]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[8]);
+      new_elements[3].push_back(constrained_edges[0]);
+      new_elements[3].push_back(nl);
+      new_boundaries[3].push_back(b[element_order[4]][nk]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(b[element_order[3]][nk]);
+      new_boundaries[3].push_back(0);
+
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[4]);
+      new_elements[3].push_back(constrained_edges[2]);
+      new_elements[3].push_back(nk);
+      new_boundaries[3].push_back(b[element_order[1]][nl]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(b[element_order[2]][nl]);
+      new_boundaries[3].push_back(0);
+
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[2]);
+      new_elements[3].push_back(constrained_edges[0]);
+      new_elements[3].push_back(nk);
+      new_boundaries[3].push_back(b[element_order[0]][nl]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+
+      new_elements[3].push_back(constrained_edges[6]);
+      new_elements[3].push_back(constrained_edges[0]);
+      new_elements[3].push_back(constrained_edges[8]);
+      new_elements[3].push_back(nk);
+      new_boundaries[3].push_back(b[element_order[4]][nl]);
+      new_boundaries[3].push_back(b[element_order[3]][nl]);
+      new_boundaries[3].push_back(0);
+      new_boundaries[3].push_back(0);
+
+      // Option 5
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[0]);
+      new_elements[4].push_back(constrained_edges[2]);
+      new_elements[4].push_back(nl);
+      new_boundaries[4].push_back(b[element_order[0]][nk]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(b[element_order[4]][nk]);
+      new_boundaries[4].push_back(0);
+
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[2]);
+      new_elements[4].push_back(constrained_edges[4]);
+      new_elements[4].push_back(nl);
+      new_boundaries[4].push_back(b[element_order[1]][nk]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[4]);
+      new_elements[4].push_back(constrained_edges[6]);
+      new_elements[4].push_back(nl);
+      new_boundaries[4].push_back(b[element_order[2]][nk]);
+      new_boundaries[4].push_back(b[element_order[3]][nk]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[2]);
+      new_elements[4].push_back(constrained_edges[0]);
+      new_elements[4].push_back(nk);
+      new_boundaries[4].push_back(b[element_order[0]][nl]);
+      new_boundaries[4].push_back(b[element_order[4]][nl]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[4]);
+      new_elements[4].push_back(constrained_edges[2]);
+      new_elements[4].push_back(nk);
+      new_boundaries[4].push_back(b[element_order[1]][nl]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(0);
+
+      new_elements[4].push_back(constrained_edges[8]);
+      new_elements[4].push_back(constrained_edges[6]);
+      new_elements[4].push_back(constrained_edges[4]);
+      new_elements[4].push_back(nk);
+      new_boundaries[4].push_back(b[element_order[2]][nl]);
+      new_boundaries[4].push_back(0);
+      new_boundaries[4].push_back(b[element_order[3]][nl]);
+      new_boundaries[4].push_back(0);
+    }else if(nelements==6){
+      // This is the 6-element to 8-element swap.
+      new_elements.resize(1);
+      new_boundaries.resize(1);
+
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[5]][nk]);
+      new_boundaries[0].push_back(b[element_order[0]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(b[element_order[3]][nk]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[2]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[1]][nk]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(nl);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[4]][nk]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[0]);
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(b[element_order[5]][nl]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[0]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[6]);
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[3]][nl]);
+      new_boundaries[0].push_back(b[element_order[2]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[2]);
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(b[element_order[1]][nl]);
+      new_boundaries[0].push_back(0);
+
+      new_elements[0].push_back(constrained_edges[4]);
+      new_elements[0].push_back(constrained_edges[10]);
+      new_elements[0].push_back(constrained_edges[8]);
+      new_elements[0].push_back(nk);
+      new_boundaries[0].push_back(b[element_order[4]][nl]);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+      new_boundaries[0].push_back(0);
+    }else{
+      return false;
+    }
+
+    nelements = new_elements[0].size()/4;
+
+    // Check new minimum quality.
+    std::vector<double> new_min_quality(new_elements.size());
+    std::vector< std::vector<double> > newq(new_elements.size());
+    int best_option=0;
+    for(size_t option=0;option<new_elements.size();option++){
+      newq[option].resize(nelements);
+      for(size_t j=0;j<nelements;j++){
+        newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
+                                             _mesh->get_coords(new_elements[option][j*4+1]),
+                                             _mesh->get_coords(new_elements[option][j*4+2]),
+                                             _mesh->get_coords(new_elements[option][j*4+3]),
+                                             _mesh->get_metric(new_elements[option][j*4+0]),
+                                             _mesh->get_metric(new_elements[option][j*4+1]),
+                                             _mesh->get_metric(new_elements[option][j*4+2]),
+                                             _mesh->get_metric(new_elements[option][j*4+3]));
+
+        if(newq[option][j] < 0.0){
+          index_t stash_id = new_elements[option][j*4];
+          new_elements[option][j*4] = new_elements[option][j*4+1];
+          new_elements[option][j*4+1] = stash_id;
+          int stash_b = new_boundaries[option][j*4];
+          new_boundaries[option][j*4] = new_boundaries[option][j*4+1];
+          new_boundaries[option][j*4+1] = stash_b;
+          newq[option][j] = -newq[option][j];
+        }
+      }
+
+      new_min_quality[option] = newq[option][0];
+      for(size_t j=0;j<nelements;j++)
+        new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
+    }
+
+
+    for(size_t option=1;option<new_elements.size();option++){
+      if(new_min_quality[option]>new_min_quality[best_option]){
+        best_option = option;
+      }
+    }
+
+    if(new_min_quality[best_option] <= min_quality)
+      return false;
+
+    double new_vol = 0.0;
+    for(int j=0;j<nelements;j++){
+      const index_t* n = &new_elements[best_option][j*4];
+      new_vol += property->volume(_mesh->get_coords(n[0]), _mesh->get_coords(n[1]),
+          _mesh->get_coords(n[2]), _mesh->get_coords(n[3]));
+    }
+
+    if(fabs(new_vol - orig_vol) > DBL_EPSILON)
+      return false;
+
+    // Update NNList
+    std::vector<index_t>::iterator vit = std::find(_mesh->NNList[nk].begin(), _mesh->NNList[nk].end(), nl);
+    assert(vit != _mesh->NNList[nk].end());
+    _mesh->NNList[nk].erase(vit);
+    vit = std::find(_mesh->NNList[nl].begin(), _mesh->NNList[nl].end(), nk);
+    assert(vit != _mesh->NNList[nl].end());
+    _mesh->NNList[nl].erase(vit);
+
+    // Remove old elements.
+    for(auto& it : neigh_elements)
+      _mesh->erase_element(it);
+
+    // Add new elements and mark edges for propagation.
+    // First, recycle element IDs.
+    std::deque<index_t> new_eids;
+    for(auto& ele : neigh_elements)
+      new_eids.push_back(ele);
+
+    // Next, find how many new elements we have to allocate
+    int extra_elements = nelements - neigh_elements.size();
+    if(extra_elements > 0){
+      index_t new_eid;
+#pragma omp atomic capture
+      {
+        new_eid = _mesh->NElements;
+        _mesh->NElements += extra_elements;
+      }
+
+      if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
+        int oldval = 0;
+        while(oldval>0){
+          oldval = ENList_lock.fetch_or(1, std::memory_order_acq_rel);
+        }
+        if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
+          _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
+          _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
+          _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
+        }
+        ENList_lock.store(0, std::memory_order_release);
+      }
+
+      for(int i=0; i<extra_elements; ++i)
+        new_eids.push_back(new_eid++);
+    }
+
+    for(size_t j=0;j<nelements;j++){
+      index_t eid = new_eids[0];
+      new_eids.pop_front();
+      for(size_t i=0;i<nloc;i++){
+        _mesh->_ENList[eid*nloc+i]=new_elements[best_option][j*4+i];
+        _mesh->boundary[eid*nloc+i]=new_boundaries[best_option][j*4+i];
+      }
+      _mesh->quality[eid]=newq[best_option][j];
+
+      for(int p=0; p<nloc; ++p){
+        index_t v1 = new_elements[best_option][j*4+p];
+        _mesh->NEList[v1].insert(eid);
+
+        for(int q=p+1; q<nloc; ++q){
+          index_t v2 = new_elements[best_option][j*4+q];
+          std::vector<index_t>::iterator vit = std::find(_mesh->NNList[v1].begin(), _mesh->NNList[v1].end(), v2);
+          if(vit == _mesh->NNList[v1].end()){
+            _mesh->NNList[v1].push_back(v2);
+            _mesh->NNList[v2].push_back(v1);
+          }
+
+          pMap[std::min(v1,v2)].insert(std::max(v1,v2));
+        }
+      }
+    }
+
+    return true;
   }
 
   Mesh<real_t> *_mesh;
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;
+  std::atomic<unsigned int> ENList_lock;
+  std::vector<atomwrapper> vLocks;
 
   static const size_t ndims=dim;
   static const size_t nloc=dim+1;
   static const size_t msize=(dim==2?3:6);
 
-  std::vector< std::vector<index_t> > newElements;
-  std::vector< std::vector<int> > newBoundaries;
-
   std::vector< std::set<index_t> > marked_edges;
-  std::vector<real_t> quality;
   real_t min_Q;
 
   int nthreads;
