@@ -122,18 +122,6 @@ old = __sync_fetch_and_add(shared, inc);
 return old;
 }
 
-struct atomwrapper
-{
-  std::atomic<unsigned int> _a;
-
-  atomwrapper(){
-    _a.store(0, std::memory_order_relaxed);
-  }
-
-  atomwrapper(const atomwrapper &other)
-    :_a(other._a.load()) {}
-};
-
 #define pragmatic_isnormal std::isnormal
 #define pragmatic_isnan std::isnan
 

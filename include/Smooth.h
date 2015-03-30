@@ -38,7 +38,6 @@
 #ifndef SMOOTH_H
 #define SMOOTH_H
 
-#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -56,6 +55,7 @@
 #endif
 
 #include "ElementProperty.h"
+#include "Lock.h"
 #include "Mesh.h"
 #include "MetricTensor.h"
 
@@ -113,9 +113,10 @@ template<typename real_t, int dim>
     std::vector<bool> is_boundary(NNodes, false);
     double qsum=0;
 
-#pragma omp parallel
-    {
-#pragma omp for schedule(guided) reduction(+:qsum)
+    if(quality_tol>0){
+      good_q = quality_tol;
+    }else{
+#pragma omp parallel for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
@@ -132,11 +133,8 @@ template<typename real_t, int dim>
           }
         }
       }
+      good_q = qsum/NElements;
     }
-    good_q = qsum/NElements;
-
-    if(quality_tol>0)
-      good_q = quality_tol;
 
     // Use this to keep track of vertices that are still to be visited.
     std::vector<int> active_vertices(NNodes, 1);
@@ -162,19 +160,13 @@ template<typename real_t, int dim>
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             retry.push_back(node);
-            continue;
-          }
-          if(active_vertices[node] != 1){
-            vLocks[node]._a.store(0, std::memory_order_release);
             continue;
           }
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-            if((oldval & 1) != 0){
+            if(vLocks[it].is_locked()){
               abort = true;
               break;
             }
@@ -191,7 +183,7 @@ template<typename real_t, int dim>
           else
             retry.push_back(node);
 
-          vLocks[node]._a.store(0, std::memory_order_release);
+          vLocks[node].unlock();
         }
 
         while(retry.size()>0){
@@ -203,19 +195,13 @@ template<typename real_t, int dim>
 
             bool abort = false;
 
-            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[node].try_lock()){
               next_retry.push_back(node);
-              continue;
-            }
-            if(active_vertices[node] != 1){
-              vLocks[node]._a.store(0, std::memory_order_release);
               continue;
             }
 
             for(auto& it : _mesh->NNList[node]){
-              int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-              if((oldval & 1) != 0){
+              if(vLocks[it].is_locked()){
                 abort = true;
                 break;
               }
@@ -232,7 +218,7 @@ template<typename real_t, int dim>
             else
               next_retry.push_back(node);
 
-            vLocks[node]._a.store(0, std::memory_order_release);
+            vLocks[node].unlock();
           }
 
           retry.swap(next_retry);
@@ -250,9 +236,10 @@ template<typename real_t, int dim>
     std::vector<bool> is_boundary(NNodes, false);
     double qsum=0;
 
-#pragma omp parallel
-    {
-#pragma omp for schedule(guided) reduction(+:qsum)
+    if(quality_tol>0){
+      good_q = quality_tol;
+    }else{
+#pragma omp parallel for schedule(guided) reduction(+:qsum)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
@@ -269,11 +256,8 @@ template<typename real_t, int dim>
           }
         }
       }
+      good_q = qsum/NElements;
     }
-    good_q = qsum/NElements;
-
-    if(quality_tol>0)
-      good_q = quality_tol;
 
     // Use this to keep track of vertices that are still to be visited.
     std::vector<int> active_vertices(NNodes, 1);
@@ -299,19 +283,13 @@ template<typename real_t, int dim>
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             retry.push_back(node);
-            continue;
-          }
-          if(active_vertices[node] != 1){
-            vLocks[node]._a.store(0, std::memory_order_release);
             continue;
           }
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-            if((oldval & 1) != 0){
+            if(vLocks[it].is_locked()){
               abort = true;
               break;
             }
@@ -328,7 +306,7 @@ template<typename real_t, int dim>
           else
             retry.push_back(node);
 
-          vLocks[node]._a.store(0, std::memory_order_release);
+          vLocks[node].unlock();
         }
 
         while(retry.size()>0){
@@ -340,19 +318,13 @@ template<typename real_t, int dim>
 
             bool abort = false;
 
-            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[node].try_lock()){
               next_retry.push_back(node);
-              continue;
-            }
-            if(active_vertices[node] != 1){
-              vLocks[node]._a.store(0, std::memory_order_release);
               continue;
             }
 
             for(auto& it : _mesh->NNList[node]){
-              int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-              if((oldval & 1) != 0){
+              if(vLocks[it].is_locked()){
                 abort = true;
                 break;
               }
@@ -369,7 +341,7 @@ template<typename real_t, int dim>
             else
               next_retry.push_back(node);
 
-            vLocks[node]._a.store(0, std::memory_order_release);
+            vLocks[node].unlock();
           }
 
           retry.swap(next_retry);
@@ -415,15 +387,13 @@ template<typename real_t, int dim>
 
         bool abort = false;
 
-        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-        if((oldval & 1) != 0){
+        if(!vLocks[node].try_lock()){
           retry.push_back(node);
           continue;
         }
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-          if((oldval & 1) != 0){
+          if(vLocks[it].is_locked()){
             abort = true;
             break;
           }
@@ -434,7 +404,7 @@ template<typename real_t, int dim>
         else
           retry.push_back(node);
 
-        vLocks[node]._a.store(0, std::memory_order_release);
+        vLocks[node].unlock();
       }
 
       while(retry.size()>0){
@@ -443,15 +413,13 @@ template<typename real_t, int dim>
         for(auto& node : retry){
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             next_retry.push_back(node);
             continue;
           }
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.load(std::memory_order_acquire);
-            if((oldval & 1) != 0){
+            if(vLocks[it].is_locked()){
               abort = true;
               break;
             }
@@ -462,7 +430,7 @@ template<typename real_t, int dim>
           else
             next_retry.push_back(node);
 
-          vLocks[node]._a.store(0, std::memory_order_release);
+          vLocks[node].unlock();
         }
 
         retry.swap(next_retry);
@@ -1408,7 +1376,7 @@ template<typename real_t, int dim>
 
   Mesh<real_t> *_mesh;
   ElementProperty<real_t> *property;
-  std::vector<atomwrapper> vLocks;
+  std::vector<Lock> vLocks;
 
   const size_t nloc, msize;
 

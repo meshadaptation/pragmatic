@@ -39,14 +39,12 @@
 #define SWAPPING_H
 
 #include <algorithm>
-#include <atomic>
-#include <limits>
-#include <list>
 #include <set>
 #include <vector>
 
 #include "Edge.h"
 #include "ElementProperty.h"
+#include "Lock.h"
 #include "Mesh.h"
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
@@ -88,8 +86,6 @@ template<typename real_t, int dim> class Swapping{
     }
 
     nnodes_reserve = 0;
-    ENList_lock.store(0, std::memory_order_relaxed);
-    nthreads = pragmatic_nthreads();
   }
 
   /// Default destructor.
@@ -123,16 +119,14 @@ template<typename real_t, int dim> class Swapping{
       for(index_t node=0; node<NNodes; ++node){
         bool abort = false;
 
-        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-        if((oldval & 1) != 0){
+        if(!vLocks[node].try_lock()){
           retry.push_back(node);
           continue;
         }
         locks_held.push_back(node);
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[it].try_lock()){
             abort = true;
             break;
           }
@@ -170,7 +164,7 @@ template<typename real_t, int dim> class Swapping{
           retry.push_back(node);
 
         for(auto& it : locks_held){
-          vLocks[it]._a.store(0, std::memory_order_release);
+          vLocks[it].unlock();
         }
         locks_held.clear();
       }
@@ -184,16 +178,14 @@ template<typename real_t, int dim> class Swapping{
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             next_retry.push_back(node);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[it].try_lock()){
               abort = true;
               break;
             }
@@ -224,7 +216,7 @@ template<typename real_t, int dim> class Swapping{
             next_retry.push_back(node);
 
           for(auto& it : locks_held){
-            vLocks[it]._a.store(0, std::memory_order_release);
+            vLocks[it].unlock();
           }
           locks_held.clear();
         }
@@ -242,20 +234,14 @@ template<typename real_t, int dim> class Swapping{
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             retry.push_back(node);
-            continue;
-          }
-          if(marked_edges[node].empty()){
-            vLocks[node]._a.store(0, std::memory_order_release);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[it].try_lock()){
               abort = true;
               break;
             }
@@ -293,7 +279,7 @@ template<typename real_t, int dim> class Swapping{
             retry.push_back(node);
 
           for(auto& it : locks_held){
-            vLocks[it]._a.store(0, std::memory_order_release);
+            vLocks[it].unlock();
           }
           locks_held.clear();
         }
@@ -307,20 +293,14 @@ template<typename real_t, int dim> class Swapping{
 
             bool abort = false;
 
-            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[node].try_lock()){
               next_retry.push_back(node);
-              continue;
-            }
-            if(marked_edges[node].empty()){
-              vLocks[node]._a.store(0, std::memory_order_release);
               continue;
             }
             locks_held.push_back(node);
 
             for(auto& it : _mesh->NNList[node]){
-              int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-              if((oldval & 1) != 0){
+              if(!vLocks[it].try_lock()){
                 abort = true;
                 break;
               }
@@ -351,7 +331,7 @@ template<typename real_t, int dim> class Swapping{
               next_retry.push_back(node);
 
             for(auto& it : locks_held){
-              vLocks[it]._a.store(0, std::memory_order_release);
+              vLocks[it].unlock();
             }
             locks_held.clear();
           }
@@ -1300,16 +1280,13 @@ template<typename real_t, int dim> class Swapping{
       }
 
       if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
-        int oldval = 0;
-        while(oldval>0){
-          oldval = ENList_lock.fetch_or(1, std::memory_order_acq_rel);
-        }
+        ENList_lock.lock();
         if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
           _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
           _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
           _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
         }
-        ENList_lock.store(0, std::memory_order_release);
+        ENList_lock.unlock();
       }
 
       for(int i=0; i<extra_elements; ++i)
@@ -1349,8 +1326,8 @@ template<typename real_t, int dim> class Swapping{
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;
-  std::atomic<unsigned int> ENList_lock;
-  std::vector<atomwrapper> vLocks;
+  Lock ENList_lock;
+  std::vector<Lock> vLocks;
 
   static const size_t ndims=dim;
   static const size_t nloc=dim+1;
@@ -1358,8 +1335,6 @@ template<typename real_t, int dim> class Swapping{
 
   std::vector< std::set<index_t> > marked_edges;
   real_t min_Q;
-
-  int nthreads;
 };
 
 #endif

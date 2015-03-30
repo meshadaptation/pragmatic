@@ -50,7 +50,7 @@
 #include "ElementProperty.h"
 #include "Mesh.h"
 
-/*! \brief Performs 2D mesh refinement.
+/*! \brief Performs 2D/3D mesh refinement.
  *
  */
 template<typename real_t, int dim> class Refine{

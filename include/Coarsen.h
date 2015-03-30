@@ -39,7 +39,6 @@
 #define COARSEN_H
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <limits>
 #include <set>
@@ -50,9 +49,11 @@
 #endif
 
 #include "ElementProperty.h"
+#include "Lock.h"
 #include "Mesh.h"
+#include "Worklist.h"
 
-/*! \brief Performs 2D mesh coarsening.
+/*! \brief Performs 2D/3D mesh coarsening.
  *
  */
 
@@ -84,6 +85,10 @@ template<typename real_t, int dim> class Coarsen{
 
     nnodes_reserve = 0;
     delete_slivers = false;
+
+    nthreads = omp_get_max_threads();
+    current_worklist.resize(nthreads);
+    current_worklist.resize(nthreads);
   }
 
   /// Default destructor.
@@ -112,25 +117,25 @@ template<typename real_t, int dim> class Coarsen{
 
 #pragma omp parallel
     {
+      int tid = omp_get_thread_num();
+
       // Vector "retry" is used to store aborted vertices.
       // Vector "round" is used to store propagated vertices.
       std::vector<index_t> retry, next_retry;
-      std::vector<index_t> this_round, next_round;
+      std::vector<index_t> next_round;
       std::vector<index_t> locks_held;
-#pragma omp for schedule(guided) nowait
+#pragma omp for schedule(static) nowait
       for(index_t node=0; node<NNodes; ++node){
         bool abort = false;
 
-        int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-        if((oldval & 1) != 0){
+        if(!vLocks[node].try_lock()){
           retry.push_back(node);
           continue;
         }
         locks_held.push_back(node);
 
         for(auto& it : _mesh->NNList[node]){
-          int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[it].try_lock()){
             abort = true;
             break;
           }
@@ -152,7 +157,7 @@ template<typename real_t, int dim> class Coarsen{
           retry.push_back(node);
 
         for(auto& it : locks_held){
-          vLocks[it]._a.store(0, std::memory_order_release);
+          vLocks[it].unlock();
         }
         locks_held.clear();
       }
@@ -166,16 +171,14 @@ template<typename real_t, int dim> class Coarsen{
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             next_retry.push_back(node);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[it].try_lock()){
               abort = true;
               break;
             }
@@ -197,7 +200,7 @@ template<typename real_t, int dim> class Coarsen{
             next_retry.push_back(node);
 
           for(auto& it : locks_held){
-            vLocks[it]._a.store(0, std::memory_order_release);
+            vLocks[it].unlock();
           }
           locks_held.clear();
         }
@@ -206,29 +209,25 @@ template<typename real_t, int dim> class Coarsen{
       }
 
       while(!next_round.empty()){
-        this_round.swap(next_round);
+        current_worklist[tid].replace(next_round);
         next_round.clear();
 
-        for(auto& node : this_round){
+        current_worklist[tid].init_traversal();
+        while(current_worklist[tid].is_valid()){
+          index_t node = current_worklist[tid].get_next();
           if(dynamic_vertex[node] == -1)
             continue;
 
           bool abort = false;
 
-          int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-          if((oldval & 1) != 0){
+          if(!vLocks[node].try_lock()){
             retry.push_back(node);
-            continue;
-          }
-          if(dynamic_vertex[node] != -2){
-            vLocks[node]._a.store(0, std::memory_order_release);
             continue;
           }
           locks_held.push_back(node);
 
           for(auto& it : _mesh->NNList[node]){
-            int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[it].try_lock()){
               abort = true;
               break;
             }
@@ -250,7 +249,7 @@ template<typename real_t, int dim> class Coarsen{
             retry.push_back(node);
 
           for(auto& it : locks_held){
-            vLocks[it]._a.store(0, std::memory_order_release);
+            vLocks[it].unlock();
           }
           locks_held.clear();
         }
@@ -264,20 +263,14 @@ template<typename real_t, int dim> class Coarsen{
 
             bool abort = false;
 
-            int oldval = vLocks[node]._a.fetch_or(1, std::memory_order_acq_rel);
-            if((oldval & 1) != 0){
+            if(!vLocks[node].try_lock()){
               next_retry.push_back(node);
-              continue;
-            }
-            if(dynamic_vertex[node] != -2){
-              vLocks[node]._a.store(0, std::memory_order_release);
               continue;
             }
             locks_held.push_back(node);
 
             for(auto& it : _mesh->NNList[node]){
-              int oldval = vLocks[it]._a.fetch_or(1, std::memory_order_acq_rel);
-              if((oldval & 1) != 0){
+              if(!vLocks[it].try_lock()){
                 abort = true;
                 break;
               }
@@ -299,7 +292,7 @@ template<typename real_t, int dim> class Coarsen{
               next_retry.push_back(node);
 
             for(auto& it : locks_held){
-              vLocks[it]._a.store(0, std::memory_order_release);
+              vLocks[it].unlock();
             }
             locks_held.clear();
           }
@@ -308,7 +301,11 @@ template<typename real_t, int dim> class Coarsen{
         }
 
         if(next_round.empty()){
-          // TODO: Try to steal work
+          // Try to steal work
+          for(int t=(tid+1)%nthreads; t!=tid; t=(t+1)%nthreads){
+            if(current_worklist[t].steal_work(next_round))
+              break;
+          }
         }
       }
     }
@@ -591,7 +588,8 @@ template<typename real_t, int dim> class Coarsen{
 
   size_t nnodes_reserve;
   std::vector<index_t> dynamic_vertex;
-  std::vector<atomwrapper> vLocks;
+  std::vector<Lock> vLocks;
+  std::vector< Worklist<index_t> > current_worklist, next_worklist;
 
   real_t _L_low, _L_max;
   bool delete_slivers;
@@ -599,6 +597,8 @@ template<typename real_t, int dim> class Coarsen{
   const static size_t ndims=dim;
   const static size_t nloc=dim+1;
   const static size_t msize=(dim==2?3:6);
+
+  int nthreads;
 };
 
 #endif
