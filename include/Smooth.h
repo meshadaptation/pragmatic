@@ -110,20 +110,36 @@ template<typename real_t, int dim>
   void smart_laplacian(int max_iterations=10, double quality_tol=-1.0){
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
-    std::vector<bool> is_boundary(NNodes, false);
-    double qsum=0;
 
+    std::vector< std::atomic<bool> > is_boundary(NNodes);
+
+    // Use this to keep track of vertices that are still to be visited.
+    std::vector<int> active_vertices(NNodes, 1);
+    
+    if(vLocks.size() < NNodes)
+      vLocks.resize(NNodes);
+    
+    good_q = quality_tol;
+    
+    double qsum=0;
 #pragma omp parallel
     {
-#pragma omp for schedule(guided) reduction(+:qsum)
+      // Initialize.
+#pragma omp for schedule(static)
+      for(int i=0;i<NNodes;i++){
+	is_boundary[i] = false;
+	vLocks[i]._a = 0;
+      }
+
+      // Identify boundary.
+#pragma omp for schedule(static)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
-          _mesh->quality[i] = 1.0;
+	  _mesh->quality[i] = 1.0;
           continue;
         }
-        qsum+=_mesh->quality[i];
-
+	
         for(size_t j=0;j<nloc;j++){
           if(_mesh->boundary[i*nloc+j]>0){
             for(size_t k=1;k<nloc;k++){
@@ -132,24 +148,28 @@ template<typename real_t, int dim>
           }
         }
       }
-    }
-    good_q = qsum/NElements;
 
-    if(quality_tol>0)
-      good_q = quality_tol;
-
-    // Use this to keep track of vertices that are still to be visited.
-    std::vector<int> active_vertices(NNodes, 1);
-
-    if(vLocks.size() < NNodes)
-      vLocks.resize(NNodes);
-
-    // First sweep through all vertices. Add vertices adjacent to any
-    // vertex moved into the active_vertex list.
-#pragma omp parallel
-    {
+      if(quality_tol<0){
+	// Try to select a good_q.
+#pragma omp for schedule(guided) reduction(+:qsum)
+	for(int i=0;i<NElements;i++){
+	  const int *n=_mesh->get_element(i);
+	  if(n[0]<0){
+	    continue;
+	  }
+	  qsum+=_mesh->quality[i];
+	}
+	
+#pragma omp single
+	{
+	  good_q = qsum/NElements;
+	}
+      }
+      
+      // First sweep through all vertices. Add vertices adjacent to any
+      // vertex moved into the active_vertex list.
       std::vector<index_t> retry, next_retry;
-
+      
       int iter=0;
       while((iter++) < max_iterations){
 #pragma omp for schedule(guided) nowait
@@ -172,7 +192,7 @@ template<typename real_t, int dim>
             continue;
           }
 
-          for(auto& it : _mesh->NNList[node]){
+          for(const auto& it : _mesh->NNList[node]){
             int oldval = vLocks[it]._a.load(std::memory_order_acquire);
             if((oldval & 1) != 0){
               abort = true;
@@ -182,7 +202,7 @@ template<typename real_t, int dim>
 
           if(!abort){
             if(smart_laplacian_kernel(node)){
-              for(auto& it : _mesh->NNList[node]){
+              for(const auto& it : _mesh->NNList[node]){
                 active_vertices[it] = 1;
               }
             }
@@ -247,20 +267,36 @@ template<typename real_t, int dim>
   void optimisation_linf(int max_iterations=10, double quality_tol=-1.0){
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
-    std::vector<bool> is_boundary(NNodes, false);
-    double qsum=0;
+    
+    std::vector< std::atomic<bool> > is_boundary(NNodes);
 
+    // Use this to keep track of vertices that are still to be visited.
+    std::vector<int> active_vertices(NNodes, 1);
+    
+    if(vLocks.size() < NNodes)
+      vLocks.resize(NNodes);
+    
+    good_q = quality_tol;
+    
+    double qsum=0;
 #pragma omp parallel
     {
-#pragma omp for schedule(guided) reduction(+:qsum)
+      // Initialize.
+#pragma omp for schedule(static)
+      for(int i=0;i<NNodes;i++){
+	is_boundary[i] = false;
+	vLocks[i]._a = 0;
+      }
+      
+      // Identify boundary.
+#pragma omp for schedule(static)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0){
-          _mesh->quality[i] = 1.0;
+	  _mesh->quality[i] = 1.0;
           continue;
         }
-        qsum+=_mesh->quality[i];
-
+	
         for(size_t j=0;j<nloc;j++){
           if(_mesh->boundary[i*nloc+j]>0){
             for(size_t k=1;k<nloc;k++){
@@ -269,22 +305,26 @@ template<typename real_t, int dim>
           }
         }
       }
-    }
-    good_q = qsum/NElements;
+      
+      if(quality_tol<0){
+	// Try to select a good_q.
+#pragma omp for schedule(guided) reduction(+:qsum)
+	for(int i=0;i<NElements;i++){
+	  const int *n=_mesh->get_element(i);
+	  if(n[0]<0){
+	    continue;
+	  }
+	  qsum+=_mesh->quality[i];
+	}
+	
+#pragma omp single
+	{
+	  good_q = qsum/NElements;
+	}
+      }
 
-    if(quality_tol>0)
-      good_q = quality_tol;
-
-    // Use this to keep track of vertices that are still to be visited.
-    std::vector<int> active_vertices(NNodes, 1);
-
-    if(vLocks.size() < NNodes)
-      vLocks.resize(NNodes);
-
-    // First sweep through all vertices. Add vertices adjacent to any
-    // vertex moved into the active_vertex list.
-#pragma omp parallel
-    {
+      // First sweep through all vertices. Add vertices adjacent to any
+      // vertex moved into the active_vertex list.      
       std::vector<index_t> retry, next_retry;
 
       int iter=0;
@@ -384,33 +424,44 @@ template<typename real_t, int dim>
   void laplacian(int max_iterations=10){
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
-    std::vector<bool> is_boundary(NNodes, false);
+    
+    std::vector< std::atomic<bool> > is_boundary(NNodes);
 
     if(vLocks.size() < NNodes)
       vLocks.resize(NNodes);
 
-    // Sweep through all vertices.
 #pragma omp parallel
     {
-#pragma omp for schedule(guided)
+      // Initialize.
+#pragma omp for schedule(static)
+      for(int i=0;i<NNodes;i++){
+	is_boundary[i] = false;
+	vLocks[i]._a = 0;
+      }
+      
+      // Identify boundary.
+#pragma omp for schedule(static)
       for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]==-1)
-          continue;
-
-        for(size_t j=0;j<nloc;j++){
-          if(_mesh->boundary[i*nloc+j]>0){
-            for(size_t k=1;k<nloc;k++){
-              is_boundary[n[(j+k)%nloc]] = true;
-            }
-          }
-        }
+	const int *n=_mesh->get_element(i);
+	if(n[0]<0){
+	  continue;
+	}
+	
+	for(size_t j=0;j<nloc;j++){
+	  if(_mesh->boundary[i*nloc+j]>0){
+	    for(size_t k=1;k<nloc;k++){
+	      is_boundary[n[(j+k)%nloc]] = true;
+	    }
+	  }
+	}
       }
 
+      // First sweep through all vertices. Add vertices adjacent to any
+      // vertex moved into the active_vertex list.
       std::vector<index_t> retry, next_retry;
 #pragma omp for schedule(guided) nowait
       for(index_t node=0; node<NNodes; ++node){
-        if((_mesh->is_halo_node(node))||(_mesh->NNList[node].empty())||is_boundary[node])
+        if(_mesh->is_halo_node(node) || _mesh->NNList[node].empty() || is_boundary[node])
           continue;
 
         bool abort = false;
@@ -553,11 +604,12 @@ template<typename real_t, int dim>
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
     
     const real_t *m0 = _mesh->get_metric(node);
-    for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
-      real_t x = get_x(*il)-x0;
-      real_t y = get_y(*il)-y0;
+    
+    for(const auto& il : patch){
+      real_t x = get_x(il)-x0;
+      real_t y = get_y(il)-y0;
       
-      const real_t *m1 = _mesh->get_metric(*il);
+      const real_t *m1 = _mesh->get_metric(il);
       double m[] = {0.5*(m0[0]+m1[0]), 0.5*(m0[1]+m1[1]), 0.5*(m0[2]+m1[2])};
 
       q[0] += (m[0]*x + m[1]*y);
@@ -592,12 +644,12 @@ template<typename real_t, int dim>
     Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
     
     const real_t *m0 = _mesh->get_metric(node);
-    for(typename std::set<index_t>::const_iterator il=patch.begin();il!=patch.end();++il){
-      real_t x = get_x(*il)-x0;
-      real_t y = get_y(*il)-y0;
-      real_t z = get_z(*il)-z0;
+    for(const auto & il : patch){
+      real_t x = get_x(il)-x0;
+      real_t y = get_y(il)-y0;
+      real_t z = get_z(il)-z0;
       
-      const real_t *m1 = _mesh->get_metric(*il);
+      const real_t *m1 = _mesh->get_metric(il);
       double m[] = {0.5*(m0[0]+m1[0]), 0.5*(m0[1]+m1[1]), 0.5*(m0[2]+m1[2]),
 		                       0.5*(m0[3]+m1[3]), 0.5*(m0[4]+m1[4]),
 		                                          0.5*(m0[5]+m1[5])};
@@ -669,7 +721,7 @@ template<typename real_t, int dim>
     for(size_t j=0;j<3;j++)
       _mesh->metric[node*3+j] = mp[j];
     
-    for(auto& e : _mesh->NEList[node])
+    for(const auto& e : _mesh->NEList[node])
       update_quality_2d(e);
 
     return true;
@@ -705,7 +757,7 @@ template<typename real_t, int dim>
     for(size_t j=0;j<6;j++)
       _mesh->metric[node*6+j] = mp[j];
     
-    for(auto& e : _mesh->NEList[node])
+    for(const auto& e : _mesh->NEList[node])
       update_quality_3d(e);
 
     return true;
@@ -729,9 +781,9 @@ template<typename real_t, int dim>
     
     // Find the worst element.
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
-    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(_mesh->quality[*it]<worst_element.first)
-        worst_element = std::pair<double, index_t>(_mesh->quality[*it], *it);
+    for(const auto& it : _mesh->NEList[n0]){
+      if(_mesh->quality[it]<worst_element.first)
+        worst_element = std::pair<double, index_t>(_mesh->quality[it], it);
     }
     assert(worst_element.second!=-1);
 
@@ -769,8 +821,9 @@ template<typename real_t, int dim>
     double alpha;
     {
       double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
-      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
-        const double *x1 = _mesh->get_coords(*it);
+      
+      for(const auto& it : _mesh->NEList[n0]){
+        const double *x1 = _mesh->get_coords(it);
         
         bbox[0] = std::min(bbox[0], x1[0]);
         bbox[1] = std::max(bbox[1], x1[0]);
@@ -781,11 +834,11 @@ template<typename real_t, int dim>
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2])/2.0;
     }
 
-    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(*it==worst_element.second)
+  for(const auto& it : _mesh->NEList[n0]){
+      if(it==worst_element.second)
         continue;
 
-      const index_t *n=_mesh->get_element(*it);
+      const index_t *n=_mesh->get_element(it);
       size_t loc=0;
       for(;loc<3;loc++)
         if(n[loc]==n0)
@@ -801,7 +854,7 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, m0, grad);
 	
       double new_alpha =
-          (_mesh->quality[*it]-worst_element.first)/
+          (_mesh->quality[it]-worst_element.first)/
           ((search[0]*grad_w[0]+search[1]*grad_w[1])-
           (search[0]*grad[0]+search[1]*grad[1]));
 
@@ -832,8 +885,8 @@ template<typename real_t, int dim>
       // Need to check that we have not decreased the Linf norm. Start by assuming the best.
       linf_update = true;
       std::vector<double> new_quality;
-      for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-        const index_t *n=_mesh->get_element(*it);
+      for(const auto& it : _mesh->NEList[n0]){
+        const index_t *n=_mesh->get_element(it);
         size_t loc=0;
         for(;loc<3;loc++)
           if(n[loc]==n0)
@@ -890,9 +943,9 @@ template<typename real_t, int dim>
     
     // Find the worst element.
     std::pair<double, index_t> worst_element(DBL_MAX, -1);
-    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(_mesh->quality[*it]<worst_element.first)
-        worst_element = std::pair<double, index_t>(_mesh->quality[*it], *it);
+    for(const auto& it : _mesh->NEList[n0]){
+      if(_mesh->quality[it]<worst_element.first)
+        worst_element = std::pair<double, index_t>(_mesh->quality[it], it);
     }
     assert(worst_element.second!=-1);
     
@@ -956,8 +1009,8 @@ template<typename real_t, int dim>
     double alpha;
     {
       double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
-      for(typename std::vector<index_t>::const_iterator it=_mesh->NNList[n0].begin();it!=_mesh->NNList[n0].end();++it){
-        const double *x1 = _mesh->get_coords(*it);
+      for(const auto& it : _mesh->NNList[n0]){
+        const double *x1 = _mesh->get_coords(it);
 	
         bbox[0] = std::min(bbox[0], x1[0]);
         bbox[1] = std::max(bbox[1], x1[0]);
@@ -970,11 +1023,11 @@ template<typename real_t, int dim>
       }
       alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/6.0;
     }
-    for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-      if(*it==worst_element.second)
+    for(const auto& it : _mesh->NEList[n0]){
+      if(it==worst_element.second)
         continue;
 
-      const index_t *n=_mesh->get_element(*it);
+      const index_t *n=_mesh->get_element(it);
       size_t loc=0;
       for(;loc<4;loc++)
         if(n[loc]==n0)
@@ -1012,7 +1065,7 @@ template<typename real_t, int dim>
       property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad);
 	
       double new_alpha =
-          (_mesh->quality[*it]-worst_element.first)/
+          (_mesh->quality[it]-worst_element.first)/
           ((search[0]*grad_w[0]+search[1]*grad_w[1]+search[2]*grad_w[2])-
           (search[0]*grad[0]+search[1]*grad[1]+search[2]*grad[2]));
 
@@ -1041,8 +1094,8 @@ template<typename real_t, int dim>
       // Need to check that we have not decreased the Linf norm. Start by assuming the best.
       linf_update = true;
       std::vector<double> new_quality;
-      for(typename std::set<index_t>::const_iterator it=_mesh->NEList[n0].begin();it!=_mesh->NEList[n0].end();++it){
-        const index_t *n=_mesh->get_element(*it);
+      for(const auto& it : _mesh->NEList[n0]){
+        const index_t *n=_mesh->get_element(it);
         size_t loc=0;
         for(;loc<4;loc++)
           if(n[loc]==n0)
@@ -1139,8 +1192,8 @@ template<typename real_t, int dim>
   inline real_t functional_Linf(index_t node){
     double patch_quality = std::numeric_limits<double>::max();
 
-    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      patch_quality = std::min(patch_quality, _mesh->quality[*ie]);
+    for(const auto& ie : _mesh->NEList[node]){
+      patch_quality = std::min(patch_quality, _mesh->quality[ie]);
     }
 
     return patch_quality;
@@ -1158,8 +1211,8 @@ template<typename real_t, int dim>
 
   inline real_t functional_Linf_2d(index_t n0, const real_t *p, const real_t *mp) const{
     real_t functional = DBL_MAX;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[n0].begin();ie!=_mesh->NEList[n0].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
+    for(const auto& ie : _mesh->NEList[n0]){
+      const index_t *n=_mesh->get_element(ie);
       assert(n[0]>=0);
       int iloc = 0;
 
@@ -1185,8 +1238,8 @@ template<typename real_t, int dim>
 
   inline real_t functional_Linf_3d(index_t n0, const real_t *p, const real_t *mp) const{
     real_t functional = DBL_MAX;
-    for(typename std::set<index_t>::iterator ie=_mesh->NEList[n0].begin();ie!=_mesh->NEList[n0].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
+    for(const auto& ie : _mesh->NEList[n0]){
+      const index_t *n=_mesh->get_element(ie);
       size_t loc=0;
       for(;loc<4;loc++)
         if(n[loc]==n0)
@@ -1232,14 +1285,14 @@ template<typename real_t, int dim>
     return functional;
   }
 
-  inline bool generate_location_2d(index_t node, const real_t *p, double *mp){
+  inline bool generate_location_2d(index_t node, const real_t *p, double *mp) const{
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1};
     int best_e=-1;
     real_t tol=-1;
 
-    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
+    for(const auto& ie : _mesh->NEList[node]){
+      const index_t *n=_mesh->get_element(ie);
       assert(n[0]>=0);
 
       const real_t *x0 = _mesh->get_coords(n[0]);
@@ -1269,13 +1322,13 @@ template<typename real_t, int dim>
       real_t min_l = std::min(ll[0], std::min(ll[1], ll[2]));
       if(best_e==-1){
         tol = min_l;
-        best_e = *ie;
+        best_e = ie;
         for(size_t i=0;i<nloc;i++)
           l[i] = ll[i];
       }else{
         if(min_l>tol){
           tol = min_l;
-          best_e = *ie;
+          best_e = ie;
           for(size_t i=0;i<nloc;i++)
             l[i] = ll[i];
         }
@@ -1296,14 +1349,14 @@ template<typename real_t, int dim>
     return true;
   }
 
-  inline bool generate_location_3d(index_t node, const real_t *p, double *mp){
+  inline bool generate_location_3d(index_t node, const real_t *p, double *mp) const{
     // Interpolate metric at this new position.
     real_t l[]={-1, -1, -1, -1};
     int best_e=-1;
     real_t tol=-1;
 
-    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[node].begin();ie!=_mesh->NEList[node].end();++ie){
-      const index_t *n=_mesh->get_element(*ie);
+    for(const auto& ie : _mesh->NEList[node]){
+      const index_t *n=_mesh->get_element(ie);
       assert(n[0]>=0);
 
       const real_t *x0 = _mesh->get_coords(n[0]);
@@ -1337,13 +1390,13 @@ template<typename real_t, int dim>
       real_t min_l = std::min(std::min(ll[0], ll[1]), std::min(ll[2], ll[3]));
       if(best_e==-1){
         tol = min_l;
-        best_e = *ie;
+        best_e = ie;
         for(size_t i=0;i<nloc;i++)
           l[i] = ll[i];
       }else{
         if(min_l>tol){
           tol = min_l;
-          best_e = *ie;
+          best_e = ie;
           for(size_t i=0;i<nloc;i++)
             l[i] = ll[i];
         }
@@ -1375,6 +1428,10 @@ template<typename real_t, int dim>
   inline void update_quality_2d(index_t element){
     const index_t *n=_mesh->get_element(element);
 
+    assert(n[0]>=0);
+    assert(n[1]>=0);
+    assert(n[2]>=0);
+    
     const double *x0 = _mesh->get_coords(n[0]);
     const double *x1 = _mesh->get_coords(n[1]);
     const double *x2 = _mesh->get_coords(n[2]);
@@ -1384,7 +1441,7 @@ template<typename real_t, int dim>
     const double *m2 = _mesh->get_metric(n[2]);
 
     _mesh->quality[element] = property->lipnikov(x0, x1, x2,
-					  m0, m1, m2);
+						 m0, m1, m2);
     return;
   }
 

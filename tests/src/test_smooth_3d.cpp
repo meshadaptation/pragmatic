@@ -50,6 +50,20 @@
 
 #include <mpi.h>
 
+void test_block(double qmean, double qmin, long double area, long double volume){
+  std::cout<<"Checking area == 6: ";
+  if(fabs(area-6)<6*DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (area="<<area<<" diff="<<fabs(area-6)<<")"<<std::endl;
+  
+  std::cout<<"Checking volume == 1: ";
+  if(fabs(volume-1)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+}
+
 int main(int argc, char **argv){
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
@@ -89,12 +103,14 @@ int main(int argc, char **argv){
 
   double qmean = mesh->get_qmean();
   double qmin = mesh->get_qmin();
-  
-  if(rank==0)
-    std::cout<<"Initial quality:"<<std::endl
-	     <<"Quality mean:    "<<qmean<<std::endl
-	     <<"Quality min:     "<<qmin<<std::endl;
-  
+
+  long double area = mesh->calculate_area();
+  long double volume = mesh->calculate_volume();
+
+  if(rank==0){
+    test_block(qmean, qmin, area, volume);
+  }
+    
   Smooth<double, 3> smooth(*mesh);
   
   double tic = get_wtime();
@@ -104,10 +120,13 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
 
-  if(rank==0)
-    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
+  area = mesh->calculate_area();
+  volume = mesh->calculate_volume();
+
+  if(rank==0){
+    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, area, volume);
+  }
 
   std::string vtu_filename = std::string("../data/test_smooth_laplacian_3d");
   VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
@@ -119,16 +138,12 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
+  area = mesh->calculate_area();
+  volume = mesh->calculate_volume();
 
-    std::cout<<"Checking quality between bounds - (min>0.01): ";
-    if(qmin>0.01)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, area, volume);
   }
 
   vtu_filename = std::string("../data/test_smooth_smart_laplacian_3d");
@@ -141,36 +156,16 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
 
+  area = mesh->calculate_area();
+  volume = mesh->calculate_volume();
+
   if(rank==0){
-    std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
-    
-    std::cout<<"Checking quality between bounds - (min>0.01): ";
-    if(qmin>0.01)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+    std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, area, volume);
   }
+  
   vtu_filename = std::string("../data/test_smooth_optimisation_linf_3d");
   VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
-
-  long double area = mesh->calculate_area();
-  long double volume = mesh->calculate_volume();
-
-  if(rank==0){
-    std::cout<<"Checking area == 6: ";
-    if(fabs(area-6)<6*DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (area="<<area<<" diff="<<fabs(area-6)<<")"<<std::endl;
-    
-    std::cout<<"Checking volume == 1: ";
-    if(fabs(volume-1)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
-  }
   
   MPI_Finalize();
 
