@@ -71,7 +71,7 @@ private:
   }
 
   inline void push_back(t_type value){
-    assert(_mode==CREATION);
+    assert(_mode.load(std::memory_order_relaxed)==CREATION);
     long int next_idx = _idx.fetch_add(1, std::memory_order_relaxed);
     if(next_idx >= _end_idx){
       _expand();
@@ -85,7 +85,7 @@ private:
   }
 
   inline t_type get_next(){
-    assert(_mode==TRAVERSAL);
+    assert(_mode.load(std::memory_order_relaxed)==TRAVERSAL);
     long int next_idx = _idx.fetch_sub(1, std::memory_order_relaxed);
     if(next_idx == _first_idx)
       _mode.store(INVALID, std::memory_order_release);
@@ -97,7 +97,7 @@ private:
   }
 
   bool steal_work(Worklist<t_type>& thiefs_worklist){
-    if(!_mode.load(std::memory_order_acquire))
+    if(_mode.load(std::memory_order_acquire) == INVALID)
       return false;
 
     long int current, target;
@@ -171,7 +171,7 @@ private:
   // Index to the first workitem in _list which is available for consumption.
   std::atomic<long int> _first_idx;
 
-  // Lock used for critical operations (memory reallocation, work stealing, list swapping)
+  // Lock used for critical operations, i.e. memory reallocation
   Lock _lock;
 };
 #endif

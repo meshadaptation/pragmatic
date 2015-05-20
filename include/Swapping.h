@@ -734,8 +734,6 @@ template<typename real_t, int dim> class Swapping{
           _mesh->get_coords(n[2]), _mesh->get_coords(n[3]));
     }
 
-    if(nelements>3)
-      return false;
     std::vector< std::vector<index_t> > new_elements;
     std::vector< std::vector<int> > new_boundaries;
     if(nelements==3){

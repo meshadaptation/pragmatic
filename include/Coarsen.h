@@ -51,7 +51,6 @@
 #include "ElementProperty.h"
 #include "Lock.h"
 #include "Mesh.h"
-#include "Worklist.h"
 
 /*! \brief Performs 2D/3D mesh coarsening.
  *
@@ -85,10 +84,6 @@ template<typename real_t, int dim> class Coarsen{
 
     nnodes_reserve = 0;
     delete_slivers = false;
-
-    nthreads = omp_get_max_threads();
-    current_worklist.resize(nthreads);
-    current_worklist.resize(nthreads);
   }
 
   /// Default destructor.
@@ -117,12 +112,10 @@ template<typename real_t, int dim> class Coarsen{
 
 #pragma omp parallel
     {
-      int tid = omp_get_thread_num();
-
       // Vector "retry" is used to store aborted vertices.
       // Vector "round" is used to store propagated vertices.
       std::vector<index_t> retry, next_retry;
-      std::vector<index_t> next_round;
+      std::vector<index_t> this_round, next_round;
       std::vector<index_t> locks_held;
 #pragma omp for schedule(static) nowait
       for(index_t node=0; node<NNodes; ++node){
@@ -209,12 +202,10 @@ template<typename real_t, int dim> class Coarsen{
       }
 
       while(!next_round.empty()){
-        current_worklist[tid].replace(next_round);
+        this_round.swap(next_round);
         next_round.clear();
 
-        current_worklist[tid].init_traversal();
-        while(current_worklist[tid].is_valid()){
-          index_t node = current_worklist[tid].get_next();
+        for(auto& node : this_round){
           if(dynamic_vertex[node] == -1)
             continue;
 
@@ -302,10 +293,6 @@ template<typename real_t, int dim> class Coarsen{
 
         if(next_round.empty()){
           // Try to steal work
-          for(int t=(tid+1)%nthreads; t!=tid; t=(t+1)%nthreads){
-            if(current_worklist[t].steal_work(next_round))
-              break;
-          }
         }
       }
     }
@@ -589,7 +576,6 @@ template<typename real_t, int dim> class Coarsen{
   size_t nnodes_reserve;
   std::vector<index_t> dynamic_vertex;
   std::vector<Lock> vLocks;
-  std::vector< Worklist<index_t> > current_worklist, next_worklist;
 
   real_t _L_low, _L_max;
   bool delete_slivers;
@@ -597,8 +583,6 @@ template<typename real_t, int dim> class Coarsen{
   const static size_t ndims=dim;
   const static size_t nloc=dim+1;
   const static size_t msize=(dim==2?3:6);
-
-  int nthreads;
 };
 
 #endif

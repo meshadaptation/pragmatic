@@ -50,6 +50,30 @@
 
 #include <mpi.h>
 
+void test_block(double qmean, double qmin, long double perimeter, long double area){
+  std::cout<<"Checking perimeter == 4: ";
+  if(fabs(perimeter-4)<4*DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail ("<<perimeter<<")"<<std::endl;
+
+  std::cout<<"Checking area == 1: ";
+  if(fabs(area-1)<DBL_EPSILON)
+    std::cout<<"pass"<<std::endl;
+  else
+    std::cout<<"fail ("<<area<<")"<<std::endl;
+
+  std::cout<<"Checking quality between bounds - (min>0.01): ";
+  if(qmin>0.01){
+    std::cout<<"pass"<<std::endl;
+  }else{
+    std::cout<<"fail"<<std::endl
+        <<"Quality mean:     "<<qmean<<std::endl
+        <<"Quality min:      "<<qmin<<std::endl;
+  }
+}
+
+
 int main(int argc, char **argv){
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
@@ -84,27 +108,22 @@ int main(int argc, char **argv){
   }
   metric_field.update_mesh();
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-  
-  if(rank==0)
-    std::cout<<"Initial quality:"<<std::endl
-	     <<"Quality mean:    "<<qmean<<std::endl
-	     <<"Quality min:     "<<qmin<<std::endl;
-  
   Smooth<double, 2> smooth(*mesh);
   
   double tic = get_wtime();
   smooth.laplacian(100);
   double toc = get_wtime();
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
 
-  if(rank==0)
-    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
+  long double perimeter = mesh->calculate_perimeter();
+  long double area = mesh->calculate_area();
+
+  if(rank==0){
+    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, perimeter, area);
+  }
 
   std::string vtu_filename = std::string("../data/test_smooth_laplacian_2d");
   VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
@@ -116,16 +135,12 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
+  perimeter = mesh->calculate_perimeter();
+  area = mesh->calculate_area();
 
-    std::cout<<"Checking quality between bounds - (min>0.01): ";
-    if(qmin>0.01)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+  if(rank==0){
+    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, perimeter, area);
   }
 
   vtu_filename = std::string("../data/test_smooth_smart_laplacian_2d");
@@ -138,35 +153,15 @@ int main(int argc, char **argv){
   qmean = mesh->get_qmean();
   qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl
-	     <<"Quality mean:     "<<qmean<<std::endl
-	     <<"Quality min:      "<<qmin<<std::endl;
-    
-    std::cout<<"Checking quality between bounds - (min>0.01): ";
-    if(qmin>0.01)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
-  }
   vtu_filename = std::string("../data/test_smooth_optimisation_linf_2d");
   VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 
-  long double perimeter = mesh->calculate_perimeter();
-  long double area = mesh->calculate_area();
+  perimeter = mesh->calculate_perimeter();
+  area = mesh->calculate_area();
   
   if(rank==0){
-    std::cout<<"Checking perimeter == 4: ";
-    if(fabs(perimeter-4)<4*DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail ("<<perimeter<<")"<<std::endl;
-    
-    std::cout<<"Checking area == 1: ";
-    if(fabs(area-1)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail ("<<area<<")"<<std::endl;
+    std::cout<<"Linf smooth time  "<<toc-tic<<std::endl;
+    test_block(qmean, qmin, perimeter, area);
   }
   
   MPI_Finalize();

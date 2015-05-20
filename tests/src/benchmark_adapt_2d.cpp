@@ -86,6 +86,7 @@ int main(int argc, char **argv){
 
     MetricField<double,2> metric_field(*mesh);
     std::vector<double> psi(NNodes);
+#pragma omp parallel for
     for(size_t i=0;i<NNodes;i++){
       double x = 2*mesh->get_coords(i)[0]-1;
       double y = 2*mesh->get_coords(i)[1]-1;
@@ -128,16 +129,64 @@ int main(int argc, char **argv){
         coarsen.coarsen(L_low, L_ref);
         toc = get_wtime();
         if(t>0) time_coarsen += (toc-tic);
+        if(verbose){
+          std::cout<<"INFO: Verify quality after coarsen.\n";
+          mesh->verify();
+          long double perimeter = mesh->calculate_perimeter();
+          long double area = mesh->calculate_area();
+          std::cout<<"Expecting perimeter == 4: ";
+          if(fabs(perimeter-4)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+          std::cout<<"Expecting area == 1: ";
+          if(fabs(area-1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+        }
         
         tic = get_wtime();
         swapping.swap(0.7);
         toc = get_wtime();
         if(t>0) time_swap += (toc-tic);
+        if(verbose){
+          std::cout<<"INFO: Verify quality after swapping.\n";
+          mesh->verify();
+          long double perimeter = mesh->calculate_perimeter();
+          long double area = mesh->calculate_area();
+          std::cout<<"Expecting perimeter == 4: ";
+          if(fabs(perimeter-4)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+          std::cout<<"Expecting area == 1: ";
+          if(fabs(area-1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+        }
         
         tic = get_wtime();
         refine.refine(L_ref);
         toc = get_wtime();
         if(t>0) time_refine += (toc-tic);
+        if(verbose){
+          std::cout<<"INFO: Verify quality after refinement.\n";
+          mesh->verify();
+          long double perimeter = mesh->calculate_perimeter();
+          long double area = mesh->calculate_area();
+          std::cout<<"Expecting perimeter == 4: ";
+          if(fabs(perimeter-4)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+          std::cout<<"Expecting area == 1: ";
+          if(fabs(area-1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+        }
         
         L_max = mesh->maximal_edge_length();
         
@@ -145,33 +194,54 @@ int main(int argc, char **argv){
           break;
       }
       
-      double T2 = get_wtime();
-      if(t>0) time_adapt += (T2-T1);
-      
       mesh->defragment();
       
       tic = get_wtime();
-      if(I>0)
+      if(I>0){
         smooth.smart_laplacian(I*10, 1.0);
+        if(verbose){
+          std::cout<<"After smart Laplacian smoothing:\n";
+          mesh->verify();
+          long double perimeter = mesh->calculate_perimeter();
+          long double area = mesh->calculate_area();
+          std::cout<<"Expecting perimeter == 4: ";
+          if(fabs(perimeter-4)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+          std::cout<<"Expecting area == 1: ";
+          if(fabs(area-1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+          else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+        }
+      }
       smooth.optimisation_linf(10);
       toc = get_wtime();
       if(t>0) time_smooth += (toc-tic);
-      if(t>0) time_adapt += (toc-tic);
+      if(verbose){
+        std::cout<<"After optimisation based smoothing:\n";
+        mesh->verify();
+        long double perimeter = mesh->calculate_perimeter();
+        long double area = mesh->calculate_area();
+        std::cout<<"Expecting perimeter == 4: ";
+        if(fabs(perimeter-4)<DBL_EPSILON)
+          std::cout<<"pass"<<std::endl;
+        else
+          std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+        std::cout<<"Expecting area == 1: ";
+        if(fabs(area-1)<DBL_EPSILON)
+          std::cout<<"pass"<<std::endl;
+        else
+          std::cout<<"fail (area="<<area<<")"<<std::endl;
+      }
       
       if(mesh->get_qmin()>0.4)
         break;
-      if(verbose)
-        std::cerr<<I<<" :: meatgrinder "<<mesh->get_qmin()<<std::endl;
     }
 
-    NNodes = mesh->get_number_nodes();
-    psi.resize(NNodes);
-    for(size_t i=0;i<NNodes;i++){
-      double x = 2*mesh->get_coords(i)[0]-1;
-      double y = 2*mesh->get_coords(i)[1]-1;
-
-      psi[i] = 0.1*sin(20*x+2*pi*t/period) + atan2(-0.1, (double)(2*x - sin(5*y + 2*pi*t/period)));
-    }
+    double T2 = get_wtime();
+    if(t>0) time_adapt += (T2-T1);
 
     if((t>0)&&(rank==0))
       std::cout<<"BENCHMARK: "
@@ -180,12 +250,24 @@ int main(int argc, char **argv){
                <<std::setw(9)<<time_swap/t<<" "
                <<std::setw(11)<<time_smooth/t<<" "
                <<std::setw(10)<<time_adapt/t<<std::endl
-               <<"NNodes, NElements = "<<mesh->get_number_nodes()<<", "<<mesh->get_number_elements()<<std::endl;
+               <<"NNodes, NElements, t = "<<mesh->get_number_nodes()<<", "<<mesh->get_number_elements()<< ", " << t <<std::endl;
 
     if(verbose){
       mesh->print_quality();
-      // sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
-      // VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
+
+      std::cerr<<t<<" :: meatgrinder "<<mesh->get_qmin()<<std::endl;
+
+      NNodes = mesh->get_number_nodes();
+      psi.resize(NNodes);
+      for(size_t i=0;i<NNodes;i++){
+        double x = 2*mesh->get_coords(i)[0]-1;
+        double y = 2*mesh->get_coords(i)[1]-1;
+
+        psi[i] = 0.1*sin(20*x+2*pi*t/period) + atan2(-0.1, (double)(2*x - sin(5*y + 2*pi*t/period)));
+      }
+
+      sprintf(filename, "../data/benchmark_adapt_2d-%d", t);
+      VTKTools<double>::export_vtu(&(filename[0]), mesh, &(psi[0]));
     }
   }
 

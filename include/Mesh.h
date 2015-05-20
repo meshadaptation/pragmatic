@@ -191,102 +191,85 @@ template<typename real_t> class Mesh{
     size_t NNodes = get_number_nodes();
     size_t NElements = get_number_elements();
     
-    if(ndims==2){
-      // Initialise the boundary array
-      boundary.resize(NElements*3);
-      std::fill(boundary.begin(), boundary.end(), -2);
-      
-      // Create node-element adjacency list.
-      std::vector< std::set<int> > NEList(NNodes);
-      for(size_t i=0;i<NElements;i++){
-        if(_ENList[i*3]==-1)
-          continue;
+    // Initialise the boundary array
+    boundary.resize(NElements*nloc);
+    std::fill(boundary.begin(), boundary.end(), -2);
 
-        for(size_t j=0;j<3;j++)
-          NEList[_ENList[i*3+j]].insert(i);
-      }
-      
-      // Check neighbourhood of each element
-      for(size_t i=0;i<NElements;i++){
-        if(_ENList[i*3]==-1)
-          continue;
+#pragma omp parallel
+    {
+      if(ndims==2){
+        // Check neighbourhood of each element
+#pragma omp for schedule(guided)
+        for(size_t i=0;i<NElements;i++){
+          if(_ENList[i*3]==-1)
+            continue;
 
-        for(int j=0;j<3;j++){
-          int n1 = _ENList[i*3+(j+1)%3];
-          int n2 = _ENList[i*3+(j+2)%3];
+          for(int j=0;j<3;j++){
+            int n1 = _ENList[i*3+(j+1)%3];
+            int n2 = _ENList[i*3+(j+2)%3];
 
-          if(is_owned_node(n1)||is_owned_node(n2)){
-            std::set<int> neighbours;
-            set_intersection(NEList[n1].begin(), NEList[n1].end(),
-                     NEList[n2].begin(), NEList[n2].end(),
-                     inserter(neighbours, neighbours.begin()));
+            if(is_owned_node(n1)||is_owned_node(n2)){
+              std::set<int> neighbours;
+              set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                       NEList[n2].begin(), NEList[n2].end(),
+                       inserter(neighbours, neighbours.begin()));
 
-            if(neighbours.size()==2){
-              if(*neighbours.begin()==(int)i)
-                boundary[i*3+j] = *neighbours.rbegin();
-              else
-                boundary[i*3+j] = *neighbours.begin();
+              if(neighbours.size()==2){
+                if(*neighbours.begin()==(int)i)
+                  boundary[i*3+j] = *neighbours.rbegin();
+                else
+                  boundary[i*3+j] = *neighbours.begin();
+              }
+            }else{
+              // This is a halo facet.
+              boundary[i*3+j] = -1;
             }
-          }else{
-            // This is a halo facet.
-            boundary[i*3+j] = -1;
+          }
+        }
+      }else{ // ndims==3
+        // Check neighbourhood of each element
+#pragma omp for schedule(guided)
+        for(size_t i=0;i<NElements;i++){
+          if(_ENList[i*4]==-1)
+            continue;
+
+          for(int j=0;j<4;j++){
+            int n1 = _ENList[i*4+(j+1)%4];
+            int n2 = _ENList[i*4+(j+2)%4];
+            int n3 = _ENList[i*4+(j+3)%4];
+
+            if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
+              std::set<int> edge_neighbours;
+              set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                       NEList[n2].begin(), NEList[n2].end(),
+                       inserter(edge_neighbours, edge_neighbours.begin()));
+
+              std::set<int> neighbours;
+              set_intersection(NEList[n3].begin(), NEList[n3].end(),
+                       edge_neighbours.begin(), edge_neighbours.end(),
+                       inserter(neighbours, neighbours.begin()));
+
+              if(neighbours.size()==2){
+                if(*neighbours.begin()==(int)i)
+                  boundary[i*4+j] = *neighbours.rbegin();
+                else
+                  boundary[i*4+j] = *neighbours.begin();
+              }
+            }else{
+              // This is a halo facet.
+              boundary[i*4+j] = -1;
+            }
           }
         }
       }
-    }else{ // ndims==3
-      // Initialise the boundary array
-      boundary.resize(NElements*4);
-      std::fill(boundary.begin(), boundary.end(), -2);
-      
-      // Create node-element adjacency list.
-      std::vector< std::set<int> > NEList(NNodes);
-      for(size_t i=0;i<NElements;i++){
-        if(_ENList[i*4]==-1)
-          continue;
 
-        for(size_t j=0;j<4;j++)
-          NEList[_ENList[i*4+j]].insert(i);
-      }
-      
-      // Check neighbourhood of each element
-      for(size_t i=0;i<NElements;i++){
-        if(_ENList[i*4]==-1)
-          continue;
-
-        for(int j=0;j<4;j++){
-          int n1 = _ENList[i*4+(j+1)%4];
-          int n2 = _ENList[i*4+(j+2)%4];
-          int n3 = _ENList[i*4+(j+3)%4];
-
-          if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)){
-            std::set<int> edge_neighbours;
-            set_intersection(NEList[n1].begin(), NEList[n1].end(),
-                     NEList[n2].begin(), NEList[n2].end(),
-                     inserter(edge_neighbours, edge_neighbours.begin()));
-
-            std::set<int> neighbours;
-            set_intersection(NEList[n3].begin(), NEList[n3].end(),
-                     edge_neighbours.begin(), edge_neighbours.end(),
-                     inserter(neighbours, neighbours.begin()));
-
-            if(neighbours.size()==2){
-              if(*neighbours.begin()==(int)i)
-                boundary[i*4+j] = *neighbours.rbegin();
-              else
-                boundary[i*4+j] = *neighbours.begin();
-            }
-          }else{
-            // This is a halo facet.
-            boundary[i*4+j] = -1;
-          }
-        }
-      }
-    }
+#pragma omp for
     for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
       if(*it==-2)
         *it = 1;
       else if(*it>=0)
         *it = 0;
+    }
   }
 
 
@@ -405,20 +388,16 @@ template<typename real_t> class Mesh{
     int NNodes = get_number_nodes();
     double total_length=0;
     int nedges=0;
-// #pragma omp parallel reduction(+:total_length,nedges)
-    {
-#pragma omp for schedule(static)
-      for(int i=0;i<NNodes;i++){
-        if(is_owned_node(i) && (NNList[i].size()>0))
-          for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
-            if(i<*it){ // Ensure that every edge length is only calculated once.
-              double length = calc_edge_length(i, *it);
-#pragma omp atomic
-              total_length += length;
-#pragma omp atomic
-              nedges++;
-            }
+
+#pragma omp parallel for reduction(+:total_length,nedges)
+    for(int i=0;i<NNodes;i++){
+      if(is_owned_node(i) && (NNList[i].size()>0)){
+        for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
+          if(i<*it){ // Ensure that every edge length is only calculated once.
+            total_length += calc_edge_length(i, *it);
+            nedges++;
           }
+        }
       }
     }
 
@@ -442,6 +421,7 @@ template<typename real_t> class Mesh{
       
       if(num_processes>1){
 #ifdef HAVE_MPI
+#pragma omp parallel for reduction(+:total_length)
         for(int i=0;i<NElements;i++){
           if(_ENList[i*nloc] < 0)
             continue;
@@ -462,6 +442,7 @@ template<typename real_t> class Mesh{
         MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
 #endif
       }else{
+#pragma omp parallel for reduction(+:total_length)
         for(int i=0;i<NElements;i++){
           if(_ENList[i*nloc] < 0)
             continue;
@@ -471,8 +452,8 @@ template<typename real_t> class Mesh{
               int n1 = _ENList[i*nloc+(j+1)%3];
               int n2 = _ENList[i*nloc+(j+2)%3];
 
-                  long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-                  long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
+              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
+              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
 
               total_length += sqrt(dx*dx+dy*dy);
             }
@@ -749,26 +730,23 @@ template<typename real_t> class Mesh{
     double sum=0;
     int nele=0;
 
-#pragma omp parallel reduction(+:sum, nele)
-    {
-#pragma omp for schedule(static)
-      for(size_t i=0;i<NElements;i++){
-        const index_t *n=get_element(i);
-        if(n[0]<0)
-          continue;
+#pragma omp parallel for reduction(+:sum, nele)
+    for(size_t i=0;i<NElements;i++){
+      const index_t *n=get_element(i);
+      if(n[0]<0)
+        continue;
 
-	double q;
-        if(ndims==2){
-          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-				 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-        }else{
-          q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-				 get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
-        }
-
-	sum+=q;
-        nele++;
+      double q;
+      if(ndims==2){
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+      }else{
+        q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+               get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
       }
+
+      sum+=q;
+      nele++;
     }
 
     if(num_processes>1){
@@ -816,6 +794,7 @@ template<typename real_t> class Mesh{
   double get_qmin_2d() const{
     double qmin=1; // Where 1 is ideal.
 
+#pragma omp parallel for reduction(min:qmin)
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
@@ -834,6 +813,7 @@ template<typename real_t> class Mesh{
   double get_qmin_3d() const{
     double qmin=1; // Where 1 is ideal.
 
+#pragma omp parallel for reduction(min:qmin)
     for(size_t i=0;i<NElements;i++){
       const index_t *n=get_element(i);
       if(n[0]<0)
@@ -918,8 +898,9 @@ template<typename real_t> class Mesh{
   }
 
   real_t maximal_edge_length() const{
-    double L_max = 0;
+    double L_max = 0.0;
 
+#pragma omp parallel for reduction(max:L_max)
     for(index_t i=0;i<(index_t) NNodes;i++){
       for(typename std::vector<index_t>::const_iterator it=NNList[i].begin();it!=NNList[i].end();++it){
         if(i<*it){ // Ensure that every edge length is only calculated once.
