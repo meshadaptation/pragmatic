@@ -1270,13 +1270,7 @@ template<typename real_t, int dim> class Swapping{
     // Next, find how many new elements we have to allocate
     int extra_elements = nelements - neigh_elements.size();
     if(extra_elements > 0){
-      index_t new_eid;
-#pragma omp atomic capture
-      {
-        new_eid = _mesh->NElements;
-        _mesh->NElements += extra_elements;
-      }
-
+      index_t new_eid = __sync_fetch_and_add(&_mesh->NElements, extra_elements);;
       if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
         ENList_lock.lock();
         if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
