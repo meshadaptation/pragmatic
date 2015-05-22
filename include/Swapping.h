@@ -108,6 +108,13 @@ template<typename real_t, int dim> class Swapping{
       vLocks.resize(NNodes);
     }
 
+    // Proactively resize _ENList if it's not big enough
+    if(_mesh->_ENList.size() < (_mesh->NElements*1.5)*nloc){
+      _mesh->_ENList.resize((_mesh->NElements*1.5)*nloc);
+      _mesh->boundary.resize((_mesh->NElements*1.5)*nloc);
+      _mesh->quality.resize((_mesh->NElements*1.5)*nloc);
+    }
+
 #pragma omp parallel
     {
       // Vector "retry" is used to store aborted vertices.
@@ -1229,7 +1236,6 @@ template<typename real_t, int dim> class Swapping{
         new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
     }
 
-
     for(size_t option=1;option<new_elements.size();option++){
       if(new_min_quality[option]>new_min_quality[best_option]){
         best_option = option;
@@ -1270,17 +1276,7 @@ template<typename real_t, int dim> class Swapping{
     // Next, find how many new elements we have to allocate
     int extra_elements = nelements - neigh_elements.size();
     if(extra_elements > 0){
-      index_t new_eid = __sync_fetch_and_add(&_mesh->NElements, extra_elements);;
-      if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
-        ENList_lock.lock();
-        if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc){
-          _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
-          _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
-          _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
-        }
-        ENList_lock.unlock();
-      }
-
+      index_t new_eid = __sync_fetch_and_add(&_mesh->NElements, extra_elements);
       for(int i=0; i<extra_elements; ++i)
         new_eids.push_back(new_eid++);
     }
@@ -1318,7 +1314,6 @@ template<typename real_t, int dim> class Swapping{
   ElementProperty<real_t> *property;
 
   size_t nnodes_reserve;
-  Lock ENList_lock;
   std::vector<Lock> vLocks;
 
   static const size_t ndims=dim;

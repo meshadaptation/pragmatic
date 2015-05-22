@@ -1379,7 +1379,7 @@ template<typename real_t, int dim>
       }
     }
     assert(best_e!=-1);
-    assert(tol>-10*DBL_EPSILON);
+    assert(tol>-DBL_EPSILON);
 
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
