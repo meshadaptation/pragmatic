@@ -1220,7 +1220,11 @@ template<typename real_t, int dim> class Swapping{
                                              _mesh->get_metric(new_elements[option][j*4+2]),
                                              _mesh->get_metric(new_elements[option][j*4+3]));
 
-        if(newq[option][j] < 0.0){
+        double vol = property->volume(_mesh->get_coords(new_elements[option][j*4+0]),
+                                      _mesh->get_coords(new_elements[option][j*4+1]),
+                                      _mesh->get_coords(new_elements[option][j*4+2]),
+                                      _mesh->get_coords(new_elements[option][j*4+3]));
+        if(vol < 0.0){
           index_t stash_id = new_elements[option][j*4];
           new_elements[option][j*4] = new_elements[option][j*4+1];
           new_elements[option][j*4+1] = stash_id;
