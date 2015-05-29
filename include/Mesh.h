@@ -263,7 +263,6 @@ template<typename real_t> class Mesh{
         }
       }
 
-#pragma omp for
     for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
       if(*it==-2)
         *it = 1;
