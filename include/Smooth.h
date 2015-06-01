@@ -659,6 +659,9 @@ template<typename real_t, int dim>
 
   // Smart Laplacian kernels
   inline bool smart_laplacian_kernel(index_t node){
+    if(_mesh->NEList[node].empty())
+      return false;
+     
     bool update;
     if(dim==2)
       update = smart_laplacian_2d_kernel(node);
@@ -742,6 +745,9 @@ template<typename real_t, int dim>
 
   // l-infinity optimisation kernels
   inline bool optimisation_linf_kernel(index_t node){
+    if(_mesh->NEList[node].empty())
+      return false;
+    
     bool update;
     if(dim==2)
       update = optimisation_linf_2d_kernel(node);
@@ -1379,8 +1385,13 @@ template<typename real_t, int dim>
       }
     }
     assert(best_e!=-1);
+#ifndef NDEBUG
+    if(!(tol>-10*DBL_EPSILON)){
+      std::cerr<<__FILE__<<", "<<__LINE__<<" failing with tol="<<tol<<std::endl;
+    }
     assert(tol>-10*DBL_EPSILON);
-
+#endif
+    
     const index_t *n=_mesh->get_element(best_e);
     assert(n[0]>=0);
 
