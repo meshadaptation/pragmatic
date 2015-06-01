@@ -262,8 +262,9 @@ template<typename real_t> class Mesh{
           }
         }
       }
-
-    for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it)
+    }
+    
+    for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it){
       if(*it==-2)
         *it = 1;
       else if(*it>=0)
