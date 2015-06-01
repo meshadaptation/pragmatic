@@ -79,7 +79,7 @@ class ParameterException(Exception):
   pass
 
 try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("../libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("../lib/libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
@@ -596,7 +596,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   # EXTRACT HESSIAN
   [HH,cell2dof] = get_dofs(H)
   # add DOLFIN_EPS on the diagonal to avoid zero eigenvalues
-  HH[0,:] += DOLFIN_EPS
+  HH[0,:] += 1e3*DOLFIN_EPS
   HH[2,:] += DOLFIN_EPS
   if n==3: #3D
    HH[5,:] += DOLFIN_EPS
