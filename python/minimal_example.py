@@ -49,7 +49,7 @@ def minimal_example(width=2e-2, Nadapt=10, eta = 0.01):
      bc = DirichletBC(V, Expression(testsol), boundary)
      solve(a == L, u, bc)
      startTime = time()
-     H = metric_pnorm(u, eta, max_edge_length=1., max_edge_ratio=50)
+     H = metric_pnorm(u, eta, max_edge_length=3., max_edge_ratio=None)
      H = logproject(H)
      if iii != Nadapt-1:
       mesh = adapt(H)
