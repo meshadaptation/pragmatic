@@ -494,18 +494,14 @@ template<typename real_t> class VTKTools{
 
       if(ndims==2){
         for(int j=0;j<3;j++){
-          if(mesh->boundary[i*3+j]>0){
-            vtk_boundary_nodes->SetTuple1(n[(j+1)%3], mesh->boundary[i*3+j]);
-            vtk_boundary_nodes->SetTuple1(n[(j+2)%3], mesh->boundary[i*3+j]);
-          }
+	  vtk_boundary_nodes->SetTuple1(n[(j+1)%3], mesh->boundary[i*3+j]);
+	  vtk_boundary_nodes->SetTuple1(n[(j+2)%3], mesh->boundary[i*3+j]);
         }
       }else{
         for(int j=0;j<4;j++){
-          if(mesh->boundary[i*4+j]>0){
-            vtk_boundary_nodes->SetTuple1(n[(j+1)%4], mesh->boundary[i*4+j]);
-            vtk_boundary_nodes->SetTuple1(n[(j+2)%4], mesh->boundary[i*4+j]);
-            vtk_boundary_nodes->SetTuple1(n[(j+3)%4], mesh->boundary[i*4+j]);
-          }
+	  vtk_boundary_nodes->SetTuple1(n[(j+1)%4], mesh->boundary[i*4+j]);
+	  vtk_boundary_nodes->SetTuple1(n[(j+2)%4], mesh->boundary[i*4+j]);
+	  vtk_boundary_nodes->SetTuple1(n[(j+3)%4], mesh->boundary[i*4+j]);
         }
       }
     }
