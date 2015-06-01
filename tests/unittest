@@ -70,7 +70,7 @@ class UnitTestHarness:
 
         files = glob.glob(dir)
         for file in files:
-            if not os.path.isdir(file) and stat.S_IXUSR & os.stat(file)[stat.ST_MODE]:
+            if not os.path.isdir(file) and stat.S_IXUSR & os.stat(file)[stat.ST_MODE] and "test" in file:
                 self.tests.append(UnitTest(file))
 
     def run(self):
