@@ -41,7 +41,9 @@
 #include <omp.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 
 #include "Refine.h"
@@ -63,6 +65,7 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
   mesh->create_boundary();
 
@@ -125,6 +128,9 @@ int main(int argc, char **argv){
   }
 
   delete mesh;
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 

@@ -42,7 +42,9 @@
 #include <omp.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 
 #include "Coarsen.h"
@@ -79,6 +81,7 @@ int main(int argc, char **argv){
   }
 
   // Benchmark times.
+#ifdef HAVE_VTK
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
   mesh->create_boundary();
@@ -259,6 +262,9 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail (area="<<area<<")"<<std::endl;
   }
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 

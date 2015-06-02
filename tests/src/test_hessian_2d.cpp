@@ -41,7 +41,9 @@
 #include <omp.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 #include "ticker.h"
 
@@ -53,6 +55,7 @@ int main(int argc, char **argv){
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
   mesh->create_boundary();
 
@@ -102,6 +105,9 @@ int main(int argc, char **argv){
     std::cout<<"pass\n";
 
   delete mesh;
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 
