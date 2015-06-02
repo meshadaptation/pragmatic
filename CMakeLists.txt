@@ -76,7 +76,12 @@ if (NOT ENABLE_MPI OR NOT MPI_FOUND)
   message(STATUS "Configured without MPI support.")
 endif()
 
-option(ENABLE_OPENMP "Enable OpenMP support." ON)
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_OPENMP) AND (NOT (x$ENV{ENABLE_OPENMP} STREQUAL x)))
+  set(ENABLE_OPENMP $ENV{ENABLE_OPENMP})
+else()
+  option(ENABLE_OPENMP "Enable OpenMP support." ON)
+endif()
 if (ENABLE_OPENMP)
   find_package(OpenMP)
   if (OPENMP_FOUND)
