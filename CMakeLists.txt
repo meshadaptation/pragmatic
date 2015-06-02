@@ -15,7 +15,12 @@ enable_language(CXX)
 enable_language(C)
 
 set (PRAGMATIC_LIBRARIES)
-option(ENABLE_VTK "Enable VTK input/output." ON)
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
+  set(ENABLE_VTK $ENV{ENABLE_VTK})
+else()
+  option(ENABLE_VTK "Enable VTK input/output." ON)
+endif()
 if (ENABLE_VTK)
   FIND_PACKAGE(VTK NO_MODULE)
   if(VTK_FOUND)
