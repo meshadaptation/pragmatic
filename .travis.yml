@@ -11,6 +11,9 @@ install:
 compiler:
   - gcc
 # Change this to your needs
+env:
+  - ENABLE_VTK=FALSE
+  - ENABLE_VTK=TRUE
 script:
   - mkdir build
   - cd build
