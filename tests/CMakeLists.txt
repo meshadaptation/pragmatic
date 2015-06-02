@@ -25,65 +25,71 @@ FOREACH(item ${src_lite})
 ENDFOREACH(item)
 MESSAGE(STATUS "str_cite ${src_lite}")
 
-ADD_EXECUTABLE(test_generate_Steiner_ellipse_3d ${PRAGMATIC_TEST_SRC}/test_generate_Steiner_ellipse_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_generate_Steiner_ellipse_3d ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(test_refine_3d ${PRAGMATIC_TEST_SRC}/test_refine_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_refine_3d ${PRAGMATIC_LIBRARIES})
-
+# tests without VTK:
 ADD_EXECUTABLE(test_ElementProperty ${PRAGMATIC_TEST_SRC}/test_ElementProperty.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_ElementProperty ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_swap_2d ${PRAGMATIC_TEST_SRC}/test_swap_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_swap_2d ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(test_mpi_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(test_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_coarsen_3d ${PRAGMATIC_LIBRARIES})
-
-ADD_EXECUTABLE(test_refine_2d ${PRAGMATIC_TEST_SRC}/test_refine_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_refine_2d ${PRAGMATIC_LIBRARIES})
+ADD_EXECUTABLE(test_generate_Steiner_ellipse_3d ${PRAGMATIC_TEST_SRC}/test_generate_Steiner_ellipse_3d.cpp ${src_lite})
+TARGET_LINK_LIBRARIES(test_generate_Steiner_ellipse_3d ${PRAGMATIC_LIBRARIES})
 
 ADD_EXECUTABLE(test_eigen ${PRAGMATIC_TEST_SRC}/test_eigen.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_eigen ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_hessian_3d ${PRAGMATIC_TEST_SRC}/test_hessian_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_hessian_3d ${PRAGMATIC_LIBRARIES})
+# tests with VTK:
+if (ENABLE_VTK)
 
-ADD_EXECUTABLE(test_mpi_refine_3d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_mpi_refine_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_adapt_2d ${PRAGMATIC_TEST_SRC}/test_adapt_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_adapt_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_coarsen_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_coarsen_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_adapt_3d ${PRAGMATIC_TEST_SRC}/test_adapt_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_adapt_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_adapt_2d ${PRAGMATIC_TEST_SRC}/test_adapt_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_adapt_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_adapt_3d ${PRAGMATIC_TEST_SRC}/test_mpi_adapt_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_mpi_refine_2d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_mpi_refine_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_coarsen_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_hessian_2d ${PRAGMATIC_TEST_SRC}/test_hessian_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_hessian_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_coarsen_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_smooth_2d ${PRAGMATIC_TEST_SRC}/test_smooth_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_smooth_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_mpi_adapt_3d ${PRAGMATIC_TEST_SRC}/test_mpi_adapt_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_mpi_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_mpi_coarsen_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_refine_2d ${PRAGMATIC_TEST_SRC}/test_refine_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_refine_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_smooth_3d ${PRAGMATIC_TEST_SRC}/test_smooth_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_smooth_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_refine_2d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_refine_2d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(test_adapt_3d ${PRAGMATIC_TEST_SRC}/test_adapt_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_adapt_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_refine_3d ${PRAGMATIC_TEST_SRC}/test_refine_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_refine_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(benchmark_adapt_2d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_2d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(benchmark_adapt_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_refine_3d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_refine_3d ${PRAGMATIC_LIBRARIES})
 
-ADD_EXECUTABLE(benchmark_adapt_3d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_3d.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(benchmark_adapt_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_swap_2d ${PRAGMATIC_TEST_SRC}/test_swap_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_swap_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_smooth_2d ${PRAGMATIC_TEST_SRC}/test_smooth_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_smooth_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_smooth_3d ${PRAGMATIC_TEST_SRC}/test_smooth_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_smooth_3d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_hessian_2d ${PRAGMATIC_TEST_SRC}/test_hessian_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_hessian_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_hessian_3d ${PRAGMATIC_TEST_SRC}/test_hessian_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_hessian_3d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(benchmark_adapt_2d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(benchmark_adapt_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(benchmark_adapt_3d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(benchmark_adapt_3d ${PRAGMATIC_LIBRARIES})
+
+endif()
