@@ -123,13 +123,20 @@ class UnitTestHarness:
             print "    Failures: %d" % failcount
         else:
             print "    Failures: %d; tests = %s" % (failcount, failtests)
+        # Throw exception if any warning or failure occured, such that
+        # the script can exit with error code, which is crucial for travis
+        if (warncount > 0 or failcount > 0):
+            raise Exception("Error: Encountered a warning or failure.")
 
 if __name__ == "__main__":
     import sys
 
     if "--electricfence" in sys.argv:
-      os.putenv("LD_PRELOAD", "/usr/lib/libefence.so.0.0")
-      #os.putenv("EF_DISABLE_BANNER", "1")
+        os.putenv("LD_PRELOAD", "/usr/lib/libefence.so.0.0")
+        #os.putenv("EF_DISABLE_BANNER", "1")
 
-    TestHarness = UnitTestHarness(sys.argv[-1])
-    TestHarness.run()
+    try:
+        TestHarness = UnitTestHarness(sys.argv[-1])
+        TestHarness.run()
+    except:
+        sys.exit(1)
