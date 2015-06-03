@@ -85,3 +85,4 @@ TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
 
+file(COPY ${CMAKE_SOURCE_DIR}/python DESTINATION ${CMAKE_BINARY_DIR}/)
