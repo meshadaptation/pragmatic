@@ -79,7 +79,7 @@ class ParameterException(Exception):
   pass
 
 try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("../libpragmatic.so")
+  _libpragmatic = ctypes.cdll.LoadLibrary("../lib/libpragmatic.so")
 except:
   raise LibraryException("Failed to load libpragmatic.so")
 
