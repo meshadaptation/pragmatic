@@ -37,6 +37,8 @@
 #ifndef HALOEXCHANGE_H
 #define HALOEXCHANGE_H
 
+#ifdef HAVE_MPI
+
 #include <vector>
 #include <cassert>
 
@@ -171,5 +173,7 @@ template <typename DATATYPE, int block0, int block1>
 
   return;
 }
+
+#endif
 
 #endif
