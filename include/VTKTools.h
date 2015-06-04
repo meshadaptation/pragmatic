@@ -77,7 +77,9 @@ typedef float vtkFloatingPointType;
 #include "ElementProperty.h"
 
 extern "C" {
+#ifdef HAVE_METIS
 #include "metis.h"
+#endif
 }
 
 #ifdef HAVE_MPI
