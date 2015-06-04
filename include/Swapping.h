@@ -1115,140 +1115,60 @@ template<typename real_t, int dim> class Swapping{
       new_boundaries[4].push_back(0);
       new_boundaries[4].push_back(b[element_order[3]][nl]);
       new_boundaries[4].push_back(0);
-    }else if(nelements==6){
-      // This is the 6-element to 8-element swap.
-      new_elements.resize(1);
-      new_boundaries.resize(1);
-
-      new_elements[0].push_back(constrained_edges[0]);
-      new_elements[0].push_back(constrained_edges[2]);
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(nl);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[5]][nk]);
-      new_boundaries[0].push_back(b[element_order[0]][nk]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[6]);
-      new_elements[0].push_back(constrained_edges[8]);
-      new_elements[0].push_back(nl);
-      new_boundaries[0].push_back(b[element_order[3]][nk]);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[2]][nk]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[2]);
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(nl);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[1]][nk]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[8]);
-      new_elements[0].push_back(nl);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[4]][nk]);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[2]);
-      new_elements[0].push_back(constrained_edges[0]);
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(nk);
-      new_boundaries[0].push_back(b[element_order[5]][nl]);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[0]][nl]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[6]);
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[8]);
-      new_elements[0].push_back(nk);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[3]][nl]);
-      new_boundaries[0].push_back(b[element_order[2]][nl]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[2]);
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(nk);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(b[element_order[1]][nl]);
-      new_boundaries[0].push_back(0);
-
-      new_elements[0].push_back(constrained_edges[4]);
-      new_elements[0].push_back(constrained_edges[10]);
-      new_elements[0].push_back(constrained_edges[8]);
-      new_elements[0].push_back(nk);
-      new_boundaries[0].push_back(b[element_order[4]][nl]);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(0);
-      new_boundaries[0].push_back(0);
     }else{
       return false;
     }
-
     nelements = new_elements[0].size()/4;
-
+	
     // Check new minimum quality.
     std::vector<double> new_min_quality(new_elements.size());
     std::vector< std::vector<double> > newq(new_elements.size());
-    int best_option=0;
+
     for(size_t option=0;option<new_elements.size();option++){
       newq[option].resize(nelements);
+      double new_vol = 0.0;
       for(size_t j=0;j<nelements;j++){
-        newq[option][j] = property->lipnikov(_mesh->get_coords(new_elements[option][j*4+0]),
-                                             _mesh->get_coords(new_elements[option][j*4+1]),
-                                             _mesh->get_coords(new_elements[option][j*4+2]),
-                                             _mesh->get_coords(new_elements[option][j*4+3]),
-                                             _mesh->get_metric(new_elements[option][j*4+0]),
-                                             _mesh->get_metric(new_elements[option][j*4+1]),
-                                             _mesh->get_metric(new_elements[option][j*4+2]),
-                                             _mesh->get_metric(new_elements[option][j*4+3]));
-
-        if(newq[option][j] < 0.0){
-          index_t stash_id = new_elements[option][j*4];
-          new_elements[option][j*4] = new_elements[option][j*4+1];
-          new_elements[option][j*4+1] = stash_id;
-          int stash_b = new_boundaries[option][j*4];
-          new_boundaries[option][j*4] = new_boundaries[option][j*4+1];
-          new_boundaries[option][j*4+1] = stash_b;
-          newq[option][j] = -newq[option][j];
-        }
+	const index_t* n = &new_elements[option][j*4];
+	double vol = property->volume(_mesh->get_coords(n[0]), _mesh->get_coords(n[1]),
+				      _mesh->get_coords(n[2]), _mesh->get_coords(n[3]));
+	
+	if(vol<0){
+	  vol*=-1;
+	  std::swap(new_elements[option][j*4], new_elements[option][j*4+1]);
+	  std::swap(new_boundaries[option][j*4], new_boundaries[option][j*4+1]);
+	}
+	
+	new_vol += vol;
+	
+        newq[option][j] = property->lipnikov(_mesh->get_coords(n[0]),
+                                             _mesh->get_coords(n[1]),
+                                             _mesh->get_coords(n[2]),
+                                             _mesh->get_coords(n[3]),
+                                             _mesh->get_metric(n[0]),
+                                             _mesh->get_metric(n[1]),
+                                             _mesh->get_metric(n[2]),
+                                             _mesh->get_metric(n[3]));
       }
-
-      new_min_quality[option] = newq[option][0];
-      for(size_t j=0;j<nelements;j++)
-        new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
+      
+      if(fabs(new_vol - orig_vol) > DBL_EPSILON){
+	new_min_quality[option] = -1;
+      }else{
+	new_min_quality[option] = newq[option][0];
+	for(size_t j=0;j<nelements;j++)
+	  new_min_quality[option] = std::min(newq[option][j], new_min_quality[option]);
+      }
     }
-
-
+    
+    int best_option=0;
     for(size_t option=1;option<new_elements.size();option++){
       if(new_min_quality[option]>new_min_quality[best_option]){
         best_option = option;
       }
     }
-
+    
     if(new_min_quality[best_option] <= min_quality)
       return false;
-
-    double new_vol = 0.0;
-    for(int j=0;j<nelements;j++){
-      const index_t* n = &new_elements[best_option][j*4];
-      new_vol += property->volume(_mesh->get_coords(n[0]), _mesh->get_coords(n[1]),
-          _mesh->get_coords(n[2]), _mesh->get_coords(n[3]));
-    }
-
-    if(fabs(new_vol - orig_vol) > DBL_EPSILON)
-      return false;
-
+    
     // Update NNList
     std::vector<index_t>::iterator vit = std::find(_mesh->NNList[nk].begin(), _mesh->NNList[nk].end(), nl);
     assert(vit != _mesh->NNList[nk].end());
