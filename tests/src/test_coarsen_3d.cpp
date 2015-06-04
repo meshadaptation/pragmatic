@@ -124,7 +124,7 @@ int main(int argc, char **argv){
   if(nelements<50)
     std::cout<<"pass"<<std::endl;
   else
-    std::cout<<"fail"<<std::endl;
+    std::cout<<"fail ("<<nelements<<")"<<std::endl;
 
   delete mesh;
 
