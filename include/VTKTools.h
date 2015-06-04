@@ -187,6 +187,7 @@ template<typename real_t> class VTKTools{
     int nparts=1;
     Mesh<real_t> *mesh=NULL;
 
+#ifdef HAVE_MPI
     // Handle mpi parallel run.
     MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
@@ -342,6 +343,7 @@ template<typename real_t> class VTKTools{
       else
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]), &(lnn2gnn[0]), &(owner_range[0]), comm);
     }
+#endif
 
     if(nparts==1){ // If nparts!=1, then the mesh has been created already by the code a few lines above.
       if(ndims==2)
