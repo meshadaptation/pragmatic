@@ -48,7 +48,9 @@
 #include "Swapping.h"
 #include "ticker.h"
 
+#ifdef HAVE_MPI
 #include <mpi.h>
+#endif
 
 void usage(char *cmd){
   std::cout<<"Usage: "<<cmd<<" [options] infile\n"
@@ -124,21 +126,25 @@ void cout_quality(const Mesh<double> *mesh, std::string operation){
   double qmean = mesh->get_qmean();
   double qmin = mesh->get_qmin();
 
-  int rank;
+  int rank=0;
+#ifdef HAVE_MPI
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
 
   if(rank==0)
     std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
 }
 
 int main(int argc, char **argv){
+  int rank = 0;
+#ifdef HAVE_MPI
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
-  int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
 
   if(argc==1){
     usage(argv[0]);
@@ -213,6 +219,7 @@ int main(int argc, char **argv){
   int nparts=1;
   Mesh<double> *mesh=NULL;
   
+#ifdef HAVE_MPI
   // Handle mpi parallel run.
   MPI_Comm_size(MPI_COMM_WORLD, &nparts);
   
@@ -361,7 +368,9 @@ int main(int argc, char **argv){
     MPI_Comm comm = MPI_COMM_WORLD;
     
     mesh = new Mesh<double>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(lnn2gnn[0]), &(owner_range[0]), comm);
-  }else{
+  }else
+#endif
+  {
     mesh = new Mesh<double>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
   }
 
@@ -440,7 +449,9 @@ int main(int argc, char **argv){
 
   delete mesh;
 
+#ifdef HAVE_MPI
   MPI_Finalize();
+#endif
 
   return 0;
 }
