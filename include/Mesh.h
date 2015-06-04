@@ -514,7 +514,9 @@ template<typename real_t> class Mesh{
           total_area += sqrt(s*(s-a)*(s-b)*(s-c));
         }
 
+#ifdef HAVE_MPI
         MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
       }else{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
@@ -602,7 +604,9 @@ template<typename real_t> class Mesh{
           }
         }
 
+#ifdef HAVE_MPI
         MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
       }else{
 #pragma omp parallel for reduction(+:total_area)
         for(int i=0;i<NElements;i++){
@@ -693,7 +697,9 @@ template<typename real_t> class Mesh{
           total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
         }
 	
+#ifdef HAVE_MPI
         MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
       }else{
 #pragma omp parallel for reduction(+:total_volume)
         for(int i=0;i<NElements;i++){
@@ -749,10 +755,12 @@ template<typename real_t> class Mesh{
       nele++;
     }
 
+#ifdef HAVE_MPI
     if(num_processes>1){
       MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
       MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
     }
+#endif
 
     double mean = sum/nele;
 
@@ -804,8 +812,10 @@ template<typename real_t> class Mesh{
                                                get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
     }
 
+#ifdef HAVE_MPI
     if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+#endif
     
     return qmin;
   }
@@ -823,8 +833,10 @@ template<typename real_t> class Mesh{
                                                get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
     }
 
+#ifdef HAVE_MPI
     if(num_processes>1)
       MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+#endif
     
     return qmin;
   }
@@ -1339,11 +1351,25 @@ template<typename real_t> class Mesh{
         std::cout<<"VERIFY: maximum element volume...."<<max_ele_vol<<std::endl;
       }
     }
+    
+    double cachedq=0;
+    for(size_t i=0;i<NElements;i++){
+      const index_t *n=get_element(i);
+      if(n[0]<0)
+        continue;
+      cachedq += quality[i];
+    }
+
+#ifdef HAVE_MPI
+    MPI_Allreduce(MPI_IN_PLACE, &cachedq, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+#endif
+
     double qmean = get_qmean();
     double qmin = get_qmin();
     if(rank==0){
-      std::cout<<"VERIFY: mean quality...."<<qmean<<std::endl;
-      std::cout<<"VERIFY: min quality...."<<qmin<<std::endl;
+      std::cout<<"VERIFY: mean quality......."<<qmean<<std::endl;
+      std::cout<<"VERIFY: min quality........"<<qmin<<std::endl;
+      std::cout<<"VERIFY: cached quality....."<<cachedq<<std::endl;
     }
 
 #ifdef HAVE_MPI
@@ -1358,7 +1384,8 @@ template<typename real_t> class Mesh{
   }
 
   void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
-                       std::vector< std::vector<index_t> > *recv_vec) {
+                       std::vector< std::vector<index_t> > *recv_vec){
+#ifdef HAVE_MPI
     int ierr, recv_size, tag = 123456;
     std::vector<MPI_Status> status(num_processes);
     std::vector<MPI_Request> send_req(num_processes);
@@ -1384,6 +1411,7 @@ template<typename real_t> class Mesh{
 
     MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
     MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
+#endif
   }
 
  private:
@@ -1969,9 +1997,9 @@ template<typename real_t> class Mesh{
   std::vector<int> node_owner;
   std::vector<index_t> lnn2gnn;
 
+  index_t gnn_offset;
 #ifdef HAVE_MPI
   MPI_Comm _mpi_comm;
-  index_t gnn_offset;
 
   // MPI data type for index_t and real_t
   MPI_Datatype MPI_INDEX_T;
