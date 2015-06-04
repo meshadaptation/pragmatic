@@ -386,8 +386,10 @@ void fit_ellipsoid(int i, real_t *sm){
       }
     }
     
+#ifdef HAVE_MPI
     // Halo update if parallel
     halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+#endif
   }
 
 
@@ -439,10 +441,16 @@ void fit_ellipsoid(int i, real_t *sm){
       for(int i=0; i<_NNodes; i++){
         _metric[i].get_metric(&(_mesh->metric[i*(dim==2?3:6)]));
       }
+#pragma omp for schedule(static)
+      for(int i=0; i<_NElements; i++){
+        _mesh->template update_quality<dim>(i);
+      }
     }
     
+#ifdef HAVE_MPI
     // Halo update if parallel
     halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
+#endif
   }
 
   /*! Add the contribution from the metric field from a new field with a target linear interpolation error. 
