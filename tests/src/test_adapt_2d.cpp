@@ -39,7 +39,9 @@
 #include <iostream>
 #include <vector>
 
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 #include "Mesh.h"
 #include "VTKTools.h"
@@ -51,16 +53,20 @@
 #include "Swapping.h"
 #include "ticker.h"
 
+#ifdef HAVE_MPI
 #include <mpi.h>
+#endif
 
 int main(int argc, char **argv){
+  int rank=0;
+#ifdef HAVE_MPI
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
 
-  int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
 
   bool verbose = false;
   if(argc>1){
@@ -89,13 +95,10 @@ int main(int argc, char **argv){
   metric_field.add_field(&(psi[0]), eta, 2);
   metric_field.update_mesh();
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-
-  if((rank==0)&&(verbose)) std::cout<<"Initial quality:\n"
-                                    <<"Quality mean:  "<<qmean<<std::endl
-                                    <<"Quality min:   "<<qmin<<std::endl;
-  //VTKTools<double>::export_vtu("../data/test_adapt_2d-initial", mesh);
+  if(verbose){
+    std::cout<<"Initial quality:\n";
+    mesh->verify();
+  }
 
   // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
   double L_up = sqrt(2.0);
@@ -179,8 +182,8 @@ int main(int argc, char **argv){
 
   VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+  double qmean = mesh->get_qmean();
+  double qmin = mesh->get_qmin();
   
   long double perimeter = mesh->calculate_perimeter();
   long double area = mesh->calculate_area();
@@ -206,19 +209,21 @@ int main(int argc, char **argv){
       std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
 
     std::cout<<"Expecting perimeter == 4: ";
-    if(fabs(perimeter-4)<DBL_EPSILON)
+    if(std::abs(perimeter-4)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
 
     std::cout<<"Expecting area == 1: ";
-    if(fabs(area-1)<DBL_EPSILON)
+    if(std::abs(area-1)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (area="<<area<<")"<<std::endl;
   }
 
+#ifdef HAVE_MPI
   MPI_Finalize();
+#endif
 
   return 0;
 }
