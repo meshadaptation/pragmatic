@@ -1,12 +1,19 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/bin)
 set(PRAGMATIC_TEST_SRC ${CMAKE_SOURCE_DIR}/tests/src)
 
-add_custom_target(test
-make
-COMMAND mkdir -p data
-COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/data/* data/
-COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
-COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
+if (NOT(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR}))
+  add_custom_target(test
+  make
+  COMMAND mkdir -p data
+  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/data/* data/
+  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
+  COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
+else()
+  add_custom_target(test
+  make
+  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
+  COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
+endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests/include)
 file(GLOB lib_src "${CMAKE_SOURCE_DIR}/src/*.cpp")
