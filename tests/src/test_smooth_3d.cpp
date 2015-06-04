@@ -43,7 +43,9 @@
 #include <omp.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 #include "Smooth.h"
 #include "ticker.h"
@@ -76,6 +78,7 @@ int main(int argc, char **argv){
   const double target_quality_mean = 0.3;
   const double target_quality_min = 0.01;
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
 
@@ -166,6 +169,9 @@ int main(int argc, char **argv){
 
   vtu_filename = std::string("../data/test_smooth_optimisation_linf_3d");
   VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 

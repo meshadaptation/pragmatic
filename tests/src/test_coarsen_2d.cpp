@@ -44,7 +44,9 @@
 #include <cfloat>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 
 #include "Coarsen.h"
@@ -66,6 +68,7 @@ int main(int argc, char **argv){
     verbose = std::string(argv[1])=="-v";
   }
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
   mesh->create_boundary();
 
@@ -125,6 +128,9 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail"<<std::endl;
   }
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 

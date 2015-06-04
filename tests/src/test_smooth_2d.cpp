@@ -43,7 +43,9 @@
 #include <omp.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 #include "Smooth.h"
 #include "ticker.h"
@@ -86,6 +88,7 @@ int main(int argc, char **argv){
   const double target_quality_mean = 0.7;
   const double target_quality_min = 0.1;
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
   mesh->create_boundary();
 
@@ -163,7 +166,10 @@ int main(int argc, char **argv){
     std::cout<<"Linf smooth time  "<<toc-tic<<std::endl;
     test_block(qmean, qmin, perimeter, area);
   }
-  
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
+
   MPI_Finalize();
 
   return 0;

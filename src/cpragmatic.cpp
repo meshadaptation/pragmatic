@@ -44,12 +44,15 @@
 #include "Swapping.h"
 #include "Smooth.h"
 
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 
 static void *_pragmatic_mesh=NULL;
 static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
+#ifdef HAVE_VTK
   void pragmatic_dump(const char *filename){
     VTKTools<double>::export_vtu(filename, (Mesh<double>*)_pragmatic_mesh);
   }
@@ -57,6 +60,7 @@ extern "C" {
   void pragmatic_dump_debug(){
     pragmatic_dump("dump\0");
   }
+#endif
 
   /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
       be called before this can be called again, i.e. cannot adapt
@@ -100,6 +104,7 @@ extern "C" {
 
   /** Initialise pragmatic with name of VTK file to be adapted.
   */
+#ifdef HAVE_VTK
   void pragmatic_vtk_init(const char *filename){
     assert(_pragmatic_mesh==NULL);
     assert(_pragmatic_metric_field==NULL);
@@ -109,6 +114,7 @@ extern "C" {
 
     _pragmatic_mesh = mesh;
   }
+#endif
 
   /** Add field which should be adapted to.
 

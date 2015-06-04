@@ -40,7 +40,9 @@
 #include <getopt.h>
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 
 #include "Coarsen.h"
@@ -158,6 +160,7 @@ int main(int argc, char **argv){
   parse_arguments(argc, argv, infilename, verbose, factor);
 
   // Read in image
+#ifdef HAVE_VTK
   vtkSmartPointer<vtkJPEGReader> reader = vtkSmartPointer<vtkJPEGReader>::New();
   reader->SetFileName(infilename.c_str());
   vtkSmartPointer<vtkImageGaussianSmooth> gsmooth = vtkSmartPointer<vtkImageGaussianSmooth>::New();
@@ -448,6 +451,9 @@ int main(int argc, char **argv){
     VTKTools<double>::export_vtu(outfilename.c_str(), mesh);
 
   delete mesh;
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
 #ifdef HAVE_MPI
   MPI_Finalize();

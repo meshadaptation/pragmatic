@@ -51,7 +51,9 @@
 #endif
 
 #include "Mesh.h"
+#ifdef HAVE_VTK
 #include "VTKTools.h"
+#endif
 #include "MetricField.h"
 
 #include "Coarsen.h"
@@ -71,6 +73,7 @@ int main(int argc, char **argv){
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+#ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
   mesh->create_boundary();
 
@@ -101,6 +104,9 @@ int main(int argc, char **argv){
     std::cout<<"Coarsen time = "<<toc-tic<<std::endl;
     std::cout<<"pass"<<std::endl;
   }
+#else
+  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+#endif
 
   MPI_Finalize();
 
