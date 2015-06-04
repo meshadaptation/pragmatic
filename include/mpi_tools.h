@@ -36,6 +36,7 @@
 #ifndef MPI_TOOLS_H
 #define MPI_TOOLS_H
 
+#ifdef HAVE_MPI
 #include <mpi.h>
 
 // Template MPI data types.
@@ -70,5 +71,6 @@ template <> mpi_type_wrapper<unsigned long>::mpi_type_wrapper();
 
 // Explicit instantiation for `long long'
 template <> mpi_type_wrapper<long long>::mpi_type_wrapper();
+#endif
 
 #endif
