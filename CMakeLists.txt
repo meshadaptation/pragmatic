@@ -37,7 +37,7 @@ endif()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated")
 
-FIND_PACKAGE(MPI REQUIRED)
+FIND_PACKAGE(MPI)
 if(MPI_FOUND)
   add_definitions(-DHAVE_MPI)
   include_directories(${MPI_CXX_INCLUDE_PATH} ${MPI_C_INCLUDE_PATH})
@@ -72,7 +72,7 @@ file(GLOB CXX_SOURCES src/*.cpp)
 
 # target_link_library
 add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
-target_link_libraries(pragmatic metis)
+target_link_libraries(pragmatic ${PRAGMATIC_LIBRARIES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
