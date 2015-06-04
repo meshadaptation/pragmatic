@@ -181,7 +181,7 @@ int main(int argc, char **argv){
       cout_quality(mesh, "coarsen");
 
     tic = get_wtime();
-    swapping.swap(0.7);
+    swapping.swap(0.1);
     if(verbose)
       cout_quality(mesh, "Swap");
     time_swap += get_wtime() - tic;
@@ -241,8 +241,8 @@ int main(int argc, char **argv){
              <<std::setw(10)<<time_adapt<<" "
              <<std::setw(10)<<time_other<<"\n";
 
-    std::cout<<"Expecting qmean>0.4, qmin>0.01: ";
-    if((qmean>0.4)&&(qmin>0.01))
+    std::cout<<"Expecting qmean>0.3, qmin>0.01: ";
+    if((qmean>0.3)&&(qmin>0.01))
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
