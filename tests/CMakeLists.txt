@@ -4,8 +4,8 @@ set(PRAGMATIC_TEST_SRC ${CMAKE_SOURCE_DIR}/tests/src)
 add_custom_target(test
 make
 COMMAND mkdir -p data
-COMMAND cp ${CMAKE_SOURCE_DIR}/tests/data/* data/
-COMMAND cp ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
+COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/data/* data/
+COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
 COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
 
 include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests/include)
