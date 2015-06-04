@@ -56,7 +56,7 @@
 template<typename real_t, int dim> class Refine{
  public:
   /// Default constructor.
-  Refine(Mesh<real_t> &mesh){
+  Refine(Mesh<real_t> &mesh): nloc(dim+1), msize(dim==2?3:6), nedge(dim==2?3:6){
     _mesh = &mesh;
 
     size_t NElements = _mesh->get_number_elements();
@@ -78,10 +78,15 @@ template<typename real_t, int dim> class Refine{
       break;
     }
 
+#ifdef HAVE_MPI
     MPI_Comm comm = _mesh->get_mpi_comm();
 
     nprocs = pragmatic_nprocesses(comm);
     rank = pragmatic_process_id(comm);
+#else
+    nprocs = 1;
+    rank = 0;
+#endif
 
     nthreads = pragmatic_nthreads();
 
@@ -153,7 +158,7 @@ template<typename real_t, int dim> class Refine{
        */
       size_t reserve_size = nedge*origNNodes/nthreads;
       newVertices[tid].clear(); newVertices[tid].reserve(reserve_size);
-      newCoords[tid].clear(); newCoords[tid].reserve(ndims*reserve_size);
+      newCoords[tid].clear(); newCoords[tid].reserve(dim*reserve_size);
       newMetric[tid].clear(); newMetric[tid].reserve(msize*reserve_size);
 
       /* Loop through all edges and select them for refinement if
@@ -186,8 +191,8 @@ template<typename real_t, int dim> class Refine{
 #pragma omp single
       {
         size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
-        if(_mesh->_coords.size()<reserve*ndims){
-          _mesh->_coords.resize(reserve*ndims);
+        if(_mesh->_coords.size()<reserve*dim){
+          _mesh->_coords.resize(reserve*dim);
           _mesh->metric.resize(reserve*msize);
           _mesh->NNList.resize(reserve);
           _mesh->NEList.resize(reserve);
@@ -198,7 +203,7 @@ template<typename real_t, int dim> class Refine{
       }
 
       // Append new coords and metric to the mesh.
-      memcpy(&_mesh->_coords[ndims*threadIdx[tid]], &newCoords[tid][0], ndims*splitCnt[tid]*sizeof(real_t));
+      memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
       memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
 
       // Fix IDs of new vertices
@@ -485,9 +490,9 @@ template<typename real_t, int dim> class Refine{
           index_t n1 = _mesh->_ENList[i*nloc + 1];
           index_t n2 = _mesh->_ENList[i*nloc + 2];
 
-          const real_t *x0 = &_mesh->_coords[n0*ndims];
-          const real_t *x1 = &_mesh->_coords[n1*ndims];
-          const real_t *x2 = &_mesh->_coords[n2*ndims];
+          const real_t *x0 = &_mesh->_coords[n0*dim];
+          const real_t *x1 = &_mesh->_coords[n1*dim];
+          const real_t *x2 = &_mesh->_coords[n2*dim];
 
           real_t av = property->area(x0, x1, x2);
 
@@ -527,7 +532,7 @@ template<typename real_t, int dim> class Refine{
         property->template length<dim>(x0, x1, m1)));
 
     // Calculate position of new vertex and append it to OMP thread's temp storage
-    for(size_t i=0;i<ndims;i++){
+    for(size_t i=0;i<dim;i++){
       x = x0[i]+weight*(x1[i] - x0[i]);
       newCoords[tid].push_back(x);
     }
@@ -2575,12 +2580,12 @@ template<typename real_t, int dim> class Refine{
         // We start with a temporary location at the euclidean barycentre of the wedge.
         for(typename std::map<Coords_t, index_t>::const_iterator it=coords_map.begin(); it!=coords_map.end(); ++it){
           const real_t *x = _mesh->get_coords(it->second);
-          for(int j=0; j<ndims; ++j)
+          for(int j=0; j<dim; ++j)
             nc[j] += x[j];
         }
-        for(int j=0; j<ndims; ++j){
+        for(int j=0; j<dim; ++j){
           nc[j] /= coords_map.size();
-          _mesh->_coords[cid*ndims+j] = nc[j];
+          _mesh->_coords[cid*dim+j] = nc[j];
         }
 
         // Interpolate metric at temporary location using the parent element's basis functions
@@ -2686,8 +2691,8 @@ template<typename real_t, int dim> class Refine{
         }
       }
 
-      for(int i=0; i<ndims; ++i){
-        _mesh->_coords[cid*ndims+i] = nc[i];
+      for(int i=0; i<dim; ++i){
+        _mesh->_coords[cid*dim+i] = nc[i];
       }
 
       for(int i=0; i<msize; ++i)
@@ -2710,7 +2715,9 @@ template<typename real_t, int dim> class Refine{
       if(nprocs == 1){
         _mesh->node_owner[cid] = 0;
         _mesh->lnn2gnn[cid] = cid;
-      }else{
+      }
+#ifdef HAVE_MPI
+      else{
         int owner = nprocs;
         for(int j=0; j<nloc; ++j)
           owner = std::min(owner, _mesh->node_owner[n[j]]);
@@ -2744,16 +2751,17 @@ template<typename real_t, int dim> class Refine{
           _mesh->lnn2gnn[cid] = _mesh->gnn_offset+cid;
         }
       }
+#endif
     }
   }
 
   inline void append_element(const index_t *elem, const int *boundary, const size_t tid){
     if(dim==3){
       // Fix orientation of new element.
-      const real_t *x0 = &(_mesh->_coords[elem[0]*ndims]);
-      const real_t *x1 = &(_mesh->_coords[elem[1]*ndims]);
-      const real_t *x2 = &(_mesh->_coords[elem[2]*ndims]);
-      const real_t *x3 = &(_mesh->_coords[elem[3]*ndims]);
+      const real_t *x0 = &(_mesh->_coords[elem[0]*dim]);
+      const real_t *x1 = &(_mesh->_coords[elem[1]*dim]);
+      const real_t *x2 = &(_mesh->_coords[elem[2]*dim]);
+      const real_t *x3 = &(_mesh->_coords[elem[3]*dim]);
 
       real_t av = property->volume(x0, x1, x2, x3);
 
@@ -2785,10 +2793,10 @@ template<typename real_t, int dim> class Refine{
   inline void replace_element(const index_t eid, const index_t *n, const int *boundary){
     if(dim==3){
       // Fix orientation of new element.
-      const real_t *x0 = &(_mesh->_coords[n[0]*ndims]);
-      const real_t *x1 = &(_mesh->_coords[n[1]*ndims]);
-      const real_t *x2 = &(_mesh->_coords[n[2]*ndims]);
-      const real_t *x3 = &(_mesh->_coords[n[3]*ndims]);
+      const real_t *x0 = &(_mesh->_coords[n[0]*dim]);
+      const real_t *x1 = &(_mesh->_coords[n[1]*dim]);
+      const real_t *x2 = &(_mesh->_coords[n[2]*dim]);
+      const real_t *x3 = &(_mesh->_coords[n[3]*dim]);
 
       real_t av = property->volume(x0, x1, x2, x3);
 
@@ -2922,11 +2930,11 @@ template<typename real_t, int dim> class Refine{
   Mesh<real_t> *_mesh;
   ElementProperty<real_t> *property;
 
-  static const size_t ndims=dim, nloc=(dim+1), msize=(dim==2?3:6), nedge=(dim==2?3:6);
+  const size_t nloc, msize, nedge;
   int nprocs, rank, nthreads;
 
-  void (Refine<real_t,dim>::* refineMode2D[nedge])(const index_t *, int, int);
-  void (Refine<real_t,dim>::* refineMode3D[nedge])(std::vector< DirectedEdge<index_t> >&, int, int);
+  void (Refine<real_t,dim>::* refineMode2D[3])(const index_t *, int, int);
+  void (Refine<real_t,dim>::* refineMode3D[6])(std::vector< DirectedEdge<index_t> >&, int, int);
 };
 
 
