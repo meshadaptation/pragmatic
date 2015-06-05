@@ -60,6 +60,9 @@ class UnitTest:
         if self.stderr:
             warncount = warncount + 1
 
+        if (warncount > 0 or failcount > 0):
+            print self.stdout
+
         return (passcount, warncount, failcount)
 
 class UnitTestHarness:
