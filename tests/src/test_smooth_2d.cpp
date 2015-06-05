@@ -52,7 +52,7 @@
 
 #include <mpi.h>
 
-void test_block(double qmean, double qmin, long double perimeter, long double area){
+void test_block(double qmean, double qmin, long double perimeter, long double area, double qtol=0.01){
   long double perimeter_exact = 4;
   std::cout<<"Checking perimeter == 4: ";
   if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
@@ -67,8 +67,8 @@ void test_block(double qmean, double qmin, long double perimeter, long double ar
   else
     std::cout<<"fail ("<<area<<")"<<std::endl;
 
-  std::cout<<"Checking quality between bounds - (min>0.01): ";
-  if(qmin>0.01){
+  std::cout<<"Checking quality between bounds - (min>"<<qtol<<"): ";
+  if(qmin>qtol){
     std::cout<<"pass"<<std::endl;
   }else{
     std::cout<<"fail"<<std::endl
@@ -127,7 +127,7 @@ int main(int argc, char **argv){
 
   if(rank==0){
     std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, perimeter, area);
+    test_block(qmean, qmin, perimeter, area, 0.0);
   }
 
   std::string vtu_filename = std::string("../data/test_smooth_laplacian_2d");
