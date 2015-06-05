@@ -469,191 +469,111 @@ template<typename real_t> class Mesh{
   }
 
 
-  /// Calculate area
+  /// Calculate area - optimise for percision rather than performance as it is only used for verification.
   double calculate_area(){
     int NElements = get_number_elements();
     long double total_area=0;
-
+    
     if(ndims==2){
-      if(num_processes>1){
-#pragma omp parallel for reduction(+:total_area)
-        for(int i=0;i<NElements;i++){
-          const index_t *n=get_element(i);
-          if(n[0] < 0)
-            continue;
+      for(int i=0;i<NElements;i++){
+	const index_t *n=get_element(i);
+	if(n[0] < 0)
+	  continue;
 
-          // Don't sum if it's not ours
-          if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
-            continue;
-
-          const double *x1 = get_coords(n[0]);
-          const double *x2 = get_coords(n[1]);
-          const double *x3 = get_coords(n[2]);
-
-          // Use Heron's Formula
-          long double a;
-          {
-            long double dx = (x1[0]-x2[0]);
-            long double dy = (x1[1]-x2[1]);
-            a = std::sqrt(dx*dx+dy*dy);
-          }
-          long double b;
-          {
-            long double dx = (x1[0]-x3[0]);
-            long double dy = (x1[1]-x3[1]);
-            b = std::sqrt(dx*dx+dy*dy);
-          }
-          long double c;
-          {
-            long double dx = (x2[0]-x3[0]);
-            long double dy = (x2[1]-x3[1]);
-            c = std::sqrt(dx*dx+dy*dy);
-          }
-          long double s = (a+b+c)/2;
-
-          total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
-        }
-
-#ifdef HAVE_MPI
-        MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
-      }else{
-#pragma omp parallel for reduction(+:total_area)
-        for(int i=0;i<NElements;i++){
-          const index_t *n=get_element(i);
-          if(n[0] < 0)
-            continue;
-
-          const double *x1 = get_coords(n[0]);
-          const double *x2 = get_coords(n[1]);
-          const double *x3 = get_coords(n[2]);
-        
-          // Use Heron's Formula
-          long double a;
-          {
-            long double dx = (x1[0]-x2[0]);
-            long double dy = (x1[1]-x2[1]);
-            a = std::sqrt(dx*dx+dy*dy);
-          }
-          long double b;
-          {
-            long double dx = (x1[0]-x3[0]);
-            long double dy = (x1[1]-x3[1]);
-            b = std::sqrt(dx*dx+dy*dy);
-          }
-          long double c;
-          {
-            long double dx = (x2[0]-x3[0]);
-            long double dy = (x2[1]-x3[1]);
-            c = std::sqrt(dx*dx+dy*dy);
-          }
-          long double s = (a+b+c)/2;
-            
-          total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
-        }
+	if(num_processes>1){
+	  // Don't sum if it's not ours
+	  if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
+	    continue;
+	}
+	
+	const double *x1 = get_coords(n[0]);
+	const double *x2 = get_coords(n[1]);
+	const double *x3 = get_coords(n[2]);
+	
+	// Use Heron's Formula
+	long double a;
+	{
+	  long double dx = ((long double)x1[0]-(long double)x2[0]);
+	  long double dy = ((long double)x1[1]-(long double)x2[1]);
+	  a = std::sqrt(dx*dx+dy*dy);
+	}
+	long double b;
+	{
+	  long double dx = ((long double)x1[0]-(long double)x3[0]);
+	  long double dy = ((long double)x1[1]-(long double)x3[1]);
+	  b = std::sqrt(dx*dx+dy*dy);
+	}
+	long double c;
+	{
+	  long double dx = ((long double)x2[0]-(long double)x3[0]);
+	  long double dy = ((long double)x2[1]-(long double)x3[1]);
+	  c = std::sqrt(dx*dx+dy*dy);
+	}
+	long double s = (a+b+c)/2;
+	
+	total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
       }
+      
+#ifdef HAVE_MPI
+      if(num_processes>1)
+	MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
     }else{ // 3D
-      if(num_processes>1){
-#pragma omp parallel for reduction(+:total_area)
-        for(int i=0;i<NElements;i++){
-          const index_t *n=get_element(i);
-          if(n[0] < 0)
-            continue;
+      for(int i=0;i<NElements;i++){
+	const index_t *n=get_element(i);
+	if(n[0] < 0)
+	  continue;
+	
+	for(int j=0;j<4;j++){
+	  if(boundary[i*nloc+j]<=0)
+	    continue;
+	  
+	  int n1 = n[(j+1)%4];
+	  int n2 = n[(j+2)%4];
+	  int n3 = n[(j+3)%4];
 
-          for(int j=0;j<4;j++){
-            if(boundary[i*nloc+j]<=0)
-              continue;
-
-            int n1 = n[(j+1)%4];
-            int n2 = n[(j+2)%4];
-            int n3 = n[(j+3)%4];
-
-            // Don't sum if it's not ours
-            if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
-              continue;
-
-            const double *x1 = get_coords(n1);
-            const double *x2 = get_coords(n2);
-            const double *x3 = get_coords(n3);
-
-            // Use Heron's Formula
-            long double a;
-            {
-              long double dx = (x1[0]-x2[0]);
-              long double dy = (x1[1]-x2[1]);
-              long double dz = (x1[2]-x2[2]);
-              a = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double b;
-            {
-              long double dx = (x1[0]-x3[0]);
-              long double dy = (x1[1]-x3[1]);
-              long double dz = (x1[2]-x3[2]);
-              b = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double c;
-            {
-              long double dx = (x2[0]-x3[0]);
-              long double dy = (x2[1]-x3[1]);
-              long double dz = (x2[2]-x3[2]);
-              c = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double s = (a+b+c)/2;
-
-            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
-          }
-        }
-
+	  if(num_processes>1){
+	    // Don't sum if it's not ours
+	    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+	      continue;
+	  }
+	  
+	  const double *x1 = get_coords(n1);
+	  const double *x2 = get_coords(n2);
+	  const double *x3 = get_coords(n3);
+	  
+	  // Use Heron's Formula
+	  long double a;
+	  {
+	    long double dx = ((long double)x1[0]-(long double)x2[0]);
+	    long double dy = ((long double)x1[1]-(long double)x2[1]);
+	    long double dz = ((long double)x1[2]-(long double)x2[2]);
+	    a = std::sqrt(dx*dx+dy*dy+dz*dz);
+	  }
+	  long double b;
+	  {
+	    long double dx = ((long double)x1[0]-(long double)x3[0]);
+	    long double dy = ((long double)x1[1]-(long double)x3[1]);
+	    long double dz = ((long double)x1[2]-(long double)x3[2]);
+	    b = std::sqrt(dx*dx+dy*dy+dz*dz);
+	  }
+	  long double c;
+	  {
+	    long double dx = ((long double)x2[0]-(long double)x3[0]);
+	    long double dy = ((long double)x2[1]-(long double)x3[1]);
+	    long double dz = ((long double)x2[2]-(long double)x3[2]);
+	    c = std::sqrt(dx*dx+dy*dy+dz*dz);
+	  }
+	  long double s = (a+b+c)/2;
+	  
+	  total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+	}
+      }
+      
 #ifdef HAVE_MPI
+      if(num_processes>1)
         MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
 #endif
-      }else{
-#pragma omp parallel for reduction(+:total_area)
-        for(int i=0;i<NElements;i++){
-          const index_t *n=get_element(i);
-          if(n[0] < 0)
-            continue;
-
-          for(int j=0;j<4;j++){
-            if(boundary[i*nloc+j]<=0)
-              continue;
-
-            int n1 = n[(j+1)%4];
-            int n2 = n[(j+2)%4];
-            int n3 = n[(j+3)%4];
-
-            const double *x1 = get_coords(n1);
-            const double *x2 = get_coords(n2);
-            const double *x3 = get_coords(n3);
-
-            // Use Heron's Formula
-            long double a;
-            {
-              long double dx = (x1[0]-x2[0]);
-              long double dy = (x1[1]-x2[1]);
-              long double dz = (x1[2]-x2[2]);
-              a = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double b;
-            {
-              long double dx = (x1[0]-x3[0]);
-              long double dy = (x1[1]-x3[1]);
-              long double dz = (x1[2]-x3[2]);
-              b = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double c;
-            {
-              long double dx = (x2[0]-x3[0]);
-              long double dy = (x2[1]-x3[1]);
-              long double dz = (x2[2]-x3[2]);
-              c = std::sqrt(dx*dx+dy*dy+dz*dz);
-            }
-            long double s = (a+b+c)/2;
-
-            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
-          }
-        }
-      }
     }
     return total_area;
   }
