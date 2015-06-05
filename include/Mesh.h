@@ -419,48 +419,25 @@ template<typename real_t> class Mesh{
     if(ndims==2){
       long double total_length=0;
       
-      if(num_processes>1){
-#ifdef HAVE_MPI
-#pragma omp parallel for reduction(+:total_length)
-        for(int i=0;i<NElements;i++){
-          if(_ENList[i*nloc] < 0)
-            continue;
-
-          for(int j=0;j<3;j++){
-            int n1 = _ENList[i*nloc+(j+1)%3];
-            int n2 = _ENList[i*nloc+(j+2)%3];
-
-            if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
-              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-
-              total_length += std::sqrt(dx*dx+dy*dy);
-            }
-          }
-        }
-
-        MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
-      }else{
-#pragma omp parallel for reduction(+:total_length)
-        for(int i=0;i<NElements;i++){
-          if(_ENList[i*nloc] < 0)
-            continue;
-
-          for(int j=0;j<3;j++){
-            if(boundary[i*nloc+j]>0){
-              int n1 = _ENList[i*nloc+(j+1)%3];
-              int n2 = _ENList[i*nloc+(j+2)%3];
-
-              long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
-              long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
-
-              total_length += std::sqrt(dx*dx+dy*dy);
-            }
-          }
-        }
+      for(int i=0;i<NElements;i++){
+	if(_ENList[i*nloc] < 0)
+	  continue;
+	
+	for(int j=0;j<3;j++){
+	  int n1 = _ENList[i*nloc+(j+1)%3];
+	  int n2 = _ENList[i*nloc+(j+2)%3];
+	  
+	  if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)){
+	    long double dx = ((long double)_coords[n1*2  ]-(long double)_coords[n2*2  ]);
+	    long double dy = ((long double)_coords[n1*2+1]-(long double)_coords[n2*2+1]);
+	    
+	    total_length += std::sqrt(dx*dx+dy*dy);
+	  }
+	}
       }
       
+      if(num_processes>1)
+        MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
       return total_length;
     }else{
       std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
