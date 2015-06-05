@@ -434,7 +434,7 @@ template<typename real_t> class Mesh{
               long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
               long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
 
-              total_length += sqrt(dx*dx+dy*dy);
+              total_length += std::sqrt(dx*dx+dy*dy);
             }
           }
         }
@@ -455,7 +455,7 @@ template<typename real_t> class Mesh{
               long double dx = (_coords[n1*2  ]-_coords[n2*2  ]);
               long double dy = (_coords[n1*2+1]-_coords[n2*2+1]);
 
-              total_length += sqrt(dx*dx+dy*dy);
+              total_length += std::sqrt(dx*dx+dy*dy);
             }
           }
         }
@@ -495,23 +495,23 @@ template<typename real_t> class Mesh{
           {
             long double dx = (x1[0]-x2[0]);
             long double dy = (x1[1]-x2[1]);
-            a = sqrt(dx*dx+dy*dy);
+            a = std::sqrt(dx*dx+dy*dy);
           }
           long double b;
           {
             long double dx = (x1[0]-x3[0]);
             long double dy = (x1[1]-x3[1]);
-            b = sqrt(dx*dx+dy*dy);
+            b = std::sqrt(dx*dx+dy*dy);
           }
           long double c;
           {
             long double dx = (x2[0]-x3[0]);
             long double dy = (x2[1]-x3[1]);
-            c = sqrt(dx*dx+dy*dy);
+            c = std::sqrt(dx*dx+dy*dy);
           }
-          long double s = 0.5*(a+b+c);
+          long double s = (a+b+c)/2;
 
-          total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
         }
 
 #ifdef HAVE_MPI
@@ -533,23 +533,23 @@ template<typename real_t> class Mesh{
           {
             long double dx = (x1[0]-x2[0]);
             long double dy = (x1[1]-x2[1]);
-            a = sqrt(dx*dx+dy*dy);
+            a = std::sqrt(dx*dx+dy*dy);
           }
           long double b;
           {
             long double dx = (x1[0]-x3[0]);
             long double dy = (x1[1]-x3[1]);
-            b = sqrt(dx*dx+dy*dy);
+            b = std::sqrt(dx*dx+dy*dy);
           }
           long double c;
           {
             long double dx = (x2[0]-x3[0]);
             long double dy = (x2[1]-x3[1]);
-            c = sqrt(dx*dx+dy*dy);
+            c = std::sqrt(dx*dx+dy*dy);
           }
-          long double s = 0.5*(a+b+c);
+          long double s = (a+b+c)/2;
             
-          total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+          total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
         }
       }
     }else{ // 3D
@@ -582,25 +582,25 @@ template<typename real_t> class Mesh{
               long double dx = (x1[0]-x2[0]);
               long double dy = (x1[1]-x2[1]);
               long double dz = (x1[2]-x2[2]);
-              a = sqrt(dx*dx+dy*dy+dz*dz);
+              a = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
             long double b;
             {
               long double dx = (x1[0]-x3[0]);
               long double dy = (x1[1]-x3[1]);
               long double dz = (x1[2]-x3[2]);
-              b = sqrt(dx*dx+dy*dy+dz*dz);
+              b = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
             long double c;
             {
               long double dx = (x2[0]-x3[0]);
               long double dy = (x2[1]-x3[1]);
               long double dz = (x2[2]-x3[2]);
-              c = sqrt(dx*dx+dy*dy+dz*dz);
+              c = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
-            long double s = 0.5*(a+b+c);
+            long double s = (a+b+c)/2;
 
-            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
           }
         }
 
@@ -632,25 +632,25 @@ template<typename real_t> class Mesh{
               long double dx = (x1[0]-x2[0]);
               long double dy = (x1[1]-x2[1]);
               long double dz = (x1[2]-x2[2]);
-              a = sqrt(dx*dx+dy*dy+dz*dz);
+              a = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
             long double b;
             {
               long double dx = (x1[0]-x3[0]);
               long double dy = (x1[1]-x3[1]);
               long double dz = (x1[2]-x3[2]);
-              b = sqrt(dx*dx+dy*dy+dz*dz);
+              b = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
             long double c;
             {
               long double dx = (x2[0]-x3[0]);
               long double dy = (x2[1]-x3[1]);
               long double dz = (x2[2]-x3[2]);
-              c = sqrt(dx*dx+dy*dy+dz*dz);
+              c = std::sqrt(dx*dx+dy*dy+dz*dz);
             }
-            long double s = 0.5*(a+b+c);
+            long double s = (a+b+c)/2;
 
-            total_area += sqrt(s*(s-a)*(s-b)*(s-c));
+            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
           }
         }
       }

@@ -112,28 +112,28 @@ template<typename real_t, int dim>
     int NElements = _mesh->get_number_elements();
 
     std::vector< std::atomic<bool> > is_boundary(NNodes);
-
-    // Use this to keep track of vertices that are still to be visited.
-    std::vector<int> active_vertices(NNodes);
-
+    std::vector< std::atomic<bool> > active_vertices(NNodes);
     if(vLocks.size() < NNodes)
       vLocks.resize(NNodes);
 
-#pragma omp parallel for
-    for(int n=0; n<NNodes; ++n){
-      is_boundary[n].store(false, std::memory_order_relaxed);
-      if(_mesh->NNList[n].empty()){
-        active_vertices[n] = 0;
-      }else{
-        active_vertices[n] = 1;
+    double qsum=0;
+    good_q = quality_tol;
+
+#pragma omp parallel
+    {
+#pragma omp for schedule(static)
+      for(int n=0; n<NNodes; ++n){
+        is_boundary[n].store(false, std::memory_order_relaxed);
+        if(_mesh->NNList[n].empty()){
+          assert(_mesh->NEList[n].empty());
+          active_vertices[n].store(false, std::memory_order_relaxed);
+        }else{
+          active_vertices[n].store(true, std::memory_order_relaxed);
+        }
+        vLocks[n].unlock();
       }
-      vLocks[n].unlock();
-    }
 
-    if(quality_tol>0){
-      good_q = quality_tol;
-
-#pragma omp parallel for schedule(guided)
+#pragma omp for schedule(guided)
       for(int i=0;i<NElements;i++){
         const int *n=_mesh->get_element(i);
         if(n[0]<0)
@@ -147,50 +147,41 @@ template<typename real_t, int dim>
           }
         }
       }
-    }else{ // if(quality_tol < 0)
-      double qsum=0;
 
-#pragma omp parallel for schedule(guided) reduction(+:qsum)
-      for(int i=0;i<NElements;i++){
-        const int *n=_mesh->get_element(i);
-        if(n[0]<0){
-          _mesh->quality[i] = 1.0;
-          continue;
+      if(good_q<0){
+#pragma omp for schedule(static) reduction(+:qsum)
+        for(int i=0;i<NElements;i++){
+          const int *n=_mesh->get_element(i);
+          if(n[0]<0)
+            continue;
+
+          assert(std::isfinite(_mesh->quality[i]));
+          qsum+=_mesh->quality[i];
         }
-        qsum+=_mesh->quality[i];
-
-        for(size_t j=0;j<nloc;j++){
-          if(_mesh->boundary[i*nloc+j]>0){
-            for(size_t k=1;k<nloc;k++){
-              is_boundary[n[(j+k)%nloc]].store(true, std::memory_order_relaxed);
-            }
-          }
+#pragma single
+        {
+          good_q = qsum/NElements;
+          assert(std::isnormal(good_q));
         }
       }
 
-      good_q = qsum/NElements;
-    }
-
-    // First sweep through all vertices. Add vertices adjacent to any
-    // vertex moved into the active_vertex list.
-#pragma omp parallel
-    {
+      // First sweep through all vertices. Add vertices adjacent to any
+      // vertex moved into the active_vertex list.
       std::vector<index_t> retry, next_retry;
 
       int iter=0;
       while((iter++) < max_iterations){
 #pragma omp for schedule(guided) nowait
         for(index_t node=0; node<NNodes; ++node){
-          if((_mesh->is_halo_node(node)) || is_boundary[node].load(std::memory_order_relaxed) || active_vertices[node]==0)
+          if(_mesh->is_halo_node(node) || is_boundary[node].load(std::memory_order_relaxed) || !active_vertices[node].load(std::memory_order_relaxed))
             continue;
-
-          bool abort = false;
 
           if(!vLocks[node].try_lock()){
             retry.push_back(node);
             continue;
           }
 
+          bool abort = false;
           for(const auto& it : _mesh->NNList[node]){
             if(vLocks[it].is_locked()){
               abort = true;
@@ -201,24 +192,23 @@ template<typename real_t, int dim>
           if(!abort){
             if(smart_laplacian_kernel(node)){
               for(auto& it : _mesh->NNList[node]){
-                active_vertices[it] = 1;
+                assert(!_mesh->NNList[node].empty());
+                assert(!_mesh->NEList[node].empty());
+                active_vertices[it].store(true, std::memory_order_relaxed);
               }
+            }else{
+              active_vertices[node].store(false, std::memory_order_relaxed);
             }
-            active_vertices[node] = 0;
           }else{
             retry.push_back(node);
           }
-
           vLocks[node].unlock();
         }
 
-        while(retry.size()>0){
+        for(int iretry=0;iretry<100;iretry++){ // Put a hard limit on the number of times we try to get a lock.
           next_retry.clear();
 
           for(const auto& node : retry){
-            if(active_vertices[node] == 0)
-              continue;
-
             bool abort = false;
 
             if(!vLocks[node].try_lock()){
@@ -236,18 +226,22 @@ template<typename real_t, int dim>
             if(!abort){
               if(smart_laplacian_kernel(node)){
                 for(auto& it : _mesh->NNList[node]){
-                  active_vertices[it] = 1;
+                  assert(!_mesh->NNList[node].empty());
+                  assert(!_mesh->NEList[node].empty());
+                  active_vertices[it].store(true, std::memory_order_relaxed);
                 }
+              }else{
+                active_vertices[node].store(false, std::memory_order_relaxed);
               }
-              active_vertices[node] = 0;
-            }
-            else
+            }else{
               next_retry.push_back(node);
-
+            }
             vLocks[node].unlock();
           }
 
           retry.swap(next_retry);
+          if(retry.empty())
+            break;
         }
       }
     }

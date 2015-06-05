@@ -250,17 +250,19 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
 
-    std::cout<<"Expecting volume == 1: ";
-    if(fabs(volume-1)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
+    long double volume_exact = 1;
+    std::cout<<"Expecting volume == "<<volume_exact<<": ";
+    if(std::abs(volume-volume_exact)/std::max(volume, volume_exact)<DBL_EPSILON)
+      std::cout<<"pass (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
     else
-      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+      std::cout<<"fail (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
 
-    std::cout<<"Expecting area == 6: ";
-    if(fabs(area-6)<6*DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
+    long double area_exact = 6;
+    std::cout<<"Expecting area == "<<area_exact<<": ";
+    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
+      std::cout<<"pass (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
     else
-      std::cout<<"fail (area="<<area<<")"<<std::endl;
+      std::cout<<"fail (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
   }
 #else
   std::cerr<<"Pragmatic was configured without VTK"<<std::endl;

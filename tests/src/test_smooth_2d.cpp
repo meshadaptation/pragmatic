@@ -53,14 +53,16 @@
 #include <mpi.h>
 
 void test_block(double qmean, double qmin, long double perimeter, long double area){
+  long double perimeter_exact = 4;
   std::cout<<"Checking perimeter == 4: ";
-  if(fabs(perimeter-4)<4*DBL_EPSILON)
+  if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail ("<<perimeter<<")"<<std::endl;
 
+  long double area_exact=1;
   std::cout<<"Checking area == 1: ";
-  if(fabs(area-1)<DBL_EPSILON)
+  if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail ("<<area<<")"<<std::endl;
