@@ -14,6 +14,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 enable_language(CXX)
 enable_language(C)
 
+set(INSTALL_LIB_DIR "lib" CACHE PATH
+    "Installation directory for libraries")
+set(INSTALL_BIN_DIR "bin" CACHE PATH
+    "Installation directory for executables")
+set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
+    "Installation directory for header files")
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -66,6 +73,15 @@ if (OPENMP_FOUND)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
+find_package(PythonInterp 2.7)
+if(PYTHONINTERP_FOUND)
+    set(ADAPTIVITY_PY_IN "${CMAKE_CURRENT_SOURCE_DIR}/python/adaptivity.py.in")
+    set(ADAPTIVITY_PY "${CMAKE_CURRENT_SOURCE_DIR}/python/adaptivity.py")
+
+    # Generate adaptivity.py
+    configure_file(${ADAPTIVITY_PY_IN} ${ADAPTIVITY_PY})
+endif()
+
 FIND_PACKAGE(Metis REQUIRED)
 if(METIS_FOUND)
   include_directories(${METIS_INCLUDE_DIR})
@@ -85,13 +101,6 @@ add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
 target_link_libraries(pragmatic ${PRAGMATIC_LIBRARIES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
-
-set(INSTALL_LIB_DIR "lib" CACHE PATH
-    "Installation directory for libraries")
-set(INSTALL_BIN_DIR "bin" CACHE PATH
-    "Installation directory for executables")
-set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
-    "Installation directory for header files")
 
 install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
