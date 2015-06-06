@@ -436,8 +436,10 @@ template<typename real_t> class Mesh{
 	}
       }
       
+#ifdef HAVE_MPI
       if(num_processes>1)
         MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+#endif
       return total_length;
     }else{
       std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
