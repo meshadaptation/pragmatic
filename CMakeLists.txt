@@ -14,6 +14,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 enable_language(CXX)
 enable_language(C)
 
+set(INSTALL_LIB_DIR "lib" CACHE PATH
+    "Installation directory for libraries")
+set(INSTALL_BIN_DIR "bin" CACHE PATH
+    "Installation directory for executables")
+set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
+    "Installation directory for header files")
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -52,7 +59,7 @@ if(MPI_FOUND)
   add_definitions(-DHAVE_MPI)
   include_directories(${MPI_CXX_INCLUDE_PATH} ${MPI_C_INCLUDE_PATH})
 
-  set (CMAKE_CXX_FLAGS ${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS})
+  set (CMAKE_CXX_FLAGS "${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS}")
   set (CMAKE_C_FLAGS ${MPI_C_COMPILE_FLAGS} ${CMAKE_C_FLAGS})
   set (CMAKE_LINK_FLAGS ${MPI_C_LINK_FLAGS} ${CMAKE_LINK_FLAGS})
   set (PRAGMATIC_LIBRARIES ${MPI_CXX_LIBRARIES} ${MPI_C_LIBRARIES} ${PRAGMATIC_LIBRARIES})
@@ -64,6 +71,15 @@ if (OPENMP_FOUND)
     add_definitions(-DHAVE_OPENMP)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
+
+find_package(PythonInterp 2.7)
+if(PYTHONINTERP_FOUND)
+    set(ADAPTIVITY_PY_IN "${CMAKE_CURRENT_SOURCE_DIR}/python/adaptivity.py.in")
+    set(ADAPTIVITY_PY "${CMAKE_CURRENT_SOURCE_DIR}/python/adaptivity.py")
+
+    # Generate adaptivity.py
+    configure_file(${ADAPTIVITY_PY_IN} ${ADAPTIVITY_PY})
 endif()
 
 FIND_PACKAGE(Metis REQUIRED)
@@ -87,7 +103,7 @@ target_link_libraries(pragmatic ${PRAGMATIC_LIBRARIES})
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
 install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN *.h)
-install(FILES libpragmatic.so DESTINATION lib)
+install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
@@ -95,4 +111,3 @@ TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
 
-file(COPY ${CMAKE_SOURCE_DIR}/python DESTINATION ${CMAKE_BINARY_DIR}/)
