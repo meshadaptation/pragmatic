@@ -16,6 +16,8 @@ env:
   - ENABLE_VTK=TRUE
   - ENABLE_MPI=FALSE
   - ENABLE_MPI=TRUE
+  - ENABLE_OPENMP=FALSE
+  - ENABLE_OPENMP=TRUE
 script:
   - mkdir build
   - cd build

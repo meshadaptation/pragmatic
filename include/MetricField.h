@@ -58,7 +58,7 @@
 #include <mpi.h>
 #endif
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 

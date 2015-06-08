@@ -49,7 +49,7 @@
 #include <boost/unordered_map.hpp>
 #endif
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 

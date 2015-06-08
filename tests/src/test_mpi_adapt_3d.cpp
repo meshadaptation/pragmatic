@@ -39,7 +39,7 @@
 #include <vector>
 #include <unistd.h>
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 

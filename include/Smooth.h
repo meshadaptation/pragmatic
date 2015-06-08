@@ -50,7 +50,7 @@
 #include <Eigen/Dense>
 #include <errno.h>
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 
