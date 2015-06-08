@@ -79,9 +79,10 @@ class ParameterException(Exception):
   pass
 
 try:
-  _libpragmatic = ctypes.cdll.LoadLibrary("../lib/libpragmatic.so")
+  path = "${CMAKE_INSTALL_PREFIX}/${INSTALL_LIB_DIR}/libpragmatic${CMAKE_SHARED_LIBRARY_SUFFIX}"
+  _libpragmatic = ctypes.cdll.LoadLibrary(path)
 except:
-  raise LibraryException("Failed to load libpragmatic.so")
+  raise LibraryException("Failed to load libpragmatic in %s" % path)
 
 def refine_metric(M, factor):
   class RefineExpression(Expression):
