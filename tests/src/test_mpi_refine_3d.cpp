@@ -42,7 +42,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 

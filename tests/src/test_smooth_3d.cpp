@@ -40,7 +40,9 @@
 #include <errno.h>
 #include <cfloat>
 
+#ifdef HAVE_OPENMP
 #include <omp.h>
+#endif
 
 #include "Mesh.h"
 #ifdef HAVE_VTK

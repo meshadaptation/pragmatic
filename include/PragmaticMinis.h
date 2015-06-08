@@ -38,7 +38,7 @@
 #ifndef PRAGMATICMINIS_H
 #define PRAGMATICMINIS_H
 
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 
@@ -51,7 +51,7 @@
 #include <atomic>
 
 int pragmatic_nthreads(){
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
   return omp_get_max_threads();
 #else
   return 1;
@@ -59,7 +59,7 @@ int pragmatic_nthreads(){
 }
 
 int pragmatic_thread_id(){
-#ifdef _OPENMP
+#ifdef HAVE_OPENMP
   return omp_get_thread_num();
 #else
   return 0;
@@ -114,7 +114,7 @@ asm volatile(
 :"p"(shared), "r"(inc)
 :"%g1"
 );
-#elif _OPENMP >= 201107
+#elif HAVE_OPENMP >= 201107
 #pragma omp atomic capture
 {
 old = *shared;
