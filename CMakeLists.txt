@@ -52,7 +52,9 @@ else()
     message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated")
+if(CMAKE_COMPILER_IS_GNUCXX)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated")
+endif()
 
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_MPI) AND (NOT (x$ENV{ENABLE_MPI} STREQUAL x)))
