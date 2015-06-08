@@ -106,6 +106,21 @@ class ElementProperty{
     return orientation*inv2*(y02*x01 - y01*x02);
   }
 
+ /*! Calculate area of 2D triangle with greater precision.
+  * @param x0 pointer to 2D position for first point in triangle.
+  * @param x1 pointer to 2D position for second point in triangle.
+  * @param x2 pointer to 2D position for third point in triangle.
+  */
+ inline long double area_precision(const real_t *x0, const real_t *x1, const real_t *x2) const{
+   long double x01 = (x0[0] - x1[0]);
+   long double y01 = (x0[1] - x1[1]);
+   
+   long double x02 = (x0[0] - x2[0]);
+   long double y02 = (x0[1] - x2[1]);
+   
+   return orientation*(y02*x01 - y01*x02)/2;
+ }
+
   /*! Calculate volume of tetrahedron.
    * @param x0 pointer to 3D position for first point in triangle.
    * @param x1 pointer to 3D position for second point in triangle.
