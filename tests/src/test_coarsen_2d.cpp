@@ -119,14 +119,16 @@ int main(int argc, char **argv){
     else
       std::cout<<"fail"<<std::endl;
 
-    std::cout<<"Expecting perimeter = 4: ";
-    if(fabs(perimeter-4)<DBL_EPSILON)
+    long double perimeter_exact = 4;
+    std::cout<<"Expecting perimeter = "<<perimeter_exact<<": ";
+    if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
 
-    std::cout<<"Expecting area = 1: ";
-    if(fabs(area-1)<DBL_EPSILON)
+    long double area_exact = 1;
+    std::cout<<"Expecting area = "<<area_exact<<": ";
+    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

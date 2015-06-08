@@ -140,7 +140,7 @@ int main(int argc, char **argv){
   for(size_t i=0;i<10;i++){
     // Coarsen
     tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref, true);
+    coarsen.coarsen(L_low, L_ref);
     time_coarsen += get_wtime() - tic;
 
     if(verbose)
@@ -184,7 +184,7 @@ int main(int argc, char **argv){
 
   for(size_t i=0;i<5;i++){
     tic = get_wtime();
-    coarsen.coarsen(L_up, L_up, true);
+    coarsen.coarsen(L_up, L_up);
     time_coarsen += get_wtime() - tic;
     if(verbose)
       cout_quality(mesh, "coarsen");

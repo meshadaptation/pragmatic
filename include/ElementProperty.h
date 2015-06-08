@@ -113,22 +113,45 @@ class ElementProperty{
    * @param x3 pointer to 3D position for forth point in triangle.
    */
  inline real_t volume(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
-
-    real_t x01 = (x0[0] - x1[0]);
-    real_t x02 = (x0[0] - x2[0]);
-    real_t x03 = (x0[0] - x3[0]);
-
-    real_t y01 = (x0[1] - x1[1]);
-    real_t y02 = (x0[1] - x2[1]);
-    real_t y03 = (x0[1] - x3[1]);
-
-    real_t z01 = (x0[2] - x1[2]);
-    real_t z02 = (x0[2] - x2[2]);
-    real_t z03 = (x0[2] - x3[2]);
-
-    return orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
-  }
-
+   
+   real_t x01 = (x0[0] - x1[0]);
+   real_t x02 = (x0[0] - x2[0]);
+   real_t x03 = (x0[0] - x3[0]);
+   
+   real_t y01 = (x0[1] - x1[1]);
+   real_t y02 = (x0[1] - x2[1]);
+   real_t y03 = (x0[1] - x3[1]);
+   
+   real_t z01 = (x0[2] - x1[2]);
+   real_t z02 = (x0[2] - x2[2]);
+   real_t z03 = (x0[2] - x3[2]);
+   
+   return orientation*inv6*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+ }
+ 
+ /*! Calculate volume of tetrahedron with greater precision.
+  * @param x0 pointer to 3D position for first point in triangle.
+  * @param x1 pointer to 3D position for second point in triangle.
+  * @param x2 pointer to 3D position for third point in triangle.
+  * @param x3 pointer to 3D position for forth point in triangle.
+  */
+ inline long double volume_precision(const real_t *x0, const real_t *x1, const real_t *x2, const real_t *x3) const{
+   
+   long double x01 = ((long double)x0[0] - (long double)x1[0]);
+   long double x02 = ((long double)x0[0] - (long double)x2[0]);
+   long double x03 = ((long double)x0[0] - (long double)x3[0]);
+   
+   long double y01 = ((long double)x0[1] - (long double)x1[1]);
+   long double y02 = ((long double)x0[1] - (long double)x2[1]);
+   long double y03 = ((long double)x0[1] - (long double)x3[1]);
+   
+   long double z01 = ((long double)x0[2] - (long double)x1[2]);
+   long double z02 = ((long double)x0[2] - (long double)x2[2]);
+   long double z03 = ((long double)x0[2] - (long double)x3[2]);
+   
+   return orientation*(-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03))/6;
+ }
+ 
   /*! Length of an edge as measured in metric space.
    *
    * @param x0 coordinate at start of line segment.
