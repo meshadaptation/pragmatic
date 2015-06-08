@@ -60,18 +60,22 @@
 #include "ticker.h"
 
 int main(int argc, char **argv){
+#ifdef HAVE_MPI
   int required_thread_support=MPI_THREAD_SINGLE;
   int provided_thread_support;
   MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
   assert(required_thread_support==provided_thread_support);
-  
+#endif
+
   bool verbose = false;
   if(argc>1){
     verbose = std::string(argv[1])=="-v";
   }
 
-  int rank;
+  int rank=0;
+#ifdef HAVE_MPI
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
 
 #ifdef HAVE_VTK
   Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
@@ -108,7 +112,9 @@ int main(int argc, char **argv){
   std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
+#ifdef HAVE_MPI
   MPI_Finalize();
+#endif
 
   return 0;
 }
