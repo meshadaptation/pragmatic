@@ -69,7 +69,7 @@
 
 template<typename real_t> class Mesh{
  public:
-
+  
   /*! 2D triangular mesh constructor. This is for use when there is no MPI.
    *
    * @param NNodes number of nodes in the local mesh.
@@ -78,7 +78,7 @@ template<typename real_t> class Mesh{
    * @param x is the X coordinate.
    * @param y is the Y coordinate.
    */
-  Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y){
+ Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y):ndims(2), nloc(3), snloc(2), msize(3){
 #ifdef HAVE_MPI
     _mpi_comm = MPI_COMM_WORLD;
 #endif
@@ -99,7 +99,7 @@ template<typename real_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const index_t *lnn2gnn,
-       const index_t *owner_range, MPI_Comm mpi_comm){
+       const index_t *owner_range, MPI_Comm mpi_comm):ndims(2), nloc(3), snloc(2), msize(3){
     _mpi_comm = mpi_comm;
     _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, owner_range);
   }
@@ -115,7 +115,7 @@ template<typename real_t> class Mesh{
    * @param z is the Z coordinate.
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
-       const real_t *x, const real_t *y, const real_t *z){
+       const real_t *x, const real_t *y, const real_t *z):ndims(3), nloc(4), snloc(3), msize(6){
 #ifdef HAVE_MPI
       _mpi_comm = MPI_COMM_WORLD;
 #endif
@@ -137,7 +137,7 @@ template<typename real_t> class Mesh{
    */
   Mesh(int NNodes, int NElements, const index_t *ENList,
        const real_t *x, const real_t *y, const real_t *z, const index_t *lnn2gnn,
-       const index_t *owner_range, MPI_Comm mpi_comm){
+       const index_t *owner_range, MPI_Comm mpi_comm):ndims(3), nloc(4), snloc(3), msize(6){
     _mpi_comm = mpi_comm;
     _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, owner_range);
   }
@@ -264,11 +264,11 @@ template<typename real_t> class Mesh{
       }
     }
     
-    for(std::vector<int>::iterator it=boundary.begin();it!=boundary.end();++it){
-      if(*it==-2)
-        *it = 1;
-      else if(*it>=0)
-        *it = 0;
+    for(auto &it : boundary){
+      if(it==-2)
+        it = 1;
+      else if(it>=0)
+        it = 0;
     }
   }
 
@@ -304,7 +304,51 @@ template<typename real_t> class Mesh{
     }
   }
 
- /// Erase an element
+  void get_boundary(int *facets, int *ids) const{
+    // Sweep through boundary and set ids.
+    size_t NElements = get_number_elements();
+    int *facet = facets;
+    int *id = ids;
+    for(int i=0;i<NElements;i++){
+      const int *n=get_element(i);
+      if(n[0]==-1)
+        continue;
+      
+      for(int j=0;j<nloc;j++){
+	if(boundary[i*nloc+j]<=0)
+	  continue;
+
+	if(ndims==2){
+	  facet[0] = n[(j+1)%3];
+	  facet[1] = n[(j+2)%3];
+	}else{
+	  if(j==0){
+	    facet[0] = n[(j+1)%3];
+	    facet[1] = n[(j+3)%3];
+	    facet[2] = n[(j+2)%3];
+	  }else if(j==1){
+	    facet[0] = n[(j+0)%3];
+	    facet[1] = n[(j+2)%3];
+	    facet[2] = n[(j+3)%3];
+	  }else if(j==2){
+	    facet[0] = n[(j+0)%3];
+	    facet[1] = n[(j+3)%3];
+	    facet[2] = n[(j+1)%3];
+	  }else if(j==3){
+	    facet[0] = n[(j+0)%3];
+	    facet[1] = n[(j+1)%3];
+	    facet[2] = n[(j+2)%3];
+	  }	  
+	}
+	*id = boundary[i*nloc+j];
+	
+	facet+=snloc;
+	++id;
+      }
+    }
+  }
+
+  /// Erase an element
   void erase_element(const index_t eid){
     const index_t *n = get_element(eid);
 
@@ -342,6 +386,17 @@ template<typename real_t> class Mesh{
     return NElements;
   }
 
+  /// Return the number of boundary facets in the mesh.
+  inline size_t get_number_facets() const{
+    size_t NFacets = 0;
+    for(auto &it : boundary){
+      if(it>0)
+	NFacets++;
+    }
+    
+    return NFacets;
+  }
+  
   /// Return the number of spatial dimensions.
   inline size_t get_number_dimensions() const{
     return ndims;
@@ -1345,16 +1400,6 @@ template<typename real_t> class Mesh{
 
     nthreads = pragmatic_nthreads();
 
-    if(z==NULL){
-      nloc = 3;
-      ndims = 2;
-      msize = 3;
-    }else{
-      nloc = 4;
-      ndims = 3;
-      msize = 6;
-    }
-
     // From the globalENList, create the halo and a local ENList if num_processes>1.
     const index_t *ENList;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
@@ -1856,14 +1901,14 @@ template<typename real_t> class Mesh{
   inline void update_quality(index_t element){
     const index_t *n=get_element(element);
 
-    if(dim==2){
+    if(ndims==2){
       quality[element] = calculate_quality<2>(n);
     }else{
       quality[element] = calculate_quality<3>(n);
     }
   }
 
-  size_t ndims, nloc, msize;
+  const size_t ndims, nloc, snloc, msize;
   std::vector<index_t> _ENList;
   std::vector<real_t> _coords;
 

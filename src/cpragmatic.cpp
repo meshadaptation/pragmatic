@@ -263,12 +263,14 @@ extern "C" {
 
       @param [out] NNodes
       @param [out] NElements
+      @param [out] NFacets
    */
-  void pragmatic_get_info(int *NNodes, int *NElements){
+  void pragmatic_get_info(int *NNodes, int *NElements, int *NFacets){
     Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
     *NNodes = mesh->get_number_nodes();
     *NElements = mesh->get_number_elements();
+    *NFacets = mesh->get_number_facets();
   }
 
   void pragmatic_get_coords_2d(double *x, double *y){
@@ -302,6 +304,18 @@ extern "C" {
       }
     }
   }
+
+/** Set the domain boundary.
+ @param [out] facets Facet list
+ @param [out] ids Boundary ids
+ **/
+  void pragmatic_get_boundary(int *facets, int *ids){
+    assert(_pragmatic_mesh!=NULL);
+
+    Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+    mesh->get_boundary(facets, ids);
+  }
+
 /*
   void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn){
     std::vector<int> _NPNodes, _lnn2gnn;
