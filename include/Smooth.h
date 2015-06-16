@@ -111,6 +111,9 @@ template<typename real_t, int dim>
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
 
+    if(NElements==0)
+      return;
+
     std::vector< std::atomic<bool> > is_boundary(NNodes);
     std::vector< std::atomic<bool> > active_vertices(NNodes);
     if(vLocks.size() < NNodes)
@@ -253,6 +256,9 @@ template<typename real_t, int dim>
   void optimisation_linf(int max_iterations=10, double quality_tol=-1.0){
     int NNodes = _mesh->get_number_nodes();
     int NElements = _mesh->get_number_elements();
+
+    if(NElements==0)
+      return;
     
     std::vector< std::atomic<bool> > is_boundary(NNodes);
     std::vector< std::atomic<bool> > active_vertices(NNodes);

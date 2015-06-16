@@ -34,7 +34,7 @@
  *  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  *  SUCH DAMAGE.
  */
-
+ 
 #ifndef COARSEN_H
 #define COARSEN_H
 
@@ -128,7 +128,7 @@ template<typename real_t, int dim> class Coarsen{
         vLocks[i].unlock();
       }
 
-      for(int citerations=0;citerations<100;citerations++){
+      for(int citerations=0;citerations<2;citerations++){
         // Vector "retry" is used to store aborted vertices.
         // Vector "round" is used to store propagated vertices.
         std::vector<index_t> retry, next_retry;
@@ -167,7 +167,7 @@ template<typename real_t, int dim> class Coarsen{
           locks_held.clear();
         }
 
-        while(retry.size()>0){
+        for(int iretry=0;iretry<100;iretry++){
           next_retry.clear();
 
           for(auto& node : retry){
@@ -204,6 +204,8 @@ template<typename real_t, int dim> class Coarsen{
           }
 
           retry.swap(next_retry);
+	  if(retry.empty())
+	    break;
         }
 
 #pragma omp barrier
@@ -225,6 +227,9 @@ template<typename real_t, int dim> class Coarsen{
     if(_mesh->NNList[rm_vertex].empty())
       return -1;
     
+    if(_mesh->NEList[rm_vertex].size()==1)
+      return -1;
+
     // For now, lock the halo
     if(_mesh->is_halo_node(rm_vertex))
       return -1;
@@ -259,9 +264,83 @@ template<typename real_t, int dim> class Coarsen{
       // Get the next shortest edge.
       target_vertex = short_edges.begin()->second;
       short_edges.erase(short_edges.begin());
-      
-      // Assume the best.
+
+       // Assume the best.
       reject_collapse=false;
+     
+      if(surface_coarsening){
+	std::set<index_t> compromised_boundary;
+	for(const auto &element : _mesh->NEList[rm_vertex]){
+          const int *n=_mesh->get_element(element);
+          for(size_t i=0;i<nloc;i++){
+            if(n[i]!=rm_vertex){
+              if(_mesh->boundary[element*nloc+i]>0){
+                compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+	      }
+	    }
+          }
+	}
+
+	if(compromised_boundary.size()>1){
+          reject_collapse=true;
+	  continue;
+	}else if(compromised_boundary.size()==1){
+     	  // Only allow this vertex to be collapsed to a vertex on the same boundary (not to an internal vertex).
+          std::set<index_t> target_boundary;
+          for(const auto &element : _mesh->NEList[target_vertex]){
+            const int *n=_mesh->get_element(element);
+            for(size_t i=0;i<nloc;i++){
+              if(n[i]!=target_vertex){
+                if(_mesh->boundary[element*nloc+i]>0){
+                  target_boundary.insert(_mesh->boundary[element*nloc+i]);
+	        }
+              }
+            }
+	  }
+
+          if(target_boundary.size()==1){
+	    if(*target_boundary.begin() != *compromised_boundary.begin()){
+              reject_collapse=true;
+              continue;
+	    }
+
+            // Restrict how many boundary facets we can collapse in one go (fewer topological issues to think about).	
+            std::set<index_t> deleted_elements;
+            std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
+                                  _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
+	                          std::inserter(deleted_elements, deleted_elements.begin()));
+            int scnt=0;
+	    bool confirm_boundary=false;
+            for(const auto& de : deleted_elements){
+              // Count surface facets.
+	      // Check this is not actually an internal edge.
+	      const int *n = _mesh->get_element(de);
+  	      for(int i=0;i<nloc;i++){
+                if(_mesh->boundary[de*nloc+i]>0)
+                  scnt++;
+
+		if(!confirm_boundary){
+		  if(n[i]!=rm_vertex && n[i]!=target_vertex){ 
+		    std::set<index_t> paired_elements;
+		    std::set_intersection(deleted_elements.begin(), deleted_elements.end(),
+                                          _mesh->NEList[n[i]].begin(), _mesh->NEList[n[i]].end(),
+                                          std::inserter(paired_elements, paired_elements.begin()));
+		    if(paired_elements.size()==1)
+                      confirm_boundary = true;
+	          }
+		}
+	      }
+	    }
+            if(scnt!=2 || !confirm_boundary){
+              reject_collapse=true;
+	      continue;
+            }
+          }else{
+            reject_collapse=true;
+            continue;
+          }
+	}
+      }
 
       /* Check the properties of new elements. If the
          new properties are not acceptable then continue. */
@@ -308,9 +387,9 @@ template<typename real_t, int dim> class Coarsen{
 	// Check the area/volume of this new element.
 	long double new_av=0.0;
 	if(dim==2)
-	  new_av = property->area(_mesh->get_coords(n[0]),
-				  _mesh->get_coords(n[1]),
-				  _mesh->get_coords(n[2]));
+	  new_av = property->area_precision(_mesh->get_coords(n[0]),
+				            _mesh->get_coords(n[1]),
+				            _mesh->get_coords(n[2]));
 	else
 	  new_av = property->volume_precision(_mesh->get_coords(n[0]),
 					      _mesh->get_coords(n[1]),
@@ -350,14 +429,16 @@ template<typename real_t, int dim> class Coarsen{
       if(reject_collapse)
 	continue;
       
-      // Check we are not removing surface features.
-      if(!surface_coarsening && std::abs(total_new_av-total_old_av)/std::max(total_new_av, total_old_av)>DBL_EPSILON){
-        reject_collapse=true;
-	continue;
+      if(!surface_coarsening){
+	// Check we are not removing surface features.
+	if(std::abs(total_new_av-total_old_av)/std::max(total_new_av, total_old_av)>DBL_EPSILON){
+          reject_collapse=true;
+	  continue;
+	}
       }
       
-      // Check if any of the new edges are longer than L_max.
-      if(!reject_collapse && !delete_with_extreme_prejudice){
+      if(!delete_with_extreme_prejudice){
+	// Check if any of the new edges are longer than L_max.
         for(const auto &nn : _mesh->NNList[rm_vertex]){
           if(target_vertex==nn)
             continue;
@@ -370,11 +451,14 @@ template<typename real_t, int dim> class Coarsen{
 	if(reject_collapse)
 	  continue;
       }
-      
-      if(quality_constrained && !better)
-	reject_collapse=false;
-      
-      // If this edge is ok to collapse then jump out.
+
+      if(quality_constrained){
+        if(!better){
+	  reject_collapse=false;
+        }
+      }
+
+      // If this edge is ok to collapse then break out of loop.
       if(!reject_collapse)
         break;
     }
@@ -398,10 +482,32 @@ template<typename real_t, int dim> class Coarsen{
     // This is the set of vertices which are common neighbours between rm_vertex and target_vertex.
     std::set<index_t> common_patch;
 
-    // Remove deleted elements from node-element adjacency list and from element-node list.
-    for(typename std::set<index_t>::const_iterator de=deleted_elements.begin(); de!=deleted_elements.end();++de){
-      index_t eid = *de;
+    std::set<index_t> compromised_boundary;
+    for(const auto &element : _mesh->NEList[rm_vertex]){
+      const int *n=_mesh->get_element(element);
+      for(size_t i=0;i<nloc;i++){
+        if(n[i]!=rm_vertex){
+          if(_mesh->boundary[element*nloc+i]>0){
+            compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+          }
+        }
+      }
+    }
 
+    std::set<index_t> target_boundary;
+    for(const auto &element : _mesh->NEList[target_vertex]){
+      const int *n=_mesh->get_element(element);
+      for(size_t i=0;i<nloc;i++){
+        if(n[i]!=target_vertex){
+          if(_mesh->boundary[element*nloc+i]>0){
+            target_boundary.insert(_mesh->boundary[element*nloc+i]);
+          }
+        }
+      }
+    }
+
+    // Remove deleted elements from node-element adjacency list and from element-node list.
+    for(const auto &eid : deleted_elements){
       // Remove element from NEList[rm_vertex].
       _mesh->NEList[rm_vertex].erase(eid);
 
@@ -415,7 +521,7 @@ template<typename real_t, int dim> class Coarsen{
         }else{
           _mesh->NEList[vid].erase(eid);
 
-          // If this vertex is neither rm_vertex nor target_vertex, it is one of the common neighbours.
+          // If this vertex is neither rm_vertex nor target_vertex, then it is one of the common neighbours.
           if(vid != target_vertex){
             other_vertex.push_back(vid);
             common_patch.insert(vid);
@@ -424,8 +530,10 @@ template<typename real_t, int dim> class Coarsen{
       }
 
       // Handle vertex collapsing onto boundary.
-      if(_mesh->boundary[eid*nloc+lrm_vertex]>0){
-        // Find element whose internal edge will be pulled into an external edge.
+      if(compromised_boundary.empty() && _mesh->boundary[eid*nloc+lrm_vertex]>0){
+	assert(target_boundary.size()==1);
+
+        // Find element whose internal facet will be pulled into the external boundary.
         std::set<index_t> otherNE;
         if(dim==2){
           assert(other_vertex.size()==1);
@@ -433,16 +541,17 @@ template<typename real_t, int dim> class Coarsen{
         }else{
           assert(other_vertex.size()==2);
           std::set_intersection(_mesh->NEList[other_vertex[0]].begin(), _mesh->NEList[other_vertex[0]].end(),
-              _mesh->NEList[other_vertex[1]].begin(), _mesh->NEList[other_vertex[1]].end(),
-              std::inserter(otherNE, otherNE.begin()));
+                                _mesh->NEList[other_vertex[1]].begin(), _mesh->NEList[other_vertex[1]].end(),
+                                std::inserter(otherNE, otherNE.begin()));
         }
         std::set<index_t> new_boundary_eid;
         std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
-            otherNE.begin(), otherNE.end(), std::inserter(new_boundary_eid, new_boundary_eid.begin()));
+                              otherNE.begin(), otherNE.end(),
+                              std::inserter(new_boundary_eid, new_boundary_eid.begin()));
 
-        if(!new_boundary_eid.empty()){
-          // eid has been removed from NEList[rm_vertex],
-          // so new_boundary_eid contains only the other element.
+        // eid has been removed from NEList[rm_vertex],
+        // so new_boundary_eid contains only the other element.
+	if(!new_boundary_eid.empty()){
           assert(new_boundary_eid.size()==1);
           index_t target_eid = *new_boundary_eid.begin();
           for(int i=0;i<nloc;i++){
@@ -452,15 +561,67 @@ template<typename real_t, int dim> class Coarsen{
                 _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
                 break;
               }
-            }else{
+             }else{
               if(nid!=rm_vertex && nid!=other_vertex[0] && nid!=other_vertex[1]){
                 _mesh->boundary[target_eid*nloc+i] = _mesh->boundary[eid*nloc+lrm_vertex];
                 break;
               }
             }
           }
-        }
+	}
       }
+      /*
+      else if(dim==3 && !compromised_boundary.empty()){
+	assert(target_boundary.size()==1);
+
+        // Find element whose internal edge will be pulled into an external edge.
+        std::set<index_t> otherNE;
+        assert(other_vertex.size()==2);
+	
+        std::set_intersection(_mesh->NEList[other_vertex[0]].begin(), _mesh->NEList[other_vertex[0]].end(),
+                              _mesh->NEList[other_vertex[1]].begin(), _mesh->NEList[other_vertex[1]].end(),
+                              std::inserter(otherNE, otherNE.begin()));
+
+        std::set<index_t> new_boundary_eid;
+	int tvertex = target_vertex;
+        int boundary_id = _mesh->boundary[eid*nloc+tvertex];
+        std::set_intersection(_mesh->NEList[tvertex].begin(), _mesh->NEList[tvertex].end(),
+                              otherNE.begin(), otherNE.end(),
+                              std::inserter(new_boundary_eid, new_boundary_eid.begin()));
+	assert(new_boundary_eid.size()==1 || new_boundary_eid.size()==0);
+	if(!new_boundary_eid.empty()){
+	  std::cerr<<"t";
+          index_t target_eid = *new_boundary_eid.begin();
+          const index_t *n=_mesh->get_element(target_eid);
+          for(int i=0;i<nloc;i++){
+            if(n[i]!=tvertex && n[i]!=other_vertex[0] && n[i]!=other_vertex[1]){
+              _mesh->boundary[target_eid*nloc+i] = boundary_id;
+              break;
+            }
+          }
+        }
+
+        int tvertex=rm_vertex;
+        int boundary_id = _mesh->boundary[eid*nloc+tvertex];
+	std::set_intersection(_mesh->NEList[tvertex].begin(), _mesh->NEList[tvertex].end(),
+	                      otherNE.begin(), otherNE.end(),
+	                      std::inserter(new_boundary_eid, new_boundary_eid.begin()));
+
+        // eid has been removed from NEList[rm_vertex],
+        // so new_boundary_eid contains only the other element.
+        for(auto& target_eid : new_boundary_eid){
+	  std::cerr<<"r";
+          const index_t *n=_mesh->get_element(target_eid);
+          for(int i=0;i<nloc;i++){
+            if(n[i]!=tvertex && n[i]!=other_vertex[0] && n[i]!=other_vertex[1]){
+              _mesh->boundary[target_eid*nloc+i] = boundary_id;
+              break;
+            }
+          }
+        }
+	std::cerr<<"-";
+      }
+      */
 
       // Remove element from mesh.
       _mesh->_ENList[eid*nloc] = -1;
@@ -469,30 +630,39 @@ template<typename real_t, int dim> class Coarsen{
     assert((dim==2 && common_patch.size() == deleted_elements.size()) || (dim==3));
 
     // For all adjacent elements, replace rm_vertex with target_vertex in ENList and update quality.
-    for(typename std::set<index_t>::iterator ee=_mesh->NEList[rm_vertex].begin();ee!=_mesh->NEList[rm_vertex].end();++ee){
+    for(const auto& eid : _mesh->NEList[rm_vertex]){
       for(size_t i=0;i<nloc;i++){
-        if(_mesh->_ENList[nloc*(*ee)+i]==rm_vertex){
-          _mesh->_ENList[nloc*(*ee)+i] = target_vertex;
+        if(_mesh->_ENList[nloc*eid+i]==rm_vertex){
+          _mesh->_ENList[nloc*eid+i] = target_vertex;
           break;
         }
       }
 
-      _mesh->template update_quality<dim>(*ee);
+      _mesh->template update_quality<dim>(eid);
 
       // Add element to target_vertex's NEList.
-      _mesh->NEList[target_vertex].insert(*ee);
+      _mesh->NEList[target_vertex].insert(eid);
     }
 
     // Update surrounding NNList.
     common_patch.insert(target_vertex);
-    for(typename std::vector<index_t>::const_iterator nn=_mesh->NNList[rm_vertex].begin();nn!=_mesh->NNList[rm_vertex].end();++nn){
-      typename std::vector<index_t>::iterator it = std::find(_mesh->NNList[*nn].begin(), _mesh->NNList[*nn].end(), rm_vertex);
-      _mesh->NNList[*nn].erase(it);
+    for(const auto& nid : _mesh->NNList[rm_vertex]){
+      typename std::vector<index_t>::iterator it = std::find(_mesh->NNList[nid].begin(), _mesh->NNList[nid].end(), rm_vertex);
+      _mesh->NNList[nid].erase(it);
 
       // Find all entries pointing back to rm_vertex and update them to target_vertex.
-      if(common_patch.count(*nn)==0){
-        _mesh->NNList[*nn].push_back(target_vertex);
-        _mesh->NNList[target_vertex].push_back(*nn);
+      if(common_patch.count(nid)==0){
+        if(true || !compromised_boundary.empty()){
+          // Need to take extra care as the topology may have changed.
+	  if(std::find(_mesh->NNList[nid].begin(), _mesh->NNList[nid].end(), target_vertex)==_mesh->NNList[nid].end())
+            _mesh->NNList[nid].push_back(target_vertex);
+
+          if(std::find(_mesh->NNList[target_vertex].begin(), _mesh->NNList[target_vertex].end(), nid)==_mesh->NNList[target_vertex].end())
+            _mesh->NNList[target_vertex].push_back(nid);
+        }else{
+          _mesh->NNList[nid].push_back(target_vertex);
+  	  _mesh->NNList[target_vertex].push_back(nid);
+	}
       }
     }
 

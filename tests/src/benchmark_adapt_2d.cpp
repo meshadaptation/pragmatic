@@ -35,6 +35,7 @@
  *  SUCH DAMAGE.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -77,6 +78,8 @@ int main(int argc, char **argv){
 
   const double pi = 3.141592653589793;
   const double period = 100.0;
+  long double ideal_area(1);
+  long double ideal_perimeter(4);
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
@@ -144,12 +147,12 @@ int main(int argc, char **argv){
           long double perimeter = mesh->calculate_perimeter();
           long double area = mesh->calculate_area();
           std::cout<<"Expecting perimeter == 4: ";
-          if(fabs(perimeter-4)<DBL_EPSILON)
+          if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
           std::cout<<"Expecting area == 1: ";
-          if(fabs(area-1)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
@@ -165,12 +168,12 @@ int main(int argc, char **argv){
           long double perimeter = mesh->calculate_perimeter();
           long double area = mesh->calculate_area();
           std::cout<<"Expecting perimeter == 4: ";
-          if(fabs(perimeter-4)<DBL_EPSILON)
+          if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
           std::cout<<"Expecting area == 1: ";
-          if(fabs(area-1)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
@@ -186,12 +189,12 @@ int main(int argc, char **argv){
           long double perimeter = mesh->calculate_perimeter();
           long double area = mesh->calculate_area();
           std::cout<<"Expecting perimeter == 4: ";
-          if(fabs(perimeter-4)<DBL_EPSILON)
+          if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
           std::cout<<"Expecting area == 1: ";
-          if(fabs(area-1)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
@@ -214,12 +217,12 @@ int main(int argc, char **argv){
           long double perimeter = mesh->calculate_perimeter();
           long double area = mesh->calculate_area();
           std::cout<<"Expecting perimeter == 4: ";
-          if(fabs(perimeter-4)<DBL_EPSILON)
+          if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
           std::cout<<"Expecting area == 1: ";
-          if(fabs(area-1)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
@@ -234,12 +237,12 @@ int main(int argc, char **argv){
         long double perimeter = mesh->calculate_perimeter();
         long double area = mesh->calculate_area();
         std::cout<<"Expecting perimeter == 4: ";
-        if(fabs(perimeter-4)<DBL_EPSILON)
+        if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
           std::cout<<"pass"<<std::endl;
         else
           std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
         std::cout<<"Expecting area == 1: ";
-        if(fabs(area-1)<DBL_EPSILON)
+        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
           std::cout<<"pass"<<std::endl;
         else
           std::cout<<"fail (area="<<area<<")"<<std::endl;

@@ -50,6 +50,12 @@ if (ENABLE_VTK)
   ADD_EXECUTABLE(test_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_3d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
+  ADD_EXECUTABLE(test_coarsen_boundary_2d ${PRAGMATIC_TEST_SRC}/test_coarsen_boundary_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_boundary_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_coarsen_boundary_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_boundary_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_boundary_3d ${PRAGMATIC_LIBRARIES})
+
   ADD_EXECUTABLE(test_refine_2d ${PRAGMATIC_TEST_SRC}/test_refine_2d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_refine_2d ${PRAGMATIC_LIBRARIES})
 

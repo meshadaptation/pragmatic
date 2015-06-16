@@ -113,14 +113,15 @@ int main(int argc, char **argv){
   long double area = mesh->calculate_area();
   long double volume = mesh->calculate_volume();
 
+  long double ideal_area(6), ideal_volume(1);
   std::cout<<"Checking area == 6: ";
-  if(fabs(area-6)<6*DBL_EPSILON)
+  if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail (area="<<area<<")"<<std::endl;
 
   std::cout<<"Checking volume == 1: ";
-  if(fabs(volume-1)<DBL_EPSILON)
+  if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail (volume="<<volume<<")"<<std::endl;

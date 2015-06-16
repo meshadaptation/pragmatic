@@ -77,6 +77,8 @@ int main(int argc, char **argv){
 
   const double pi = 3.141592653589793;
   const double period = 100.0;
+  long double ideal_area(6);
+  long double ideal_volume(1);
 
   // Benchmark times.
   double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0;
@@ -151,12 +153,12 @@ int main(int argc, char **argv){
           long double area = mesh->calculate_area();
           long double volume = mesh->calculate_volume();
           std::cout<<"Expecting area == 6: ";
-          if(fabs(area-6)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
           std::cout<<"Expecting volume == 1: ";
-          if(fabs(volume-1)<DBL_EPSILON)
+          if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (volume="<<volume<<")"<<std::endl;
@@ -172,12 +174,12 @@ int main(int argc, char **argv){
           long double area = mesh->calculate_area();
           long double volume = mesh->calculate_volume();
           std::cout<<"Expecting area == 6: ";
-          if(fabs(area-6)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
           std::cout<<"Expecting volume == 1: ";
-          if(fabs(volume-1)<DBL_EPSILON)
+          if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (volume="<<volume<<")"<<std::endl;
@@ -193,12 +195,12 @@ int main(int argc, char **argv){
           long double area = mesh->calculate_area();
           long double volume = mesh->calculate_volume();
           std::cout<<"Expecting area == 6: ";
-          if(fabs(area-6)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
           std::cout<<"Expecting volume == 1: ";
-          if(fabs(volume-1)<DBL_EPSILON)
+          if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (volume="<<volume<<")"<<std::endl;
@@ -221,12 +223,12 @@ int main(int argc, char **argv){
           long double area = mesh->calculate_area();
           long double volume = mesh->calculate_volume();
           std::cout<<"Expecting area == 6: ";
-          if(fabs(area-6)<DBL_EPSILON)
+          if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (area="<<area<<")"<<std::endl;
           std::cout<<"Expecting volume == 1: ";
-          if(fabs(volume-1)<DBL_EPSILON)
+          if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
           else
             std::cout<<"fail (volume="<<volume<<")"<<std::endl;
@@ -241,12 +243,12 @@ int main(int argc, char **argv){
         long double area = mesh->calculate_area();
         long double volume = mesh->calculate_volume();
         std::cout<<"Expecting area == 6: ";
-        if(fabs(area-6)<DBL_EPSILON)
+        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
           std::cout<<"pass"<<std::endl;
         else
           std::cout<<"fail (area="<<area<<")"<<std::endl;
         std::cout<<"Expecting volume == 1: ";
-        if(fabs(volume-1)<DBL_EPSILON)
+        if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
           std::cout<<"pass"<<std::endl;
         else
           std::cout<<"fail (volume="<<volume<<")"<<std::endl;

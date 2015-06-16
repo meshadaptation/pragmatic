@@ -120,14 +120,15 @@ int main(int argc, char **argv){
   }
 
   if(rank==0){
+    long double ideal_area(1), ideal_perimeter(4);
     std::cout<<"Expecting perimeter == 4: ";
-    if(fabs(perimeter-4)<4*DBL_EPSILON)
+    if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;
 
     std::cout<<"Expecting area == 1: ";
-    if(fabs(area-1)<2*DBL_EPSILON)
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
       std::cout<<"pass"<<std::endl;
     else
       std::cout<<"fail"<<std::endl;

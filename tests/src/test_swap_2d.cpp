@@ -123,17 +123,18 @@ int main(int argc, char **argv){
              <<"Perimeter:      "<<perimeter<<std::endl;;
   }
 
+  long double ideal_area(1), ideal_perimeter(4);
   std::cout<<"Checking perimeter = 4: ";
-  if(fabs(perimeter-4)<DBL_EPSILON)
+  if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<DBL_EPSILON)
     std::cout<<"pass\n";
   else
-    std::cout<<"false ("<<fabs(perimeter-4)<<", epsilon="<<DBL_EPSILON<<")\n";
+    std::cout<<"false ("<<std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<<", epsilon="<<DBL_EPSILON<<")\n";
   
   std::cout<<"Checking area == 1: ";
-  if(fabs(area-1)<DBL_EPSILON)
+  if(std::abs(area-ideal_area)/std::max(area,ideal_area)<DBL_EPSILON)
     std::cout<<"pass\n";
   else
-    std::cout<<"false ("<<fabs(area-1)<<", epsilon="<<DBL_EPSILON<<")\n";
+    std::cout<<"false ("<<std::abs(area-ideal_area)<<", epsilon="<<DBL_EPSILON<<")\n";
 
   delete mesh;
 #else

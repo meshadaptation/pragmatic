@@ -136,8 +136,21 @@ public:
       _metric = new MetricTensor<real_t,dim>[_NNodes];
 
     if(dim==2){
-      std::cerr<<"ERROR: void generate_mesh_metric() not yet implemented in 2D.\n";
-      exit(-1);
+#pragma omp parallel
+      {
+        double alpha = pow(1.0/resolution_scaling_factor, 2);
+#pragma omp for schedule(static)
+        for(int i=0; i<_NNodes; i++){
+          real_t m[3];
+
+          fit_ellipsoid(i, m);
+
+          for(int j=0;j<3;j++)
+            m[j]*=alpha;
+
+          _metric[i].set_metric(m);
+	}
+      }
     }else{
 #pragma omp parallel
       {
@@ -163,62 +176,111 @@ public:
  */
 
 void fit_ellipsoid(int i, real_t *sm){
-  Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<real_t, 6, 6>::Zero(6,6);
-  Eigen::Matrix<double, 6, 1> b = Eigen::Matrix<real_t, 6, 1>::Zero(6);
+  if(dim==2){
+    Eigen::Matrix<double, 3, 3> A = Eigen::Matrix<real_t, 3, 3>::Zero(3,3);
+    Eigen::Matrix<double, 3, 1> b = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
-  std::vector<index_t> nodes = _mesh->NNList[i];
-  nodes.push_back(i);
+    std::vector<index_t> nodes = _mesh->NNList[i];
+    nodes.push_back(i);
 
-  for(typename std::vector<index_t>::const_iterator it=nodes.begin();it!=nodes.end();++it){
-    const real_t *X0=_mesh->get_coords(*it);
-    real_t x0=X0[0], y0=X0[1], z0=X0[2];
-    assert(std::isfinite(x0));
-    assert(std::isfinite(y0));
-    assert(std::isfinite(z0));
+    for(typename std::vector<index_t>::const_iterator it=nodes.begin();it!=nodes.end();++it){
+      const real_t *X0=_mesh->get_coords(*it);
+      real_t x0=X0[0], y0=X0[1];
+      assert(std::isfinite(x0));
+      assert(std::isfinite(y0));
 
-    for(typename std::vector<index_t>::const_iterator n=_mesh->NNList[*it].begin();n!=_mesh->NNList[*it].end();++n){
-      if(*n<=*it)
-	continue;
+      for(typename std::vector<index_t>::const_iterator n=_mesh->NNList[*it].begin();n!=_mesh->NNList[*it].end();++n){
+        if(*n<=*it)
+          continue;
       
-      const real_t *X=_mesh->get_coords(*n);
-      real_t x=X[0]-x0, y=X[1]-y0, z=X[2]-z0;
+        const real_t *X=_mesh->get_coords(*n);
+        real_t x=X[0]-x0, y=X[1]-y0;
 
-      assert(std::isfinite(x));
-      assert(std::isfinite(y));
-      assert(std::isfinite(z));
-      if(x<0){
-        x*=-1;
-        y*=-1;
-        z*=-1;
+        assert(std::isfinite(x));
+        assert(std::isfinite(y));
+        if(x<0){
+          x*=-1;
+          y*=-1;
+        }
+	A[0]+=pow(x, 4); A[1]+=pow(x, 2)*pow(y, 2); A[2]+=pow(x, 3)*y; 
+	A[3]+=pow(x, 2)*pow(y, 2); A[4]+=pow(y, 4); A[5]+=x*pow(y, 3); 
+	A[6]+=pow(x, 3)*y; A[7]+=x*pow(y, 3); A[8]+=pow(x, 2)*pow(y, 2); 
+
+	b[0]+=pow(x, 2);
+	b[1]+=pow(y, 2);
+	b[2]+=x*y;
       }
-            A[0]+=pow(x, 4); A[1]+=pow(x, 2)*pow(y, 2); A[2]+=pow(x, 2)*pow(z, 2); A[3]+=pow(x, 2)*y*z; A[4]+=pow(x, 3)*z; A[5]+=pow(x, 3)*y; 
-      A[6]+=pow(x, 2)*pow(y, 2); A[7]+=pow(y, 4); A[8]+=pow(y, 2)*pow(z, 2); A[9]+=pow(y, 3)*z; A[10]+=x*pow(y, 2)*z; A[11]+=x*pow(y, 3); 
-      A[12]+=pow(x, 2)*pow(z, 2); A[13]+=pow(y, 2)*pow(z, 2); A[14]+=pow(z, 4); A[15]+=y*pow(z, 3); A[16]+=x*pow(z, 3); A[17]+=x*y*pow(z, 2); 
-      A[18]+=pow(x, 2)*y*z; A[19]+=pow(y, 3)*z; A[20]+=y*pow(z, 3); A[21]+=pow(y, 2)*pow(z, 2); A[22]+=x*y*pow(z, 2); A[23]+=x*pow(y, 2)*z; 
-      A[24]+=pow(x, 3)*z; A[25]+=x*pow(y, 2)*z; A[26]+=x*pow(z, 3); A[27]+=x*y*pow(z, 2); A[28]+=pow(x, 2)*pow(z, 2); A[29]+=pow(x, 2)*y*z; 
-      A[30]+=pow(x, 3)*y; A[31]+=x*pow(y, 3); A[32]+=x*y*pow(z, 2); A[33]+=x*pow(y, 2)*z; A[34]+=pow(x, 2)*y*z; A[35]+=pow(x, 2)*pow(y, 2); 
-
-      b[0]+=pow(x, 2);
-      b[1]+=pow(y, 2);
-      b[2]+=pow(z, 2);
-      b[3]+=y*z;
-      b[4]+=x*z;
-      b[5]+=x*y;
     }
-  }
 
-  Eigen::Matrix<double, 6, 1> S = Eigen::Matrix<real_t, 6, 1>::Zero(6);
+    Eigen::Matrix<double, 3, 1> S = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
-  A.svd().solve(b, &S);
+    A.svd().solve(b, &S);
 
-  if(_mesh->NNList[i].size()>=6){
-    sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
-                  sm[3] = S[1]; sm[4] = S[3];
-                                sm[5] = S[2];
+    if(_mesh->NNList[i].size()>=6){
+      sm[0] = S[0]; sm[1] = S[2];
+                    sm[2] = S[1];
+    }else{
+      sm[0] = S[0]; sm[1] = 0;
+                    sm[2] = S[1];
+    }
   }else{
-    sm[0] = S[0]; sm[1] = 0;    sm[2] = 0;
-                  sm[3] = S[1]; sm[4] = 0;
-                                sm[5] = S[2];
+    Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<real_t, 6, 6>::Zero(6,6);
+    Eigen::Matrix<double, 6, 1> b = Eigen::Matrix<real_t, 6, 1>::Zero(6);
+
+    std::vector<index_t> nodes = _mesh->NNList[i];
+    nodes.push_back(i);
+
+    for(typename std::vector<index_t>::const_iterator it=nodes.begin();it!=nodes.end();++it){
+      const real_t *X0=_mesh->get_coords(*it);
+      real_t x0=X0[0], y0=X0[1], z0=X0[2];
+      assert(std::isfinite(x0));
+      assert(std::isfinite(y0));
+      assert(std::isfinite(z0));
+
+      for(typename std::vector<index_t>::const_iterator n=_mesh->NNList[*it].begin();n!=_mesh->NNList[*it].end();++n){
+        if(*n<=*it)
+          continue;
+      
+        const real_t *X=_mesh->get_coords(*n);
+        real_t x=X[0]-x0, y=X[1]-y0, z=X[2]-z0;
+
+        assert(std::isfinite(x));
+        assert(std::isfinite(y));
+        assert(std::isfinite(z));
+        if(x<0){
+          x*=-1;
+          y*=-1;
+          z*=-1;
+        }
+        A[0]+=pow(x, 4); A[1]+=pow(x, 2)*pow(y, 2); A[2]+=pow(x, 2)*pow(z, 2); A[3]+=pow(x, 2)*y*z; A[4]+=pow(x, 3)*z; A[5]+=pow(x, 3)*y; 
+        A[6]+=pow(x, 2)*pow(y, 2); A[7]+=pow(y, 4); A[8]+=pow(y, 2)*pow(z, 2); A[9]+=pow(y, 3)*z; A[10]+=x*pow(y, 2)*z; A[11]+=x*pow(y, 3); 
+        A[12]+=pow(x, 2)*pow(z, 2); A[13]+=pow(y, 2)*pow(z, 2); A[14]+=pow(z, 4); A[15]+=y*pow(z, 3); A[16]+=x*pow(z, 3); A[17]+=x*y*pow(z, 2); 
+        A[18]+=pow(x, 2)*y*z; A[19]+=pow(y, 3)*z; A[20]+=y*pow(z, 3); A[21]+=pow(y, 2)*pow(z, 2); A[22]+=x*y*pow(z, 2); A[23]+=x*pow(y, 2)*z; 
+        A[24]+=pow(x, 3)*z; A[25]+=x*pow(y, 2)*z; A[26]+=x*pow(z, 3); A[27]+=x*y*pow(z, 2); A[28]+=pow(x, 2)*pow(z, 2); A[29]+=pow(x, 2)*y*z; 
+        A[30]+=pow(x, 3)*y; A[31]+=x*pow(y, 3); A[32]+=x*y*pow(z, 2); A[33]+=x*pow(y, 2)*z; A[34]+=pow(x, 2)*y*z; A[35]+=pow(x, 2)*pow(y, 2); 
+
+        b[0]+=pow(x, 2);
+        b[1]+=pow(y, 2);
+        b[2]+=pow(z, 2);
+        b[3]+=y*z;
+        b[4]+=x*z;
+        b[5]+=x*y;
+      }
+    }
+
+    Eigen::Matrix<double, 6, 1> S = Eigen::Matrix<real_t, 6, 1>::Zero(6);
+
+    A.svd().solve(b, &S);
+
+    if(_mesh->NNList[i].size()>=6){
+      sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
+                    sm[3] = S[1]; sm[4] = S[3];
+                                  sm[5] = S[2];
+    }else{
+      sm[0] = S[0]; sm[1] = 0;    sm[2] = 0;
+                    sm[3] = S[1]; sm[4] = 0;
+                                  sm[5] = S[2];
+    }
   }
 
   return;

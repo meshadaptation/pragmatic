@@ -488,27 +488,28 @@ template<typename real_t> class VTKTools{
     vtk_boundary_nodes->SetNumberOfComponents(1);
     vtk_boundary_nodes->SetNumberOfTuples(NNodes);
     vtk_boundary_nodes->SetName("BoundaryNodes");
-    for(size_t i=0;i<NNodes;i++)
-      vtk_boundary_nodes->SetTuple1(i, -1);
 
+    std::vector<int> boundary_nodes(NNodes, 0);
     for(size_t i=0;i<NElements;i++){
       const int *n=mesh->get_element(i);
       if(n[0]==-1)
         continue;
-
+      
       if(ndims==2){
         for(int j=0;j<3;j++){
-	  vtk_boundary_nodes->SetTuple1(n[(j+1)%3], mesh->boundary[i*3+j]);
-	  vtk_boundary_nodes->SetTuple1(n[(j+2)%3], mesh->boundary[i*3+j]);
+	  boundary_nodes[n[(j+1)%3]] = std::max(boundary_nodes[n[(j+1)%3]], mesh->boundary[i*3+j]);
+          boundary_nodes[n[(j+2)%3]] = std::max(boundary_nodes[n[(j+2)%3]], mesh->boundary[i*3+j]);
         }
       }else{
         for(int j=0;j<4;j++){
-	  vtk_boundary_nodes->SetTuple1(n[(j+1)%4], mesh->boundary[i*4+j]);
-	  vtk_boundary_nodes->SetTuple1(n[(j+2)%4], mesh->boundary[i*4+j]);
-	  vtk_boundary_nodes->SetTuple1(n[(j+3)%4], mesh->boundary[i*4+j]);
+     	  boundary_nodes[n[(j+1)%4]] = std::max(boundary_nodes[n[(j+1)%4]], mesh->boundary[i*4+j]);
+          boundary_nodes[n[(j+2)%4]] = std::max(boundary_nodes[n[(j+2)%4]], mesh->boundary[i*4+j]);
+          boundary_nodes[n[(j+3)%4]] = std::max(boundary_nodes[n[(j+3)%4]], mesh->boundary[i*4+j]);
         }
       }
     }
+    for(size_t i=0;i<NNodes;i++)
+      vtk_boundary_nodes->SetTuple1(i, boundary_nodes[i]);
     ug->GetPointData()->AddArray(vtk_boundary_nodes);
 
     vtkSmartPointer<vtkIntArray> vtk_cell_numbering = vtkSmartPointer<vtkIntArray>::New();

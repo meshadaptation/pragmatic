@@ -57,14 +57,16 @@
 #endif
 
 void test_block(double qmean, double qmin, long double area, long double volume){
+  long double ideal_area(6), ideal_volume(1);
+
   std::cout<<"Checking area == 6: ";
-  if(fabs(area-6)<6*DBL_EPSILON)
+  if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
-    std::cout<<"fail (area="<<area<<" diff="<<fabs(area-6)<<")"<<std::endl;
+    std::cout<<"fail (area="<<area<<" diff="<<std::abs(area-ideal_area)<<")"<<std::endl;
 
   std::cout<<"Checking volume == 1: ";
-  if(fabs(volume-1)<DBL_EPSILON)
+  if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
     std::cout<<"pass"<<std::endl;
   else
     std::cout<<"fail (volume="<<volume<<")"<<std::endl;
@@ -99,7 +101,7 @@ int main(int argc, char **argv){
     double x = 2*mesh->get_coords(i)[0] - 1;
     double y = 2*mesh->get_coords(i)[1] - 1;
     double z = 2*mesh->get_coords(i)[2] - 1;
-    double d = std::min(1-fabs(x), std::min(1-fabs(y), 1-fabs(z)));
+    double d = std::min(1-std::abs(x), std::min(1-std::abs(y), 1-std::abs(z)));
     
     double hx = h0 - (h1-h0)*(d-1);
     double m[] = {1.0/pow(hx, 2), 0,              0,

@@ -661,9 +661,10 @@ template<typename real_t> class Mesh{
     }
 #endif
 
-    double mean = sum/nele;
-
-    return mean;
+    if(nele>0)
+      return sum/nele;
+    else
+      return 0;
   }
 
   /// Print out the qualities. Useful if you want to plot a histogram of element qualities.

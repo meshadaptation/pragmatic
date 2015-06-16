@@ -109,7 +109,7 @@ int main(int argc, char **argv){
     // Want x,y ranging from -1, 1
     double x = 2*mesh->get_coords(i)[0] - 1;
     double y = 2*mesh->get_coords(i)[1] - 1;
-    double d = std::min(1-fabs(x), 1-fabs(y));
+    double d = std::min(1-std::abs(x), 1-std::abs(y));
     
     double hx = h0 - (h1-h0)*(d-1);
     double m[] = {1.0/pow(hx, 2), 0, 1.0/pow(hx, 2)};
