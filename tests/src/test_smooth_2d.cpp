@@ -57,129 +57,129 @@
 #endif
 
 void test_block(double qmean, double qmin, long double perimeter, long double area, double qtol=0.01){
-  long double perimeter_exact = 4;
-  std::cout<<"Checking perimeter == 4: ";
-  if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail ("<<perimeter<<")"<<std::endl;
+    long double perimeter_exact = 4;
+    std::cout<<"Checking perimeter == 4: ";
+    if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail ("<<perimeter<<")"<<std::endl;
 
-  long double area_exact=1;
-  std::cout<<"Checking area == 1: ";
-  if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail ("<<area<<")"<<std::endl;
+    long double area_exact=1;
+    std::cout<<"Checking area == 1: ";
+    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail ("<<area<<")"<<std::endl;
 
-  std::cout<<"Checking quality between bounds - (min>"<<qtol<<"): ";
-  if(qmin>qtol){
-    std::cout<<"pass"<<std::endl;
-  }else{
-    std::cout<<"fail"<<std::endl
-        <<"Quality mean:     "<<qmean<<std::endl
-        <<"Quality min:      "<<qmin<<std::endl;
-  }
+    std::cout<<"Checking quality between bounds - (min>"<<qtol<<"): ";
+    if(qmin>qtol){
+        std::cout<<"pass"<<std::endl;
+    }else{
+        std::cout<<"fail"<<std::endl
+            <<"Quality mean:     "<<qmean<<std::endl
+            <<"Quality min:      "<<qmin<<std::endl;
+    }
 }
 
 
 int main(int argc, char **argv){
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
-  const double target_quality_mean = 0.7;
-  const double target_quality_min = 0.1;
+    const double target_quality_mean = 0.7;
+    const double target_quality_min = 0.1;
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,2> metric_field(*mesh);
-  
-  size_t NNodes = mesh->get_number_nodes();
+    MetricField<double,2> metric_field(*mesh);
 
-  double h1 = 1.0/50;
-  double h0 = 10.0/50;
-  for(size_t i=0;i<NNodes;i++){
-    // Want x,y ranging from -1, 1
-    double x = 2*mesh->get_coords(i)[0] - 1;
-    double y = 2*mesh->get_coords(i)[1] - 1;
-    double d = std::min(1-std::abs(x), 1-std::abs(y));
-    
-    double hx = h0 - (h1-h0)*(d-1);
-    double m[] = {1.0/pow(hx, 2), 0, 1.0/pow(hx, 2)};
-    
-    metric_field.set_metric(m, i);
-  }
-  metric_field.update_mesh();
+    size_t NNodes = mesh->get_number_nodes();
 
-  Smooth<double, 2> smooth(*mesh);
-  
-  double tic = get_wtime();
-  smooth.laplacian(100);
-  double toc = get_wtime();
+    double h1 = 1.0/50;
+    double h0 = 10.0/50;
+    for(size_t i=0;i<NNodes;i++){
+        // Want x,y ranging from -1, 1
+        double x = 2*mesh->get_coords(i)[0] - 1;
+        double y = 2*mesh->get_coords(i)[1] - 1;
+        double d = std::min(1-std::abs(x), 1-std::abs(y));
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
+        double hx = h0 - (h1-h0)*(d-1);
+        double m[] = {1.0/pow(hx, 2), 0, 1.0/pow(hx, 2)};
 
-  long double perimeter = mesh->calculate_perimeter();
-  long double area = mesh->calculate_area();
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-  if(rank==0){
-    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, perimeter, area, 0.0);
-  }
+    Smooth<double, 2> smooth(*mesh);
 
-  std::string vtu_filename = std::string("../data/test_smooth_laplacian_2d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    double tic = get_wtime();
+    smooth.laplacian(100);
+    double toc = get_wtime();
 
-  tic = get_wtime();
-  smooth.smart_laplacian(2000);
-  toc = get_wtime();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
 
-  perimeter = mesh->calculate_perimeter();
-  area = mesh->calculate_area();
+    if(rank==0){
+        std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, perimeter, area, 0.0);
+    }
 
-  if(rank==0){
-    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, perimeter, area);
-  }
+    std::string vtu_filename = std::string("../data/test_smooth_laplacian_2d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 
-  vtu_filename = std::string("../data/test_smooth_smart_laplacian_2d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    tic = get_wtime();
+    smooth.smart_laplacian(2000);
+    toc = get_wtime();
 
-  tic = get_wtime();
-  smooth.optimisation_linf(4000);
-  toc = get_wtime();
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+    perimeter = mesh->calculate_perimeter();
+    area = mesh->calculate_area();
 
-  vtu_filename = std::string("../data/test_smooth_optimisation_linf_2d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    if(rank==0){
+        std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, perimeter, area);
+    }
 
-  perimeter = mesh->calculate_perimeter();
-  area = mesh->calculate_area();
-  
-  if(rank==0){
-    std::cout<<"Linf smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, perimeter, area);
-  }
+    vtu_filename = std::string("../data/test_smooth_smart_laplacian_2d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+
+    tic = get_wtime();
+    smooth.optimisation_linf(4000);
+    toc = get_wtime();
+
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
+
+    vtu_filename = std::string("../data/test_smooth_optimisation_linf_2d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+
+    perimeter = mesh->calculate_perimeter();
+    area = mesh->calculate_area();
+
+    if(rank==0){
+        std::cout<<"Linf smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, perimeter, area);
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

@@ -51,19 +51,19 @@
  */
 
 extern "C" {
-  void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y);
-  void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z);
-  void pragmatic_vtk_begin(const char *filename);
-  void pragmatic_add_field(const double *psi, const double *error);
-  void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length);
-  void pragmatic_adapt();
-  void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements);
-  void pragmatic_get_coords_2d(double *x, double *y);
-  void pragmatic_get_coords_3d(double *x, double *y, double *z);
-  void pragmatic_get_elements(int *elements);
-  void pragmatic_get_facets(int *facets);
-  void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn);
-  void pragmatic_get_metric(double *metric);
-  void pragmatic_dump(const char *filename);
-  void pragmatic_end();
+    void pragmatic_2d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y);
+    void pragmatic_3d_begin(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z);
+    void pragmatic_vtk_begin(const char *filename);
+    void pragmatic_add_field(const double *psi, const double *error);
+    void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length);
+    void pragmatic_adapt();
+    void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements);
+    void pragmatic_get_coords_2d(double *x, double *y);
+    void pragmatic_get_coords_3d(double *x, double *y, double *z);
+    void pragmatic_get_elements(int *elements);
+    void pragmatic_get_facets(int *facets);
+    void pragmatic_get_lnn2gnn(int *nodes_per_partition, int *lnn2gnn);
+    void pragmatic_get_metric(double *metric);
+    void pragmatic_dump(const char *filename);
+    void pragmatic_end();
 }

@@ -57,93 +57,93 @@
 #endif
 
 int main(int argc, char **argv){
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
-  
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
-  
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
-  
+
+    bool verbose = false;
+    if(argc>1){
+        verbose = std::string(argv[1])=="-v";
+    }
+
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
-  mesh->create_boundary();
-  
-  MetricField<double,2> metric_field(*mesh);
-  
-  size_t NNodes = mesh->get_number_nodes();
-  double eta=0.0001;
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50.vtu");
+    mesh->create_boundary();
 
-  std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0]-1;
-    double y = 2*mesh->get_coords(i)[1]-1;
+    MetricField<double,2> metric_field(*mesh);
 
-    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
-  }
+    size_t NNodes = mesh->get_number_nodes();
+    double eta=0.0001;
 
-  metric_field.add_field(&(psi[0]), eta, 1);
-  metric_field.update_mesh();
-  
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-  
-  Swapping<double,2> swapping(*mesh);
-  
-  double tic = get_wtime();
-  swapping.swap(0.95);
-  double toc = get_wtime();
+    std::vector<double> psi(NNodes);
+    for(size_t i=0;i<NNodes;i++){
+        double x = 2*mesh->get_coords(i)[0]-1;
+        double y = 2*mesh->get_coords(i)[1]-1;
 
-  if(!mesh->verify()){
-    mesh->defragment();
-    
-    VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
-    exit(-1);
-  }
+        psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+    }
 
-  VTKTools<double>::export_vtu("../data/test_swap_2d", mesh);
-  
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+    metric_field.add_field(&(psi[0]), eta, 1);
+    metric_field.update_mesh();
 
-  long double perimeter = mesh->calculate_perimeter();
-  long double area = mesh->calculate_area();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
 
-  if(verbose&&rank==0){
-    std::cout<<"Swap loop time: "<<toc-tic<<std::endl
-             <<"Quality mean:   "<<qmean<<std::endl
-             <<"Quality min:    "<<qmin<<std::endl
-             <<"Perimeter:      "<<perimeter<<std::endl;;
-  }
+    Swapping<double,2> swapping(*mesh);
 
-  long double ideal_area(1), ideal_perimeter(4);
-  std::cout<<"Checking perimeter = 4: ";
-  if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<DBL_EPSILON)
-    std::cout<<"pass\n";
-  else
-    std::cout<<"false ("<<std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<<", epsilon="<<DBL_EPSILON<<")\n";
-  
-  std::cout<<"Checking area == 1: ";
-  if(std::abs(area-ideal_area)/std::max(area,ideal_area)<DBL_EPSILON)
-    std::cout<<"pass\n";
-  else
-    std::cout<<"false ("<<std::abs(area-ideal_area)<<", epsilon="<<DBL_EPSILON<<")\n";
+    double tic = get_wtime();
+    swapping.swap(0.95);
+    double toc = get_wtime();
 
-  delete mesh;
+    if(!mesh->verify()){
+        mesh->defragment();
+
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
+        exit(-1);
+    }
+
+    VTKTools<double>::export_vtu("../data/test_swap_2d", mesh);
+
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
+
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
+
+    if(verbose&&rank==0){
+        std::cout<<"Swap loop time: "<<toc-tic<<std::endl
+            <<"Quality mean:   "<<qmean<<std::endl
+            <<"Quality min:    "<<qmin<<std::endl
+            <<"Perimeter:      "<<perimeter<<std::endl;;
+    }
+
+    long double ideal_area(1), ideal_perimeter(4);
+    std::cout<<"Checking perimeter = 4: ";
+    if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<DBL_EPSILON)
+        std::cout<<"pass\n";
+    else
+        std::cout<<"false ("<<std::abs(perimeter-ideal_perimeter)/std::max(perimeter,ideal_perimeter)<<", epsilon="<<DBL_EPSILON<<")\n";
+
+    std::cout<<"Checking area == 1: ";
+    if(std::abs(area-ideal_area)/std::max(area,ideal_area)<DBL_EPSILON)
+        std::cout<<"pass\n";
+    else
+        std::cout<<"false ("<<std::abs(area-ideal_area)<<", epsilon="<<DBL_EPSILON<<")\n";
+
+    delete mesh;
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

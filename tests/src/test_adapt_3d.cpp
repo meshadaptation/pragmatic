@@ -60,225 +60,225 @@
 #endif
 
 void cout_quality(const Mesh<double> *mesh, std::string operation){
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
 
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
-  if(rank==0)
-    std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
+    if(rank==0)
+        std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
 }
 
 int main(int argc, char **argv){
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1){
+        verbose = std::string(argv[1])=="-v";
+    }
 
-  // Benchmark times.
+    // Benchmark times.
 #ifdef HAVE_VTK
-  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
-  mesh->create_boundary();
+    double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,3> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
-  double eta=0.05;
+    size_t NNodes = mesh->get_number_nodes();
+    double eta=0.05;
 
-  for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0] - 1;
-    double y = 2*mesh->get_coords(i)[1];
-    
-    double m[] = {0.2*(-8*x + 4*sin(5*y))/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) - 250.0*sin(50*x),  2.0*(2*x - sin(5*y))*cos(5*y)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2),                                                        0,
-                                                                                                   -5.0*(2*x - sin(5*y))*pow(cos(5*y), 2)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) + 2.5*sin(5*y)/(pow(2*x - sin(5*y), 2) + 0.01), 0,
-                                                                                                                                                                                                                                0};
+    for(size_t i=0;i<NNodes;i++){
+        double x = 2*mesh->get_coords(i)[0] - 1;
+        double y = 2*mesh->get_coords(i)[1];
 
-    
-    for(int j=0;j<5;j++)
-      m[j]/=eta;
-    m[5] = 1.0;
-    
-    metric_field.set_metric(m, i);
-  }
-  metric_field.apply_max_aspect_ratio(10);  
-  metric_field.update_mesh();
+        double m[] = {0.2*(-8*x + 4*sin(5*y))/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) - 250.0*sin(50*x),  2.0*(2*x - sin(5*y))*cos(5*y)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2),                                                        0,
+            -5.0*(2*x - sin(5*y))*pow(cos(5*y), 2)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) + 2.5*sin(5*y)/(pow(2*x - sin(5*y), 2) + 0.01), 0,
+            0};
 
-  VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
 
-  cout_quality(mesh, "Initial quality");
+        for(int j=0;j<5;j++)
+            m[j]/=eta;
+        m[5] = 1.0;
 
-  // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
-  double L_up = sqrt(2.0);
-  double L_low = L_up/2;
+        metric_field.set_metric(m, i);
+    }
+    metric_field.apply_max_aspect_ratio(10);  
+    metric_field.update_mesh();
 
-  Coarsen<double, 3> coarsen(*mesh);
-  Smooth<double, 3> smooth(*mesh);
-  Refine<double, 3> refine(*mesh);
-  Swapping<double, 3> swapping(*mesh);
+    VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
 
-  time_adapt = get_wtime();
+    cout_quality(mesh, "Initial quality");
 
-  double L_max = mesh->maximal_edge_length();
-  double alpha = sqrt(2.0)/2;
-  double L_ref = std::max(alpha*L_max, L_up);
+    // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+    double L_up = sqrt(2.0);
+    double L_low = L_up/2;
 
-  if(verbose)
-    std::cout<<"Phase I\n";
+    Coarsen<double, 3> coarsen(*mesh);
+    Smooth<double, 3> smooth(*mesh);
+    Refine<double, 3> refine(*mesh);
+    Swapping<double, 3> swapping(*mesh);
 
-  for(size_t i=0;i<10;i++){
-    // Coarsen
-    tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref);
-    time_coarsen += get_wtime() - tic;
+    time_adapt = get_wtime();
+
+    double L_max = mesh->maximal_edge_length();
+    double alpha = sqrt(2.0)/2;
+    double L_ref = std::max(alpha*L_max, L_up);
 
     if(verbose)
-      cout_quality(mesh, "Coarsen");
+        std::cout<<"Phase I\n";
 
-    // Refine
-    tic = get_wtime();
-    refine.refine(L_ref);
-    time_refine += get_wtime() - tic;
+    for(size_t i=0;i<10;i++){
+        // Coarsen
+        tic = get_wtime();
+        coarsen.coarsen(L_low, L_ref);
+        time_coarsen += get_wtime() - tic;
+
+        if(verbose)
+            cout_quality(mesh, "Coarsen");
+
+        // Refine
+        tic = get_wtime();
+        refine.refine(L_ref);
+        time_refine += get_wtime() - tic;
+
+        if(verbose)
+            cout_quality(mesh, "refine");
+
+        // Swap
+        tic = get_wtime();
+        swapping.swap(0.1);
+        time_swap += get_wtime() - tic;
+
+        if(verbose)
+            cout_quality(mesh, "Swap");
+
+        // Smooth
+        tic = get_wtime();
+        smooth.smart_laplacian(1);
+        time_smooth += get_wtime()-tic;
+
+        if(verbose)
+            cout_quality(mesh, "Smooth");
+
+        alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
+        L_max = mesh->maximal_edge_length();
+        L_ref = std::max(alpha*L_max, L_up);
+
+
+        if(L_max>1.0 and (L_max-L_up)<0.01)
+            break;
+    }
 
     if(verbose)
-      cout_quality(mesh, "refine");
+        std::cout<<"Phase II\n";
 
-    // Swap
+    for(size_t i=0;i<5;i++){
+        tic = get_wtime();
+        coarsen.coarsen(L_up, L_up);
+        time_coarsen += get_wtime() - tic;
+        if(verbose)
+            cout_quality(mesh, "coarsen");
+
+        tic = get_wtime();
+        swapping.swap(0.1);
+        if(verbose)
+            cout_quality(mesh, "Swap");
+        time_swap += get_wtime() - tic;
+
+        tic = get_wtime();
+        smooth.smart_laplacian(1);
+        if(verbose)
+            cout_quality(mesh, "Smooth");
+        time_smooth += get_wtime()-tic;
+    }
+
+    double time_defrag = get_wtime();
+    mesh->defragment();
+    time_defrag = get_wtime()-time_defrag;
+
+    if(verbose){
+        mesh->verify();
+
+        VTKTools<double>::export_vtu("../data/test_adapt_3d-basic", mesh);
+    }
+
     tic = get_wtime();
-    swapping.swap(0.1);
-    time_swap += get_wtime() - tic;
-
-    if(verbose)
-      cout_quality(mesh, "Swap");
-
-    // Smooth
-    tic = get_wtime();
-    smooth.smart_laplacian(1);
+    smooth.smart_laplacian(20);
+    smooth.optimisation_linf(20);
     time_smooth += get_wtime()-tic;
 
     if(verbose)
-      cout_quality(mesh, "Smooth");
+        cout_quality(mesh, "Final smooth");
 
-    alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
-    L_max = mesh->maximal_edge_length();
-    L_ref = std::max(alpha*L_max, L_up);
+    time_adapt = get_wtime()-time_adapt;
 
+    if(verbose){
+        if(rank==0)
+            std::cout<<"After optimisation based smoothing:\n";
+        mesh->verify();
+    }
 
-    if(L_max>1.0 and (L_max-L_up)<0.01)
-      break;
-  }
+    VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
 
- if(verbose)
-    std::cout<<"Phase II\n";
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
 
-  for(size_t i=0;i<5;i++){
-    tic = get_wtime();
-    coarsen.coarsen(L_up, L_up);
-    time_coarsen += get_wtime() - tic;
-    if(verbose)
-      cout_quality(mesh, "coarsen");
+    long double volume = mesh->calculate_volume();
+    long double area = mesh->calculate_area();
 
-    tic = get_wtime();
-    swapping.swap(0.1);
-    if(verbose)
-      cout_quality(mesh, "Swap");
-    time_swap += get_wtime() - tic;
-  
-    tic = get_wtime();
-    smooth.smart_laplacian(1);
-    if(verbose)
-      cout_quality(mesh, "Smooth");
-    time_smooth += get_wtime()-tic;
-  }
+    delete mesh;
 
-  double time_defrag = get_wtime();
-  mesh->defragment();
-  time_defrag = get_wtime()-time_defrag;
-  
-  if(verbose){
-    mesh->verify();
+    if(rank==0){
+        std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
+        double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
+        std::cout<<"BENCHMARK: "
+            <<std::setw(12)<<time_coarsen<<" "
+            <<std::setw(11)<<time_refine<<" "
+            <<std::setw(9)<<time_swap<<" "
+            <<std::setw(11)<<time_smooth<<" "
+            <<std::setw(11)<<time_defrag<<" "
+            <<std::setw(10)<<time_adapt<<" "
+            <<std::setw(10)<<time_other<<"\n";
 
-    VTKTools<double>::export_vtu("../data/test_adapt_3d-basic", mesh);
-  }
+        std::cout<<"Expecting qmean>0.3, qmin>0.01: ";
+        if((qmean>0.3)&&(qmin>0.01))
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
 
-  tic = get_wtime();
-  smooth.smart_laplacian(20);
-  smooth.optimisation_linf(20);
-  time_smooth += get_wtime()-tic;
- 
-  if(verbose)
-    cout_quality(mesh, "Final smooth");
+        long double volume_exact = 1;
+        std::cout<<"Expecting volume == "<<volume_exact<<": ";
+        if(std::abs(volume-volume_exact)/std::max(volume, volume_exact)<DBL_EPSILON)
+            std::cout<<"pass (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
+        else
+            std::cout<<"fail (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
 
-  time_adapt = get_wtime()-time_adapt;
-
-  if(verbose){
-    if(rank==0)
-      std::cout<<"After optimisation based smoothing:\n";
-    mesh->verify();
-  }
-
-  VTKTools<double>::export_vtu("../data/test_adapt_3d", mesh);
-
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-  
-  long double volume = mesh->calculate_volume();
-  long double area = mesh->calculate_area();
-
-  delete mesh;
-
-  if(rank==0){
-    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
-    double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
-    std::cout<<"BENCHMARK: "
-             <<std::setw(12)<<time_coarsen<<" "
-             <<std::setw(11)<<time_refine<<" "
-             <<std::setw(9)<<time_swap<<" "
-             <<std::setw(11)<<time_smooth<<" "
-             <<std::setw(11)<<time_defrag<<" "
-             <<std::setw(10)<<time_adapt<<" "
-             <<std::setw(10)<<time_other<<"\n";
-
-    std::cout<<"Expecting qmean>0.3, qmin>0.01: ";
-    if((qmean>0.3)&&(qmin>0.01))
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
-
-    long double volume_exact = 1;
-    std::cout<<"Expecting volume == "<<volume_exact<<": ";
-    if(std::abs(volume-volume_exact)/std::max(volume, volume_exact)<DBL_EPSILON)
-      std::cout<<"pass (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
-    else
-      std::cout<<"fail (volume="<<volume<<", std::abs(volume-volume_exact)/std::max(volume, volume_exact)="<<std::abs(volume-volume_exact)/std::max(volume, volume_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
-
-    long double area_exact = 6;
-    std::cout<<"Expecting area == "<<area_exact<<": ";
-    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
-      std::cout<<"pass (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
-    else
-      std::cout<<"fail (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
-  }
+        long double area_exact = 6;
+        std::cout<<"Expecting area == "<<area_exact<<": ";
+        if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
+            std::cout<<"pass (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
+        else
+            std::cout<<"fail (area="<<area<<", std::abs(area-area_exact)/std::max(area, area_exact)="<<std::abs(area-area_exact)/std::max(area, area_exact)<<", tol="<<DBL_EPSILON<<")"<<std::endl;
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

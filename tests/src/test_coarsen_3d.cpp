@@ -56,95 +56,95 @@
 
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 #endif
 
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1){
+        verbose = std::string(argv[1])=="-v";
+    }
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,3> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
-  for(size_t i=0;i<NNodes;i++){
-    double m[] =
-      {0.5, 
-       0.0, 
-       0.0,
-       0.5, 
-       0.0,
-       0.5};
+    size_t NNodes = mesh->get_number_nodes();
+    for(size_t i=0;i<NNodes;i++){
+        double m[] =
+        {0.5, 
+            0.0, 
+            0.0,
+            0.5, 
+            0.0,
+            0.5};
 
-    metric_field.set_metric(m, i);
-  }
-  metric_field.update_mesh();
-  
-  Coarsen<double,3> adapt(*mesh);
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-  double L_up = sqrt(2.0);
-  double L_low = L_up*0.5;
+    Coarsen<double,3> adapt(*mesh);
 
-  double tic = get_wtime();
-  adapt.coarsen(L_low, L_up);
-  double toc = get_wtime();
+    double L_up = sqrt(2.0);
+    double L_low = L_up*0.5;
 
-  if(verbose)
-    mesh->verify();
+    double tic = get_wtime();
+    adapt.coarsen(L_low, L_up);
+    double toc = get_wtime();
 
-  mesh->defragment();
+    if(verbose)
+        mesh->verify();
 
-  int nelements = mesh->get_number_elements();  
+    mesh->defragment();
 
-  if(verbose){
-    double qmean = mesh->get_qmean();
-    double qmin = mesh->get_qmin();
+    int nelements = mesh->get_number_elements();  
 
-    std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
-             <<"Number elements:       "<<nelements<<std::endl
-             <<"Quality mean:          "<<qmean<<std::endl
-             <<"Quality min:           "<<qmin<<std::endl;
+    if(verbose){
+        double qmean = mesh->get_qmean();
+        double qmin = mesh->get_qmin();
 
-    long double area = mesh->calculate_area();
-    long double volume = mesh->calculate_volume();
+        std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
+            <<"Number elements:       "<<nelements<<std::endl
+            <<"Quality mean:          "<<qmean<<std::endl
+            <<"Quality min:           "<<qmin<<std::endl;
 
-    long double area_exact=6;
-    std::cout<<"Checking area == "<<area_exact<<": ";
-    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
+        long double area = mesh->calculate_area();
+        long double volume = mesh->calculate_volume();
+
+        long double area_exact=6;
+        std::cout<<"Checking area == "<<area_exact<<": ";
+        if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+
+        long double volume_exact=1;
+        std::cout<<"Checking volume == "<<volume_exact<<"1: ";
+        if(std::abs(volume-volume_exact)/std::max(volume, volume_exact)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+    }
+
+    VTKTools<double>::export_vtu("../data/test_coarsen_3d", mesh);
+
+    if(nelements<50)
+        std::cout<<"pass"<<std::endl;
     else
-      std::cout<<"fail (area="<<area<<")"<<std::endl;
+        std::cout<<"fail ("<<nelements<<")"<<std::endl;
 
-    long double volume_exact=1;
-    std::cout<<"Checking volume == "<<volume_exact<<"1: ";
-    if(std::abs(volume-volume_exact)/std::max(volume, volume_exact)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (volume="<<volume<<")"<<std::endl;
-  }
-
-  VTKTools<double>::export_vtu("../data/test_coarsen_3d", mesh);
-
-  if(nelements<50)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail ("<<nelements<<")"<<std::endl;
-
-  delete mesh;
+    delete mesh;
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

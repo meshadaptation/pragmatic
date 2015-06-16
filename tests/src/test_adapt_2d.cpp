@@ -60,176 +60,176 @@
 #endif
 
 int main(int argc, char **argv){
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1){
+        verbose = std::string(argv[1])=="-v";
+    }
 
-  // Benchmark times.
-  double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
+    // Benchmark times.
+    double time_coarsen=0, time_refine=0, time_swap=0, time_smooth=0, time_adapt=0, tic;
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,2> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
-  double eta=0.001;
+    size_t NNodes = mesh->get_number_nodes();
+    double eta=0.001;
 
-  std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0]-1;
-    double y = 2*mesh->get_coords(i)[1]-1;
+    std::vector<double> psi(NNodes);
+    for(size_t i=0;i<NNodes;i++){
+        double x = 2*mesh->get_coords(i)[0]-1;
+        double y = 2*mesh->get_coords(i)[1]-1;
 
-    psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
-  }
-
-  metric_field.add_field(&(psi[0]), eta, 2);
-  metric_field.update_mesh();
-
-  if(verbose){
-    std::cout<<"Initial quality:\n";
-    mesh->verify();
-  }
-
-  // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
-  double L_up = sqrt(2.0);
-  double L_low = L_up/2;
-
-  Coarsen<double, 2> coarsen(*mesh);
-  Smooth<double, 2> smooth(*mesh);
-  Refine<double, 2> refine(*mesh);
-  Swapping<double, 2> swapping(*mesh);
-
-  time_adapt = get_wtime();
-
-  double L_max = mesh->maximal_edge_length();
-  double alpha = sqrt(2.0)/2;
-  for(size_t i=0;i<20;i++){
-    double L_ref = std::max(alpha*L_max, L_up);
-    
-    tic = get_wtime();
-    coarsen.coarsen(L_low, L_ref);
-    time_coarsen += get_wtime() - tic;
-    if(verbose){
-      std::cout<<"INFO: Verify quality after coarsen.\n";
-      mesh->verify();
-    }
-    
-    tic = get_wtime();
-    swapping.swap(0.7);
-    time_swap += get_wtime() - tic;
-    if(verbose){
-      std::cout<<"INFO: Verify quality after swapping.\n";
-      mesh->verify();
+        psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
     }
 
-    tic = get_wtime();
-    refine.refine(L_ref);
-    time_refine += get_wtime() - tic;
+    metric_field.add_field(&(psi[0]), eta, 2);
+    metric_field.update_mesh();
+
     if(verbose){
-      std::cout<<"INFO: Verify quality after refinement.\n";
-      mesh->verify();
+        std::cout<<"Initial quality:\n";
+        mesh->verify();
     }
 
-    L_max = mesh->maximal_edge_length();
-    
-    if((L_max-L_up)<0.01)
-      break;
-  }
+    // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
+    double L_up = sqrt(2.0);
+    double L_low = L_up/2;
 
-  double time_defrag = get_wtime();
-  mesh->defragment();
-  time_defrag = get_wtime()-time_defrag;
+    Coarsen<double, 2> coarsen(*mesh);
+    Smooth<double, 2> smooth(*mesh);
+    Refine<double, 2> refine(*mesh);
+    Swapping<double, 2> swapping(*mesh);
 
-  if(verbose){
-    if(rank==0)
-      std::cout<<"Basic quality:\n";
-    mesh->verify();
+    time_adapt = get_wtime();
 
-    VTKTools<double>::export_vtu("../data/test_adapt_2d-basic", mesh);
-  }
+    double L_max = mesh->maximal_edge_length();
+    double alpha = sqrt(2.0)/2;
+    for(size_t i=0;i<20;i++){
+        double L_ref = std::max(alpha*L_max, L_up);
 
-  tic = get_wtime();
-  smooth.smart_laplacian(10);
-  smooth.optimisation_linf(10);
-  time_smooth += get_wtime()-tic;
+        tic = get_wtime();
+        coarsen.coarsen(L_low, L_ref);
+        time_coarsen += get_wtime() - tic;
+        if(verbose){
+            std::cout<<"INFO: Verify quality after coarsen.\n";
+            mesh->verify();
+        }
 
-  time_adapt = get_wtime()-time_adapt;
+        tic = get_wtime();
+        swapping.swap(0.7);
+        time_swap += get_wtime() - tic;
+        if(verbose){
+            std::cout<<"INFO: Verify quality after swapping.\n";
+            mesh->verify();
+        }
 
-  if(verbose){
-    if(rank==0)
-      std::cout<<"After optimisation based smoothing:\n";
-    mesh->verify();
-  }
+        tic = get_wtime();
+        refine.refine(L_ref);
+        time_refine += get_wtime() - tic;
+        if(verbose){
+            std::cout<<"INFO: Verify quality after refinement.\n";
+            mesh->verify();
+        }
 
-  NNodes = mesh->get_number_nodes();
-  psi.resize(NNodes);
-  for(size_t i=0;i<NNodes;i++){
-    double x = 2*mesh->get_coords(i)[0]-1;
-    double y = 2*mesh->get_coords(i)[1]-1;
+        L_max = mesh->maximal_edge_length();
 
-    psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
-  }
+        if((L_max-L_up)<0.01)
+            break;
+    }
 
-  VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+    double time_defrag = get_wtime();
+    mesh->defragment();
+    time_defrag = get_wtime()-time_defrag;
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-  
-  long double perimeter = mesh->calculate_perimeter();
-  long double area = mesh->calculate_area();
+    if(verbose){
+        if(rank==0)
+            std::cout<<"Basic quality:\n";
+        mesh->verify();
 
-  delete mesh;
+        VTKTools<double>::export_vtu("../data/test_adapt_2d-basic", mesh);
+    }
 
-  if(rank==0){
-    std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
-    double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
-    std::cout<<"BENCHMARK: "
-             <<std::setw(12)<<time_coarsen<<" "
-             <<std::setw(11)<<time_refine<<" "
-             <<std::setw(9)<<time_swap<<" "
-             <<std::setw(11)<<time_smooth<<" "
-             <<std::setw(11)<<time_defrag<<" "
-             <<std::setw(10)<<time_adapt<<" "
-             <<std::setw(10)<<time_other<<"\n";
+    tic = get_wtime();
+    smooth.smart_laplacian(10);
+    smooth.optimisation_linf(10);
+    time_smooth += get_wtime()-tic;
 
-    std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
-    if((qmean>0.8)&&(qmin>0.1))
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
+    time_adapt = get_wtime()-time_adapt;
 
-    std::cout<<"Expecting perimeter == 4: ";
-    if(std::abs(perimeter-4)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+    if(verbose){
+        if(rank==0)
+            std::cout<<"After optimisation based smoothing:\n";
+        mesh->verify();
+    }
 
-    std::cout<<"Expecting area == 1: ";
-    if(std::abs(area-1)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail (area="<<area<<")"<<std::endl;
-  }
+    NNodes = mesh->get_number_nodes();
+    psi.resize(NNodes);
+    for(size_t i=0;i<NNodes;i++){
+        double x = 2*mesh->get_coords(i)[0]-1;
+        double y = 2*mesh->get_coords(i)[1]-1;
+
+        psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+    }
+
+    VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
+
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
+
+    delete mesh;
+
+    if(rank==0){
+        std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
+        double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
+        std::cout<<"BENCHMARK: "
+            <<std::setw(12)<<time_coarsen<<" "
+            <<std::setw(11)<<time_refine<<" "
+            <<std::setw(9)<<time_swap<<" "
+            <<std::setw(11)<<time_smooth<<" "
+            <<std::setw(11)<<time_defrag<<" "
+            <<std::setw(10)<<time_adapt<<" "
+            <<std::setw(10)<<time_other<<"\n";
+
+        std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
+        if((qmean>0.8)&&(qmin>0.1))
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
+
+        std::cout<<"Expecting perimeter == 4: ";
+        if(std::abs(perimeter-4)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (perimeter="<<perimeter<<")"<<std::endl;
+
+        std::cout<<"Expecting area == 1: ";
+        if(std::abs(area-1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail (area="<<area<<")"<<std::endl;
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

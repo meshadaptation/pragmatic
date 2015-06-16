@@ -60,61 +60,61 @@
 #include "ticker.h"
 
 int main(int argc, char **argv){
-  int rank=0;
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,2> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
+    size_t NNodes = mesh->get_number_nodes();
 
-  std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
-  
-  metric_field.add_field(&(psi[0]), 0.0001);
-  metric_field.update_mesh();
+    std::vector<double> psi(NNodes);
+    for(size_t i=0;i<NNodes;i++)
+        psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
 
-  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
+    metric_field.add_field(&(psi[0]), 0.0001);
+    metric_field.update_mesh();
 
-  Refine<double,2> adapt(*mesh);
+    VTKTools<double>::export_vtu("../data/test_mpi_refine_2d_init", mesh);
 
-  double tic = get_wtime();
-  for(int i=0;i<3;i++)
-    adapt.refine(sqrt(2.0));
-  double toc = get_wtime();
+    Refine<double,2> adapt(*mesh);
 
-  if(!mesh->verify()){
-    std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
-  }
-  
-  mesh->defragment();
+    double tic = get_wtime();
+    for(int i=0;i<3;i++)
+        adapt.refine(sqrt(2.0));
+    double toc = get_wtime();
 
-  VTKTools<double>::export_vtu("../data/test_mpi_refine_2d", mesh);
+    if(!mesh->verify()){
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
+    }
 
-  delete mesh;
+    mesh->defragment();
 
-  if(rank==0){
-    std::cout<<"Refine time = "<<toc-tic<<std::endl;
-    std::cout<<"pass"<<std::endl;
-  }
+    VTKTools<double>::export_vtu("../data/test_mpi_refine_2d", mesh);
+
+    delete mesh;
+
+    if(rank==0){
+        std::cout<<"Refine time = "<<toc-tic<<std::endl;
+        std::cout<<"pass"<<std::endl;
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

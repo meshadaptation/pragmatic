@@ -55,76 +55,76 @@
 
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 #endif
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
+    mesh->create_boundary();
 
-  MetricField<double, 3> metric_field(*mesh);
+    MetricField<double, 3> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
+    size_t NNodes = mesh->get_number_nodes();
 
-  std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] =
-      pow(mesh->get_coords(i)[0]+0.1, 2) +
-      pow(mesh->get_coords(i)[1]+0.1, 2) +
-      pow(mesh->get_coords(i)[2]+0.1, 2);
-  
-  double start_tic = get_wtime();
-  metric_field.add_field(&(psi[0]), 1.0);
-  metric_field.update_mesh();
-  std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
+    std::vector<double> psi(NNodes);
+    for(size_t i=0;i<NNodes;i++)
+        psi[i] =
+            pow(mesh->get_coords(i)[0]+0.1, 2) +
+            pow(mesh->get_coords(i)[1]+0.1, 2) +
+            pow(mesh->get_coords(i)[2]+0.1, 2);
 
-  std::vector<double> metric(NNodes*6);
-  metric_field.get_metric(&(metric[0]));
+    double start_tic = get_wtime();
+    metric_field.add_field(&(psi[0]), 1.0);
+    metric_field.update_mesh();
+    std::cout<<"Hessian loop time = "<<get_wtime()-start_tic<<std::endl;
 
-  double rms[] = {0., 0., 0., 0., 0., 0.};
-  int ncnt=0;
-  for(size_t i=0;i<NNodes;i++){
-    rms[0] += pow(2.0-metric[i*6  ], 2);
-    rms[1] += pow(metric[i*6+1], 2);
-    rms[2] += pow(metric[i*6+2], 2);
-    rms[3] += pow(2.0-metric[i*6+3], 2);
-    rms[4] += pow(metric[i*6+4], 2);    
-    rms[5] += pow(2.0-metric[i*6+5], 2);
- 
-    ncnt++;
-  }
+    std::vector<double> metric(NNodes*6);
+    metric_field.get_metric(&(metric[0]));
 
-  double max_rms = 0;
-  for(size_t i=0;i<6;i++){
-    rms[i] = sqrt(rms[i]/ncnt);
-    max_rms = std::max(max_rms, rms[i]);
-  }
+    double rms[] = {0., 0., 0., 0., 0., 0.};
+    int ncnt=0;
+    for(size_t i=0;i<NNodes;i++){
+        rms[0] += pow(2.0-metric[i*6  ], 2);
+        rms[1] += pow(metric[i*6+1], 2);
+        rms[2] += pow(metric[i*6+2], 2);
+        rms[3] += pow(2.0-metric[i*6+3], 2);
+        rms[4] += pow(metric[i*6+4], 2);    
+        rms[5] += pow(2.0-metric[i*6+5], 2);
 
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] =
-      pow(mesh->get_coords(i)[0]+0.1, 2) +
-      pow(mesh->get_coords(i)[1]+0.1, 2) +
-      pow(mesh->get_coords(i)[2]+0.1, 2);
+        ncnt++;
+    }
 
-  VTKTools<double>::export_vtu("../data/test_hessian_3d", mesh, &(psi[0]));
+    double max_rms = 0;
+    for(size_t i=0;i<6;i++){
+        rms[i] = sqrt(rms[i]/ncnt);
+        max_rms = std::max(max_rms, rms[i]);
+    }
 
-  delete mesh;
+    for(size_t i=0;i<NNodes;i++)
+        psi[i] =
+            pow(mesh->get_coords(i)[0]+0.1, 2) +
+            pow(mesh->get_coords(i)[1]+0.1, 2) +
+            pow(mesh->get_coords(i)[2]+0.1, 2);
 
-  std::cout<<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<", "<<rms[3]<<", "<<rms[4]<<", "<<rms[5]<<std::endl;
-  if(max_rms>0.01)
-    std::cout<<"fail\n";
-  else
-    std::cout<<"pass\n";
+    VTKTools<double>::export_vtu("../data/test_hessian_3d", mesh, &(psi[0]));
+
+    delete mesh;
+
+    std::cout<<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<", "<<rms[3]<<", "<<rms[4]<<", "<<rms[5]<<std::endl;
+    if(max_rms>0.01)
+        std::cout<<"fail\n";
+    else
+        std::cout<<"pass\n";
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

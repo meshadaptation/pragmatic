@@ -55,70 +55,70 @@
 
 int main(int argc, char **argv){
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 #endif
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+    mesh->create_boundary();
 
-  size_t NNodes = mesh->get_number_nodes();
+    size_t NNodes = mesh->get_number_nodes();
 
-  // Set up field - use first touch policy
-  std::vector<double> psi(NNodes);
+    // Set up field - use first touch policy
+    std::vector<double> psi(NNodes);
 #pragma omp parallel
-  {
+    {
 #pragma omp for schedule(static)
-    for(size_t i=0;i<NNodes;i++)
-      psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
-  }
-  
-  MetricField<double,2> metric_field(*mesh);
-  
-  double tic = get_wtime();
-  metric_field.add_field(&(psi[0]), 1.0);
-  double toc = get_wtime();
-  
-  metric_field.update_mesh();
-  
-  std::vector<double> metric(NNodes*3);
-  metric_field.get_metric(&(metric[0]));
-  
-  double rms[] = {0., 0., 0.};
-  for(size_t i=0;i<NNodes;i++){
-    rms[0] += pow(2.0-metric[i*3  ], 2);
-    rms[1] += pow(    metric[i*3+1], 2);
-    rms[2] += pow(2.0-metric[i*3+2], 2);
-  }
-  
-  double max_rms = 0;
-  for(size_t i=0;i<3;i++){
-    rms[i] = sqrt(rms[i]/NNodes);
-    max_rms = std::max(max_rms, rms[i]);
-  }
-  
-  std::string vtu_filename("../data/test_hessian_2d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
-  
-  std::cout<<"Hessian :: loop time = "<<toc-tic<<std::endl
-           <<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<std::endl;
-  if(max_rms>0.01)
-    std::cout<<"fail\n";
-  else
-    std::cout<<"pass\n";
+        for(size_t i=0;i<NNodes;i++)
+            psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
+    }
 
-  delete mesh;
+    MetricField<double,2> metric_field(*mesh);
+
+    double tic = get_wtime();
+    metric_field.add_field(&(psi[0]), 1.0);
+    double toc = get_wtime();
+
+    metric_field.update_mesh();
+
+    std::vector<double> metric(NNodes*3);
+    metric_field.get_metric(&(metric[0]));
+
+    double rms[] = {0., 0., 0.};
+    for(size_t i=0;i<NNodes;i++){
+        rms[0] += pow(2.0-metric[i*3  ], 2);
+        rms[1] += pow(    metric[i*3+1], 2);
+        rms[2] += pow(2.0-metric[i*3+2], 2);
+    }
+
+    double max_rms = 0;
+    for(size_t i=0;i<3;i++){
+        rms[i] = sqrt(rms[i]/NNodes);
+        max_rms = std::max(max_rms, rms[i]);
+    }
+
+    std::string vtu_filename("../data/test_hessian_2d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
+
+    std::cout<<"Hessian :: loop time = "<<toc-tic<<std::endl
+        <<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<std::endl;
+    if(max_rms>0.01)
+        std::cout<<"fail\n";
+    else
+        std::cout<<"pass\n";
+
+    delete mesh;
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }
 

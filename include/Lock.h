@@ -41,48 +41,48 @@
 typedef unsigned char t_atomic;
 
 class Lock{
-public:
-  Lock() : _lock(0) {}
+    public:
+        Lock() : _lock(0) {}
 
-  Lock(const t_atomic value) : _lock(value) {}
+        Lock(const t_atomic value) : _lock(value) {}
 
-  Lock(const Lock& other) :_lock(other._lock.load(std::memory_order_relaxed)) {}
+        Lock(const Lock& other) :_lock(other._lock.load(std::memory_order_relaxed)) {}
 
-  ~Lock(){}
+        ~Lock(){}
 
-  inline bool try_lock(){
-    t_atomic lock_val = _lock.load(std::memory_order_relaxed);
-    if(lock_val == 1)
-      return false;
-    lock_val = _lock.fetch_or(1, std::memory_order_acq_rel);
+        inline bool try_lock(){
+            t_atomic lock_val = _lock.load(std::memory_order_relaxed);
+            if(lock_val == 1)
+                return false;
+            lock_val = _lock.fetch_or(1, std::memory_order_acq_rel);
 
-    return (lock_val==0);
-  }
+            return (lock_val==0);
+        }
 
-  inline void lock(){
-    t_atomic lock_val = _lock.load(std::memory_order_relaxed);
-    if(lock_val == 1){
-      while(!try_lock()){};
-      return;
-    }
+        inline void lock(){
+            t_atomic lock_val = _lock.load(std::memory_order_relaxed);
+            if(lock_val == 1){
+                while(!try_lock()){};
+                return;
+            }
 
-    bool is_unlocked = _lock.compare_exchange_weak(lock_val, 1, std::memory_order_acq_rel, std::memory_order_relaxed);
-    if(!is_unlocked){
-      while(!try_lock()){};
-      return;
-    }
-  }
+            bool is_unlocked = _lock.compare_exchange_weak(lock_val, 1, std::memory_order_acq_rel, std::memory_order_relaxed);
+            if(!is_unlocked){
+                while(!try_lock()){};
+                return;
+            }
+        }
 
-  inline bool is_locked(){
-    return (_lock.load(std::memory_order_acquire) == 1);
-  }
+        inline bool is_locked(){
+            return (_lock.load(std::memory_order_acquire) == 1);
+        }
 
-  inline void unlock(){
-    _lock.store(0, std::memory_order_release);
-  }
+        inline void unlock(){
+            _lock.store(0, std::memory_order_release);
+        }
 
-private:
-  std::atomic<t_atomic> _lock;
+    private:
+        std::atomic<t_atomic> _lock;
 };
 
 #endif
