@@ -216,12 +216,15 @@ template<typename real_t, int dim> class MetricField{
 
                 A.svd().solve(b, &S);
 
-                if(_mesh->NNList[i].size()>=6){
+                if(_mesh->NNList[i].size()>=3){
                     sm[0] = S[0]; sm[1] = S[2];
-                    sm[2] = S[1];
+                                  sm[2] = S[1];
                 }else{
+                    assert(std::isfinite(S[0]));
+                    assert(std::isfinite(S[1]));
+
                     sm[0] = S[0]; sm[1] = 0;
-                    sm[2] = S[1];
+                                  sm[2] = S[1];
                 }
             }else{
                 Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<real_t, 6, 6>::Zero(6,6);
@@ -465,6 +468,8 @@ template<typename real_t, int dim> class MetricField{
             size_t fudge = 5;
 
             if(pNElements > _mesh->NElements){
+                std::cerr<<"pNElements > _mesh->NElements "<<pNElements<<" "<<_mesh->NElements<<std::endl;
+
                 // Let's leave a safety margin.
                 pNElements *= fudge;
             }else{
@@ -766,7 +771,7 @@ template<typename real_t, int dim> class MetricField{
                     real_t m01 = (m0[1]+m1[1]+m2[1])*inv3;
                     real_t m11 = (m0[2]+m1[2]+m2[2])*inv3;
 
-                    real_t det = m00*m11-m01*m01;
+                    real_t det = std::abs(m00*m11-m01*m01);
 
                     total_area_metric += area*sqrt(det);
                 }
@@ -777,7 +782,6 @@ template<typename real_t, int dim> class MetricField{
                    space. Therefore:*/
                 const real_t smallest_ideal_area = 0.5*(sqrt(3.0)/4.0);
                 predicted = total_area_metric/smallest_ideal_area;
-
             }else if(dim==3){
                 real_t total_volume_metric = 0.0;
 

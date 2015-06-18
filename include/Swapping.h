@@ -725,7 +725,11 @@ inline bool swap_kernel3d(const Edge<index_t>& edge, propagation_map& pMap){
     if(*constrained_edges.begin() != *constrained_edges.rbegin()){
         return false;
     }
-    assert(element_order.size() == nelements);
+    // assert(element_order.size() == nelements);
+    if(element_order.size() != nelements){
+        std::cerr<<"assert(element_order.size() == nelements) would fail "<<element_order.size()<<", "<<nelements<<std::endl;
+        return false;
+    }
 
     double orig_vol = 0.0;
     for(auto& ele : neigh_elements){

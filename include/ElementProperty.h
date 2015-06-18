@@ -191,10 +191,16 @@ class ElementProperty{
         static inline double length2d(const real_t x0[], const real_t x1[], const double m[]){
             double x=x0[0] - x1[0];
             double y=x0[1] - x1[1];
-
-            assert((m[1]*x + m[2]*y)*y + (m[0]*x + m[1]*y)*x >= 0.0);
-
-            return sqrt(((m[1]*x + m[2]*y)*y + (m[0]*x + m[1]*y)*x));
+            
+            // The l-2 norm can fail for anisotropic metrics. In such cases use the l-inf norm.
+            double l2 = (m[1]*x + m[2]*y)*y + (m[0]*x + m[1]*y)*x;
+            if(l2>0){
+                return sqrt(l2);
+            }else{
+                double linf = std::max((m[2]*y)*y, (m[0]*x)*x);
+                assert(linf>=0);
+                return sqrt(linf);
+            }
         }
 
         /*! Length of an edge as measured in metric space.
@@ -208,13 +214,17 @@ class ElementProperty{
             double y=x0[1] - x1[1];
             double z=x0[2] - x1[2];
 
-            assert(z*(z*m[5] + y*m[4] + x*m[2]) +
-                    y*(z*m[4] + y*m[3] + x*m[1]) +
-                    x*(z*m[2] + y*m[1] + x*m[0]) >= 0.0);
-
-            return sqrt(z*(z*m[5] + y*m[4] + x*m[2]) +
-                    y*(z*m[4] + y*m[3] + x*m[1]) +
-                    x*(z*m[2] + y*m[1] + x*m[0]));
+            // The l-2 norm can fail for anisotropic metrics. In such cases use the l-inf norm.
+            double l2 = z*(z*m[5] + y*m[4] + x*m[2]) + y*(z*m[4] + y*m[3] + x*m[1]) + x*(z*m[2] + y*m[1] + x*m[0]);
+            if(l2>0){
+                return sqrt(l2);
+            }else{
+                double linf = std::max(z*(z*m[5] + y*m[4]) + y*(z*m[4] + y*m[3]),
+                                       std::max(z*(z*m[5] + x*m[2]) + x*(z*m[2] + x*m[0]),
+                                                y*(y*m[3] + x*m[1]) + x*(y*m[1] + x*m[0])));
+                assert(linf>=0);
+                return sqrt(linf);
+            }
         }
 
         /*! Evaluates the 2D Lipnikov functional. The description for the

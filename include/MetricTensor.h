@@ -144,12 +144,12 @@ template<typename treal_t, int dim> class MetricTensor{
             Eigen::Matrix<treal_t, dim, dim> M;
 
             if(dim==2){
-                M << metric[0]+DBL_EPSILON, metric[1],
-                  metric[1],             metric[2]+DBL_EPSILON;
+                M << metric[0], metric[1],
+                     metric[1], metric[2];
             }else if(dim==3){
-                M << metric[0]+DBL_EPSILON, metric[1],             metric[2],
-                  metric[1],             metric[3]+DBL_EPSILON, metric[4],
-                  metric[2],             metric[4],             metric[5]+DBL_EPSILON;
+                M << metric[0], metric[1], metric[2],
+                  metric[1], metric[3], metric[4],
+                  metric[2], metric[4], metric[5];
             }
 
             if(M.isZero())
