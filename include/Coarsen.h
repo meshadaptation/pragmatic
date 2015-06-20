@@ -303,8 +303,8 @@ template<typename real_t, int dim> class Coarsen{
 
                             std::set<index_t> deleted_elements;
                             std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
-                                    _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
-                                    std::inserter(deleted_elements, deleted_elements.begin()));
+                                                  _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
+                                                  std::inserter(deleted_elements, deleted_elements.begin()));
 
                             if(dim==2){
                                 if(deleted_elements.size()!=1){
@@ -313,23 +313,41 @@ template<typename real_t, int dim> class Coarsen{
                                 }
                             }else{
                                 /*
-                                   bool confirm_boundary=true;
                                    for(const auto& de : deleted_elements){
-                                // Check that there are not internal edges connected at both ends to a boundary.
-                                const int *n = _mesh->get_element(de);
-                                for(int i=0;i<nloc;i++){
-                                if(n[i]==target_vertex){ 
-                                std::set<index_t> paired_elements;
-                                std::set_intersection(deleted_elements.begin(), deleted_elements.end(),
-                                _mesh->NEList[n[i]].begin(), _mesh->NEList[n[i]].end(),
-                                std::inserter(paired_elements, paired_elements.begin()));
-                                if(paired_elements.size()!=1){
-                                confirm_boundary = false;
-                                break;
+                                   for(int i=0;i<nloc;i++){
+                                   if(_mesh->boundary[de*nloc+i]>0){
+                                   if(_mesh->_ENList[de*nloc+i]==rm_vertex){
+                                   reject_collapse=true;
+                                   break;
+                                   }
+                                   }
+                                   }
+                                   if(reject_collapse)
+                                   break;
+                                   }
+                                   if(reject_collapse)
+                                   continue;
+                                   */
+
+                                bool confirm_boundary=false;
+                                for(const auto& de : deleted_elements){
+                                    // Check that there are not internal edges connected at both ends to a boundary.
+                                    const int *n = _mesh->get_element(de);
+                                    for(int i=0;i<nloc;i++){
+                                        if(n[i]!=target_vertex && n[i]!=rm_vertex){ 
+                                            if(_mesh->boundary[de*nloc+i]>0){
+                                                confirm_boundary = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if(confirm_boundary)
+                                        break;
                                 }
+                                if(!confirm_boundary){
+                                    reject_collapse=true;
+                                    continue;
                                 }
-                                }
-                                }*/
                             }
                         }else{
                             reject_collapse=true;
