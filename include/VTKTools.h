@@ -97,24 +97,14 @@ extern "C" {
 template<typename real_t> class VTKTools{
     public:
         static Mesh<real_t>* import_vtu(std::string filename){
-            vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
+            vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
+            reader->SetFileName(filename.c_str());
+            reader->Update();
 
-            if(filename.substr(filename.find_last_of('.'))==".pvtu"){
-                vtkSmartPointer<vtkXMLPUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLPUnstructuredGridReader>::New();
-                reader->SetFileName(filename.c_str());
-                reader->Update();
+            vtkUnstructuredGrid *ug = reader->GetOutput();
 
-                ug->DeepCopy(reader->GetOutput());
-            }else{
-                vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
-                reader->SetFileName(filename.c_str());
-                reader->Update();
-
-                ug->DeepCopy(reader->GetOutput());
-            }
-
-            size_t NNodes = ug->GetNumberOfPoints();
-            size_t NElements = ug->GetNumberOfCells();
+            size_t NNodes = reader->GetNumberOfPoints();
+            size_t NElements = reader->GetNumberOfCells();
 
             std::map<int, int> renumber;
             std::map<int, int> gnns;
@@ -152,7 +142,6 @@ template<typename real_t> class VTKTools{
             NNodes = x.size();
 
             int cell_type = ug->GetCell(0)->GetCellType();
-
             int nloc = -1;
             int ndims = -1;
             if(cell_type==VTK_TRIANGLE){
