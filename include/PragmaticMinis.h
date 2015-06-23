@@ -50,7 +50,8 @@
 #include <cstdlib>
 #include <atomic>
 
-int pragmatic_nthreads(){
+int pragmatic_nthreads()
+{
 #ifdef HAVE_OPENMP
     return omp_get_max_threads();
 #else
@@ -58,7 +59,8 @@ int pragmatic_nthreads(){
 #endif
 }
 
-int pragmatic_thread_id(){
+int pragmatic_thread_id()
+{
 #ifdef HAVE_OPENMP
     return omp_get_thread_num();
 #else
@@ -67,13 +69,15 @@ int pragmatic_thread_id(){
 }
 
 #ifdef HAVE_MPI
-int pragmatic_nprocesses(MPI_Comm comm){
+int pragmatic_nprocesses(MPI_Comm comm)
+{
     int nprocesses;
     MPI_Comm_size(comm, &nprocesses);
     return nprocesses;
 }
 
-int pragmatic_process_id(MPI_Comm comm){
+int pragmatic_process_id(MPI_Comm comm)
+{
     int id;
     MPI_Comm_rank(comm, &id);
     return id;
@@ -81,7 +85,8 @@ int pragmatic_process_id(MPI_Comm comm){
 #endif
 
 // Returns the original value of shared, while incrementing *shared by inc.
-size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc){
+size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc)
+{
     size_t old;
 #if __FUJITSU
     /*
@@ -103,19 +108,19 @@ size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc){
      * where it is expected to be found by the 'add'.
      */
     asm volatile(
-            "ldx [%1], %%g1;"
-            "retry:"
-            "add %%g1, %2, %0;"
-            "casx [%1], %%g1, %0;"
-            "cmp %0, %%g1;"
-            "bne,pn %%xcc, retry;"
-            " mov %0, %%g1;"
-            :"=&r"(old)
-            :"p"(shared), "r"(inc)
-            :"%g1"
-            );
+        "ldx [%1], %%g1;"
+        "retry:"
+        "add %%g1, %2, %0;"
+        "casx [%1], %%g1, %0;"
+        "cmp %0, %%g1;"
+        "bne,pn %%xcc, retry;"
+        " mov %0, %%g1;"
+        :"=&r"(old)
+        :"p"(shared), "r"(inc)
+        :"%g1"
+    );
 #elif HAVE_OPENMP >= 201107
-#pragma omp atomic capture
+    #pragma omp atomic capture
     {
         old = *shared;
         *shared += inc;

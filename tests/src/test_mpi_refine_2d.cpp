@@ -59,7 +59,8 @@
 #include "Refine.h"
 #include "ticker.h"
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -79,7 +80,7 @@ int main(int argc, char **argv){
     size_t NNodes = mesh->get_number_nodes();
 
     std::vector<double> psi(NNodes);
-    for(size_t i=0;i<NNodes;i++)
+    for(size_t i=0; i<NNodes; i++)
         psi[i] = pow(mesh->get_coords(i)[0], 4) + pow(mesh->get_coords(i)[1], 4);
 
     metric_field.add_field(&(psi[0]), 0.0001);
@@ -90,11 +91,11 @@ int main(int argc, char **argv){
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0;i<3;i++)
+    for(int i=0; i<3; i++)
         adapt.refine(sqrt(2.0));
     double toc = get_wtime();
 
-    if(!mesh->verify()){
+    if(!mesh->verify()) {
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after refinement.\n";
     }
 
@@ -104,7 +105,7 @@ int main(int argc, char **argv){
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Refine time = "<<toc-tic<<std::endl;
         std::cout<<"pass"<<std::endl;
     }

@@ -39,7 +39,8 @@
 
 #include "ElementProperty.h"
 
-int main(){
+int main()
+{
     // Check triangles
     {
         double fx0[] = {0.0, 0.0};

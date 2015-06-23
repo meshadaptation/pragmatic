@@ -57,7 +57,8 @@
 #include "Refine.h"
 #include "Smooth.h"
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -77,14 +78,15 @@ int main(int argc, char **argv){
     size_t NNodes = mesh->get_number_nodes();
     size_t NElements = mesh->get_number_elements();
 
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double hx=0.025 + 0.09*mesh->get_coords(i)[0];
         double hy=0.025 + 0.09*mesh->get_coords(i)[1];
         double hz=0.025 + 0.09*mesh->get_coords(i)[2];
-        double m[] =
-        {1.0/pow(hx, 2), 0.0,            0.0,
-            0.0,            1.0/pow(hy, 2), 0.0,
-            0.0,            0.0,            1.0/pow(hz, 2)};
+        double m[] = {
+            1.0/pow(hx, 2), 0.0,            0.0,
+	    1.0/pow(hy, 2), 0.0,
+	    1.0/pow(hz, 2)
+        };
         metric_field.set_metric(m, i);
     }
     metric_field.apply_nelements(NElements);
@@ -94,8 +96,8 @@ int main(int argc, char **argv){
     double qmin = mesh->get_qmin();
 
     if(rank==0) std::cout<<"Initial quality:\n"
-        <<"Quality mean:  "<<qmean<<std::endl
-            <<"Quality min:   "<<qmin<<std::endl;
+                             <<"Quality mean:  "<<qmean<<std::endl
+                             <<"Quality min:   "<<qmin<<std::endl;
     VTKTools<double>::export_vtu("../data/test_mpi_adapt_3d-initial", mesh);
 
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -110,7 +112,7 @@ int main(int argc, char **argv){
     double L_max = mesh->maximal_edge_length();
     double alpha = 0.95; //sqrt(2.0)*0.5;
     Refine<double, 3> refine(*mesh);
-    for(size_t i=0;i<20;i++){
+    for(size_t i=0; i<20; i++) {
         double L_ref = std::max(alpha*L_max, L_up);
 
         refine.refine(L_ref);

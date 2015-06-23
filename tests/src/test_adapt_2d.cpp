@@ -59,7 +59,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -71,7 +72,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -88,7 +89,7 @@ int main(int argc, char **argv){
     double eta=0.001;
 
     std::vector<double> psi(NNodes);
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0]-1;
         double y = 2*mesh->get_coords(i)[1]-1;
 
@@ -98,7 +99,7 @@ int main(int argc, char **argv){
     metric_field.add_field(&(psi[0]), eta, 2);
     metric_field.update_mesh();
 
-    if(verbose){
+    if(verbose) {
         std::cout<<"Initial quality:\n";
         mesh->verify();
     }
@@ -116,13 +117,13 @@ int main(int argc, char **argv){
 
     double L_max = mesh->maximal_edge_length();
     double alpha = sqrt(2.0)/2;
-    for(size_t i=0;i<20;i++){
+    for(size_t i=0; i<20; i++) {
         double L_ref = std::max(alpha*L_max, L_up);
 
         tic = get_wtime();
         coarsen.coarsen(L_low, L_ref);
         time_coarsen += get_wtime() - tic;
-        if(verbose){
+        if(verbose) {
             std::cout<<"INFO: Verify quality after coarsen.\n";
             mesh->verify();
         }
@@ -130,7 +131,7 @@ int main(int argc, char **argv){
         tic = get_wtime();
         swapping.swap(0.7);
         time_swap += get_wtime() - tic;
-        if(verbose){
+        if(verbose) {
             std::cout<<"INFO: Verify quality after swapping.\n";
             mesh->verify();
         }
@@ -138,7 +139,7 @@ int main(int argc, char **argv){
         tic = get_wtime();
         refine.refine(L_ref);
         time_refine += get_wtime() - tic;
-        if(verbose){
+        if(verbose) {
             std::cout<<"INFO: Verify quality after refinement.\n";
             mesh->verify();
         }
@@ -153,7 +154,7 @@ int main(int argc, char **argv){
     mesh->defragment();
     time_defrag = get_wtime()-time_defrag;
 
-    if(verbose){
+    if(verbose) {
         if(rank==0)
             std::cout<<"Basic quality:\n";
         mesh->verify();
@@ -168,7 +169,7 @@ int main(int argc, char **argv){
 
     time_adapt = get_wtime()-time_adapt;
 
-    if(verbose){
+    if(verbose) {
         if(rank==0)
             std::cout<<"After optimisation based smoothing:\n";
         mesh->verify();
@@ -176,7 +177,7 @@ int main(int argc, char **argv){
 
     NNodes = mesh->get_number_nodes();
     psi.resize(NNodes);
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0]-1;
         double y = 2*mesh->get_coords(i)[1]-1;
 
@@ -193,17 +194,17 @@ int main(int argc, char **argv){
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
         double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
         std::cout<<"BENCHMARK: "
-            <<std::setw(12)<<time_coarsen<<" "
-            <<std::setw(11)<<time_refine<<" "
-            <<std::setw(9)<<time_swap<<" "
-            <<std::setw(11)<<time_smooth<<" "
-            <<std::setw(11)<<time_defrag<<" "
-            <<std::setw(10)<<time_adapt<<" "
-            <<std::setw(10)<<time_other<<"\n";
+                 <<std::setw(12)<<time_coarsen<<" "
+                 <<std::setw(11)<<time_refine<<" "
+                 <<std::setw(9)<<time_swap<<" "
+                 <<std::setw(11)<<time_smooth<<" "
+                 <<std::setw(11)<<time_defrag<<" "
+                 <<std::setw(10)<<time_adapt<<" "
+                 <<std::setw(10)<<time_other<<"\n";
 
         std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
         if((qmean>0.8)&&(qmin>0.1))

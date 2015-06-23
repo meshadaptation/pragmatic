@@ -5,8 +5,8 @@ if (NOT(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR}))
   add_custom_target(test
   make
   COMMAND mkdir -p data
-  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/data/* data/
-  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
+  COMMAND cp ${CMAKE_SOURCE_DIR}/tests/data/* data/
+  COMMAND cp ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
   COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
 else()
   add_custom_target(test

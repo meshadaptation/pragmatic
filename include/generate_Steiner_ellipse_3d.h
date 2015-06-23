@@ -9,7 +9,7 @@
 namespace pragmatic
 {
 
-    void generate_Steiner_ellipse(const double *x1, const double *x2, const double *x3, const double *x4, double *sm);
+void generate_Steiner_ellipse(const double *x1, const double *x2, const double *x3, const double *x4, double *sm);
 
 }
 

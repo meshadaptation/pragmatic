@@ -54,7 +54,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
@@ -63,7 +64,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -74,14 +75,15 @@ int main(int argc, char **argv){
     MetricField<double,3> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    for(size_t i=0;i<NNodes;i++){
-        double m[] =
-        {0.5, 
-            0.0, 
+    for(size_t i=0; i<NNodes; i++) {
+        double m[] = {
+            0.5,
             0.0,
-            0.5, 
             0.0,
-            0.5};
+            0.5,
+            0.0,
+            0.5
+        };
 
         metric_field.set_metric(m, i);
     }
@@ -101,16 +103,16 @@ int main(int argc, char **argv){
 
     mesh->defragment();
 
-    int nelements = mesh->get_number_elements();  
+    int nelements = mesh->get_number_elements();
 
-    if(verbose){
+    if(verbose) {
         double qmean = mesh->get_qmean();
         double qmin = mesh->get_qmin();
 
         std::cout<<"Coarsen loop time:     "<<toc-tic<<std::endl
-            <<"Number elements:       "<<nelements<<std::endl
-            <<"Quality mean:          "<<qmean<<std::endl
-            <<"Quality min:           "<<qmin<<std::endl;
+                 <<"Number elements:       "<<nelements<<std::endl
+                 <<"Quality mean:          "<<qmean<<std::endl
+                 <<"Quality min:           "<<qmin<<std::endl;
 
         long double area = mesh->calculate_area();
         long double volume = mesh->calculate_volume();

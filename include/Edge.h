@@ -40,144 +40,163 @@
 
 /*! \brief Mesh edge object.
 */
-template<typename index_t> class Edge{
-    public:
-        /*! Constructor
-         * @param nid0 Node-Id 0
-         * @param nid1 Node-Id 1
-         */
-        Edge(index_t nid0, index_t nid1){
-            edge.first = std::min(nid0, nid1);
-            edge.second = std::max(nid0, nid1);
-        }
+template<typename index_t> class Edge
+{
+public:
+    /*! Constructor
+     * @param nid0 Node-Id 0
+     * @param nid1 Node-Id 1
+     */
+    Edge(index_t nid0, index_t nid1)
+    {
+        edge.first = std::min(nid0, nid1);
+        edge.second = std::max(nid0, nid1);
+    }
 
-        /*! Copy constructor
-         * @param in Edge object.
-         */
-        Edge(const Edge& in){
-            *this = in;
-        }
+    /*! Copy constructor
+     * @param in Edge object.
+     */
+    Edge(const Edge& in)
+    {
+        *this = in;
+    }
 
-        /// Destructor
-        ~Edge(){}
+    /// Destructor
+    ~Edge() {}
 
-        /// Assignment operator
-        Edge& operator=(const Edge &in){
-            edge = in.edge;
+    /// Assignment operator
+    Edge& operator=(const Edge &in)
+    {
+        edge = in.edge;
 
-            return *this;
-        }
+        return *this;
+    }
 
-        /// Equality operator.
-        bool operator==(const Edge& in) const{
-            return this->edge == in.edge;
-        }
+    /// Equality operator.
+    bool operator==(const Edge& in) const
+    {
+        return this->edge == in.edge;
+    }
 
-        /// Inequality operator.
-        bool operator!=(const Edge& in) const{
-            return this->edge != in.edge;
-        }
+    /// Inequality operator.
+    bool operator!=(const Edge& in) const
+    {
+        return this->edge != in.edge;
+    }
 
-        /// Less-than operator
-        bool operator<(const Edge& in) const{
-            return this->edge < in.edge;
-        }
+    /// Less-than operator
+    bool operator<(const Edge& in) const
+    {
+        return this->edge < in.edge;
+    }
 
-        index_t connected(const Edge& in) const{
-            if((edge.first==in.edge.first)||(edge.first==in.edge.second))
-                return edge.first;
-            else if((edge.second==in.edge.first)||(edge.second==in.edge.second))
-                return edge.second;
-            return -1;
-        }
+    index_t connected(const Edge& in) const
+    {
+        if((edge.first==in.edge.first)||(edge.first==in.edge.second))
+            return edge.first;
+        else if((edge.second==in.edge.first)||(edge.second==in.edge.second))
+            return edge.second;
+        return -1;
+    }
 
-        bool contains(index_t nid) const{
-            return (nid==edge.first)||(nid==edge.second);
-        }
+    bool contains(index_t nid) const
+    {
+        return (nid==edge.first)||(nid==edge.second);
+    }
 
-        template<typename _real_t> friend class Mesh;
-        template<typename _real_t, int _dim> friend class Coarsen;
-        template<typename _real_t, int _dim> friend class Swapping;
-        template<typename _real_t, int _dim> friend class Refine;
+    template<typename _real_t> friend class Mesh;
+    template<typename _real_t, int _dim> friend class Coarsen;
+    template<typename _real_t, int _dim> friend class Swapping;
+    template<typename _real_t, int _dim> friend class Refine;
 
-    private:
+private:
 
-        std::pair<index_t, index_t> edge;
+    std::pair<index_t, index_t> edge;
 };
 
-template<typename index_t> class DirectedEdge{
-    public:
-        /*! Constructor
-         * @param nid0 Node-Id 0
-         * @param nid1 Node-Id 1
-         */
-        DirectedEdge(index_t nid0, index_t nid1){
-            edge.first = nid0;
-            edge.second = nid1;
-        }
+template<typename index_t> class DirectedEdge
+{
+public:
+    /*! Constructor
+     * @param nid0 Node-Id 0
+     * @param nid1 Node-Id 1
+     */
+    DirectedEdge(index_t nid0, index_t nid1)
+    {
+        edge.first = nid0;
+        edge.second = nid1;
+    }
 
-        DirectedEdge(index_t nid0, index_t nid1, index_t nid){
-            edge.first = nid0;
-            edge.second = nid1;
-            id = nid;
-        }
+    DirectedEdge(index_t nid0, index_t nid1, index_t nid)
+    {
+        edge.first = nid0;
+        edge.second = nid1;
+        id = nid;
+    }
 
-        /*! Copy constructor
-         * @param in DirectedEdge object.
-         */
-        DirectedEdge(const DirectedEdge& in){
-            *this = in;
-        }
+    /*! Copy constructor
+     * @param in DirectedEdge object.
+     */
+    DirectedEdge(const DirectedEdge& in)
+    {
+        *this = in;
+    }
 
-        // Default constructor.
-        DirectedEdge(){}
+    // Default constructor.
+    DirectedEdge() {}
 
-        /// Destructor
-        ~DirectedEdge(){}
+    /// Destructor
+    ~DirectedEdge() {}
 
-        /// Assignment operator
-        DirectedEdge& operator=(const DirectedEdge &in){
-            edge = in.edge;
-            id = in.id;
+    /// Assignment operator
+    DirectedEdge& operator=(const DirectedEdge &in)
+    {
+        edge = in.edge;
+        id = in.id;
 
-            return *this;
-        }
+        return *this;
+    }
 
-        /// Equality operator.
-        bool operator==(const DirectedEdge& in) const{
-            return this->edge == in.edge;
-        }
+    /// Equality operator.
+    bool operator==(const DirectedEdge& in) const
+    {
+        return this->edge == in.edge;
+    }
 
-        /// Inequality operator.
-        bool operator!=(const DirectedEdge& in) const{
-            return this->edge != in.edge;
-        }
+    /// Inequality operator.
+    bool operator!=(const DirectedEdge& in) const
+    {
+        return this->edge != in.edge;
+    }
 
-        /// Less-than operator
-        bool operator<(const DirectedEdge& in) const{
-            return this->edge < in.edge;
-        }
+    /// Less-than operator
+    bool operator<(const DirectedEdge& in) const
+    {
+        return this->edge < in.edge;
+    }
 
-        index_t connected(const DirectedEdge& in) const{
-            if((edge.first==in.edge.first)||(edge.first==in.edge.second))
-                return edge.first;
-            else if((edge.second==in.edge.first)||(edge.second==in.edge.second))
-                return edge.second;
-            return -1;
-        }
+    index_t connected(const DirectedEdge& in) const
+    {
+        if((edge.first==in.edge.first)||(edge.first==in.edge.second))
+            return edge.first;
+        else if((edge.second==in.edge.first)||(edge.second==in.edge.second))
+            return edge.second;
+        return -1;
+    }
 
-        bool contains(index_t nid) const{
-            return (nid==edge.first)||(nid==edge.second);
-        }
+    bool contains(index_t nid) const
+    {
+        return (nid==edge.first)||(nid==edge.second);
+    }
 
-        template<typename _real_t> friend class Mesh;
-        template<typename _real_t, int _dim> friend class Coarsen;
-        template<typename _real_t, int _dim> friend class Swapping;
-        template<typename _real_t, int _dim> friend class Refine;
+    template<typename _real_t> friend class Mesh;
+    template<typename _real_t, int _dim> friend class Coarsen;
+    template<typename _real_t, int _dim> friend class Swapping;
+    template<typename _real_t, int _dim> friend class Refine;
 
-    private:
-        index_t id;
-        std::pair<index_t, index_t> edge;
+private:
+    index_t id;
+    std::pair<index_t, index_t> edge;
 };
 
 #endif

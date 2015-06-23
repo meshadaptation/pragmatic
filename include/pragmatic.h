@@ -44,7 +44,7 @@
  * compression). It takes as its input the mesh and a metric tensor
  * field which encodes desired mesh element size anisotropically. The
  * toolkit is written in C++ and has OpenMP and MPI parallel support.
- * 
+ *
  * \section links Useful links:
  * \li Production releases are available from <a href="http://www.openpetascale.org/">Open Petascale Libraries</a>.
  * \li Bleeding edge developer site on <a href="https://launchpad.net/pragmatic">Launchpad</a>.

@@ -55,7 +55,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -67,7 +68,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -81,7 +82,7 @@ int main(int argc, char **argv){
     double eta=0.0001;
 
     std::vector<double> psi(NNodes);
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0]-1;
         double y = 2*mesh->get_coords(i)[1]-1;
 
@@ -96,7 +97,7 @@ int main(int argc, char **argv){
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0;i<3;i++)
+    for(int i=0; i<3; i++)
         adapt.refine(sqrt(2.0));
     double toc = get_wtime();
 
@@ -111,15 +112,15 @@ int main(int argc, char **argv){
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
 
-    if(verbose){
-        int nelements = mesh->get_number_elements();      
+    if(verbose) {
+        int nelements = mesh->get_number_elements();
         if(rank==0)
             std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                <<"Number elements:      "<<nelements<<std::endl
-                <<"Perimeter:            "<<perimeter<<std::endl;;
+                     <<"Number elements:      "<<nelements<<std::endl
+                     <<"Perimeter:            "<<perimeter<<std::endl;;
     }
 
-    if(rank==0){
+    if(rank==0) {
         long double ideal_area(1), ideal_perimeter(4);
         std::cout<<"Expecting perimeter == 4: ";
         if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)

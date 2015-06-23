@@ -59,7 +59,8 @@
 #include <mpi.h>
 #endif
 
-void cout_quality(const Mesh<double> *mesh, std::string operation){
+void cout_quality(const Mesh<double> *mesh, std::string operation)
+{
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();
 
@@ -72,7 +73,8 @@ void cout_quality(const Mesh<double> *mesh, std::string operation){
         std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
 }
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -84,7 +86,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -99,22 +101,23 @@ int main(int argc, char **argv){
     size_t NNodes = mesh->get_number_nodes();
     double eta=0.05;
 
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0] - 1;
         double y = 2*mesh->get_coords(i)[1];
 
         double m[] = {0.2*(-8*x + 4*sin(5*y))/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) - 250.0*sin(50*x),  2.0*(2*x - sin(5*y))*cos(5*y)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2),                                                        0,
-            -5.0*(2*x - sin(5*y))*pow(cos(5*y), 2)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) + 2.5*sin(5*y)/(pow(2*x - sin(5*y), 2) + 0.01), 0,
-            0};
+                      -5.0*(2*x - sin(5*y))*pow(cos(5*y), 2)/pow(pow(2*x - sin(5*y), 2) + 0.01, 2) + 2.5*sin(5*y)/(pow(2*x - sin(5*y), 2) + 0.01), 0,
+                      0
+                     };
 
 
-        for(int j=0;j<5;j++)
+        for(int j=0; j<5; j++)
             m[j]/=eta;
         m[5] = 1.0;
 
         metric_field.set_metric(m, i);
     }
-    metric_field.apply_max_aspect_ratio(10);  
+    metric_field.apply_max_aspect_ratio(10);
     metric_field.update_mesh();
 
     VTKTools<double>::export_vtu("../data/test_adapt_3d-initial", mesh);
@@ -139,7 +142,7 @@ int main(int argc, char **argv){
     if(verbose)
         std::cout<<"Phase I\n";
 
-    for(size_t i=0;i<10;i++){
+    for(size_t i=0; i<10; i++) {
         // Coarsen
         tic = get_wtime();
         coarsen.coarsen(L_low, L_ref);
@@ -184,7 +187,7 @@ int main(int argc, char **argv){
     if(verbose)
         std::cout<<"Phase II\n";
 
-    for(size_t i=0;i<5;i++){
+    for(size_t i=0; i<5; i++) {
         tic = get_wtime();
         coarsen.coarsen(L_up, L_up);
         time_coarsen += get_wtime() - tic;
@@ -208,7 +211,7 @@ int main(int argc, char **argv){
     mesh->defragment();
     time_defrag = get_wtime()-time_defrag;
 
-    if(verbose){
+    if(verbose) {
         mesh->verify();
 
         VTKTools<double>::export_vtu("../data/test_adapt_3d-basic", mesh);
@@ -224,7 +227,7 @@ int main(int argc, char **argv){
 
     time_adapt = get_wtime()-time_adapt;
 
-    if(verbose){
+    if(verbose) {
         if(rank==0)
             std::cout<<"After optimisation based smoothing:\n";
         mesh->verify();
@@ -240,17 +243,17 @@ int main(int argc, char **argv){
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"BENCHMARK: time_coarsen time_refine time_swap time_smooth time_defrag time_adapt time_other\n";
         double time_other = (time_adapt-(time_coarsen+time_refine+time_swap+time_smooth+time_defrag));
         std::cout<<"BENCHMARK: "
-            <<std::setw(12)<<time_coarsen<<" "
-            <<std::setw(11)<<time_refine<<" "
-            <<std::setw(9)<<time_swap<<" "
-            <<std::setw(11)<<time_smooth<<" "
-            <<std::setw(11)<<time_defrag<<" "
-            <<std::setw(10)<<time_adapt<<" "
-            <<std::setw(10)<<time_other<<"\n";
+                 <<std::setw(12)<<time_coarsen<<" "
+                 <<std::setw(11)<<time_refine<<" "
+                 <<std::setw(9)<<time_swap<<" "
+                 <<std::setw(11)<<time_smooth<<" "
+                 <<std::setw(11)<<time_defrag<<" "
+                 <<std::setw(10)<<time_adapt<<" "
+                 <<std::setw(10)<<time_other<<"\n";
 
         std::cout<<"Expecting qmean>0.3, qmin>0.01: ";
         if((qmean>0.3)&&(qmin>0.01))

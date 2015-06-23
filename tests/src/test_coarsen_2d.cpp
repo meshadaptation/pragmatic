@@ -58,7 +58,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -69,7 +70,7 @@ int main(int argc, char **argv){
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -80,7 +81,7 @@ int main(int argc, char **argv){
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double m[] = {0.5, 0.0, 0.5};
         metric_field.set_metric(m, i);
     }
@@ -102,19 +103,19 @@ int main(int argc, char **argv){
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
 
-    if(verbose){
+    if(verbose) {
 
         if(rank==0)
             std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-                <<"Number elements:      "<<nelements<<std::endl
-                <<"Perimeter:            "<<perimeter<<std::endl;
+                     <<"Number elements:      "<<nelements<<std::endl
+                     <<"Perimeter:            "<<perimeter<<std::endl;
     }
 
     VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Expecting 2 elements: ";
         if(nelements==2)
             std::cout<<"pass"<<std::endl;

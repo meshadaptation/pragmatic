@@ -56,7 +56,8 @@
 #include <mpi.h>
 #endif
 
-void test_block(double qmean, double qmin, long double perimeter, long double area, double qtol=0.01){
+void test_block(double qmean, double qmin, long double perimeter, long double area, double qtol=0.01)
+{
     long double perimeter_exact = 4;
     std::cout<<"Checking perimeter == 4: ";
     if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
@@ -72,17 +73,18 @@ void test_block(double qmean, double qmin, long double perimeter, long double ar
         std::cout<<"fail ("<<area<<")"<<std::endl;
 
     std::cout<<"Checking quality between bounds - (min>"<<qtol<<"): ";
-    if(qmin>qtol){
+    if(qmin>qtol) {
         std::cout<<"pass"<<std::endl;
-    }else{
+    } else {
         std::cout<<"fail"<<std::endl
-            <<"Quality mean:     "<<qmean<<std::endl
-            <<"Quality min:      "<<qmin<<std::endl;
+                 <<"Quality mean:     "<<qmean<<std::endl
+                 <<"Quality min:      "<<qmin<<std::endl;
     }
 }
 
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -105,7 +107,7 @@ int main(int argc, char **argv){
 
     double h1 = 1.0/50;
     double h0 = 10.0/50;
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         // Want x,y ranging from -1, 1
         double x = 2*mesh->get_coords(i)[0] - 1;
         double y = 2*mesh->get_coords(i)[1] - 1;
@@ -130,7 +132,7 @@ int main(int argc, char **argv){
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, perimeter, area, 0.0);
     }
@@ -148,7 +150,7 @@ int main(int argc, char **argv){
     perimeter = mesh->calculate_perimeter();
     area = mesh->calculate_area();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, perimeter, area);
     }
@@ -169,7 +171,7 @@ int main(int argc, char **argv){
     perimeter = mesh->calculate_perimeter();
     area = mesh->calculate_area();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Linf smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, perimeter, area);
     }

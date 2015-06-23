@@ -59,7 +59,8 @@
 #include "Refine.h"
 #include "ticker.h"
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
@@ -68,7 +69,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -86,10 +87,10 @@ int main(int argc, char **argv){
     size_t NNodes = mesh->get_number_nodes();
 
     std::vector<double> psi(NNodes);
-    for(size_t i=0;i<NNodes;i++)
+    for(size_t i=0; i<NNodes; i++)
         psi[i] =
-            pow(mesh->get_coords(i)[0], 4) + 
-            pow(mesh->get_coords(i)[1], 4) + 
+            pow(mesh->get_coords(i)[0], 4) +
+            pow(mesh->get_coords(i)[1], 4) +
             pow(mesh->get_coords(i)[2], 4);
 
     metric_field.add_field(&(psi[0]), 0.001);
@@ -98,7 +99,7 @@ int main(int argc, char **argv){
     Refine<double,3> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0;i<2;i++)
+    for(int i=0; i<2; i++)
         adapt.refine(sqrt(2.0));
     double toc = get_wtime();
 
@@ -111,7 +112,7 @@ int main(int argc, char **argv){
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Refine time = "<<toc-tic<<std::endl;
         std::cout<<"pass"<<std::endl;
     }

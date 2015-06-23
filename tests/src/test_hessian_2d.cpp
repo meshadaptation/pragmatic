@@ -53,7 +53,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
@@ -69,10 +70,10 @@ int main(int argc, char **argv){
 
     // Set up field - use first touch policy
     std::vector<double> psi(NNodes);
-#pragma omp parallel
+    #pragma omp parallel
     {
-#pragma omp for schedule(static)
-        for(size_t i=0;i<NNodes;i++)
+        #pragma omp for schedule(static)
+        for(size_t i=0; i<NNodes; i++)
             psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
     }
 
@@ -88,14 +89,14 @@ int main(int argc, char **argv){
     metric_field.get_metric(&(metric[0]));
 
     double rms[] = {0., 0., 0.};
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         rms[0] += pow(2.0-metric[i*3  ], 2);
         rms[1] += pow(    metric[i*3+1], 2);
         rms[2] += pow(2.0-metric[i*3+2], 2);
     }
 
     double max_rms = 0;
-    for(size_t i=0;i<3;i++){
+    for(size_t i=0; i<3; i++) {
         rms[i] = sqrt(rms[i]/NNodes);
         max_rms = std::max(max_rms, rms[i]);
     }
@@ -104,7 +105,7 @@ int main(int argc, char **argv){
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh, &(psi[0]));
 
     std::cout<<"Hessian :: loop time = "<<toc-tic<<std::endl
-        <<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<std::endl;
+             <<"RMS = "<<rms[0]<<", "<<rms[1]<<", "<<rms[2]<<std::endl;
     if(max_rms>0.01)
         std::cout<<"fail\n";
     else

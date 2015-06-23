@@ -56,7 +56,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -68,7 +69,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -82,7 +83,7 @@ int main(int argc, char **argv){
     double eta=0.0001;
 
     std::vector<double> psi(NNodes);
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0]-1;
         double y = 2*mesh->get_coords(i)[1]-1;
 
@@ -101,7 +102,7 @@ int main(int argc, char **argv){
     swapping.swap(0.95);
     double toc = get_wtime();
 
-    if(!mesh->verify()){
+    if(!mesh->verify()) {
         mesh->defragment();
 
         VTKTools<double>::export_vtu("../data/test_adapt_2d-swapping", mesh);
@@ -116,11 +117,11 @@ int main(int argc, char **argv){
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
 
-    if(verbose&&rank==0){
+    if(verbose&&rank==0) {
         std::cout<<"Swap loop time: "<<toc-tic<<std::endl
-            <<"Quality mean:   "<<qmean<<std::endl
-            <<"Quality min:    "<<qmin<<std::endl
-            <<"Perimeter:      "<<perimeter<<std::endl;;
+                 <<"Quality mean:   "<<qmean<<std::endl
+                 <<"Quality min:    "<<qmin<<std::endl
+                 <<"Perimeter:      "<<perimeter<<std::endl;;
     }
 
     long double ideal_area(1), ideal_perimeter(4);

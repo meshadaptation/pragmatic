@@ -47,9 +47,10 @@
 
 template <typename DATATYPE, int block>
 void halo_update(MPI_Comm comm,
-        const std::vector< std::vector<index_t> > &send,
-        const std::vector< std::vector<index_t> > &recv,
-        std::vector<DATATYPE> &vec){
+                 const std::vector< std::vector<index_t> > &send,
+                 const std::vector< std::vector<index_t> > &recv,
+                 std::vector<DATATYPE> &vec)
+{
     int num_processes;
     MPI_Comm_size(comm, &num_processes);
     if(num_processes<2)
@@ -68,10 +69,10 @@ void halo_update(MPI_Comm comm,
 
     // Setup non-blocking receives.
     std::vector< std::vector<DATATYPE> > recv_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-        if((i==rank)||(recv[i].size()==0)){
+    for(int i=0; i<num_processes; i++) {
+        if((i==rank)||(recv[i].size()==0)) {
             request[i] =  MPI_REQUEST_NULL;
-        }else{
+        } else {
             recv_buff[i].resize(recv[i].size()*block);
             MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), wrap.mpi_type, i, 0, comm, &(request[i]));
         }
@@ -79,12 +80,12 @@ void halo_update(MPI_Comm comm,
 
     // Non-blocking sends.
     std::vector< std::vector<DATATYPE> > send_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-        if((i==rank)||(send[i].size()==0)){
+    for(int i=0; i<num_processes; i++) {
+        if((i==rank)||(send[i].size()==0)) {
             request[num_processes+i] = MPI_REQUEST_NULL;
-        }else{
-            for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it)
-                for(int j=0;j<block;j++){
+        } else {
+            for(typename std::vector<index_t>::const_iterator it=send[i].begin(); it!=send[i].end(); ++it)
+                for(int j=0; j<block; j++) {
                     send_buff[i].push_back(vec[(*it)*block+j]);
                 }
             MPI_Isend(&(send_buff[i][0]), send_buff[i].size(), wrap.mpi_type, i, 0, comm, &(request[num_processes+i]));
@@ -95,10 +96,10 @@ void halo_update(MPI_Comm comm,
     MPI_Waitall(num_processes, &(request[0]), &(status[0]));
     MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
 
-    for(int i=0;i<num_processes;i++){
+    for(int i=0; i<num_processes; i++) {
         int k=0;
-        for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k)
-            for(int j=0;j<block;j++)
+        for(typename std::vector<index_t>::const_iterator it=recv[i].begin(); it!=recv[i].end(); ++it, ++k)
+            for(int j=0; j<block; j++)
                 vec[(*it)*block+j] = recv_buff[i][k*block+j];
     }
 
@@ -107,9 +108,10 @@ void halo_update(MPI_Comm comm,
 
 template <typename DATATYPE, int block0, int block1>
 void halo_update(MPI_Comm comm,
-        const std::vector< std::vector<index_t> > &send,
-        const std::vector< std::vector<index_t> > &recv,
-        std::vector<DATATYPE> &vec0, std::vector<DATATYPE> &vec1){
+                 const std::vector< std::vector<index_t> > &send,
+                 const std::vector< std::vector<index_t> > &recv,
+                 std::vector<DATATYPE> &vec0, std::vector<DATATYPE> &vec1)
+{
     int num_processes;
     MPI_Comm_size(comm, &num_processes);
     if(num_processes<2)
@@ -128,11 +130,11 @@ void halo_update(MPI_Comm comm,
 
     // Setup non-blocking receives.
     std::vector< std::vector<DATATYPE> > recv_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
+    for(int i=0; i<num_processes; i++) {
         int msg_size = recv[i].size()*(block0+block1);
-        if((i==rank)||(msg_size==0)){
+        if((i==rank)||(msg_size==0)) {
             request[i] =  MPI_REQUEST_NULL;
-        }else{
+        } else {
             recv_buff[i].resize(msg_size);
             MPI_Irecv(&(recv_buff[i][0]), msg_size, wrap.mpi_type, i, 0, comm, &(request[i]));
         }
@@ -140,15 +142,15 @@ void halo_update(MPI_Comm comm,
 
     // Non-blocking sends.
     std::vector< std::vector<DATATYPE> > send_buff(num_processes);
-    for(int i=0;i<num_processes;i++){
-        if((i==rank)||(send[i].size()==0)){
+    for(int i=0; i<num_processes; i++) {
+        if((i==rank)||(send[i].size()==0)) {
             request[num_processes+i] = MPI_REQUEST_NULL;
-        }else{
-            for(typename std::vector<index_t>::const_iterator it=send[i].begin();it!=send[i].end();++it){
-                for(int j=0;j<block0;j++){
+        } else {
+            for(typename std::vector<index_t>::const_iterator it=send[i].begin(); it!=send[i].end(); ++it) {
+                for(int j=0; j<block0; j++) {
                     send_buff[i].push_back(vec0[(*it)*block0+j]);
                 }
-                for(int j=0;j<block1;j++){
+                for(int j=0; j<block1; j++) {
                     send_buff[i].push_back(vec1[(*it)*block1+j]);
                 }
             }
@@ -161,12 +163,12 @@ void halo_update(MPI_Comm comm,
     MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
 
     int block01 = block0+block1;
-    for(int i=0;i<num_processes;i++){
+    for(int i=0; i<num_processes; i++) {
         int k=0;
-        for(typename std::vector<index_t>::const_iterator it=recv[i].begin();it!=recv[i].end();++it, ++k){
-            for(int j=0;j<block0;j++)
+        for(typename std::vector<index_t>::const_iterator it=recv[i].begin(); it!=recv[i].end(); ++it, ++k) {
+            for(int j=0; j<block0; j++)
                 vec0[(*it)*block0+j] = recv_buff[i][k*block01+j];
-            for(int j=0;j<block1;j++)
+            for(int j=0; j<block1; j++)
                 vec1[(*it)*block1+j] = recv_buff[i][k*block01+block0+j];
         }
     }

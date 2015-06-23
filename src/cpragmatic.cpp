@@ -53,11 +53,13 @@ static void *_pragmatic_metric_field=NULL;
 
 extern "C" {
 #ifdef HAVE_VTK
-    void pragmatic_dump(const char *filename){
+    void pragmatic_dump(const char *filename)
+    {
         VTKTools<double>::export_vtu(filename, (Mesh<double>*)_pragmatic_mesh);
     }
 
-    void pragmatic_dump_debug(){
+    void pragmatic_dump_debug()
+    {
         pragmatic_dump("dump\0");
     }
 #endif
@@ -72,8 +74,9 @@ extern "C" {
       @param [in] x x coordinate array
       @param [in] y y coordinate array
       */
-    void pragmatic_2d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y){
-        if(_pragmatic_mesh!=NULL){
+    void pragmatic_2d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y)
+    {
+        if(_pragmatic_mesh!=NULL) {
             throw new std::string("PRAgMaTIc: only one mesh can be adapted at a time");
         }
 
@@ -93,7 +96,8 @@ extern "C" {
       @param [in] y y coordinate array
       @param [in] z z coordinate array
       */
-    void pragmatic_3d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z){
+    void pragmatic_3d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z)
+    {
         assert(_pragmatic_mesh==NULL);
         assert(_pragmatic_metric_field==NULL);
 
@@ -105,7 +109,8 @@ extern "C" {
     /** Initialise pragmatic with name of VTK file to be adapted.
     */
 #ifdef HAVE_VTK
-    void pragmatic_vtk_init(const char *filename){
+    void pragmatic_vtk_init(const char *filename)
+    {
         assert(_pragmatic_mesh==NULL);
         assert(_pragmatic_metric_field==NULL);
 
@@ -125,26 +130,27 @@ extern "C" {
       Mathematics of Computation, Volume 76, Number 257, January
       2007. Set to -1 to default to absolute error measure.
       */
-    void pragmatic_add_field(const double *psi, const double *error, int *pnorm){
+    void pragmatic_add_field(const double *psi, const double *error, int *pnorm)
+    {
         assert(_pragmatic_mesh!=NULL);
 
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
-        if(_pragmatic_metric_field==NULL){
-            if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
+        if(_pragmatic_metric_field==NULL) {
+            if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
                 MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
                 metric_field->add_field(psi, *error, *pnorm);
                 metric_field->update_mesh();
 
                 _pragmatic_metric_field = metric_field;
-            }else{
+            } else {
                 MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
                 metric_field->add_field(psi, *error, *pnorm);
                 metric_field->update_mesh();
 
                 _pragmatic_metric_field = metric_field;
             }
-        }else{
+        } else {
             std::cerr<<"WARNING: Fortran interface currently only supports adding a single field.\n";
         }
     }
@@ -153,26 +159,27 @@ extern "C" {
 
       @param [in] metric Metric tensor field.
       */
-    void pragmatic_set_metric(const double *metric){
+    void pragmatic_set_metric(const double *metric)
+    {
         assert(_pragmatic_mesh!=NULL);
         assert(_pragmatic_metric_field==NULL);
 
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
-        if(_pragmatic_metric_field==NULL){
-            if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
+        if(_pragmatic_metric_field==NULL) {
+            if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
                 MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
                 _pragmatic_metric_field = metric_field;
-            }else{
+            } else {
                 MetricField<double,3> *metric_field = new MetricField<double,3>(*mesh);
                 _pragmatic_metric_field = metric_field;
             }
         }
 
-        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
+        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
             ((MetricField<double,2> *)_pragmatic_metric_field)->set_metric_full(metric);
             ((MetricField<double,2> *)_pragmatic_metric_field)->update_mesh();
-        }else{
+        } else {
             ((MetricField<double,3> *)_pragmatic_metric_field)->set_metric_full(metric);
             ((MetricField<double,3> *)_pragmatic_metric_field)->update_mesh();
         }
@@ -184,7 +191,8 @@ extern "C" {
       @param [in] facets Facet list
       @param [in] ids Boundary ids
       */
-    void pragmatic_set_boundary(const int *nfacets, const int *facets, const int *ids){
+    void pragmatic_set_boundary(const int *nfacets, const int *facets, const int *ids)
+    {
         assert(_pragmatic_mesh!=NULL);
 
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
@@ -193,7 +201,8 @@ extern "C" {
 
     /** Adapt the mesh.
     */
-    void pragmatic_adapt(){
+    void pragmatic_adapt()
+    {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
         const size_t ndims = mesh->get_number_dimensions();
@@ -202,7 +211,7 @@ extern "C" {
         double L_up = sqrt(2.0);
         double L_low = L_up*0.5;
 
-        if(ndims==2){
+        if(ndims==2) {
             Coarsen<double, 2> coarsen(*mesh);
             Smooth<double, 2> smooth(*mesh);
             Refine<double, 2> refine(*mesh);
@@ -211,7 +220,7 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            for(size_t i=0;i<20;i++){
+            for(size_t i=0; i<20; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 coarsen.coarsen(L_low, L_ref);
@@ -228,7 +237,7 @@ extern "C" {
 
             smooth.smart_laplacian(20);
             smooth.optimisation_linf(20);
-        }else{
+        } else {
             Coarsen<double, 3> coarsen(*mesh);
             Smooth<double, 3> smooth(*mesh);
             Refine<double, 3> refine(*mesh);
@@ -239,7 +248,7 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            for(size_t i=0;i<10;i++){
+            for(size_t i=0; i<10; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
@@ -264,39 +273,43 @@ extern "C" {
       @param [out] NNodes
       @param [out] NElements
       */
-    void pragmatic_get_info(int *NNodes, int *NElements){
+    void pragmatic_get_info(int *NNodes, int *NElements)
+    {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
         *NNodes = mesh->get_number_nodes();
         *NElements = mesh->get_number_elements();
     }
 
-    void pragmatic_get_coords_2d(double *x, double *y){
+    void pragmatic_get_coords_2d(double *x, double *y)
+    {
         size_t NNodes = ((Mesh<double> *)_pragmatic_mesh)->get_number_nodes();
-        for(size_t i=0;i<NNodes;i++){
+        for(size_t i=0; i<NNodes; i++) {
             x[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[0];
             y[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[1];
         }
     }
 
-    void pragmatic_get_coords_3d(double *x, double *y, double *z){
+    void pragmatic_get_coords_3d(double *x, double *y, double *z)
+    {
         size_t NNodes = ((Mesh<double> *)_pragmatic_mesh)->get_number_nodes();
-        for(size_t i=0;i<NNodes;i++){
+        for(size_t i=0; i<NNodes; i++) {
             x[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[0];
             y[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[1];
             z[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[2];
         }
     }
 
-    void pragmatic_get_elements(int *elements){
+    void pragmatic_get_elements(int *elements)
+    {
         const size_t ndims = ((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions();
         const size_t NElements = ((Mesh<double> *)_pragmatic_mesh)->get_number_elements();
         const size_t nloc = (ndims==2)?3:4;
 
-        for(size_t i=0;i<NElements;i++){
+        for(size_t i=0; i<NElements; i++) {
             const int *n=((Mesh<double> *)_pragmatic_mesh)->get_element(i);
 
-            for(size_t j=0;j<nloc;j++){
+            for(size_t j=0; j<nloc; j++) {
                 assert(n[j]>=0);
                 elements[i*nloc+j] = n[j];
             }
@@ -315,19 +328,21 @@ extern "C" {
        lnn2gnn[i] = _lnn2gnn[i];
        }
        */
-    void pragmatic_get_metric(double *metric){
-        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
+    void pragmatic_get_metric(double *metric)
+    {
+        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
             ((MetricField<double,2> *)_pragmatic_metric_field)->get_metric(metric);
-        }else{
+        } else {
             ((MetricField<double,3> *)_pragmatic_metric_field)->get_metric(metric);
         }
     }
 
-    void pragmatic_finalize(){
-        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
+    void pragmatic_finalize()
+    {
+        if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
             if(_pragmatic_metric_field!=NULL)
                 delete (MetricField<double,2> *)_pragmatic_metric_field;
-        }else{
+        } else {
             if(_pragmatic_metric_field!=NULL)
                 delete (MetricField<double,3> *)_pragmatic_metric_field;
         }

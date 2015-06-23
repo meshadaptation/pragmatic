@@ -56,7 +56,8 @@
 #include <mpi.h>
 #endif
 
-void test_block(double qmean, double qmin, long double area, long double volume){
+void test_block(double qmean, double qmin, long double area, long double volume)
+{
     long double ideal_area(6), ideal_volume(1);
 
     std::cout<<"Checking area == 6: ";
@@ -72,7 +73,8 @@ void test_block(double qmean, double qmin, long double area, long double volume)
         std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 }
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -96,7 +98,7 @@ int main(int argc, char **argv){
 
     double h1 = 1.0/20;
     double h0 = 10.0/20;
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         // Want x,y,z ranging from -1, 1
         double x = 2*mesh->get_coords(i)[0] - 1;
         double y = 2*mesh->get_coords(i)[1] - 1;
@@ -105,8 +107,9 @@ int main(int argc, char **argv){
 
         double hx = h0 - (h1-h0)*(d-1);
         double m[] = {1.0/pow(hx, 2), 0,              0,
-            1.0/pow(hx, 2), 0,
-            1.0/pow(hx, 2)};
+                      1.0/pow(hx, 2), 0,
+                      1.0/pow(hx, 2)
+                     };
 
         metric_field.set_metric(m, i);
     }
@@ -118,7 +121,7 @@ int main(int argc, char **argv){
     long double area = mesh->calculate_area();
     long double volume = mesh->calculate_volume();
 
-    if(rank==0){
+    if(rank==0) {
         test_block(qmean, qmin, area, volume);
     }
 
@@ -134,7 +137,7 @@ int main(int argc, char **argv){
     area = mesh->calculate_area();
     volume = mesh->calculate_volume();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, area, volume);
     }
@@ -152,7 +155,7 @@ int main(int argc, char **argv){
     area = mesh->calculate_area();
     volume = mesh->calculate_volume();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, area, volume);
     }
@@ -170,7 +173,7 @@ int main(int argc, char **argv){
     area = mesh->calculate_area();
     volume = mesh->calculate_volume();
 
-    if(rank==0){
+    if(rank==0) {
         std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl;
         test_block(qmean, qmin, area, volume);
     }

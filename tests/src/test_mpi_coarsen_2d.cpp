@@ -56,7 +56,8 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -68,7 +69,7 @@ int main(int argc, char **argv){
 #endif
 
     bool verbose = false;
-    if(argc>1){
+    if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
 
@@ -79,7 +80,7 @@ int main(int argc, char **argv){
     MetricField<double, 2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    for(size_t i=0;i<NNodes;i++){
+    for(size_t i=0; i<NNodes; i++) {
         double m[] = {0.5, 0.0, 0.5};
         metric_field.set_metric(m, i);
     }
@@ -94,7 +95,7 @@ int main(int argc, char **argv){
     adapt.coarsen(L_low, L_up);
     double toc = get_wtime();
 
-    if(!mesh->verify()){
+    if(!mesh->verify()) {
         std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
     }
 
@@ -102,17 +103,17 @@ int main(int argc, char **argv){
 
     int nelements = mesh->get_number_elements();
 
-    if(verbose){
+    if(verbose) {
         if(rank==0)
             std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-                <<"Number elements:      "<<nelements<<std::endl;
+                     <<"Number elements:      "<<nelements<<std::endl;
     }
 
     VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
 
     delete mesh;
 
-    if(rank==0){
+    if(rank==0) {
         if(nelements<=510)
             std::cout<<"pass"<<std::endl;
         else
