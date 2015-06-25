@@ -69,16 +69,14 @@ class UnitTestTimer:
     def __init__(self, min):
         from multiprocessing import Process
         self.minutes = min
-        self.waitsec = 60
+        self.waitsec = 7*60
         self.cp = Process(target=self.run)
 
     def run(self):
         import time
         for i in range(self.minutes):
-            out = "Running for %i minute" %(i)
-            if (i != 1): out = out+"s"
-            print out
             time.sleep(self.waitsec)
+            print "Still running..."
 
     def start(self):
         self.cp.start()
@@ -105,10 +103,10 @@ class UnitTestHarness:
         warntests = []
         failtests = []
 
-        UTTimer = UnitTestTimer(30)
-        UTTimer.start()
-
         for test in self.tests:
+
+            UTTimer = UnitTestTimer(60)
+            UTTimer.start()
 
             exitStatus = test.run()
 
@@ -141,7 +139,7 @@ class UnitTestHarness:
             warncount += W
             failcount += F
 
-        UTTimer.terminate()
+            UTTimer.terminate()
 
         print "  RESULTS"
         print "    Passes:   %d" % passcount
