@@ -25,8 +25,21 @@ DOI: [10.1016/j.procs.2012.04.166](http://dx.doi.org/10.1016/j.procs.2012.04.166
 DOI: [10.1007/978-3-642-23397-5_38](http://dx.doi.org/10.1007/978-3-642-23397-5_38)
 
 # Build
+If you want to build PRAgMaTIc in the source directory, do:
+
 $ cmake .
+
 $ make
+
+If you want to build outside the source directory, do:
+
+$ cd BUILDDIR
+
+$ cmake path/to/source/directory
+
+$ make
+
+where BUILDDIR is the directory in which you want to build PRAgMaTIc, and path/to/source/directory is the absolute path of, or relative path to the source directory.
 
 # Testing
 $ make test
@@ -37,6 +50,10 @@ argument --prefix=/target_location for ./configure. The default
 location is /usr/local.
 
 $ make install
+
+Depending on the target_location you might have to run with sudo rights.
+
+$ sudo make install
 
 # RPM
 A RPM spec file is provided in the source root directory. Typically
