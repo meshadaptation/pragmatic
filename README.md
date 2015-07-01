@@ -24,22 +24,37 @@ DOI: [10.1016/j.procs.2012.04.166](http://dx.doi.org/10.1016/j.procs.2012.04.166
 *Accelerating Anisotropic Mesh Adaptivity on nVIDIA's CUDA Using Texture Interpolation*
 DOI: [10.1007/978-3-642-23397-5_38](http://dx.doi.org/10.1007/978-3-642-23397-5_38)
 
-# Build
-If you want to build PRAgMaTIc in the source directory, do:
+# Configure
+PRAgMaTIc can be configured with a number of custom options, which are shown in the following.
+
+ENABLE_VTK=TRUE|FALSE
+
+ENABLE_MPI=TRUE|FALSE
+
+ENABLE_OPENMP=TRUE|FALSE
+
+These can be set as env variables, or given as command line arguments to cmake, e.g. cmake -DENABLE_MPI=FALSE would disable MPI support. If both of the same option are given, the command line argument is given a higher priority over the env variable.
+
+If neither is given the default value is used for the configuration, which is TRUE for all configure options.
+
+If you want to build PRAgMaTIc in the source directory, do
 
 $ cmake .
 
-$ make
-
-If you want to build outside the source directory, do:
+If you want to build outside the source directory, first change into the directory in which you want to build
 
 $ cd BUILDDIR
 
+then do
+
 $ cmake path/to/source/directory
 
-$ make
-
 where BUILDDIR is the directory in which you want to build PRAgMaTIc, and path/to/source/directory is the absolute path of, or relative path to the source directory.
+
+# Build
+PRAgMaTIc is now ready to be built, simply do
+
+$ make
 
 # Testing
 $ make test
