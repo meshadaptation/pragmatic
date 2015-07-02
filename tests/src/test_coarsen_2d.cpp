@@ -123,7 +123,7 @@ int main(int argc, char **argv)
             std::cout<<"fail"<<std::endl;
 
         long double perimeter_exact(4);
-        std::cout<<"Expecting perimeter = "<<perimeter_exact<<": "<<perimeter<<" ("<<std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<<")\n";
+        std::cout<<"Expecting perimeter = "<<perimeter_exact<<": "<<perimeter<<" ("<<std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<<") ";
         if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
