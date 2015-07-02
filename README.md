@@ -72,6 +72,11 @@ Depending on INSTALLDIR you might have to run with sudo rights.
 
 $ sudo make install
 
+# Examples
+Some examples can be found in SRCDIR/python. Dolfin is required to run them.
+
+Note: PRAgMaTIc needs to be built prior to running the examples.
+
 # DEBIAN
 
 A Debian package is provided. To build a deb simply cd to the source
