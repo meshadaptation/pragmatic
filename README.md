@@ -37,8 +37,7 @@ These can be set as env variables, or given as command line arguments to cmake, 
 
 If neither is given the default value is used for the configuration, which is TRUE for all configure options.
 
-
-Let SRCDIR be the source directory of PRAgMaTIc and BUILDDIR the build directory in which you want to build PRAgMaTIc. E.g. execute
+Let SRCDIR be the source directory of PRAgMaTIc, BUILDDIR the build directory in which you want to build PRAgMaTIc, and INSTALLDIR the directory in which you wish to install PRAgMaTIc. E.g. execute
 
 $ mkdir BUILDDIR
 
@@ -50,24 +49,26 @@ $ cmake path/to/SRCDIR
 
 in which path/to/SRCDIR is the absolute path of, or relative path to the source directory of PRAgMaTIc.
 
+If you want to install PRAgMaTIc to a specific location then specify the target location.
+
+$ cmake -DCMAKE_INSTALL_PREFIX=INSTALLDIR path/to/SRCDIR
+
+The default location is /usr/local.
+
 # Build
-PRAgMaTIc is now ready to be built. Execute
+PRAgMaTIc is now ready to be built. In your BUILDDIR execute
 
 $ make
 
 # Testing
 $ make test
 
-in your BUILDDIR.
-
 # Install
-If you want to install to a specific location then specify the
-argument --prefix=/target_location for ./configure. The default
-location is /usr/local.
+In your BUILDDIR, execute
 
 $ make install
 
-Depending on the target_location you might have to run with sudo rights.
+Depending on INSTALLDIR you might have to run with sudo rights.
 
 $ sudo make install
 
