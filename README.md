@@ -70,15 +70,6 @@ Depending on the target_location you might have to run with sudo rights.
 
 $ sudo make install
 
-# RPM
-A RPM spec file is provided in the source root directory. Typically
-you need to create a tar ball of the source directory and then execute
-rpmbuild, e.g.:
-
-$ rpmbuild -ta pragmatic-0.1.tar.gz 
-
-See rpmbuild documentation for more details.
-
 # DEBIAN
 
 A Debian package is provided. To build a deb simply cd to the source
