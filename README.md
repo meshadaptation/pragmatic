@@ -37,43 +37,43 @@ These can be set as env variables, or given as command line arguments to cmake, 
 
 If neither is given the default value is used for the configuration, which is TRUE for all configure options.
 
-Let SRCDIR be the source directory of PRAgMaTIc, BUILDDIR the build directory in which you want to build PRAgMaTIc, and INSTALLDIR the directory in which you wish to install PRAgMaTIc. E.g. execute
+Let <SRCDIR> be the path to the source directory of PRAgMaTIc, <BUILDDIR> the build directory in which you want to build PRAgMaTIc, and <INSTALLDIR> the directory in which you wish to install PRAgMaTIc. E.g. execute
 
-$ mkdir BUILDDIR
+$ mkdir <BUILDDIR>
 
-$ cd BUILDDIR
+$ cd <BUILDDIR>
 
 Then do
 
-$ cmake path/to/SRCDIR
-
-in which path/to/SRCDIR is the absolute path of, or relative path to the source directory of PRAgMaTIc.
+$ cmake <SRCDIR>
 
 If you want to install PRAgMaTIc to a specific location then specify the target location.
 
-$ cmake -DCMAKE_INSTALL_PREFIX=INSTALLDIR path/to/SRCDIR
+$ cmake -DCMAKE_INSTALL_PREFIX=<INSTALLDIR> <SRCDIR>
 
-The default location is /usr/local.
+The default location for <INSTALLDIR> is /usr/local.
 
 # Build
-PRAgMaTIc is now ready to be built. In your BUILDDIR execute
+PRAgMaTIc is now ready to be built. In your <BUILDDIR> execute
 
 $ make
 
 # Testing
+To build and run tests, execute
+
 $ make test
 
 # Install
-In your BUILDDIR, execute
+In your <BUILDDIR>, execute
 
 $ make install
 
-Depending on INSTALLDIR you might have to run with sudo rights.
+Depending on <INSTALLDIR> you might have to run with sudo rights.
 
 $ sudo make install
 
 # Examples
-Some examples can be found in SRCDIR/python. Dolfin is required to run them.
+Some examples can be found in <SRCDIR>/python. Dolfin is required to run them.
 
 Note: PRAgMaTIc needs to be built prior to running the examples.
 
