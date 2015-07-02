@@ -37,27 +37,28 @@ These can be set as env variables, or given as command line arguments to cmake, 
 
 If neither is given the default value is used for the configuration, which is TRUE for all configure options.
 
-If you want to build PRAgMaTIc in the source directory, do
 
-$ cmake .
+Let SRCDIR be the source directory of PRAgMaTIc and BUILDDIR the build directory in which you want to build PRAgMaTIc. E.g. execute
 
-If you want to build outside the source directory, first change into the directory in which you want to build
+$ mkdir BUILDDIR
 
 $ cd BUILDDIR
 
-then do
+Then do
 
-$ cmake path/to/source/directory
+$ cmake path/to/SRCDIR
 
-where BUILDDIR is the directory in which you want to build PRAgMaTIc, and path/to/source/directory is the absolute path of, or relative path to the source directory.
+in which path/to/SRCDIR is the absolute path of, or relative path to the source directory of PRAgMaTIc.
 
 # Build
-PRAgMaTIc is now ready to be built, simply do
+PRAgMaTIc is now ready to be built. Execute
 
 $ make
 
 # Testing
 $ make test
+
+in your BUILDDIR.
 
 # Install
 If you want to install to a specific location then specify the
