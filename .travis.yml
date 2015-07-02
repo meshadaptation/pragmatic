@@ -25,5 +25,5 @@ script:
   - make
   - cd tests/
   - make
-  - travis_wait make test
+  - make test
 
