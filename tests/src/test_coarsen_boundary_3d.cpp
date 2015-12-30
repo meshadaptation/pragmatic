@@ -88,7 +88,7 @@ int main(int argc, char **argv)
 
     // Benchmark times.
 #ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/bearskull.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box50x50x50.vtu");
     mesh->create_boundary();
     mesh->defragment();
 
