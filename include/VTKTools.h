@@ -113,6 +113,10 @@ template<typename real_t> class VTKTools{
       ug->DeepCopy(reader->GetOutput());
     }
 
+    return import_vtu(ug);
+  }
+
+  static Mesh<real_t>* import_vtu(vtkUnstructuredGrid *ug){
     size_t NNodes = ug->GetNumberOfPoints();
     size_t NElements = ug->GetNumberOfCells();
 
