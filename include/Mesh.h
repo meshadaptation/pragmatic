@@ -475,7 +475,7 @@ public:
 
 
     /// Calculate area - optimise for percision rather than performance as it is only used for verification.
-    double calculate_area()
+    double calculate_area() const
     {
         int NElements = get_number_elements();
         long double total_area=0;
@@ -585,7 +585,7 @@ public:
     }
 
     /// Calculate volume
-    double calculate_volume()
+    double calculate_volume() const
     {
         int NElements = get_number_elements();
         long double total_volume=0;
