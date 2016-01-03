@@ -99,7 +99,7 @@ int main(int argc, char **argv)
     MetricField<double,3> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    double eta=0.05;
+    double eta=0.1;
 
     for(size_t i=0; i<NNodes; i++) {
         double x = 2*mesh->get_coords(i)[0] - 1;
