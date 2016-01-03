@@ -97,101 +97,127 @@ extern "C" {
 template<typename real_t> class VTKTools
 {
 public:
-    static Mesh<real_t>* import_vtu(std::string filename)
-    {
+    static Mesh<real_t>* import_vtu(std::string filename){
         vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
         reader->SetFileName(filename.c_str());
         reader->Update();
 
         vtkUnstructuredGrid *ug = reader->GetOutput();
 
-        size_t NNodes = reader->GetNumberOfPoints();
-        size_t NElements = reader->GetNumberOfCells();
+        return import_vtu(ug);
+    }
 
-        std::map<int, int> renumber;
-        std::map<int, int> gnns;
+    static Mesh<real_t>* import_vtu(vtkUnstructuredGrid *ug){
+        int rank=0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        std::vector<real_t> x,y,z;
-        int ncnt=0;
-        bool have_global_ids = ug->GetPointData()->GetArray("GlobalId")!=NULL;
-        if(have_global_ids) {
-            for(size_t i=0; i<NNodes; i++) {
-                int gnn = ug->GetPointData()->GetArray("GlobalId")->GetTuple1(i);
-                if(gnns.find(gnn)==gnns.end()) {
-                    gnns[gnn] = ncnt;;
-                    renumber[i] = ncnt;
-                    ncnt++;
+        int nparts=1;
+        MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
+        mpi_type_wrapper<index_t> mpi_index_t_wrapper;
+        MPI_Datatype MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
+
+        std::vector<real_t> x, y, z;
+        std::vector<int> ENList;
+
+        size_t NNodes, NElements;
+        int nloc, ndims;
+        int cell_type;
+        if (rank==0) {
+            NNodes = ug->GetNumberOfPoints();
+            NElements = ug->GetNumberOfCells();
+
+            cell_type = ug->GetCell(0)->GetCellType();
+            if(cell_type==VTK_TRIANGLE) {
+                nloc = 3;
+                ndims = 2;
+            } else if(cell_type==VTK_TETRA) {
+                nloc = 4;
+                ndims = 3;
+            } else {
+                std::cerr<<"ERROR("<<__FILE__<<"): unsupported element type\n";
+                exit(-1);
+            }
+
+            x.reserve(NNodes);
+            y.reserve(NNodes);
+            z.reserve(NNodes);
+            ENList.reserve(nloc*NElements);
+
+            std::map<int, int> renumber;
+            std::map<int, int> gnns;
+
+            int ncnt=0;
+            bool have_global_ids = ug->GetPointData()->GetArray("GlobalId")!=NULL;
+            if(have_global_ids) {
+                for(size_t i=0; i<NNodes; i++) {
+                    int gnn = ug->GetPointData()->GetArray("GlobalId")->GetTuple1(i);
+                    if(gnns.find(gnn)==gnns.end()) {
+                        gnns[gnn] = ncnt;;
+                        renumber[i] = ncnt;
+                        ncnt++;
+
+                        real_t r[3];
+                        ug->GetPoints()->GetPoint(i, r);
+                        x.push_back(r[0]);
+                        y.push_back(r[1]);
+                        z.push_back(r[2]);
+                    } else {
+                        renumber[i] = gnns[gnn];
+                    }
+                }
+            } else {
+                for(size_t i=0; i<NNodes; i++) {
                     real_t r[3];
                     ug->GetPoints()->GetPoint(i, r);
                     x.push_back(r[0]);
                     y.push_back(r[1]);
                     z.push_back(r[2]);
-                } else {
-                    renumber[i] = gnns[gnn];
                 }
             }
-        } else {
-            for(size_t i=0; i<NNodes; i++) {
-                real_t r[3];
-                ug->GetPoints()->GetPoint(i, r);
-                x.push_back(r[0]);
-                y.push_back(r[1]);
-                z.push_back(r[2]);
+
+            NNodes = x.size();
+
+            for(size_t i=0; i<NElements; i++) {
+                int ghost=0;
+                if(ug->GetCellData()->GetArray("vtkGhostLevels")!=NULL)
+                    ghost = ug->GetCellData()->GetArray("vtkGhostLevels")->GetTuple1(i);
+
+                if(ghost>0)
+                    continue;
+
+                vtkCell *cell = ug->GetCell(i);
+                assert(cell->GetCellType()==cell_type);
+                for(int j=0; j<nloc; j++) {
+                    if(have_global_ids)
+                        ENList.push_back(renumber[cell->GetPointId(j)]);
+                    else
+                        ENList.push_back(cell->GetPointId(j));
+                }
             }
+            NElements = ENList.size()/nloc;
         }
 
-        NNodes = x.size();
+        MPI_Bcast(&NNodes, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&NElements, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&nloc, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&ndims, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        int cell_type = ug->GetCell(0)->GetCellType();
-        int nloc = -1;
-        int ndims = -1;
-        if(cell_type==VTK_TRIANGLE) {
-            nloc = 3;
-            ndims = 2;
-        } else if(cell_type==VTK_TETRA) {
-            nloc = 4;
-            ndims = 3;
-        } else {
-            std::cerr<<"ERROR("<<__FILE__<<"): unsupported element type\n";
-            exit(-1);
+        if (rank!=0) {
+            ENList.resize(nloc*NElements);
         }
 
-        std::vector<int> ENList;
-        for(size_t i=0; i<NElements; i++) {
-            int ghost=0;
-            if(ug->GetCellData()->GetArray("vtkGhostLevels")!=NULL)
-                ghost = ug->GetCellData()->GetArray("vtkGhostLevels")->GetTuple1(i);
+        MPI_Bcast(ENList.data(), nloc*NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
 
-            if(ghost>0)
-                continue;
-
-            vtkCell *cell = ug->GetCell(i);
-            assert(cell->GetCellType()==cell_type);
-            for(int j=0; j<nloc; j++) {
-                if(have_global_ids)
-                    ENList.push_back(renumber[cell->GetPointId(j)]);
-                else
-                    ENList.push_back(cell->GetPointId(j));
-            }
-        }
-        NElements = ENList.size()/nloc;
-
-        int nparts=1;
         Mesh<real_t> *mesh=NULL;
 
 #ifdef HAVE_MPI
-        // Handle mpi parallel run.
-        MPI_Comm_size(MPI_COMM_WORLD, &nparts);
-
         if(nparts>1) {
             std::vector<index_t> owner_range;
             std::vector<index_t> lnn2gnn;
             std::vector<int> node_owner;
 
             std::vector<int> epart(NElements, 0), npart(NNodes, 0);
-            int rank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
             if(rank==0) {
                 int edgecut;
@@ -224,7 +250,7 @@ public:
 #else
                 std::vector<int> etype(NElements);
                 for(size_t i=0; i<NElements; i++)
-                    etype[i] = ndims-1;
+                    etype[i] = nloc;
                 int numflag = 0;
                 METIS_PartMeshNodal(&intNElements,
                                     &intNNodes,
@@ -238,11 +264,8 @@ public:
 #endif
             }
 
-            mpi_type_wrapper<index_t> mpi_index_t_wrapper;
-            MPI_Datatype MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
-
-            MPI_Bcast(&(epart[0]), NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
-            MPI_Bcast(&(npart[0]), NNodes, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+            MPI_Bcast(epart.data(), NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+            MPI_Bcast(npart.data(), NNodes, MPI_INDEX_T, 0, MPI_COMM_WORLD);
 
             // Separate out owned nodes.
             std::vector< std::vector<index_t> > node_partition(nparts);
@@ -288,10 +311,11 @@ public:
             }
 
             // Global numbering to partition numbering look up table.
-            NNodes = node_partition[rank].size();
-            lnn2gnn.resize(NNodes);
-            node_owner.resize(NNodes);
-            for(size_t i=0; i<NNodes; i++) {
+            int lNNodes = node_partition[rank].size();
+
+            lnn2gnn.resize(lNNodes);
+            node_owner.resize(lNNodes);
+            for(size_t i=0; i<lNNodes; i++) {
                 index_t nid = node_partition[rank][i];
                 index_t gnn = renumber[nid];
                 lnn2gnn[i] = gnn;
@@ -299,20 +323,6 @@ public:
             }
 
             // Construct local mesh.
-            std::vector<real_t> lx(NNodes), ly(NNodes), lz(NNodes);
-            if(ndims==2) {
-                for(size_t i=0; i<NNodes; i++) {
-                    lx[i] = x[node_partition[rank][i]];
-                    ly[i] = y[node_partition[rank][i]];
-                }
-            } else {
-                for(size_t i=0; i<NNodes; i++) {
-                    lx[i] = x[node_partition[rank][i]];
-                    ly[i] = y[node_partition[rank][i]];
-                    lz[i] = z[node_partition[rank][i]];
-                }
-            }
-
             NElements = element_partition.size();
             std::vector<index_t> lENList(NElements*nloc);
             for(size_t i=0; i<NElements; i++) {
@@ -321,13 +331,38 @@ public:
                     lENList[i*nloc+j] = nid;
                 }
             }
-
-            // Swap
-            x.swap(lx);
-            y.swap(ly);
-            if(ndims==3)
-                z.swap(lz);
+            ENList.clear();
             ENList.swap(lENList);
+
+            // Construct local x
+            x.resize(NNodes);
+            MPI_Bcast(x.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            std::vector<real_t> lx(lNNodes);
+            for(size_t i=0; i<lNNodes; i++)
+                lx[i] = x[node_partition[rank][i]];
+            x.clear();
+            x.swap(lx);
+
+            // Construct local y.
+            y.resize(NNodes);
+            MPI_Bcast(y.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            std::vector<real_t> ly(lNNodes);
+            for(size_t i=0; i<lNNodes; i++)
+                ly[i] = y[node_partition[rank][i]];
+            y.clear();
+            y.swap(ly);
+
+            if(ndims==3) {
+                z.resize(NNodes);
+                MPI_Bcast(z.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                std::vector<real_t> lz(lNNodes);
+                for(size_t i=0; i<lNNodes; i++)
+                    lz[i] = z[node_partition[rank][i]];
+                z.clear();
+                z.swap(lz);
+            }
+
+            NNodes = lNNodes;
 
             MPI_Comm comm = MPI_COMM_WORLD;
 
