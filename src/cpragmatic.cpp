@@ -315,6 +315,10 @@ extern "C" {
       lnn2gnn[i] = _lnn2gnn[i];
   }
 */
+  void pragmatic_get_boundaryTags(int ** tags){
+    *tags = ((Mesh<double> *)_pragmatic_mesh)->get_boundaryTags();
+  }
+
   void pragmatic_get_metric(double *metric){
     if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2){
       ((MetricField<double,2> *)_pragmatic_metric_field)->get_metric(metric);

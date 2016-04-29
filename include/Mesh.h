@@ -372,6 +372,11 @@ template<typename real_t> class Mesh{
       m[i] = metric[nid*msize+i];
     return;
   }
+  
+  /// Return the array of boundary facets and associated tags
+  inline  int * get_boundaryTags() {
+    return boundary.data();
+  }
 
   /// Returns true if the node is in any of the partitioned elements.
   inline bool is_halo_node(index_t nid) const{

@@ -14,6 +14,7 @@ extern "C" {
   void pragmatic_get_coords_2d(double *x, double *y);
   void pragmatic_get_coords_3d(double *x, double *y, double *z);
   void pragmatic_get_elements(int *elements);
+  void pragmatic_get_boundaryTags(int ** tags);
   void pragmatic_finalize(void);
 #if defined(__cplusplus)
 }
