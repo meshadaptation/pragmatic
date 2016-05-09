@@ -97,17 +97,29 @@ extern "C" {
 template<typename real_t> class VTKTools
 {
 public:
-    static Mesh<real_t>* import_vtu(std::string filename){
-        vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
-        reader->SetFileName(filename.c_str());
-        reader->Update();
+    static Mesh<real_t>* import_vtu(std::string filename)
+    {
+        vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
-        vtkUnstructuredGrid *ug = reader->GetOutput();
+        if(filename.substr(filename.find_last_of('.'))==".pvtu") {
+            vtkSmartPointer<vtkXMLPUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLPUnstructuredGridReader>::New();
+            reader->SetFileName(filename.c_str());
+            reader->Update();
+
+            ug->DeepCopy(reader->GetOutput());
+        } else {
+            vtkSmartPointer<vtkXMLUnstructuredGridReader> reader = vtkSmartPointer<vtkXMLUnstructuredGridReader>::New();
+            reader->SetFileName(filename.c_str());
+            reader->Update();
+
+            ug->DeepCopy(reader->GetOutput());
+        }
 
         return import_vtu(ug);
     }
 
-    static Mesh<real_t>* import_vtu(vtkUnstructuredGrid *ug){
+    static Mesh<real_t>* import_vtu(vtkUnstructuredGrid *ug)
+    {
         int rank=0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -120,7 +132,7 @@ public:
         std::vector<real_t> x, y, z;
         std::vector<int> ENList;
 
-        size_t NNodes, NElements;
+        index_t NNodes, NElements;
         int nloc, ndims;
         int cell_type;
         if (rank==0) {
@@ -150,7 +162,7 @@ public:
             int ncnt=0;
             bool have_global_ids = ug->GetPointData()->GetArray("GlobalId")!=NULL;
             if(have_global_ids) {
-                for(size_t i=0; i<NNodes; i++) {
+                for(index_t i=0; i<NNodes; i++) {
                     int gnn = ug->GetPointData()->GetArray("GlobalId")->GetTuple1(i);
                     if(gnns.find(gnn)==gnns.end()) {
                         gnns[gnn] = ncnt;;
@@ -167,7 +179,7 @@ public:
                     }
                 }
             } else {
-                for(size_t i=0; i<NNodes; i++) {
+                for(index_t i=0; i<NNodes; i++) {
                     real_t r[3];
                     ug->GetPoints()->GetPoint(i, r);
                     x.push_back(r[0]);
@@ -178,7 +190,7 @@ public:
 
             NNodes = x.size();
 
-            for(size_t i=0; i<NElements; i++) {
+            for(index_t i=0; i<NElements; i++) {
                 int ghost=0;
                 if(ug->GetCellData()->GetArray("vtkGhostLevels")!=NULL)
                     ghost = ug->GetCellData()->GetArray("vtkGhostLevels")->GetTuple1(i);
@@ -224,7 +236,7 @@ public:
 
                 std::vector<int> eind(NElements*nloc);
                 eind[0] = 0;
-                for(size_t i=0; i<NElements*nloc; i++)
+                for(index_t i=0; i<NElements*nloc; i++)
                     eind[i] = ENList[i];
 
                 int intNElements = NElements;
@@ -233,7 +245,7 @@ public:
 #ifdef METIS_VER_MAJOR
                 int vsize = nloc - 1;
                 std::vector<int> eptr(NElements+1);
-                for(size_t i=0; i<NElements; i++)
+                for(index_t i=0; i<NElements; i++)
                     eptr[i+1] = eptr[i]+nloc;
                 METIS_PartMeshNodal(&intNElements,
                                     &intNNodes,
@@ -249,7 +261,7 @@ public:
                                     &(npart[0]));
 #else
                 std::vector<int> etype(NElements);
-                for(size_t i=0; i<NElements; i++)
+                for(index_t i=0; i<NElements; i++)
                     etype[i] = nloc;
                 int numflag = 0;
                 METIS_PartMeshNodal(&intNElements,
@@ -269,7 +281,7 @@ public:
 
             // Separate out owned nodes.
             std::vector< std::vector<index_t> > node_partition(nparts);
-            for(size_t i=0; i<NNodes; i++)
+            for(index_t i=0; i<NNodes; i++)
                 node_partition[npart[i]].push_back(i);
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
@@ -289,7 +301,7 @@ public:
             }
             std::vector<index_t> element_partition;
             std::set<index_t> halo_nodes;
-            for(size_t i=0; i<NElements; i++) {
+            for(index_t i=0; i<NElements; i++) {
                 std::set<index_t> residency;
                 for(int j=0; j<nloc; j++)
                     residency.insert(npart[ENList[i*nloc+j]]);
@@ -315,7 +327,7 @@ public:
 
             lnn2gnn.resize(lNNodes);
             node_owner.resize(lNNodes);
-            for(size_t i=0; i<lNNodes; i++) {
+            for(index_t i=0; i<lNNodes; i++) {
                 index_t nid = node_partition[rank][i];
                 index_t gnn = renumber[nid];
                 lnn2gnn[i] = gnn;
@@ -325,7 +337,7 @@ public:
             // Construct local mesh.
             NElements = element_partition.size();
             std::vector<index_t> lENList(NElements*nloc);
-            for(size_t i=0; i<NElements; i++) {
+            for(index_t i=0; i<NElements; i++) {
                 for(int j=0; j<nloc; j++) {
                     index_t nid = renumber[ENList[element_partition[i]*nloc+j]];
                     lENList[i*nloc+j] = nid;
@@ -338,7 +350,7 @@ public:
             x.resize(NNodes);
             MPI_Bcast(x.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
             std::vector<real_t> lx(lNNodes);
-            for(size_t i=0; i<lNNodes; i++)
+            for(index_t i=0; i<lNNodes; i++)
                 lx[i] = x[node_partition[rank][i]];
             x.clear();
             x.swap(lx);
@@ -347,7 +359,7 @@ public:
             y.resize(NNodes);
             MPI_Bcast(y.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
             std::vector<real_t> ly(lNNodes);
-            for(size_t i=0; i<lNNodes; i++)
+            for(index_t i=0; i<lNNodes; i++)
                 ly[i] = y[node_partition[rank][i]];
             y.clear();
             y.swap(ly);
@@ -356,7 +368,7 @@ public:
                 z.resize(NNodes);
                 MPI_Bcast(z.data(), NNodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
                 std::vector<real_t> lz(lNNodes);
-                for(size_t i=0; i<lNNodes; i++)
+                for(index_t i=0; i<lNNodes; i++)
                     lz[i] = z[node_partition[rank][i]];
                 z.clear();
                 z.swap(lz);
@@ -385,12 +397,12 @@ public:
 
     static void export_vtu(const char *basename, const Mesh<real_t> *mesh, const real_t *psi=NULL)
     {
-        size_t NElements = mesh->get_number_elements();
-        size_t ndims = mesh->get_number_dimensions();
+        index_t NElements = mesh->get_number_elements();
+        index_t ndims = mesh->get_number_dimensions();
 
         // Set the orientation of elements.
         ElementProperty<real_t> *property = NULL;
-        for(size_t i=0; i<NElements; i++) {
+        for(index_t i=0; i<NElements; i++) {
             const int *n=mesh->get_element(i);
             assert(n[0]>=0);
 
@@ -410,7 +422,7 @@ public:
         vtkSmartPointer<vtkUnstructuredGrid> ug = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
         vtkSmartPointer<vtkPoints> vtk_points = vtkSmartPointer<vtkPoints>::New();
-        size_t NNodes = mesh->get_number_nodes();
+        index_t NNodes = mesh->get_number_nodes();
         vtk_points->SetNumberOfPoints(NNodes);
 
         vtkSmartPointer<vtkDoubleArray> vtk_psi = NULL;
@@ -448,7 +460,7 @@ public:
         vtk_min_desired_length->SetName("min_desired_edge_length");
 
         #pragma omp parallel for
-        for(size_t i=0; i<NNodes; i++) {
+        for(index_t i=0; i<NNodes; i++) {
             const real_t *r = mesh->get_coords(i);
             const double *m = mesh->get_metric(i);
 
@@ -517,7 +529,7 @@ public:
         vtk_boundary_nodes->SetName("BoundaryNodes");
 
         std::vector<int> boundary_nodes(NNodes, 0);
-        for(size_t i=0; i<NElements; i++) {
+        for(index_t i=0; i<NElements; i++) {
             const int *n=mesh->get_element(i);
             if(n[0]==-1)
                 continue;
@@ -535,7 +547,7 @@ public:
                 }
             }
         }
-        for(size_t i=0; i<NNodes; i++)
+        for(index_t i=0; i<NNodes; i++)
             vtk_boundary_nodes->SetTuple1(i, boundary_nodes[i]);
         ug->GetPointData()->AddArray(vtk_boundary_nodes);
 
@@ -557,7 +569,7 @@ public:
         vtk_quality->SetNumberOfTuples(NElements);
         vtk_quality->SetName("quality");
 
-        for(size_t i=0, k=0; i<NElements; i++) {
+        for(index_t i=0, k=0; i<NElements; i++) {
             const index_t *n = mesh->get_element(i);
             assert(n[0]>=0);
 
@@ -611,7 +623,7 @@ public:
             vtk_ghost->SetNumberOfTuples(NElements);
             vtk_ghost->SetName("vtkGhostLevels");
 
-            for(size_t i=0; i<NElements; i++) {
+            for(index_t i=0; i<NElements; i++) {
                 const index_t *n = mesh->get_element(i);
                 int owner;
                 if(ndims==2)
@@ -633,7 +645,7 @@ public:
             vtk_gnn->SetNumberOfTuples(NNodes);
             vtk_gnn->SetName("GlobalId");
 
-            for(size_t i=0; i<NNodes; i++) {
+            for(index_t i=0; i<NNodes; i++) {
                 vtk_gnn->SetTuple1(i, mesh->lnn2gnn[i]);
             }
             // ug->GetPointData()->AddArray(vtk_gnn);

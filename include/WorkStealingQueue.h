@@ -36,7 +36,9 @@
 #ifndef WORK_STEALING_QUEUE_H
 #define WORK_STEALING_QUEUE_H
 
+#ifdef HAVE_OPENMP
 #include <omp.h>
+#endif
 
 #include "Worklist.h"
 
