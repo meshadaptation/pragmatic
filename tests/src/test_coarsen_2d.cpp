@@ -58,90 +58,91 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
-  int rank=0;
+int main(int argc, char **argv)
+{
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
-  
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1) {
+        verbose = std::string(argv[1])=="-v";
+    }
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,2> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
-  for(size_t i=0;i<NNodes;i++){
-    double m[] = {0.5, 0.0, 0.5};
-    metric_field.set_metric(m, i);
-  }
-  metric_field.update_mesh();
+    size_t NNodes = mesh->get_number_nodes();
+    for(size_t i=0; i<NNodes; i++) {
+        double m[] = {0.5, 0.0, 0.5};
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-  Coarsen<double,2> adapt(*mesh);
+    Coarsen<double,2> adapt(*mesh);
 
-  double L_up = sqrt(2.0);
-  double L_low = L_up*0.5;
+    double L_up = sqrt(2.0);
+    double L_low = L_up*0.5;
 
-  double tic = get_wtime();
-  adapt.coarsen(L_low, L_up);
-  double toc = get_wtime();
-  
-  mesh->defragment();
+    double tic = get_wtime();
+    adapt.coarsen(L_low, L_up);
+    double toc = get_wtime();
 
-  int nelements = mesh->get_number_elements();
+    mesh->defragment();
 
-  long double perimeter = mesh->calculate_perimeter();
-  long double area = mesh->calculate_area();
+    int nelements = mesh->get_number_elements();
 
-  if(verbose){
+    long double perimeter = mesh->calculate_perimeter();
+    long double area = mesh->calculate_area();
 
-    if(rank==0)
-      std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-               <<"Number elements:      "<<nelements<<std::endl
-               <<"Perimeter:            "<<perimeter<<std::endl;
-  }
+    if(verbose) {
 
-  VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
+        if(rank==0)
+            std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+                     <<"Number elements:      "<<nelements<<std::endl
+                     <<"Perimeter:            "<<perimeter<<std::endl;
+    }
 
-  delete mesh;
+    VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
 
-  if(rank==0){
-    std::cout<<"Expecting 2 elements: ";
-    if(nelements==2)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+    delete mesh;
 
-    long double perimeter_exact = 4;
-    std::cout<<"Expecting perimeter = "<<perimeter_exact<<": ";
-    if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
+    if(rank==0) {
+        std::cout<<"Expecting 2 elements: ";
+        if(nelements==2)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
 
-    long double area_exact = 1;
-    std::cout<<"Expecting area = "<<area_exact<<": ";
-    if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail"<<std::endl;
-  }
+        long double perimeter_exact(4);
+        std::cout<<"Expecting perimeter = "<<perimeter_exact<<": "<<perimeter<<" ("<<std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<<") ";
+        if(std::abs(perimeter-perimeter_exact)/std::max(perimeter, perimeter_exact)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+
+        long double area_exact = 1;
+        std::cout<<"Expecting area = "<<area_exact<<": ";
+        if(std::abs(area-area_exact)/std::max(area, area_exact)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

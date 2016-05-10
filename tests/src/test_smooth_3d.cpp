@@ -56,132 +56,137 @@
 #include <mpi.h>
 #endif
 
-void test_block(double qmean, double qmin, long double area, long double volume){
-  std::cout<<"Checking area == 6: ";
-  if(fabs(area-6)<6*DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail (area="<<area<<" diff="<<fabs(area-6)<<")"<<std::endl;
+void test_block(double qmean, double qmin, long double area, long double volume)
+{
+    long double ideal_area(6), ideal_volume(1);
 
-  std::cout<<"Checking volume == 1: ";
-  if(fabs(volume-1)<DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+    std::cout<<"Checking area == 6: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (area="<<area<<" diff="<<std::abs(area-ideal_area)<<")"<<std::endl;
+
+    std::cout<<"Checking volume == 1: ";
+    if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 }
 
-int main(int argc, char **argv){
-  int rank=0;
+int main(int argc, char **argv)
+{
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
-  
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
-  const double target_quality_mean = 0.3;
-  const double target_quality_min = 0.01;
+    const double target_quality_mean = 0.3;
+    const double target_quality_min = 0.01;
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box20x20x20.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,3> metric_field(*mesh);
-  
-  size_t NNodes = mesh->get_number_nodes();
+    MetricField<double,3> metric_field(*mesh);
 
-  double h1 = 1.0/20;
-  double h0 = 10.0/20;
-  for(size_t i=0;i<NNodes;i++){
-    // Want x,y,z ranging from -1, 1
-    double x = 2*mesh->get_coords(i)[0] - 1;
-    double y = 2*mesh->get_coords(i)[1] - 1;
-    double z = 2*mesh->get_coords(i)[2] - 1;
-    double d = std::min(1-fabs(x), std::min(1-fabs(y), 1-fabs(z)));
-    
-    double hx = h0 - (h1-h0)*(d-1);
-    double m[] = {1.0/pow(hx, 2), 0,              0,
-                                  1.0/pow(hx, 2), 0,
-                                                  1.0/pow(hx, 2)};
-    
-    metric_field.set_metric(m, i);
-  }
-  metric_field.update_mesh();
+    size_t NNodes = mesh->get_number_nodes();
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
+    double h1 = 1.0/20;
+    double h0 = 10.0/20;
+    for(size_t i=0; i<NNodes; i++) {
+        // Want x,y,z ranging from -1, 1
+        double x = 2*mesh->get_coords(i)[0] - 1;
+        double y = 2*mesh->get_coords(i)[1] - 1;
+        double z = 2*mesh->get_coords(i)[2] - 1;
+        double d = std::min(1-std::abs(x), std::min(1-std::abs(y), 1-std::abs(z)));
 
-  long double area = mesh->calculate_area();
-  long double volume = mesh->calculate_volume();
-  
-  if(rank==0){
-    test_block(qmean, qmin, area, volume);
-  }
-  
-  Smooth<double, 3> smooth(*mesh);
-  
-  double tic = get_wtime();
-  smooth.laplacian(100);
-  double toc = get_wtime();
+        double hx = h0 - (h1-h0)*(d-1);
+        double m[] = {1.0/pow(hx, 2), 0,              0,
+                      1.0/pow(hx, 2), 0,
+                      1.0/pow(hx, 2)
+                     };
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-  area = mesh->calculate_area();
-  volume = mesh->calculate_volume();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, area, volume);
-  }
+    long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
 
-  std::string vtu_filename = std::string("../data/test_smooth_laplacian_3d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    if(rank==0) {
+        test_block(qmean, qmin, area, volume);
+    }
 
-  tic = get_wtime();
-  smooth.smart_laplacian(200);
-  toc = get_wtime();
+    Smooth<double, 3> smooth(*mesh);
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+    double tic = get_wtime();
+    smooth.laplacian(100);
+    double toc = get_wtime();
 
-  area = mesh->calculate_area();
-  volume = mesh->calculate_volume();
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, area, volume);
-  }
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
 
-  vtu_filename = std::string("../data/test_smooth_smart_laplacian_3d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    if(rank==0) {
+        std::cout<<"Laplacian smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, area, volume);
+    }
 
-  tic = get_wtime();
-  smooth.optimisation_linf(400);
-  toc = get_wtime();
+    std::string vtu_filename = std::string("../data/test_smooth_laplacian_3d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 
-  qmean = mesh->get_qmean();
-  qmin = mesh->get_qmin();
+    tic = get_wtime();
+    smooth.smart_laplacian(200);
+    toc = get_wtime();
 
-  area = mesh->calculate_area();
-  volume = mesh->calculate_volume();
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
 
-  if(rank==0){
-    std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl;
-    test_block(qmean, qmin, area, volume);
-  }
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
 
-  vtu_filename = std::string("../data/test_smooth_optimisation_linf_3d");
-  VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+    if(rank==0) {
+        std::cout<<"Smart Laplacian smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, area, volume);
+    }
+
+    vtu_filename = std::string("../data/test_smooth_smart_laplacian_3d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+
+    tic = get_wtime();
+    smooth.optimisation_linf(400);
+    toc = get_wtime();
+
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
+
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+
+    if(rank==0) {
+        std::cout<<"Linf optimisation smooth time  "<<toc-tic<<std::endl;
+        test_block(qmean, qmin, area, volume);
+    }
+
+    vtu_filename = std::string("../data/test_smooth_optimisation_linf_3d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }
