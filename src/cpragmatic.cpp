@@ -201,7 +201,7 @@ extern "C" {
 
     /** Adapt the mesh.
     */
-    void pragmatic_adapt()
+    void pragmatic_adapt(int coarsen_surface)
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
@@ -223,7 +223,7 @@ extern "C" {
             for(size_t i=0; i<20; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                coarsen.coarsen(L_low, L_ref);
+                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
                 refine.refine(L_ref);
 
@@ -243,7 +243,7 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
-            coarsen.coarsen(L_low, L_up);
+            coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
             double L_max = mesh->maximal_edge_length();
 
@@ -252,7 +252,7 @@ extern "C" {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
-                coarsen.coarsen(L_low, L_ref);
+                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
 
                 L_max = mesh->maximal_edge_length();
