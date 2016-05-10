@@ -268,6 +268,37 @@ extern "C" {
         }
     }
 
+    /** Coarsen the mesh.
+    */
+    void pragmatic_coarsen()
+    {
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+
+        const size_t ndims = mesh->get_number_dimensions();
+
+        double L_up = sqrt(2.0);
+
+        if(ndims==2) {
+            Coarsen<double, 2> coarsen(*mesh);
+            Swapping<double, 2> swapping(*mesh);
+
+            for(size_t i=0; i<5; i++) {
+                coarsen.coarsen(L_up, L_up, true);
+                swapping.swap(0.1);
+            }
+        } else {
+            Coarsen<double, 3> coarsen(*mesh);
+            Swapping<double, 3> swapping(*mesh);
+
+            for(size_t i=0; i<5; i++) {
+                coarsen.coarsen(L_up, L_up, true);
+                swapping.swap(0.1);
+            }
+        }
+        mesh->defragment();
+    }
+
+
     /** Get size of mesh.
 
       @param [out] NNodes
