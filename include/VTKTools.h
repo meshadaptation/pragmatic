@@ -263,7 +263,7 @@ public:
                                     epart.data(),
                                     npart.data());
 #else
-                std::vector<int> etype(NElements, nloc);
+                std::vector<int> etype(NElements, ndims-1);
                 int numflag = 0;
                 METIS_PartMeshNodal(&intNElements,
                                     &intNNodes,
