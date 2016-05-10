@@ -55,84 +55,86 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 #endif
 
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1) {
+        verbose = std::string(argv[1])=="-v";
+    }
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
+    mesh->create_boundary();
 
-  MetricField<double,3> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
+    size_t NNodes = mesh->get_number_nodes();
 
-  std::vector<double> psi(NNodes);
-  for(size_t i=0;i<NNodes;i++)
-    psi[i] = 
-      pow(mesh->get_coords(i)[0], 4) +
-      pow(mesh->get_coords(i)[1], 4) + 
-      pow(mesh->get_coords(i)[2], 4);
-  
-  metric_field.add_field(&(psi[0]), 0.001);
-  metric_field.update_mesh();
-  
-  Refine<double,3> adapt(*mesh);
+    std::vector<double> psi(NNodes);
+    for(size_t i=0; i<NNodes; i++)
+        psi[i] =
+            pow(mesh->get_coords(i)[0], 4) +
+            pow(mesh->get_coords(i)[1], 4) +
+            pow(mesh->get_coords(i)[2], 4);
 
-  double tic = get_wtime();
-  for(int i=0;i<2;i++)
-    adapt.refine(sqrt(2.0));
-  double toc = get_wtime();
+    metric_field.add_field(&(psi[0]), 0.001);
+    metric_field.update_mesh();
 
-  if(verbose)
-    mesh->verify();
+    Refine<double,3> adapt(*mesh);
 
-  mesh->defragment();
+    double tic = get_wtime();
+    for(int i=0; i<2; i++)
+        adapt.refine(sqrt(2.0));
+    double toc = get_wtime();
 
-  VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
+    if(verbose)
+        mesh->verify();
 
-  double qmean = mesh->get_qmean();
-  double qmin = mesh->get_qmin();
-  int nelements = mesh->get_number_elements();
+    mesh->defragment();
 
-  if(verbose)
-    std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
-             <<"Number elements:     "<<nelements<<std::endl
-             <<"Quality mean:        "<<qmean<<std::endl
-             <<"Quality min:         "<<qmin<<std::endl;
+    VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
 
-  long double area = mesh->calculate_area();
-  long double volume = mesh->calculate_volume();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+    int nelements = mesh->get_number_elements();
 
-  std::cout<<"Checking area == 6: ";
-  if(fabs(area-6)<6*DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail (area="<<area<<")"<<std::endl;
+    if(verbose)
+        std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
+                 <<"Number elements:     "<<nelements<<std::endl
+                 <<"Quality mean:        "<<qmean<<std::endl
+                 <<"Quality min:         "<<qmin<<std::endl;
 
-  std::cout<<"Checking volume == 1: ";
-  if(fabs(volume-1)<DBL_EPSILON)
-    std::cout<<"pass"<<std::endl;
-  else
-    std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+    long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
 
-  delete mesh;
+    long double ideal_area(6), ideal_volume(1);
+    std::cout<<"Checking area == 6: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (area="<<area<<")"<<std::endl;
+
+    std::cout<<"Checking volume == 1: ";
+    if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (volume="<<volume<<")"<<std::endl;
+
+    delete mesh;
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

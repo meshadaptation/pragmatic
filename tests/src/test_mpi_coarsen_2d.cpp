@@ -56,75 +56,76 @@
 #include <mpi.h>
 #endif
 
-int main(int argc, char **argv){
-  int rank=0;
+int main(int argc, char **argv)
+{
+    int rank=0;
 #ifdef HAVE_MPI
-  int required_thread_support=MPI_THREAD_SINGLE;
-  int provided_thread_support;
-  MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
-  assert(required_thread_support==provided_thread_support);
+    int required_thread_support=MPI_THREAD_SINGLE;
+    int provided_thread_support;
+    MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
+    assert(required_thread_support==provided_thread_support);
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
-  bool verbose = false;
-  if(argc>1){
-    verbose = std::string(argv[1])=="-v";
-  }
+    bool verbose = false;
+    if(argc>1) {
+        verbose = std::string(argv[1])=="-v";
+    }
 
 #ifdef HAVE_VTK
-  Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
-  mesh->create_boundary();
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+    mesh->create_boundary();
 
-  MetricField<double, 2> metric_field(*mesh);
+    MetricField<double, 2> metric_field(*mesh);
 
-  size_t NNodes = mesh->get_number_nodes();
-  for(size_t i=0;i<NNodes;i++){
-    double m[] = {0.5, 0.0, 0.5};
-    metric_field.set_metric(m, i);
-  }
-  metric_field.update_mesh();
+    size_t NNodes = mesh->get_number_nodes();
+    for(size_t i=0; i<NNodes; i++) {
+        double m[] = {0.5, 0.0, 0.5};
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-  Coarsen<double, 2> adapt(*mesh);
+    Coarsen<double, 2> adapt(*mesh);
 
-  double L_up = sqrt(2.0);
-  double L_low = L_up*0.5;
+    double L_up = sqrt(2.0);
+    double L_low = L_up*0.5;
 
-  double tic = get_wtime();
-  adapt.coarsen(L_low, L_up);
-  double toc = get_wtime();
-  
-  if(!mesh->verify()){
-    std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
-  }
+    double tic = get_wtime();
+    adapt.coarsen(L_low, L_up);
+    double toc = get_wtime();
 
-  mesh->defragment();
+    if(!mesh->verify()) {
+        std::cout<<"ERROR(rank="<<rank<<"): Verification failed after coarsening.\n";
+    }
 
-  int nelements = mesh->get_number_elements();
+    mesh->defragment();
 
-  if(verbose){
-    if(rank==0)
-      std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
-               <<"Number elements:      "<<nelements<<std::endl;
-  }
+    int nelements = mesh->get_number_elements();
 
-  VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
+    if(verbose) {
+        if(rank==0)
+            std::cout<<"Coarsen loop time:    "<<toc-tic<<std::endl
+                     <<"Number elements:      "<<nelements<<std::endl;
+    }
 
-  delete mesh;
+    VTKTools<double>::export_vtu("../data/test_coarsen_2d", mesh);
 
-  if(rank==0){
-    if(nelements<=510)
-      std::cout<<"pass"<<std::endl;
-    else
-      std::cout<<"fail "<<std::endl;
-  }
+    delete mesh;
+
+    if(rank==0) {
+        if(nelements<=600)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail "<<std::endl;
+    }
 #else
-  std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
-  MPI_Finalize();
+    MPI_Finalize();
 #endif
 
-  return 0;
+    return 0;
 }

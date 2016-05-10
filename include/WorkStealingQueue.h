@@ -43,81 +43,89 @@
 #include "Worklist.h"
 
 template<typename t_type>
-class WorkStealingQueue{
+class WorkStealingQueue
+{
 public:
-  WorkStealingQueue(){
-    wsq.resize(omp_get_max_threads());
-  }
+    WorkStealingQueue()
+    {
+        wsq.resize(omp_get_max_threads());
+    }
 
-  inline void push(t_type value, int tid){
-    wsq[tid].push(value);
-  }
+    inline void push(t_type value, int tid)
+    {
+        wsq[tid].push(value);
+    }
 
-  inline t_type pop(int tid){
-    return wsq[tid].pop();
-  }
+    inline t_type pop(int tid)
+    {
+        return wsq[tid].pop();
+    }
 
 private:
-  struct ThreadQueue{
-    ThreadQueue() : _current(&_worklist_odd), _next(&_worklist_even), _empty(true){
-      _current->init_creation();
-      _next->init_creation();
-    }
-
-    inline void push(t_type value){
-      _next->push_back(value);
-      _empty = false;
-    }
-
-    inline t_type pop(){
-      // Get the next workitem...
-      t_type next_item = _current->get_next();
-
-      /*
-       * ...and before returning take care of special situations:
-       * 1) if current queue is now empty, swap current and next
-       * 2) if both queues are empty, attempt to steal work
-       */
-      if(!_current->is_valid()){
-        if(_next->is_valid()){
-          // Case 1; swap worklists
-          _lock.lock();
-          Worklist<t_type> * tmp = _current;
-          _current = _next;
-          _next = tmp;
-          _current->init_traversal();
-          _next->init_creation();
-          _lock.unlock();
-        }else{
-          // Case 2; we need to steal work
-          _empty = true;
-          int tid = omp_get_thread_num();
-          int nthreads = omp_get_max_threads();
-          for(int i = (tid+1)%nthreads; i != tid; i = (i+1)%nthreads){
-            if(wsq[i]._next->steal_work(*_current)){
-              _empty = false;
-              break;
-            }
-          }
+    struct ThreadQueue {
+        ThreadQueue() : _current(&_worklist_odd), _next(&_worklist_even), _empty(true)
+        {
+            _current->init_creation();
+            _next->init_creation();
         }
-      }
 
-      return next_item;
-    }
+        inline void push(t_type value)
+        {
+            _next->push_back(value);
+            _empty = false;
+        }
 
-    inline bool is_empty(){
-      return _empty;
-    }
+        inline t_type pop()
+        {
+            // Get the next workitem...
+            t_type next_item = _current->get_next();
 
-    Worklist<t_type> _worklist_odd, _worklist_even;
-    Worklist<t_type> * _current, * _next;
-    bool _empty;
+            /*
+             * ...and before returning take care of special situations:
+             * 1) if current queue is now empty, swap current and next
+             * 2) if both queues are empty, attempt to steal work
+             */
+            if(!_current->is_valid()) {
+                if(_next->is_valid()) {
+                    // Case 1; swap worklists
+                    _lock.lock();
+                    Worklist<t_type> * tmp = _current;
+                    _current = _next;
+                    _next = tmp;
+                    _current->init_traversal();
+                    _next->init_creation();
+                    _lock.unlock();
+                } else {
+                    // Case 2; we need to steal work
+                    _empty = true;
+                    int tid = omp_get_thread_num();
+                    int nthreads = omp_get_max_threads();
+                    for(int i = (tid+1)%nthreads; i != tid; i = (i+1)%nthreads) {
+                        if(wsq[i]._next->steal_work(*_current)) {
+                            _empty = false;
+                            break;
+                        }
+                    }
+                }
+            }
 
-    // Lock used for critical operations (work stealing, list swapping)
-    Lock _lock;
-  };
+            return next_item;
+        }
 
-  std::vector<ThreadQueue> wsq;
+        inline bool is_empty()
+        {
+            return _empty;
+        }
+
+        Worklist<t_type> _worklist_odd, _worklist_even;
+        Worklist<t_type> * _current, * _next;
+        bool _empty;
+
+        // Lock used for critical operations (work stealing, list swapping)
+        Lock _lock;
+    };
+
+    std::vector<ThreadQueue> wsq;
 };
 
 #endif
