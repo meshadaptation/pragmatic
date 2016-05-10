@@ -252,35 +252,33 @@ public:
                     eptr[i+1] = eptr[i]+nloc;
                 METIS_PartMeshNodal(&intNElements,
                                     &intNNodes,
-                                    &(eptr[0]),
-                                    &(eind[0]),
+                                    eptr.data(),
+                                    eind.data(),
                                     NULL,
                                     &vsize,
                                     &nparts,
                                     NULL,
                                     NULL,
                                     &edgecut,
-                                    &(epart[0]),
-                                    &(npart[0]));
+                                    epart.data(),
+                                    npart.data());
 #else
-                std::vector<int> etype(NElements);
-                for(index_t i=0; i<NElements; i++)
-                    etype[i] = nloc;
+                std::vector<int> etype(NElements, nloc);
                 int numflag = 0;
                 METIS_PartMeshNodal(&intNElements,
                                     &intNNodes,
-                                    &(eind[0]),
-                                    &(etype[0]),
+                                    eind.data(),
+                                    etype.data(),
                                     &numflag,
                                     &nparts,
                                     &edgecut,
-                                    &(epart[0]),
-                                    &(npart[0]));
+                                    epart.data(),
+                                    npart.data());
 #endif
             }
 
-            MPI_Bcast(epart.data(), NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
-            MPI_Bcast(npart.data(), NNodes, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+            MPI_Bcast(epart.data(), NElements, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Bcast(npart.data(), NNodes, MPI_INT, 0, MPI_COMM_WORLD);
 
             // Separate out owned nodes.
             std::vector< std::vector<index_t> > node_partition(nparts);
