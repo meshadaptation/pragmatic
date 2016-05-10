@@ -367,6 +367,11 @@ extern "C" {
             ((MetricField<double,3> *)_pragmatic_metric_field)->get_metric(metric);
         }
     }
+    
+    void pragmatic_get_boundaryTags(int ** tags)
+    {
+      *tags = ((Mesh<double> *)_pragmatic_mesh)->get_boundaryTags();
+    }
 
     void pragmatic_finalize()
     {
