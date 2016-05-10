@@ -25,5 +25,5 @@ script:
   - make
   - cd tests/
   - make
-  - make test
+  - make test ARGS="-v"
 
