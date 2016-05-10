@@ -121,13 +121,14 @@ public:
     static Mesh<real_t>* import_vtu(vtkUnstructuredGrid *ug)
     {
         int rank=0;
+	int nparts=1;
+#ifdef HAVE_MPI
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-        int nparts=1;
         MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
         mpi_type_wrapper<index_t> mpi_index_t_wrapper;
         MPI_Datatype MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
+#endif
 
         std::vector<real_t> x, y, z;
         std::vector<int> ENList;
@@ -210,20 +211,22 @@ public:
             NElements = ENList.size()/nloc;
         }
 
+#ifdef HAVE_MPI
         MPI_Bcast(&NNodes, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
         MPI_Bcast(&NElements, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
         MPI_Bcast(&nloc, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Bcast(&ndims, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
 
         if (rank!=0) {
             ENList.resize(nloc*NElements);
         }
 
-        MPI_Bcast(ENList.data(), nloc*NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
-
         Mesh<real_t> *mesh=NULL;
 
 #ifdef HAVE_MPI
+        MPI_Bcast(ENList.data(), nloc*NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
+
         if(nparts>1) {
             std::vector<index_t> owner_range;
             std::vector<index_t> lnn2gnn;
