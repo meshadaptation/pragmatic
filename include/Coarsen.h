@@ -270,24 +270,24 @@ private:
             // Assume the best.
             reject_collapse=false;
 
-            std::set<index_t> compromised_boundary;
-            for(const auto &element : _mesh->NEList[rm_vertex]) {
-                const int *n=_mesh->get_element(element);
-                for(size_t i=0; i<nloc; i++) {
-                    if(n[i]!=rm_vertex) {
-                        if(_mesh->boundary[element*nloc+i]>0) {
-                            compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+            if(surface_coarsening) {
+                std::set<index_t> compromised_boundary;
+                for(const auto &element : _mesh->NEList[rm_vertex]) {
+                    const int *n=_mesh->get_element(element);
+                    for(size_t i=0; i<nloc; i++) {
+                        if(n[i]!=rm_vertex) {
+                            if(_mesh->boundary[element*nloc+i]>0) {
+                                compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+                            }
                         }
                     }
                 }
-            }
 
-            if(compromised_boundary.size()>1) {
-                reject_collapse=true;
-                continue;
-            }
+                if(compromised_boundary.size()>1) {
+                    reject_collapse=true;
+                    continue;
+                }
 
-            if(surface_coarsening) {
                 if(compromised_boundary.size()==1) {
                     // Only allow this vertex to be collapsed to a vertex on the same boundary (not to an internal vertex).
                     std::set<index_t> target_boundary;
