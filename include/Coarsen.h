@@ -509,9 +509,10 @@ private:
             int facet[ndims], pos=0;
             int inherit_boundary_id=0;
             for (int i=0;i<nloc;i++) {
-                if (n[i]!=rm_vertex) {
+                if (n[i]!=target_vertex) {
                     facet[pos++] = n[i];
-                }else{
+                }
+                if (n[i]==rm_vertex){
                     inherit_boundary_id = _mesh->boundary[eid*nloc+i];
                 }
             }
