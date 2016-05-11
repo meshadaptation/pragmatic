@@ -524,7 +524,7 @@ private:
                                   std::inserter(associated_elements, associated_elements.begin()));
             if (ndims==3) {
                  std::set<index_t> associated_elements3;
-                 std::set_intersection(_mesh->NEList[facet[3]].begin(), _mesh->NEList[facet[3]].end(),
+                 std::set_intersection(_mesh->NEList[facet[2]].begin(), _mesh->NEList[facet[2]].end(),
                                                      associated_elements.begin(), associated_elements.end(),
                                                      std::inserter(associated_elements3, associated_elements3.begin()));
                  associated_elements.swap(associated_elements3);
