@@ -270,23 +270,25 @@ private:
             // Assume the best.
             reject_collapse=false;
 
-            if(surface_coarsening) {
-                std::set<index_t> compromised_boundary;
-                for(const auto &element : _mesh->NEList[rm_vertex]) {
-                    const int *n=_mesh->get_element(element);
-                    for(size_t i=0; i<nloc; i++) {
-                        if(n[i]!=rm_vertex) {
-                            if(_mesh->boundary[element*nloc+i]>0) {
-                                compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
-                            }
+            std::set<index_t> compromised_boundary;
+            for(const auto &element : _mesh->NEList[rm_vertex]) {
+                const int *n=_mesh->get_element(element);
+                for(size_t i=0; i<nloc; i++) {
+                    if(n[i]!=rm_vertex) {
+                        if(_mesh->boundary[element*nloc+i]>0) {
+                            compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
                         }
                     }
                 }
+            }
 
-                if(compromised_boundary.size()>1) {
-                    reject_collapse=true;
-                    continue;
-                } else if(compromised_boundary.size()==1) {
+            if(compromised_boundary.size()>1) {
+                reject_collapse=true;
+                continue;
+            }
+
+            if(surface_coarsening) {
+                if(compromised_boundary.size()==1) {
                     // Only allow this vertex to be collapsed to a vertex on the same boundary (not to an internal vertex).
                     std::set<index_t> target_boundary;
                     for(const auto &element : _mesh->NEList[target_vertex]) {
@@ -499,36 +501,55 @@ private:
                               _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
                               std::inserter(deleted_elements, deleted_elements.begin()));
 
-        std::set<index_t> compromised_boundary;
-        for(const auto &element : _mesh->NEList[target_vertex]) {
-            for(size_t i=0; i<nloc; i++) {
-                if(_mesh->boundary[element*nloc+i]>0) {
-                    compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
-                }
-            }
-        }
-        assert(compromised_boundary.size()==0 || compromised_boundary.size()==1);
-
-        // Find if this is on the surface.
-        int boundary_label = 0;
-        std::set<index_t> shallow_elements;
-        if(!compromised_boundary.empty()) {
-            boundary_label = *compromised_boundary.begin();
-
-            for(const auto &eid : deleted_elements) {
-                for(int i=0; i<nloc; i++) {
-                    for(const auto &jeid : _mesh->NEList[_mesh->_ENList[eid*nloc+i]]) {
-                        if(deleted_elements.count(jeid)==0) {
-                            shallow_elements.insert(jeid);
-                        }
-                    }
-                }
-            }
-        }
-
         // Clean NEList and spike ENList.
         for(const auto &eid : deleted_elements) {
             const index_t *n = _mesh->get_element(eid);
+
+            // Find falling facet.
+            int facet[ndims], pos=0;
+            int inherit_boundary_id=0;
+            for (int i=0;i<nloc;i++) {
+                if (n[i]!=rm_vertex) {
+                    facet[pos++] = n[i];
+                }else{
+                    inherit_boundary_id = _mesh->boundary[eid*nloc+i];
+                }
+            }
+
+            // Find associated element.
+            std::set<index_t> associated_elements;
+            std::set_intersection(_mesh->NEList[facet[0]].begin(), _mesh->NEList[facet[0]].end(),
+                                  _mesh->NEList[facet[1]].begin(), _mesh->NEList[facet[1]].end(),
+                                  std::inserter(associated_elements, associated_elements.begin()));
+            if (ndims==3) {
+                 std::set<index_t> associated_elements3;
+                 std::set_intersection(_mesh->NEList[facet[3]].begin(), _mesh->NEList[facet[3]].end(),
+                                                     associated_elements.begin(), associated_elements.end(),
+                                                     std::inserter(associated_elements3, associated_elements3.begin()));
+                 associated_elements.swap(associated_elements3);
+            }
+            assert(associated_elements.size()==2);
+            int associated_element = *associated_elements.begin();
+            if (associated_element==eid) {
+                associated_element = *associated_elements.rbegin();
+            }
+
+            // Locate falling facet on this element.
+            int ifacet=0;
+            const index_t *m = _mesh->get_element(associated_element);
+            for (;ifacet<nloc;ifacet++) {
+                if (m[ifacet]==facet[0])
+                    continue;
+                if (m[ifacet]==facet[1])
+                    continue;
+                if (ndims==3 && m[ifacet]==facet[2])
+                    continue;
+                break;
+            }
+            
+            // Finally...update boundary.
+            _mesh->boundary[associated_element*nloc+ifacet] = inherit_boundary_id;
+
             for(size_t i=0; i<nloc; ++i) {
                 _mesh->NEList[n[i]].erase(eid);
             }
@@ -536,7 +557,6 @@ private:
             // Remove element from mesh.
             _mesh->_ENList[eid*nloc] = -1;
         }
-
 
         // For all adjacent elements, replace rm_vertex with target_vertex in ENList and update quality.
         std::vector<index_t> new_edges;
@@ -569,54 +589,7 @@ private:
             if(std::find(_mesh->NNList[target_vertex].begin(), _mesh->NNList[target_vertex].end(), nid)==_mesh->NNList[target_vertex].end())
                 _mesh->NNList[target_vertex].push_back(nid);
         }
-        /*
-           if(nid!=target_vertex){
-        // Find all entries pointing back to rm_vertex and update them to target_vertex.
-        if(std::find(_mesh->NNList[nid].begin(), _mesh->NNList[nid].end(), target_vertex)==_mesh->NNList[nid].end())
-        _mesh->NNList[nid].push_back(target_vertex);
-
-        if(std::find(_mesh->NNList[target_vertex].begin(), _mesh->NNList[target_vertex].end(), nid)==_mesh->NNList[target_vertex].end())
-        _mesh->NNList[target_vertex].push_back(nid);
-        }
-        }
-        */
         _mesh->erase_vertex(rm_vertex);
-
-        for(const auto &eid : shallow_elements) {
-            const index_t *n = _mesh->get_element(eid);
-            for(int i=0; i<nloc; i++) {
-                std::set<index_t> neigh;
-                if(dim==2) {
-                    std::set_intersection(_mesh->NEList[n[(i+1)%nloc]].begin(), _mesh->NEList[n[(i+1)%nloc]].end(),
-                                          _mesh->NEList[n[(i+2)%nloc]].begin(), _mesh->NEList[n[(i+2)%nloc]].end(),
-                                          std::inserter(neigh, neigh.begin()));
-                } else {
-                    std::set<index_t> lneigh;
-                    std::set_intersection(_mesh->NEList[n[(i+1)%nloc]].begin(), _mesh->NEList[n[(i+1)%nloc]].end(),
-                                          _mesh->NEList[n[(i+2)%nloc]].begin(), _mesh->NEList[n[(i+2)%nloc]].end(),
-                                          std::inserter(lneigh, lneigh.begin()));
-                    std::set_intersection(_mesh->NEList[n[(i+3)%nloc]].begin(), _mesh->NEList[n[(i+3)%nloc]].end(),
-                                          lneigh.begin(), lneigh.end(),
-                                          std::inserter(neigh, neigh.begin()));
-                }
-
-                // Because of topological issues - additional checkes required.
-                size_t nsize = neigh.size();
-                if(nsize==1) {
-                    _mesh->boundary[eid*nloc+i] = boundary_label;
-                } else if(nsize==2) {
-                    _mesh->boundary[eid*nloc+i] = 0;
-                } else {
-                    std::cerr<<"ERROR: topological voilation: "<<eid<<" - ";
-                    for(const auto &ieid : neigh) {
-                        std::cerr<<ieid<<" ";
-                    }
-                    std::cerr<<std::endl;
-                    _mesh->boundary[eid*nloc+i] = boundary_label;
-                }
-            }
-        }
-
     }
 
     Mesh<real_t> *_mesh;
