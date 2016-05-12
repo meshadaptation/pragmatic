@@ -20,7 +20,7 @@ def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.04):
     ### CONSTANTS
     meshsz = 10
     ### SETUP MESH
-    mesh = BoxMesh(-0.5,-0.5,-0.5,0.5,0.5,0.5,meshsz,meshsz,meshsz)
+    mesh = BoxMesh(Point(-0.5,-0.5,-0.5),Point(0.5,0.5,0.5),meshsz,meshsz,meshsz)
     ### DERIVE FORCING TERM
     angle = pi/8 #rand*pi/2
     angle2 = pi/8 #rand*pi/2
