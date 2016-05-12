@@ -20,7 +20,7 @@ from adaptivity import metric_pnorm, mesh_metric, adapt, mesh_metric2
 set_log_level(WARNING)
 
 def test_mesh_metric():
-    mesh = RectangleMesh(0,0,1,1,20,20)
+    mesh = RectangleMesh(Point(0,0),Point(1,1),20,20)
     mesh = adapt(interpolate(Constant(((10.,0.),(0.,10.))),TensorFunctionSpace(mesh,'CG',1)))
     #extract mesh metric
     MpH = mesh_metric2(mesh)
