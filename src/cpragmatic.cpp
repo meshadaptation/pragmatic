@@ -268,6 +268,37 @@ extern "C" {
         }
     }
 
+    /** Coarsen the mesh.
+    */
+    void pragmatic_coarsen(int coarsen_surface)
+    {
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+
+        const size_t ndims = mesh->get_number_dimensions();
+
+        double L_up = sqrt(2.0);
+
+        if(ndims==2) {
+            Coarsen<double, 2> coarsen(*mesh);
+            Swapping<double, 2> swapping(*mesh);
+
+            for(size_t i=0; i<5; i++) {
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                swapping.swap(0.1);
+            }
+        } else {
+            Coarsen<double, 3> coarsen(*mesh);
+            Swapping<double, 3> swapping(*mesh);
+
+            for(size_t i=0; i<5; i++) {
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                swapping.swap(0.1);
+            }
+        }
+        mesh->defragment();
+    }
+
+
     /** Get size of mesh.
 
       @param [out] NNodes
@@ -335,6 +366,11 @@ extern "C" {
         } else {
             ((MetricField<double,3> *)_pragmatic_metric_field)->get_metric(metric);
         }
+    }
+    
+    void pragmatic_get_boundaryTags(int ** tags)
+    {
+      *tags = ((Mesh<double> *)_pragmatic_mesh)->get_boundaryTags();
     }
 
     void pragmatic_finalize()

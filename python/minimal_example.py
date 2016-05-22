@@ -25,7 +25,7 @@ def minimal_example(width=2e-2, Nadapt=10, eta = 0.01):
     meshsz = 40
     hd = Constant(width)
     ### SETUP MESH
-    mesh = RectangleMesh(-0.5,-0.5,0.5,0.5,1*meshsz,1*meshsz,"left/right")
+    mesh = RectangleMesh(Point(-0.5,-0.5),Point(0.5,0.5),1*meshsz,1*meshsz,"left/right")
     ### DERIVE FORCING TERM
     angle = pi/8 #rand*pi/2
     sx = Symbol('sx'); sy = Symbol('sy'); width_ = Symbol('ww'); aa = Symbol('aa')

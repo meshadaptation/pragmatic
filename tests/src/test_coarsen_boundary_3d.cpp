@@ -114,10 +114,9 @@ int main(int argc, char **argv)
         double L_up = sqrt(2.0);
 
         Coarsen<double, 3> coarsen(*mesh);
-        // Smooth<double, 3> smooth(*mesh);
         Swapping<double, 3> swapping(*mesh);
 
-        for(size_t i=0; i<1; i++) {
+        for(size_t i=0; i<5; i++) {
             if(verbose)
                 std::cout<<"INFO: Sweep "<<i<<std::endl;
 
@@ -141,17 +140,8 @@ int main(int argc, char **argv)
 
         mesh->defragment();
 
-        double time_smooth=get_wtime();
-        // smooth.smart_laplacian(20);
-        // smooth.optimisation_linf(20);
-        time_smooth = (get_wtime() - time_smooth);
-        if(verbose) {
-            mesh->verify();
-            cout_quality(mesh, "Quality after final smoothening");
-        }
-
         if(verbose)
-            std::cout<<"Times for metric, coarsen, swapping, smoothing = "<<time_metric<<", "<<time_coarsen<<", "<<time_swapping<<", "<<time_smooth<<std::endl;
+            std::cout<<"Times for metric, coarsen, swapping = "<<time_metric<<", "<<time_coarsen<<", "<<time_swapping<<std::endl;
 
         if(mesh->get_number_elements()==0)
             break;
