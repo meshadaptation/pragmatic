@@ -35,8 +35,8 @@
  *  SUCH DAMAGE.
  */
 
-#include <Eigen/Core>
-#include <Eigen/Dense>
+#include <eigen2/Eigen/Core>
+#include <eigen2/Eigen/Dense>
 
 int main()
 {
