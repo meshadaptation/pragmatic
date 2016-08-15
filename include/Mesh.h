@@ -315,6 +315,17 @@ public:
         }
     }
 
+    void set_boundary(const int *_boundary)
+    {
+        // Sweep through boundary and set ids.
+        size_t NElements = get_number_elements();
+        for(int i=0; i<NElements; i++) {
+            for(int j=0; j<nloc; j++) {
+                boundary[i*nloc+j] = _boundary[i*nloc+j];
+            }
+        }
+    }
+
     /// Erase an element
     void erase_element(const index_t eid)
     {
@@ -1099,7 +1110,6 @@ public:
             }
         }
 
-        #pragma omp parallel
         create_adjacency();
     }
 
@@ -1456,8 +1466,8 @@ private:
                 recv_size[j] = recv[j].size();
             }
             std::vector<int> send_size(num_processes);
-            MPI_Alltoall(&(recv_size[0]), 1, MPI_INT,
-                         &(send_size[0]), 1, MPI_INT, _mpi_comm);
+            MPI_Alltoall(recv_size.data(), 1, MPI_INT,
+                         send_size.data(), 1, MPI_INT, _mpi_comm);
 
             // Setup non-blocking receives
             send.resize(num_processes);
@@ -1603,24 +1613,20 @@ private:
                     update_quality<3>(i);
                 }
             }
-
-            // create_adjacency is meant to be called from inside a parallel region
-            create_adjacency();
         }
 
+        create_adjacency();
+	    
         create_global_node_numbering();
     }
 
     /// Create required adjacency lists.
     void create_adjacency()
     {
-        int tid = pragmatic_thread_id();
-
-        #pragma omp for schedule(static)
-        for(size_t i=0; i<NNodes; i++) {
-            NNList[i].clear();
-            NEList[i].clear();
-        }
+	NNList.clear();
+	NNList.resize(NNodes);
+	NEList.clear();
+	NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -1628,22 +1634,19 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-                if((nid_j%nthreads)==tid) {
-                    NEList[nid_j].insert(NEList[nid_j].end(), i);
-                    for(size_t k=0; k<nloc; k++) {
-                        if(j!=k) {
-                            index_t nid_k = _ENList[i*nloc+k];
-                            NNList[nid_j].push_back(nid_k);
-                        }
+		assert(nid_j<NNodes);
+                NEList[nid_j].insert(NEList[nid_j].end(), i);
+                for(size_t k=0; k<nloc; k++) {
+                    if(j!=k) {
+                        index_t nid_k = _ENList[i*nloc+k];
+	                assert(nid_k<NNodes);
+                        NNList[nid_j].push_back(nid_k);
                     }
                 }
             }
         }
 
-        #pragma omp barrier
-
         // Finalise
-        #pragma omp for schedule(static)
         for(size_t i=0; i<NNodes; i++) {
             if(NNList[i].empty())
                 continue;
@@ -1837,6 +1840,9 @@ private:
         for(int i=0; i<num_processes; i++) {
             send_map[i].clear();
             for(std::vector<int>::const_iterator it=send[i].begin(); it!=send[i].end(); ++it) {
+		if(node_owner[*it]!=rank){
+			std::cout<<"assert(node_owner[*it]==rank) :: "<<*it<<" "<<node_owner[*it]<<" "<<rank<<std::endl;
+		}
                 assert(node_owner[*it]==rank);
                 send_map[i][lnn2gnn[*it]] = *it;
             }
