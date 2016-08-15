@@ -154,6 +154,8 @@ int main(int argc, char **argv)
     
     mesh->verify();
 
+    std::cout<<"pass"<<std::endl;
+
     delete mesh;
 #else
     std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
