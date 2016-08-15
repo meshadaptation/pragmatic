@@ -1392,7 +1392,6 @@ private:
     template<typename _real_t, int _dim> friend class Refine;
     template<typename _real_t> friend class DeferredOperations;
     template<typename _real_t> friend class VTKTools;
-    template<typename _real_t> friend class CUDATools;
 
     void _init(int _NNodes, int _NElements, const index_t *globalENList,
                const real_t *x, const real_t *y, const real_t *z,
