@@ -319,6 +319,7 @@ public:
     {
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
+	boundary.resize(NElements*nloc);
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
                 boundary[i*nloc+j] = _boundary[i*nloc+j];
