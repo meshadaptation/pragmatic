@@ -1634,12 +1634,12 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-		assert(nid_j<NNodes);
+		        assert(nid_j<NNodes);
                 NEList[nid_j].insert(NEList[nid_j].end(), i);
                 for(size_t k=0; k<nloc; k++) {
                     if(j!=k) {
                         index_t nid_k = _ENList[i*nloc+k];
-	                assert(nid_k<NNodes);
+	                    assert(nid_k<NNodes);
                         NNList[nid_j].push_back(nid_k);
                     }
                 }
@@ -1840,9 +1840,6 @@ private:
         for(int i=0; i<num_processes; i++) {
             send_map[i].clear();
             for(std::vector<int>::const_iterator it=send[i].begin(); it!=send[i].end(); ++it) {
-		if(node_owner[*it]!=rank){
-			std::cout<<"assert(node_owner[*it]==rank) :: "<<*it<<" "<<node_owner[*it]<<" "<<rank<<std::endl;
-		}
                 assert(node_owner[*it]==rank);
                 send_map[i][lnn2gnn[*it]] = *it;
             }

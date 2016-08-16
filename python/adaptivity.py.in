@@ -85,15 +85,8 @@ except:
   raise LibraryException("Failed to load libpragmatic in %s" % path)
 
 def refine_metric(M, factor):
-  class RefineExpression(Expression):
-    def eval(self, value, x):
-      value[:] = M(x) * (factor * factor)
-      return
-    def value_shape(self):
-      return M.ufl_shape
-
-  space = M.function_space()
-  M2 = interpolate(RefineExpression(), space)
+  M2 = Function(M, deepcopy=True)
+  M2.assign(factor**2*M)
   name = "mesh_metric_refined_x%.6g" % factor
   M2.rename(name, name)
 
@@ -349,7 +342,7 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=No
      metric = metric_pnorm(metric, eta=eta, CG1out=True)
   
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
-   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1)) #metric = logproject(metric)
+   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1), solver_type='cg', preconditioner_type='petsc_amg') #metric = logproject(metric)
   metric = fix_CG1_metric(metric) #fixes negative eigenvalues
   if grada is not None:
       metric = gradate(metric,grada)
