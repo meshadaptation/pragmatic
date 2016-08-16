@@ -36,49 +36,31 @@
  */
 
 #include <iostream>
+#include <vector>
 
-#include <getopt.h>
-#include <sstream>
+#ifdef HAVE_OPENMP
+#include <omp.h>
+#endif
 
 #include "Mesh.h"
 #ifdef HAVE_VTK
 #include "VTKTools.h"
 #endif
 #include "MetricField.h"
-
 #include "Coarsen.h"
-#include "Smooth.h"
-#include "Swapping.h"
 #include "ticker.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
 #endif
 
-void cout_quality(const Mesh<double> *mesh, std::string operation)
-{
-    double qmean = mesh->get_qmean();
-    double qmin = mesh->get_qmin();
-
-    int rank=0;
-#ifdef HAVE_MPI
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
-
-    if(rank==0)
-        std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
-}
-
 int main(int argc, char **argv)
 {
-    int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
     bool verbose = false;
@@ -86,73 +68,42 @@ int main(int argc, char **argv)
         verbose = std::string(argv[1])=="-v";
     }
 
-    // Benchmark times.
 #ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/antarctic.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
     mesh->create_boundary();
-    mesh->defragment();
 
-    for(int icoarsen=0; icoarsen<10; icoarsen++) {
-        double time_coarsen=0, time_refine=0, time_swapping=0, time_adapt=0, tic;
+    MetricField<double,3> metric_field(*mesh);
 
-        if(verbose)
-            std::cout<<"INFO: coarsen level "<<icoarsen<<std::endl;
-        MetricField<double,2> metric_field(*mesh);
+    size_t NNodes = mesh->get_number_nodes();
+    for(size_t i=0; i<10; i++) {
+        double m[] = {
+            0.5,
+            0.0,
+            0.0,
+            0.5,
+            0.0,
+            0.5
+        };
 
-        double time_metric = get_wtime();
-        metric_field.generate_mesh_metric(2);
-        time_metric = (get_wtime() - time_metric);
-
-        metric_field.update_mesh();
-
-        if(verbose) {
-            if(icoarsen==0)
-                VTKTools<double>::export_vtu("../data/annulus_2d_c0", mesh);
-            mesh->verify();
-        }
-
-        double L_up = sqrt(2.0);
-
-        Coarsen<double, 2> coarsen(*mesh);
-        Swapping<double, 2> swapping(*mesh);
-
-        for(size_t i=0; i<5; i++) {
-            if(verbose)
-                std::cout<<"INFO: Quality sweep "<<i<<std::endl;
-
-            tic = get_wtime();
-            coarsen.coarsen(L_up, L_up, true);
-            time_coarsen += (get_wtime()-tic);
-
-            if(verbose) {
-                mesh->verify();
-                cout_quality(mesh, "Quality after coarsening");
-            }
-
-            tic = get_wtime();
-            swapping.swap(0.1);
-            time_swapping += (get_wtime()-tic);
-            if(verbose) {
-                mesh->verify();
-                cout_quality(mesh, "Quality after swapping");
-            }
-        }
-
-        mesh->defragment();
-
-        if(verbose)
-            std::cout<<"Times for metric, coarsen, swapping = "<<time_metric<<", "<<time_coarsen<<", "<<time_swapping<<std::endl;
-
-        if(mesh->get_number_elements()==0)
-            break;
-
-        std::stringstream cid;
-        cid<<(icoarsen+1);
-        std::string filename("../data/annulus_2d_c"+cid.str());
-        VTKTools<double>::export_vtu(filename.c_str(), mesh);
+        metric_field.set_metric(m, i);
     }
-    
-    mesh->verify();
+
+    for(size_t i=10; i<NNodes; i++) {
+        double m[] = {
+            0.005,
+            0.0,
+            0.0,
+            0.005,
+            0.0,
+            0.005
+        };
+
+        metric_field.set_metric(m, i);
+    }
+    metric_field.gradation(1.2, 1.0);
+    metric_field.update_mesh();
+
+    VTKTools<double>::export_vtu("../data/test_gradation_3d", mesh);
 
     std::cout<<"pass"<<std::endl;
 

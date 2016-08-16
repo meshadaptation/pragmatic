@@ -1,3 +1,4 @@
+sudo: required
 language: cpp
 before_install:
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -8,6 +9,15 @@ install:
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 90
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
   - sudo apt-get install -y libparmetis-dev
+  - wget http://bitbucket.org/eigen/eigen/get/2.0.17.tar.gz
+  - tar zxvf 2.0.17.tar.gz 
+  - pushd eigen-eigen-b23437e61a07/
+  - mkdir build
+  - pushd build
+  - cmake ../
+  - sudo make install
+  - popd
+  - popd
 compiler:
   - gcc
 # Change this to your needs

@@ -1,16 +1,16 @@
 from __future__ import print_function
-from sympy import *
+from sympy import symbols, Matrix
 import sys
 
 # Lets work this out symbolically first and perform python unit test.
 
 # From http://en.wikipedia.org/wiki/Steiner_ellipse
-x1=symbols('x1[:3]')
-x2=symbols('x2[:3]')
-x3=symbols('x3[:3]')
-x4=symbols('x4[:3]')
+x1 = symbols('x1[:3]')
+x2 = symbols('x2[:3]')
+x3 = symbols('x3[:3]')
+x4 = symbols('x4[:3]')
 
-Mij=symbols('Mij[:36]')
+Mij = symbols('Mij[:36]')
 
 M = Matrix([
     [(x1[0] - x2[0])**2, (x1[1] - x2[1])**2, (x1[2] - x2[2])**2, (x1[1] - x2[1])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[1] - x2[1])],
@@ -20,7 +20,7 @@ M = Matrix([
     [(x2[0] - x4[0])**2, (x2[1] - x4[1])**2, (x2[2] - x4[2])**2, (x2[1] - x4[1])*(x2[2] - x4[2]), (x2[0] - x4[0])*(x2[2] - x4[2]), (x2[0] - x4[0])*(x2[1] - x4[1])],
     [(x3[0] - x4[0])**2, (x3[1] - x4[1])**2, (x3[2] - x4[2])**2, (x3[1] - x4[1])*(x3[2] - x4[2]), (x3[0] - x4[0])*(x3[2] - x4[2]), (x3[0] - x4[0])*(x3[1] - x4[1])]])
 
-R=Matrix([[1], [1], [1], [1], [1], [1]])
+R = Matrix([[1], [1], [1], [1], [1], [1]])
 
 # http://en.wikipedia.org/wiki/Tetrahedron#Formulas_for_a_regular_tetrahedron
 tetrahedron = {x1[0]:1,  x1[1]:0,  x1[2]:-4/sqrt(2),
@@ -83,8 +83,8 @@ src="""
    in the code generation script generation.
  */
 
-#include <Eigen/Core>
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Dense>
 
 #include <%s>
 
