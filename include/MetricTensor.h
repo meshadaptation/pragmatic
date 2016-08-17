@@ -40,8 +40,8 @@
 
 #include <iostream>
 
-#include <eigen2/Eigen/Core>
-#include <eigen2/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 #include "PragmaticMinis.h"
 
