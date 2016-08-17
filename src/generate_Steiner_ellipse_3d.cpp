@@ -4,8 +4,8 @@
    in the code generation script generation.
    */
 
-#include <eigen2/Eigen/Core>
-#include <eigen2/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 #include <generate_Steiner_ellipse_3d.h>
 

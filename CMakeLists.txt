@@ -21,6 +21,8 @@ set(INSTALL_BIN_DIR "bin" CACHE PATH
 set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
     "Installation directory for header files")
 
+include_directories(include)
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -94,7 +96,8 @@ if(PYTHONINTERP_FOUND)
     configure_file(${ADAPTIVITY_PY_IN} ${ADAPTIVITY_PY})
 endif()
 
-include_directories(include)
+find_package(Eigen2 REQUIRED)
+include_directories(${EIGEN2_INCLUDE_DIR})
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )

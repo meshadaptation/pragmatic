@@ -46,8 +46,8 @@
 #include <limits>
 #include <random>
 
-#include <eigen2/Eigen/Core>
-#include <eigen2/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <errno.h>
 
 #ifdef HAVE_OPENMP
