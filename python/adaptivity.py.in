@@ -108,7 +108,7 @@ def edge_lengths(M):
 
   return e
 
-def polyhedron_surfmesh(mesh):
+def polyhedron_surfmesh(mesh, tol=1e-12):
     #this function calculates a surface mesh assuming a polyhedral geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
@@ -135,7 +135,7 @@ def polyhedron_surfmesh(mesh):
                  tri[3],tri[2],tri[1],tri[0]]).reshape([3,ntri*4])
     #putting large node number in later row, smaller in first
     C = fac.argsort(0)
-    Cgood = (C[0,:] == 0)*(C[0,:] == 1)+(C[1,:] == 1)*(C[0,:] == 2)+(C[1,:] == 2)*(C[0,:] == 0)
+    Cgood = (C[0,:] == 0)*(C[1,:] == 1)+(C[0,:] == 1)*(C[1,:] == 2)+(C[0,:] == 2)*(C[1,:] == 0)
     Cinv  = Cgood==False
     R = arange(ntri*4)
     fac = fac.transpose().flatten()
@@ -162,26 +162,23 @@ def polyhedron_surfmesh(mesh):
     n = n/numpy.sqrt(n[:,0]**2+n[:,1]**2+n[:,2]**2).repeat(3).reshape([len(n),3])
     # compute sets of co-linear faces (this is specific to polyhedral geometries)
     IDs = zeros(len(n), dtype = numpy.intc)
-    while True:
-        nn = IDs.argmin()
-        IDs[nn] = IDs.max() + 1
-        I = arange(0,len(IDs))
-        notnset = I != nn * ones(len(I),dtype=numpy.int64)
-        dists = abs(n[notnset,0]*(coords[bfaces[notnset,0],0] - ones(sum(notnset))*coords[bfaces[nn,0],0])+\
-                    n[notnset,1]*(coords[bfaces[notnset,0],1] - ones(sum(notnset))*coords[bfaces[nn,0],1])+\
-                    n[notnset,2]*(coords[bfaces[notnset,0],2] - ones(sum(notnset))*coords[bfaces[nn,0],2])) < 1e-12
-        angles = ones(sum(notnset))-abs(n[notnset,0]*n[nn,0]+n[notnset,1]*n[nn,1]+n[notnset,2]*n[nn,2])<1e-12 # angles = arccos(abs(t[notnset,0]*t[n,0]+t[notnset,1]*t[n,1]))<1e-12
-        IDs[I[notnset][angles*dists]] = IDs[nn]
-        if all(IDs != zeros(len(IDs),dtype=numpy.int64)):
-            info("Found %i co-linear faces" % IDs.max())
-            break
+
+    I = numpy.argsort(array(zip(n[:,0],n[:,1],n[:,2]),dtype=[('e1',int),('e2',int),('e3',int)]),order=['e1','e2','e3'])
+    n = n[I,:]; bfaces = bfaces[I,:]
+    dists = abs((n*coords[bfaces[:,0],:]).sum(1))
+    jmp = array([True] + ((abs(n[0:-1,0] - n[1:len(n),0]) > tol) | \
+                          (abs(n[0:-1,1] - n[1:len(n),1]) > tol) | \
+                          (abs(n[0:-1,2] - n[1:len(n),2]) > tol) | \
+                          (abs(dists[0:-1] - dists[1:len(n)]) > tol)).tolist())
+    log(PROGRESS, "Found %i co-linear faces" % jmp.sum())
+    IDs[:] = jmp.cumsum()
     
     #compatibility fixes
     IDs += 1
     bfaces_pair = zip(bfaces[:,0],bfaces[:,1],bfaces[:,2])
     return [bfaces,IDs]
 
-def polygon_surfmesh(mesh):
+def polygon_surfmesh(mesh, tol=1e-12):
     #calculates a surface mesh assuming a polygonal geometry, i.e. not suitable for
     #curved geometries and the output will have to be modified for problems with colinear faces.
     #a surface mesh is required for the adaptation, so this function is called, if no surface mesh
@@ -224,18 +221,16 @@ def polygon_surfmesh(mesh):
     t = t/numpy.sqrt(t[:,0]**2+t[:,1]**2).repeat(2).reshape([len(t),2])
     # compute sets of co-linear edges (this is specific to polygonal geometries)
     IDs = zeros(len(t), dtype = numpy.intc)
-    while True:
-        n = IDs.argmin()
-        IDs[n] = IDs.max() + 1
-        I = arange(0,len(IDs))
-        notnset = I != n * ones(len(I),dtype=numpy.int64)
-        dists = abs(t[notnset,1]*(coords[bfaces[notnset,0],0] - ones(sum(notnset))*coords[bfaces[n,0],0])-\
-                    t[notnset,0]*(coords[bfaces[notnset,0],1] - ones(sum(notnset))*coords[bfaces[n,0],1])) < 1e-12
-        angles = ones(sum(notnset))-abs(t[notnset,0]*t[n,0]+t[notnset,1]*t[n,1])<1e-12 # angles = arccos(abs(t[notnset,0]*t[n,0]+t[notnset,1]*t[n,1]))<1e-12
-        IDs[I[notnset][angles*dists]] = IDs[n]
-        if all(IDs != zeros(len(IDs),dtype=numpy.int64)):
-            info("Found %i co-linear edges" % IDs.max())
-            break
+
+    I = numpy.argsort(array(zip(t[:,0],t[:,1]),dtype=[('e1',int),('e2',int)]),order=['e1','e2'])
+    t = t[I,:]; bfaces = bfaces[I,:]
+    dists = abs((t[:,1::-1]*coords[bfaces[:,0],:]).sum(1))
+    jmp = array([True] + ((abs(t[0:-1,0] - t[1:len(t),0]) > tol) | \
+                          (abs(t[0:-1,1] - t[1:len(t),1]) > tol) | \
+                          (abs(dists[0:-1] - dists[1:len(t)]) > tol)).tolist())
+    log(PROGRESS, "Found %i co-linear edges" % jmp.sum())
+    IDs[:] = jmp.cumsum()
+
     #compatibility fixes
     IDs += 1
     #bfaces_pair = zip(bfaces[:,0],bfaces[:,1])
