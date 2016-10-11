@@ -96,15 +96,15 @@ public:
      * @param x is the X coordinate.
      * @param y is the Y coordinate.
      * @param lnn2gnn mapping of local node numbering to global node numbering.
-     * @param owner_range range of node id's owned by each partition.
+     * @param NPNodes number of nodes owned by the local processors.
      * @param mpi_comm the mpi communicator.
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const index_t *lnn2gnn,
-         const index_t *owner_range, MPI_Comm mpi_comm)
+         const index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
-        _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, owner_range);
+        _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, NPNodes);
     }
 #endif
 
@@ -136,15 +136,15 @@ public:
      * @param y is the Y coordinate.
      * @param z is the Z coordinate.
      * @param lnn2gnn mapping of local node numbering to global node numbering.
-     * @param owner_range range of node id's owned by each partition.
+     * @param NPNodes number of owned nodes in the local mesh.
      * @param mpi_comm the mpi communicator.
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const real_t *z, const index_t *lnn2gnn,
-         const index_t *owner_range, MPI_Comm mpi_comm)
+         const index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
-        _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, owner_range);
+        _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
 #endif
 
@@ -1394,9 +1394,9 @@ private:
     template<typename _real_t> friend class DeferredOperations;
     template<typename _real_t> friend class VTKTools;
 
-    void _init(int _NNodes, int _NElements, const index_t *globalENList,
+    void _init(int _NNodes, int _NElements, const index_t *ENList,
                const real_t *x, const real_t *y, const real_t *z,
-               const index_t *lnn2gnn, const index_t *owner_range)
+               const index_t *lnn2gnn, const index_t NPNodes)
     {
         num_processes = 1;
         rank=0;
@@ -1428,25 +1428,28 @@ private:
         }
 
         // From the globalENList, create the halo and a local ENList if num_processes>1.
-        const index_t *ENList;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
         boost::unordered_map<index_t, index_t> gnn2lnn;
 #else
         std::map<index_t, index_t> gnn2lnn;
 #endif
-        if(num_processes==1) {
-            ENList = globalENList;
-        } else {
+        if(num_processes>1) {
 #ifdef HAVE_MPI
             assert(lnn2gnn!=NULL);
-            for(size_t i=0; i<(size_t)NNodes; i++) {
+            nfor(size_t i=0; i<(size_t)NNodes; i++) {
                 gnn2lnn[lnn2gnn[i]] = i;
             }
 
+            std::vector<index_t> owner_range(num_processes+1);
+            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, owner_range.data()+1, 1, MPI_INDEX_T, comm);
+            for(int i=1;i<=num_processes;i++) {
+                owner_range[i]+=owner_range[i-1];
+            }
+
             std::vector< std::set<index_t> > recv_set(num_processes);
-            index_t *localENList = new index_t[NElements*nloc];
             for(size_t i=0; i<(size_t)NElements*nloc; i++) {
-                index_t gnn = globalENList[i];
+                index_t lnn = ENList[i];
+                index_t gnn = lnn2gnn[lnn];
                 for(int j=0; j<num_processes; j++) {
                     if(gnn<owner_range[j+1]) {
                         if(j!=rank)
@@ -1454,7 +1457,6 @@ private:
                         break;
                     }
                 }
-                localENList[i] = gnn2lnn[gnn];
             }
             std::vector<int> recv_size(num_processes);
             recv.resize(num_processes);
@@ -1511,7 +1513,6 @@ private:
                 }
             }
 
-            ENList = localENList;
 #endif
         }
 
