@@ -89,6 +89,31 @@ extern "C" {
       be called before this can be called again, i.e. cannot adapt
       multiple meshes at the same time.
 
+      @param [in] NNodes Number of nodes.
+      @param [in] NElements Number of elements.
+      @param [in] enlist Element-node list.
+      @param [in] x x coordinate array.
+      @param [in] y y coordinate array.
+      @param [in] lnn2gnn local-to-global numbering.
+      @param [in] NPNodes Number of owned nodes on the local processor.
+      @param [in] mpi_comm is the mpi comm.
+      */
+    void pragmatic_2d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y,
+                               const index_t *lnn2gnn, const index_t *owner_range, MPI_Comm mpi_comm)
+    {
+        if(_pragmatic_mesh!=NULL) {
+            throw new std::string("PRAgMaTIc: only one mesh can be adapted at a time");
+        }
+
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, lnn2gnn, *NPNodes, mpi_comm);
+
+        _pragmatic_mesh = mesh;
+    }
+
+    /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
       @param [in] NNodes Number of nodes
       @param [in] NElements Number of elements
       @param [in] enlist Element-node list
@@ -102,6 +127,32 @@ extern "C" {
         assert(_pragmatic_metric_field==NULL);
 
         Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z);
+
+        _pragmatic_mesh = mesh;
+    }
+
+    /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
+      @param [in] NNodes Number of nodes
+      @param [in] NElements Number of elements
+      @param [in] enlist Element-node list
+      @param [in] x x coordinate array
+      @param [in] y y coordinate array
+      @param [in] z z coordinate array
+      @param [in] lnn2gnn local-to-global numbering.
+      @param [in] NPNodes Number of nodes owned by local processor.
+      @param [in] mpi_comm is the mpi comm.
+
+      */
+    void pragmatic_3d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z,
+                           const index_t *lnn2gnn, const index_t *NPNodes, MPI_Comm mpi_comm)
+    {
+        assert(_pragmatic_mesh==NULL);
+        assert(_pragmatic_metric_field==NULL);
+
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z, lnn2gnn, *NPNodes, mpi_comm);
 
         _pragmatic_mesh = mesh;
     }
