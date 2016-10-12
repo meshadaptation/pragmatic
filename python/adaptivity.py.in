@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2010 Imperial College London and others.
+# Copyright (C) 2016 Imperial College London and others.
 #
 # Please see the AUTHORS file in the main source directory for a
 # full list of copyright holders.
@@ -307,8 +307,72 @@ def impose_maxN(metric, maxN):
       metric.vector().set_local(metric.vector().array()/fak)
       info('metric coarsened to meet target node number')
     return [metric,fak]
-      
-def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=None, maxN=None):
+
+def patchwise_projection(dg_metric, mesh):
+    # Patchwise projection of a DG 0 metric to CG 1.
+    # This is done by setting each vertex value to be the
+    # average of the values of the DG metric over the cells
+    # in the vertex patch. The average is weighted by the patch
+    # cell volume.
+    # Implementation in C++ for speed
+
+    code = r'''
+    #include <dolfin/mesh/Vertex.h>
+    #include <dolfin/fem/fem_utils.h>
+
+    namespace dolfin
+    {
+      void project(const Function M, GenericVector& u, const Mesh mesh, const FunctionSpace space) 
+      {
+        std::size_t dim = mesh.geometry().dim();
+        const std::vector<int> vertex_map = vertex_to_dof_map(space);
+
+        double init_vals[dim*dim] = {0.0};
+        Array<double> vals(dim*dim, init_vals);
+        double denom = 0.0;
+        double volume = 0.0;
+        unsigned count = 0;
+        unsigned len = u.local_size();
+        std::vector<double> values(len,0.0);
+
+        for (VertexIterator vertex(mesh); !vertex.end(); ++vertex)
+        {
+            for (CellIterator patch_cell(*vertex); !patch_cell.end(); ++patch_cell)
+            {
+                Array<double> p(dim,patch_cell->midpoint().coordinates());
+                M.eval(vals,p);
+                volume = patch_cell->volume();
+                for (unsigned i=0;i<dim*dim;i++)
+                {
+                values[vertex_map[count + i]] += vals[i]*volume;
+                }
+                denom += volume;
+            }
+            for (unsigned i=0;i<dim*dim;i++)
+            {
+            values[vertex_map[count + i]] = values[vertex_map[count + i]]/denom;
+            }
+            denom = 0.0;
+            count += dim*dim;
+        }
+
+        u.set_local(values);
+      }
+    }'''
+
+    # compule C++ code
+    project_jit =  dolfin.compile_extension_module(code=code, cppargs=["-fpermissive"]).project
+
+    # define new metric
+    CG = TensorFunctionSpace(mesh, 'CG', 1)
+    cg_metric = Function(CG)
+
+    # projection step
+    project_jit(dg_metric, cg_metric.vector(), mesh, CG)
+
+    return cg_metric
+
+def adapt(metric, bfaces=None, bfaces_func=None, debugon=True, eta=1e-2, grada=None, maxN=None):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers, but as of DOLFIN.__VERSION__ >= "1.3.0",
   #there is no difference.
@@ -316,10 +380,8 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=No
   #         a DOLFIN SCALAR VARIABLE. In the latter case metric_pnorm is called
   #         to calculate a DOLFIN CG1 TENSOR VARIABLE
   # INPUT : bfaces.shape = (n,2) or bfaces.shape = (n,3) is a list of edges or
-  #        faces for the mesh boundary. If not specified, it will be calculated 
-  #        using the polygon_surfmesh or polyhedron_surfmesh functions.
-  #        If specified, it should be together with
-  # INPUT : bfaces_IDs.shape = (n,), which gives each edge and face and ID, so 
+  #        faces for the mesh boundary. If not specified, it will be calculated. 
+  # INPUT : bfaces_func is a FacetFunction that gives each edge and face and ID, so 
   #         that corners implicitly specified in 2D and edges in 3D. 
   #         All corners can be specified this way in 3D, but it can require 
   #         definition of dummy IDs, if the corner is in the middle of face and
@@ -342,8 +404,10 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=No
      metric = metric_pnorm(metric, eta=eta, CG1out=True)
   
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
-   metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1), solver_type='cg', preconditioner_type='petsc_amg') #metric = logproject(metric)
-  metric = fix_CG1_metric(metric) #fixes negative eigenvalues
+      # patchwise projection to CG 1 for speed
+      metric = patchwise_projection(metric, mesh)
+      #metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1), solver_type='cg', preconditioner_type='petsc_amg') #metric = logproject(metric)
+  #metric = fix_CG1_metric(metric) #fixes negative eigenvalues
   if grada is not None:
       metric = gradate(metric,grada)
   if maxN is not None:
@@ -374,10 +438,21 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=No
   coords = mesh.coordinates()
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
-    if element.cell().geometric_dimension() == 2:
-      [bfaces,bfaces_IDs] = polygon_surfmesh(mesh)
-    else:
-      [bfaces,bfaces_IDs] = polyhedron_surfmesh(mesh)
+      mesh.init(1,2)
+      bfaces = set([])
+      [bfaces.add(f) for f in facets(mesh) if f.exterior()]
+      bfaces_list = list(bfaces)
+      bfaces = numpy.array([tuple(f.entities(0)) for f in bfaces_list])
+      #FIXME need to implement co-linear edges, WIP
+  #  if element.cell().geometric_dimension() == 2:
+  #    [bfaces,bfaces_IDs] = polygon_surfmesh(mesh)
+  #  else:
+  #    [bfaces,bfaces_IDs] = polyhedron_surfmesh(mesh)
+
+  if bfaces_func is None:
+      bfaces_IDs = numpy.arange(bfaces.shape[0], dtype = numpy.int32)
+  else:
+      bfaces_IDs = numpy.array([bfaces_func[f.index()] for f in bfaces_list], dtype = numpy.int32)
     
   x = coords[nodes,0]
   y = coords[nodes,1]
@@ -431,10 +506,10 @@ def adapt(metric, bfaces=None, bfaces_IDs=None, debugon=True, eta=1e-2, grada=No
                                   z.ctypes.data)
   info("Setting surface ...")
   nfacets = ctypes.c_int(len(bfaces))
-  facets = array(bfaces.flatten(),dtype=numpy.intc)
+  facets_array = array(bfaces.flatten(),dtype=numpy.intc)
   
   _libpragmatic.pragmatic_set_boundary(ctypes.byref(nfacets),
-                                       facets.ctypes.data,
+                                       facets_array.ctypes.data,
                                        bfaces_IDs.ctypes.data)
   
   info("Setting metric tensor field ...")
