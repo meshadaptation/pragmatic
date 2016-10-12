@@ -2662,16 +2662,16 @@ private:
                 q[1] += nm[1]*x + nm[3]*y + nm[4]*z;
                 q[2] += nm[2]*x + nm[4]*y + nm[5]*z;
 
-                A[0] += nm[0];
-                A[1] += nm[1];
-                A[2] += nm[2];
-                A[4] += nm[3];
-                A[5] += nm[4];
-                A[8] += nm[5];
+                A(0,0) += nm[0];
+                A(0,1) += nm[1];
+                A(0,2) += nm[2];
+                A(1,1) += nm[3];
+                A(1,2) += nm[4];
+                A(2,2) += nm[5];
             }
-            A[3] = A[1];
-            A[6] = A[2];
-            A[7] = A[5];
+            A(1,0) = A(0,1);
+            A(2,0) = A(0,2);
+            A(2,1) = A(1,2);
 
             // Want to solve the system Ap=q to find the new position, p.
             Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);

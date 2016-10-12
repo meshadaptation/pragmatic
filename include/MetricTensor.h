@@ -170,16 +170,16 @@ public:
         Eigen::Matrix<treal_t, dim, dim> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
 
         if(dim==2) {
-            metric[0] = Mp[0];
-            metric[1] = Mp[1];
-            metric[2] = Mp[3];
+          metric[0] = Mp(0,0);
+          metric[1] = Mp(0,1);
+          metric[2] = Mp(1,1);
         } else if(dim==3) {
-            metric[0] = Mp[0];
-            metric[1] = Mp[1];
-            metric[2] = Mp[2];
-            metric[3] = Mp[4];
-            metric[4] = Mp[5];
-            metric[5] = Mp[8];
+          metric[0] = Mp(0,0);
+          metric[1] = Mp(0,1);
+          metric[2] = Mp(0,2);
+          metric[3] = Mp(1,1);
+          metric[4] = Mp(1,2);
+          metric[5] = Mp(2,2);
         }
 
         return;
@@ -209,15 +209,15 @@ public:
             M1 << _metric[0], _metric[1],
             _metric[1], _metric[2];
         else if(dim==3) {
-            M1[0] = _metric[0];
-            M1[1] = _metric[1];
-            M1[2] = _metric[2];
-            M1[3] = _metric[1];
-            M1[4] = _metric[3];
-            M1[5] = _metric[4];
-            M1[6] = _metric[2];
-            M1[7] = _metric[4];
-            M1[8] = _metric[5];
+          M1(0,0) = _metric[0];
+          M1(0,1) = _metric[1];
+          M1(0,2) = _metric[2];
+          M1(1,0) = _metric[1];
+          M1(1,1) = _metric[3];
+          M1(1,2) = _metric[4];
+          M1(2,0) = _metric[2];
+          M1(2,1) = _metric[4];
+          M1(2,2) = _metric[5];
         }
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
@@ -243,15 +243,15 @@ public:
             M2 << metric._metric[0], metric._metric[1],
             metric._metric[1], metric._metric[2];
         else if(dim==3) {
-            M2[0] = metric._metric[0];
-            M2[1] = metric._metric[1];
-            M2[2] = metric._metric[2];
-            M2[3] = metric._metric[1];
-            M2[4] = metric._metric[3];
-            M2[5] = metric._metric[4];
-            M2[6] = metric._metric[2];
-            M2[7] = metric._metric[4];
-            M2[8] = metric._metric[5];
+          M1(0,0) = metric._metric[0];
+          M1(0,1) = metric._metric[1];
+          M1(0,2) = metric._metric[2];
+          M1(1,0) = metric._metric[1];
+          M1(1,1) = metric._metric[3];
+          M1(1,2) = metric._metric[4];
+          M1(2,0) = metric._metric[2];
+          M1(2,1) = metric._metric[4];
+          M1(2,2) = metric._metric[5];
         }
 
         // The input matrix could be zero if there is zero curvature in the local solution.
@@ -312,16 +312,16 @@ public:
         Eigen::Matrix<treal_t, dim, dim> Mc = F.transpose()*evectors*evalues.asDiagonal()*evectors.transpose()*F;
 
         if(dim==2) {
-            _metric[0] = Mc[0];
-            _metric[1] = Mc[1];
-            _metric[2] = Mc[3];
+          _metric[0] = Mc(0,0);
+          _metric[1] = Mc(0,1);
+          _metric[2] = Mc(1,1);
         } else if(dim==3) {
-            _metric[0] = Mc[0];
-            _metric[1] = Mc[1];
-            _metric[2] = Mc[2];
-            _metric[3] = Mc[4];
-            _metric[4] = Mc[5];
-            _metric[5] = Mc[8];
+          _metric[0] = Mc(0,0);
+          _metric[1] = Mc(0,1);
+          _metric[2] = Mc(0,2);
+          _metric[3] = Mc(1,1);
+          _metric[4] = Mc(1,2);
+          _metric[5] = Mc(2,2);
         }
 
         return;
@@ -337,15 +337,15 @@ public:
             M1 << _metric[0], _metric[1],
             _metric[1], _metric[2];
         else if(dim==3) {
-            M1[0] = _metric[0];
-            M1[1] = _metric[1];
-            M1[2] = _metric[2];
-            M1[3] = _metric[1];
-            M1[4] = _metric[3];
-            M1[5] = _metric[4];
-            M1[6] = _metric[2];
-            M1[7] = _metric[4];
-            M1[8] = _metric[5];
+          M1(0,0) = _metric[0];
+          M1(0,1) = _metric[1];
+          M1(0,2) = _metric[2];
+          M1(1,0) = _metric[1];
+          M1(1,1) = _metric[3];
+          M1(1,2) = _metric[4];
+          M1(2,0) = _metric[2];
+          M1(2,1) = _metric[4];
+          M1(2,2) = _metric[5];
         }
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
