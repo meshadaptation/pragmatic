@@ -96,8 +96,8 @@ if(PYTHONINTERP_FOUND)
     configure_file(${ADAPTIVITY_PY_IN} ${ADAPTIVITY_PY})
 endif()
 
-find_package(Eigen2 REQUIRED)
-include_directories(${EIGEN2_INCLUDE_DIR})
+find_package(Eigen REQUIRED)
+include_directories(${EIGEN_INCLUDE_DIR})
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
