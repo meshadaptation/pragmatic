@@ -26,8 +26,10 @@ void pragmatic::generate_Steiner_ellipse(const double *x1, const double *x2, con
     Eigen::Matrix<double, 6, 1> R;
     R<<1,1,1,1,1,1;
     Eigen::Matrix<double, 6, 1> S;
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(M);
 
-    M.svd().solve(R, &S);
+    svd.solve(R);
+    S = svd.singularValues();
 
     sm[0] = S[0];
     sm[1] = S[5];
