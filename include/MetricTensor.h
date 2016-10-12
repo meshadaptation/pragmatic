@@ -165,7 +165,7 @@ public:
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
 
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().array().abs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver.eigenvectors().real();
         Eigen::Matrix<treal_t, dim, dim> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
 
@@ -221,7 +221,7 @@ public:
         }
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
-        Eigen::Matrix<treal_t, dim, 1> evalues1 = solver1.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues1 = solver1.eigenvalues().real().array().abs();
 
         treal_t aspect_r;
         if(dim==2) {
@@ -259,7 +259,7 @@ public:
             return;
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver2(M2);
-        Eigen::Matrix<treal_t, dim, 1> evalues2 = solver2.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues2 = solver2.eigenvalues().real().array().abs();
 
         treal_t aspect_i;
         if(dim==2)
@@ -285,7 +285,7 @@ public:
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M1);
         Eigen::Matrix<treal_t, dim, dim> F =
-            solver.eigenvalues().real().cwise().abs().cwise().sqrt().asDiagonal()*
+          Eigen::DiagonalMatrix<treal_t, Eigen::Dynamic, Eigen::Dynamic>(Eigen::Matrix<treal_t, Eigen::Dynamic, Eigen::Dynamic>(solver.eigenvalues().real().array().abs().array().sqrt()))*
             solver.eigenvectors().real();
 
         if(dim==2)
@@ -299,7 +299,7 @@ public:
         Eigen::Matrix<treal_t, dim, dim> M = F.inverse().transpose()*M2*F.inverse();
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver3(M);
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver3.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver3.eigenvalues().real().array().abs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver3.eigenvectors().real();
 
         if(perserved_small_edges)
@@ -350,7 +350,7 @@ public:
 
         Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
 
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver1.eigenvalues().real().cwise().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver1.eigenvalues().real().array().abs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver1.eigenvectors().real();
 
         if(dim==2) {
@@ -472,7 +472,7 @@ public:
         } else {
             Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
 
-            Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().cwise().abs();
+            Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().array().abs();
             Eigen::Matrix<treal_t, dim, dim> evectors = solver.eigenvectors().real();
 
             for(size_t i=0; i<dim; i++)
