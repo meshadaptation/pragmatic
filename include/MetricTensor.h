@@ -480,7 +480,7 @@ public:
 
             Eigen::Matrix<treal_t, dim, dim> Mp = evectors.transpose();
             for(size_t i=0; i<dim; i++)
-              for(size_t j=0; i<dim; j++)
+              for(size_t j=0; j<dim; j++)
                 eigenvectors[i*dim+j] = Mp(i,j);
         }
     }
