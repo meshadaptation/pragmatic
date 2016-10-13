@@ -2675,10 +2675,9 @@ private:
 
             // Want to solve the system Ap=q to find the new position, p.
             Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-            svd.solve(q);
-            b = svd.singularValues();
+            b = svd.solve(q);
 
             for(int i=0; i<3; ++i) {
                 nc[i] += b[i];

@@ -262,10 +262,9 @@ public:
             }
 
             Eigen::Matrix<double, 3, 1> S = Eigen::Matrix<real_t, 3, 1>::Zero(3);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-            svd.solve(b);
-            S = svd.singularValues();
+            S = svd.solve(b);
 
             if(_mesh->NNList[i].size()>=3) {
                 sm[0] = S[0];
@@ -355,10 +354,9 @@ public:
             }
 
             Eigen::Matrix<double, 6, 1> S = Eigen::Matrix<real_t, 6, 1>::Zero(6);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-            svd.solve(b);
-            S = svd.singularValues();
+            S = svd.solve(b);
 
             if(_mesh->NNList[i].size()>=6) {
                 sm[0] = S[0];
@@ -1024,10 +1022,9 @@ private:
             A(4,5)= A(5,4);
 
             Eigen::Matrix<real_t, 6, 1> a = Eigen::Matrix<real_t, 6, 1>::Zero(6);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-            svd.solve(b);
-            a = svd.singularValues();
+            a = svd.solve(b);
 
             Hessian[0] = 2*a[1]; // d2/dx2
             Hessian[1] = a[2];   // d2/dxdy
@@ -1167,10 +1164,9 @@ private:
             A(8,9) = A(9,8);
 
             Eigen::Matrix<real_t, 10, 1> a = Eigen::Matrix<real_t, 10, 1>::Zero(10);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-            svd.solve(b);
-            a = svd.singularValues();
+            a = svd.solve(b);
 
             Hessian[0] = a[4]*2.0; // d2/dx2
             Hessian[1] = a[5];     // d2/dxdy
