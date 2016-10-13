@@ -85,7 +85,7 @@ except:
   raise LibraryException("Failed to load libpragmatic in %s" % path)
 
 def refine_metric(M, factor):
-  M2 = Function(M, deepcopy=True)
+  M2 = M.copy(deepcopy=True)
   M2.assign(factor**2*M)
   name = "mesh_metric_refined_x%.6g" % factor
   M2.rename(name, name)
@@ -372,7 +372,7 @@ def patchwise_projection(dg_metric, mesh):
 
     return cg_metric
 
-def adapt(metric, bfaces=None, bfaces_func=None, debugon=True, eta=1e-2, grada=None, maxN=None):
+def adapt(metric, bfaces=None, bfaces_func=None, debugon=True, eta=1e-2, grada=None, maxN=None, coarsen=False):
   #this is the actual adapt function. It currently works with vertex 
   #numbers rather than DOF numbers, but as of DOLFIN.__VERSION__ >= "1.3.0",
   #there is no difference.
@@ -517,7 +517,10 @@ def adapt(metric, bfaces=None, bfaces_func=None, debugon=True, eta=1e-2, grada=N
   
   info("Entering adapt ...")
   startTime = time()
-  _libpragmatic.pragmatic_adapt()
+  if coarsen:
+      _libpragmatic.pragmatic_coarsen(ctypes.c_int(1))
+  else:
+      _libpragmatic.pragmatic_adapt(ctypes.c_int(1))
   
   info("adapt took %0.1fs" % (time()-startTime))
   n_NNodes = ctypes.c_int()
