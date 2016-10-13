@@ -479,8 +479,9 @@ public:
                 eigenvalues[i] = evalues[i];
 
             Eigen::Matrix<treal_t, dim, dim> Mp = evectors.transpose();
-            for(size_t i=0; i<dim*dim; i++)
-                eigenvectors[i] = Mp[i];
+            for(size_t i=0; i<dim; i++)
+              for(size_t j=0; i<dim; j++)
+                eigenvectors[i*dim+j] = Mp(i,j);
         }
     }
 
