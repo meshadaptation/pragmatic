@@ -370,16 +370,16 @@ public:
         Eigen::Matrix<treal_t, dim, dim> Mc = evectors*evalues.asDiagonal()*evectors.transpose();
 
         if(dim==2) {
-            _metric[0] = Mc[0];
-            _metric[1] = Mc[1];
-            _metric[2] = Mc[3];
+          _metric[0] = Mc(0,0);
+          _metric[1] = Mc(0,1);
+          _metric[2] = Mc(1,1);
         } else if(dim==3) {
-            _metric[0] = Mc[0];
-            _metric[1] = Mc[1];
-            _metric[2] = Mc[2];
-            _metric[3] = Mc[4];
-            _metric[4] = Mc[5];
-            _metric[5] = Mc[8];
+          _metric[0] = Mc(0,0);
+          _metric[1] = Mc(0,1);
+          _metric[2] = Mc(0,2);
+          _metric[3] = Mc(1,1);
+          _metric[4] = Mc(1,2);
+          _metric[5] = Mc(2,2);
         }
 
         return;
