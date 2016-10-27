@@ -461,7 +461,7 @@ public:
         vtk_min_desired_length->SetName("min_desired_edge_length");
 
         #pragma omp parallel for
-        for(index_t i=0; i<NNodes; i++) {
+        for(index_t i=1; i<NNodes; i++) {
             const real_t *r = mesh->get_coords(i);
             const double *m = mesh->get_metric(i);
 
@@ -485,26 +485,26 @@ public:
             real_t max_desired_edge_length=0;
             real_t min_desired_edge_length=DBL_MAX;
 
-            if(ndims==2)
+            if(ndims==2) {
+	            MetricTensor<double,2> M(m);
                 for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin(); it!=mesh->NNList[i].end(); ++it) {
                     double length = mesh->calc_edge_length(i, *it);
                     mean_edge_length += length;
 
-                    MetricTensor<double,2> M(m);
-
                     max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
                     min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
                 }
-            else if(ndims==3)
+            }
+            else if(ndims==3) {
+                MetricTensor<double,3> M(m);
                 for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin(); it!=mesh->NNList[i].end(); ++it) {
                     double length = mesh->calc_edge_length(i, *it);
                     mean_edge_length += length;
 
-                    MetricTensor<double,3> M(m);
-
                     max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
                     min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
                 }
+            }
 
 
             mean_edge_length/=nedges;
