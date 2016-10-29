@@ -486,21 +486,21 @@ public:
             real_t min_desired_edge_length=DBL_MAX;
 
             if(ndims==2)
+                MetricTensor<double,2> M(m);
+
                 for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin(); it!=mesh->NNList[i].end(); ++it) {
                     double length = mesh->calc_edge_length(i, *it);
                     mean_edge_length += length;
-
-                    MetricTensor<double,2> M(m);
 
                     max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
                     min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
                 }
             else if(ndims==3)
+                MetricTensor<double,3> M(m);
+
                 for(typename std::vector<index_t>::const_iterator it=mesh->NNList[i].begin(); it!=mesh->NNList[i].end(); ++it) {
                     double length = mesh->calc_edge_length(i, *it);
                     mean_edge_length += length;
-
-                    MetricTensor<double,3> M(m);
 
                     max_desired_edge_length = std::max(max_desired_edge_length, M.max_length());
                     min_desired_edge_length = std::min(min_desired_edge_length, M.min_length());
