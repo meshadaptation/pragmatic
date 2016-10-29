@@ -262,7 +262,7 @@ public:
             }
 
             Eigen::Matrix<double, 3, 1> S = Eigen::Matrix<real_t, 3, 1>::Zero(3);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             S = svd.solve(b);
 
@@ -354,7 +354,7 @@ public:
             }
 
             Eigen::Matrix<double, 6, 1> S = Eigen::Matrix<real_t, 6, 1>::Zero(6);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             S = svd.solve(b);
 
@@ -1022,7 +1022,7 @@ private:
             A(4,5)= A(5,4);
 
             Eigen::Matrix<real_t, 6, 1> a = Eigen::Matrix<real_t, 6, 1>::Zero(6);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             a = svd.solve(b);
 
@@ -1164,7 +1164,7 @@ private:
             A(8,9) = A(9,8);
 
             Eigen::Matrix<real_t, 10, 1> a = Eigen::Matrix<real_t, 10, 1>::Zero(10);
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             a = svd.solve(b);
 
