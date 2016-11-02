@@ -86,9 +86,9 @@ public:
      *
      * @param metric points to the upper triangle of the tensor.
      */
-    MetricTensor(const treal_t *metric)
+    MetricTensor(const treal_t *metric, bool enforce_posDef=true)
     {
-        set_metric(metric);
+        set_metric(metric, enforce_posDef);
     }
 
     /*! Copy constructor.
@@ -138,12 +138,13 @@ public:
      *
      * @param metric is a pointer to the buffer where the metric field is to be copied from.
      */
-    void set_metric(const treal_t* metric)
+    void set_metric(const treal_t* metric, bool enforce_posDef=true)
     {
         for(size_t i=0; i<(dim==2?3:6); i++)
             _metric[i] = metric[i];
 
-        positive_definiteness(_metric);
+        if (enforce_posDef)
+          positive_definiteness(_metric);
     }
 
     // Enforce positive definiteness
