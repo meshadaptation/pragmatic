@@ -2648,9 +2648,9 @@ private:
             }
 
             // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge in metric space.
-            Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
-                Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+            Eigen::Matrix<real_t, 3, 3> A =
+                Eigen::Matrix<real_t, 3, 3>::Zero(3, 3);
+            Eigen::Matrix<real_t, 3, 1> q = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
             for(typename std::map<Coords_t, index_t>::const_iterator it=coords_map.begin(); it!=coords_map.end(); ++it) {
                 const real_t *il = _mesh->get_coords(it->second);
@@ -2674,8 +2674,8 @@ private:
             A(2,1) = A(1,2);
 
             // Want to solve the system Ap=q to find the new position, p.
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-            Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::Matrix<real_t, 3, 1> b = Eigen::Matrix<real_t, 3, 1>::Zero(3);
+            Eigen::JacobiSVD<Eigen::Matrix3d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             b = svd.solve(q);
 

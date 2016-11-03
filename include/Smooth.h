@@ -611,8 +611,8 @@ private:
         real_t x0 = get_x(node);
         real_t y0 = get_y(node);
 
-        Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(2, 2);
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
+        Eigen::Matrix<real_t, 2, 2> A = Eigen::Matrix<real_t, 2, 2>::Zero(2, 2);
+        Eigen::Matrix<real_t, 2, 1> q = Eigen::Matrix<real_t, 2, 1>::Zero(2);
 
         const real_t *m0 = _mesh->get_metric(node);
         for(const auto& il : patch) {
@@ -632,8 +632,8 @@ private:
         A(1,0)=A(0,1);
 
         // Want to solve the system Ap=q to find the new position, p.
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
-        Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::Matrix<real_t, 2, 1> b = Eigen::Matrix<real_t, 2, 1>::Zero(2);
+        Eigen::JacobiSVD<Eigen::Matrix2d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
         b = svd.solve(q);
 
@@ -654,8 +654,8 @@ private:
         real_t y0 = get_y(node);
         real_t z0 = get_z(node);
 
-        Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+        Eigen::Matrix<real_t, 3, 3> A = Eigen::Matrix<real_t, 3, 3>::Zero(3, 3);
+        Eigen::Matrix<real_t, 3, 1> q = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
         const real_t *m0 = _mesh->get_metric(node);
         for(const auto& il : patch) {
@@ -685,8 +685,8 @@ private:
         A(2,1) = A(1,2);
 
         // Want to solve the system Ap=q to find the new position, p.
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-        Eigen::JacobiSVD<Eigen::MatrixXd, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::Matrix<real_t, 3, 1> b = Eigen::Matrix<real_t, 3, 1>::Zero(3);
+        Eigen::JacobiSVD<Eigen::Matrix3d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
         b = svd.solve(q);
 
