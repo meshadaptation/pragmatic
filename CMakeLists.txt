@@ -98,6 +98,8 @@ endif()
 
 find_package(Eigen REQUIRED)
 include_directories(${EIGEN_INCLUDE_DIR})
+# Use Eigen in release mode. TODO add flag for vectorization support
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG")
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
