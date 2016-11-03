@@ -1436,12 +1436,12 @@ private:
         if(num_processes>1) {
 #ifdef HAVE_MPI
             assert(lnn2gnn!=NULL);
-            nfor(size_t i=0; i<(size_t)NNodes; i++) {
+            for(size_t i=0; i<(size_t)NNodes; i++) {
                 gnn2lnn[lnn2gnn[i]] = i;
             }
 
             std::vector<index_t> owner_range(num_processes+1);
-            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, owner_range.data()+1, 1, MPI_INDEX_T, comm);
+            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, owner_range.data()+1, 1, MPI_INDEX_T, _mpi_comm);
             for(int i=1;i<=num_processes;i++) {
                 owner_range[i]+=owner_range[i-1];
             }
