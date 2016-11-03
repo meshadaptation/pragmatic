@@ -611,8 +611,8 @@ private:
         real_t x0 = get_x(node);
         real_t y0 = get_y(node);
 
-        Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(2, 2);
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
+        Eigen::Matrix<real_t, 2, 2> A = Eigen::Matrix<real_t, 2, 2>::Zero(2, 2);
+        Eigen::Matrix<real_t, 2, 1> q = Eigen::Matrix<real_t, 2, 1>::Zero(2);
 
         const real_t *m0 = _mesh->get_metric(node);
         for(const auto& il : patch) {
@@ -625,15 +625,17 @@ private:
             q[0] += (m[0]*x + m[1]*y);
             q[1] += (m[1]*x + m[2]*y);
 
-            A[0] += m[0];
-            A[1] += m[1];
-            A[3] += m[2];
+            A(0,0) += m[0];
+            A(0,1) += m[1];
+            A(1,1) += m[2];
         }
-        A[2]=A[1];
+        A(1,0)=A(0,1);
 
         // Want to solve the system Ap=q to find the new position, p.
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(2);
-        A.svd().solve(q, &b);
+        Eigen::Matrix<real_t, 2, 1> b = Eigen::Matrix<real_t, 2, 1>::Zero(2);
+        Eigen::JacobiSVD<Eigen::Matrix2d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+        b = svd.solve(q);
 
         for(size_t i=0; i<2; i++)
             p[i] = b[i];
@@ -652,8 +654,8 @@ private:
         real_t y0 = get_y(node);
         real_t z0 = get_z(node);
 
-        Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A = Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+        Eigen::Matrix<real_t, 3, 3> A = Eigen::Matrix<real_t, 3, 3>::Zero(3, 3);
+        Eigen::Matrix<real_t, 3, 1> q = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
         const real_t *m0 = _mesh->get_metric(node);
         for(const auto& il : patch) {
@@ -671,20 +673,22 @@ private:
             q[1] += m[1]*x + m[3]*y + m[4]*z;
             q[2] += m[2]*x + m[4]*y + m[5]*z;
 
-            A[0] += m[0];
-            A[1] += m[1];
-            A[2] += m[2];
-            A[4] += m[3];
-            A[5] += m[4];
-            A[8] += m[5];
+            A(0,0) += m[0];
+            A(0,1) += m[1];
+            A(0,2) += m[2];
+            A(1,1) += m[3];
+            A(1,2) += m[4];
+            A(2,2) += m[5];
         }
-        A[3] = A[1];
-        A[6] = A[2];
-        A[7] = A[5];
+        A(1,0) = A(0,1);
+        A(2,0) = A(0,2);
+        A(2,1) = A(1,2);
 
         // Want to solve the system Ap=q to find the new position, p.
-        Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-        A.svd().solve(q, &b);
+        Eigen::Matrix<real_t, 3, 1> b = Eigen::Matrix<real_t, 3, 1>::Zero(3);
+        Eigen::JacobiSVD<Eigen::Matrix3d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+        b = svd.solve(q);
 
         for(int i=0; i<3; i++)
             p[i] = b[i];
