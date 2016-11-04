@@ -244,15 +244,15 @@ public:
             M2 << metric._metric[0], metric._metric[1],
             metric._metric[1], metric._metric[2];
         else if(dim==3) {
-          M1(0,0) = metric._metric[0];
-          M1(0,1) = metric._metric[1];
-          M1(0,2) = metric._metric[2];
-          M1(1,0) = metric._metric[1];
-          M1(1,1) = metric._metric[3];
-          M1(1,2) = metric._metric[4];
-          M1(2,0) = metric._metric[2];
-          M1(2,1) = metric._metric[4];
-          M1(2,2) = metric._metric[5];
+          M2(0,0) = metric._metric[0];
+          M2(0,1) = metric._metric[1];
+          M2(0,2) = metric._metric[2];
+          M2(1,0) = metric._metric[1];
+          M2(1,1) = metric._metric[3];
+          M2(1,2) = metric._metric[4];
+          M2(2,0) = metric._metric[2];
+          M2(2,1) = metric._metric[4];
+          M2(2,2) = metric._metric[5];
         }
 
         // The input matrix could be zero if there is zero curvature in the local solution.
