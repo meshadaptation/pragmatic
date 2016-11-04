@@ -154,19 +154,19 @@ public:
 
         if(dim==2) {
             M << metric[0], metric[1],
-            metric[1], metric[2];
+                 metric[1], metric[2];
         } else if(dim==3) {
             M << metric[0], metric[1], metric[2],
-            metric[1], metric[3], metric[4],
-            metric[2], metric[4], metric[5];
+                 metric[1], metric[3], metric[4],
+                 metric[2], metric[4], metric[5];
         }
 
         if(M.isZero())
             return;
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
 
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().array().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().cwiseAbs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver.eigenvectors().real();
         Eigen::Matrix<treal_t, dim, dim> Mp = evectors*evalues.asDiagonal()*evectors.transpose();
 
@@ -208,21 +208,21 @@ public:
         Eigen::Matrix<treal_t, dim, dim> M1;
         if(dim==2)
             M1 << _metric[0], _metric[1],
-            _metric[1], _metric[2];
+                  _metric[1], _metric[2];
         else if(dim==3) {
-          M1(0,0) = _metric[0];
-          M1(0,1) = _metric[1];
-          M1(0,2) = _metric[2];
-          M1(1,0) = _metric[1];
-          M1(1,1) = _metric[3];
-          M1(1,2) = _metric[4];
-          M1(2,0) = _metric[2];
-          M1(2,1) = _metric[4];
-          M1(2,2) = _metric[5];
+            M1(0,0) = _metric[0];
+            M1(0,1) = _metric[1];
+            M1(0,2) = _metric[2];
+            M1(1,0) = _metric[1];
+            M1(1,1) = _metric[3];
+            M1(1,2) = _metric[4];
+            M1(2,0) = _metric[2];
+            M1(2,1) = _metric[4];
+            M1(2,2) = _metric[5];
         }
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
-        Eigen::Matrix<treal_t, dim, 1> evalues1 = solver1.eigenvalues().real().array().abs();
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
+        Eigen::Matrix<treal_t, dim, 1> evalues1 = solver1.eigenvalues().real().cwiseAbs();
 
         treal_t aspect_r;
         if(dim==2) {
@@ -242,25 +242,25 @@ public:
         Eigen::Matrix<treal_t, dim, dim> M2;
         if(dim==2)
             M2 << metric._metric[0], metric._metric[1],
-            metric._metric[1], metric._metric[2];
+                  metric._metric[1], metric._metric[2];
         else if(dim==3) {
-          M2(0,0) = metric._metric[0];
-          M2(0,1) = metric._metric[1];
-          M2(0,2) = metric._metric[2];
-          M2(1,0) = metric._metric[1];
-          M2(1,1) = metric._metric[3];
-          M2(1,2) = metric._metric[4];
-          M2(2,0) = metric._metric[2];
-          M2(2,1) = metric._metric[4];
-          M2(2,2) = metric._metric[5];
+            M2(0,0) = metric._metric[0];
+            M2(0,1) = metric._metric[1];
+            M2(0,2) = metric._metric[2];
+            M2(1,0) = metric._metric[1];
+            M2(1,1) = metric._metric[3];
+            M2(1,2) = metric._metric[4];
+            M2(2,0) = metric._metric[2];
+            M2(2,1) = metric._metric[4];
+            M2(2,2) = metric._metric[5];
         }
 
         // The input matrix could be zero if there is zero curvature in the local solution.
         if(M2.isZero())
             return;
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver2(M2);
-        Eigen::Matrix<treal_t, dim, 1> evalues2 = solver2.eigenvalues().real().array().abs();
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver2(M2);
+        Eigen::Matrix<treal_t, dim, 1> evalues2 = solver2.eigenvalues().real().cwiseAbs();
 
         treal_t aspect_i;
         if(dim==2)
@@ -278,29 +278,29 @@ public:
         // Map Mi to the reference space where Mr==I
         if(dim==2)
             M1 << Mr[0], Mr[1],
-            Mr[1], Mr[2];
+                  Mr[1], Mr[2];
         else if(dim==3)
             M1 << Mr[0], Mr[1], Mr[2],
-            Mr[1], Mr[3], Mr[4],
-            Mr[2], Mr[4], Mr[5];
+                  Mr[1], Mr[3], Mr[4],
+                  Mr[2], Mr[4], Mr[5];
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M1);
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M1);
         Eigen::Matrix<treal_t, dim, dim> F =
-          Eigen::DiagonalMatrix<treal_t, Eigen::Dynamic, Eigen::Dynamic>(Eigen::Matrix<treal_t, Eigen::Dynamic, Eigen::Dynamic>(solver.eigenvalues().real().array().abs().array().sqrt()))*
+            solver.eigenvalues().real().cwiseAbs().cwiseSqrt().asDiagonal()*
             solver.eigenvectors().real();
 
         if(dim==2)
             M2 << Mi[0], Mi[1],
-            Mi[1], Mi[2];
+                  Mi[1], Mi[2];
         else if(dim==3)
             M2 << Mi[0], Mi[1], Mi[2],
-            Mi[1], Mi[3], Mi[4],
-            Mi[2], Mi[4], Mi[5];
+                  Mi[1], Mi[3], Mi[4],
+                  Mi[2], Mi[4], Mi[5];
 
         Eigen::Matrix<treal_t, dim, dim> M = F.inverse().transpose()*M2*F.inverse();
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver3(M);
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver3.eigenvalues().real().array().abs();
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver3(M);
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver3.eigenvalues().real().cwiseAbs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver3.eigenvectors().real();
 
         if(perserved_small_edges)
@@ -313,16 +313,16 @@ public:
         Eigen::Matrix<treal_t, dim, dim> Mc = F.transpose()*evectors*evalues.asDiagonal()*evectors.transpose()*F;
 
         if(dim==2) {
-          _metric[0] = Mc(0,0);
-          _metric[1] = Mc(0,1);
-          _metric[2] = Mc(1,1);
+            _metric[0] = Mc(0,0);
+            _metric[1] = Mc(0,1);
+            _metric[2] = Mc(1,1);
         } else if(dim==3) {
-          _metric[0] = Mc(0,0);
-          _metric[1] = Mc(0,1);
-          _metric[2] = Mc(0,2);
-          _metric[3] = Mc(1,1);
-          _metric[4] = Mc(1,2);
-          _metric[5] = Mc(2,2);
+            _metric[0] = Mc(0,0);
+            _metric[1] = Mc(0,1);
+            _metric[2] = Mc(0,2);
+            _metric[3] = Mc(1,1);
+            _metric[4] = Mc(1,2);
+            _metric[5] = Mc(2,2);
         }
 
         return;
@@ -336,22 +336,22 @@ public:
         Eigen::Matrix<treal_t, dim, dim> M1;
         if(dim==2)
             M1 << _metric[0], _metric[1],
-            _metric[1], _metric[2];
+                  _metric[1], _metric[2];
         else if(dim==3) {
-          M1(0,0) = _metric[0];
-          M1(0,1) = _metric[1];
-          M1(0,2) = _metric[2];
-          M1(1,0) = _metric[1];
-          M1(1,1) = _metric[3];
-          M1(1,2) = _metric[4];
-          M1(2,0) = _metric[2];
-          M1(2,1) = _metric[4];
-          M1(2,2) = _metric[5];
+            M1(0,0) = _metric[0];
+            M1(0,1) = _metric[1];
+            M1(0,2) = _metric[2];
+            M1(1,0) = _metric[1];
+            M1(1,1) = _metric[3];
+            M1(1,2) = _metric[4];
+            M1(2,0) = _metric[2];
+            M1(2,1) = _metric[4];
+            M1(2,2) = _metric[5];
         }
 
-        Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
+        Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver1(M1);
 
-        Eigen::Matrix<treal_t, dim, 1> evalues = solver1.eigenvalues().real().array().abs();
+        Eigen::Matrix<treal_t, dim, 1> evalues = solver1.eigenvalues().real().cwiseAbs();
         Eigen::Matrix<treal_t, dim, dim> evectors = solver1.eigenvectors().real();
 
         if(dim==2) {
@@ -371,16 +371,16 @@ public:
         Eigen::Matrix<treal_t, dim, dim> Mc = evectors*evalues.asDiagonal()*evectors.transpose();
 
         if(dim==2) {
-          _metric[0] = Mc(0,0);
-          _metric[1] = Mc(0,1);
-          _metric[2] = Mc(1,1);
+            _metric[0] = Mc(0,0);
+            _metric[1] = Mc(0,1);
+            _metric[2] = Mc(1,1);
         } else if(dim==3) {
-          _metric[0] = Mc(0,0);
-          _metric[1] = Mc(0,1);
-          _metric[2] = Mc(0,2);
-          _metric[3] = Mc(1,1);
-          _metric[4] = Mc(1,2);
-          _metric[5] = Mc(2,2);
+            _metric[0] = Mc(0,0);
+            _metric[1] = Mc(0,1);
+            _metric[2] = Mc(0,2);
+            _metric[3] = Mc(1,1);
+            _metric[4] = Mc(1,2);
+            _metric[5] = Mc(2,2);
         }
 
         return;
@@ -458,11 +458,11 @@ public:
         Eigen::Matrix<treal_t, dim, dim> M;
         if(dim==2)
             M << _metric[0], _metric[1],
-            _metric[1], _metric[2];
+                 _metric[1], _metric[2];
         else if(dim==3)
             M << _metric[0], _metric[1], _metric[2],
-            _metric[1], _metric[3], _metric[4],
-            _metric[2], _metric[4], _metric[5];
+                 _metric[1], _metric[3], _metric[4],
+                 _metric[2], _metric[4], _metric[5];
 
         if(M.isZero()) {
             for(size_t i=0; i<dim; i++)
@@ -471,9 +471,9 @@ public:
             for(size_t i=0; i<dim*dim; i++)
                 eigenvectors[i] = 0.0;
         } else {
-            Eigen::EigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
+            Eigen::SelfAdjointEigenSolver< Eigen::Matrix<treal_t, dim, dim> > solver(M);
 
-            Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().array().abs();
+            Eigen::Matrix<treal_t, dim, 1> evalues = solver.eigenvalues().real().cwiseAbs();
             Eigen::Matrix<treal_t, dim, dim> evectors = solver.eigenvectors().real();
 
             for(size_t i=0; i<dim; i++)
