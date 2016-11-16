@@ -38,6 +38,12 @@
 #ifndef MESH_H
 #define MESH_H
 
+#ifdef HAVE_EGADS
+extern "C"{
+#include <egads.h>
+}
+#endif
+
 #include <algorithm>
 #include <vector>
 #include <set>
@@ -52,6 +58,7 @@
 #ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
+
 
 #include "mpi_tools.h"
 
@@ -1385,6 +1392,41 @@ public:
 #endif
     }
 
+
+    int analyzeCAD(const char * filename) {
+
+
+        int         status = EGADS_SUCCESS;
+        int         i, j, oclass, mtype, nbody, *senses, nedges, nfaces, iFace;
+        const char  *OCCrev;
+        double      pos[3], result[3], parms[2], eval[18];
+        ego         context, model, geom, *bodies;
+        ego         *faces, *edges;
+    
+    
+        // look at EGADS revision
+        EG_revision(&i, &j, &OCCrev);
+        printf("\n Using EGADS %2d.%02d with %s\n\n", i, j, OCCrev);
+    
+        // define a context 
+        if ( (status = EG_open(&context)) != EGADS_SUCCESS ) {
+            fprintf(stderr, " ERROR EG_open -> status=%d\n", status);
+            return EXIT_FAILURE;
+        }
+    
+        if ( (status = EG_loadModel(context, 0,filename, &model)) != EGADS_SUCCESS) {
+            fprintf(stderr, " ERROR EG_loadModel -> status %d\n\n", status);
+            return EXIT_FAILURE;
+        }
+    
+    
+        return 0;
+
+    }
+
+
+
+
 private:
     template<typename _real_t, int _dim> friend class MetricField;
     template<typename _real_t, int _dim> friend class Smooth;
@@ -1934,6 +1976,8 @@ private:
             quality[element] = calculate_quality<3>(n);
         }
     }
+
+
 
     size_t ndims, nloc, msize;
     std::vector<index_t> _ENList;
