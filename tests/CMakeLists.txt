@@ -26,6 +26,10 @@ ENDFOREACH(item)
 MESSAGE(STATUS "str_cite ${src_lite}")
 
 # tests without VTK:
+ADD_EXECUTABLE(test_egads ${PRAGMATIC_TEST_SRC}/test_egads.cpp ${src_lite})
+TARGET_LINK_LIBRARIES(test_egads ${PRAGMATIC_LIBRARIES})
+
+
 ADD_EXECUTABLE(test_ElementProperty ${PRAGMATIC_TEST_SRC}/test_ElementProperty.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_ElementProperty ${PRAGMATIC_LIBRARIES})
 
