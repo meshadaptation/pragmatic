@@ -1,0 +1,27 @@
+FIND_PATH(EGADS_INCLUDE_DIR egads.h
+  /home/nbarral/code/ESP/EngSketchPad/include
+  )
+message( STATUS ${EGADS_INCLUDE_DIR} )
+
+FIND_LIBRARY(EGADS_LIBRARY egads
+  /home/nbarral/code/ESP/EngSketchPad/lib
+  )
+FIND_LIBRARY(OC_LIBRARY TKTopAlgo
+  /home/nbarral/code/ESP/OpenCASCADE-6.8.0/lib
+  )
+
+IF(EGADS_INCLUDE_DIR)
+  ADD_DEFINITIONS(-DHAVE_EGADS)
+  IF(EGADS_LIBRARY)
+    SET( EGADS_LIBRARIES ${EGADS_LIBRARY})
+    IF(OC_LIBRARY)
+      SET( OC_LIBRARIES ${OC_LIBRARY})
+      SET( EGADS_FOUND "YES" )
+    ENDIF(OC_LIBRARY)
+  ENDIF(EGADS_LIBRARY)
+ENDIF(EGADS_INCLUDE_DIR)
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(EGADS DEFAULT_MSG EGADS_INCLUDE_DIR )
+
+MARK_AS_ADVANCED( EGADS_INCLUDE_DIR EGADS_LIBRARY OC_LIBRARY )
