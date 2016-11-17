@@ -1418,6 +1418,7 @@ public:
             fprintf(stderr, " ERROR EG_loadModel -> status %d\n\n", status);
             return EXIT_FAILURE;
         }
+        printf("DEBUG  file %s successfully launched\n", filename);
     
     
         return 0;
