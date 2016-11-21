@@ -102,12 +102,33 @@ include_directories(${EIGEN_INCLUDE_DIR})
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG")
 
 
-FIND_PACKAGE(EGADS REQUIRED)
-if(EGADS_FOUND)
-  add_definitions(-DHAVE_EGADS)
-  include_directories(${EGADS_INCLUDE_DIR})
-  set (PRAGMATIC_LIBRARIES ${EGADS_LIBRARIES} ${PRAGMATIC_LIBRARIES})
+
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_EGADS) AND (NOT (x$ENV{ENABLE_EGADS} STREQUAL x)))
+  set(ENABLE_EGADS $ENV{ENABLE_EGADS})
+else()
+  option(ENABLE_EGADS "Enable EGADS support." ON)
 endif()
+if (ENABLE_EGADS)
+  FIND_PACKAGE(EGADS)
+  if(EGADS_FOUND)
+    add_definitions(-DHAVE_EGADS)
+    include_directories(${EGADS_INCLUDE_DIR})
+    set (PRAGMATIC_LIBRARIES ${EGADS_LIBRARIES} ${PRAGMATIC_LIBRARIES})
+
+    #TODO  This should probably not be done that way...
+	SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,${OC_LIBRARY_PATH}")
+  endif()
+endif()
+if (NOT ENABLE_EGADS OR NOT EGADS_FOUND)
+  message(STATUS "Configured without EGADS support.")
+endif()
+
+
+
+
+
+
 
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )

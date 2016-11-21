@@ -1,23 +1,20 @@
 FIND_PATH(EGADS_INCLUDE_DIR egads.h
-  /home/nbarral/code/ESP/EngSketchPad/include
+  ${ESP_PATH}/EngSketchPad/include
   )
-message( STATUS ${EGADS_INCLUDE_DIR} )
-
 FIND_LIBRARY(EGADS_LIBRARY egads
-  /home/nbarral/code/ESP/EngSketchPad/lib
+  ${ESP_PATH}/EngSketchPad/lib
   )
-FIND_LIBRARY(OC_LIBRARY TKTopAlgo
-  /home/nbarral/code/ESP/OpenCASCADE-6.8.0/lib
+FIND_PATH(OC_LIBRARY_PATH libTKTopAlgo.so
+  ${ESP_PATH}/OpenCASCADE-6.8.0/lib
   )
 
 IF(EGADS_INCLUDE_DIR)
   ADD_DEFINITIONS(-DHAVE_EGADS)
   IF(EGADS_LIBRARY)
     SET( EGADS_LIBRARIES ${EGADS_LIBRARY})
-    IF(OC_LIBRARY)
-      SET( OC_LIBRARIES ${OC_LIBRARY})
+    IF(OC_LIBRARY_PATH)
       SET( EGADS_FOUND "YES" )
-    ENDIF(OC_LIBRARY)
+    ENDIF(OC_LIBRARY_PATH)
   ENDIF(EGADS_LIBRARY)
 ENDIF(EGADS_INCLUDE_DIR)
 
