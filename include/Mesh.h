@@ -1396,7 +1396,7 @@ public:
     int analyzeCAD(const char * filename) {
 
 
-        int         status = EGADS_SUCCESS;
+        int         status;
         int         i, j, oclass, mtype, nbody, *senses, nedges, nfaces, iFace;
         const char  *OCCrev;
         double      pos[3], result[3], parms[2], eval[18];
