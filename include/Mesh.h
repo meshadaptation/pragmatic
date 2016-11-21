@@ -1400,6 +1400,7 @@ public:
         int         i, j, oclass, mtype, nbody, *senses, nedges, nfaces, iFace;
         const char  *OCCrev;
         double      pos[3], result[3], parms[2], eval[18];
+#ifdef HAVE_EGADS
         ego         context, model, geom, *bodies;
         ego         *faces, *edges;
     
@@ -1419,7 +1420,7 @@ public:
             return EXIT_FAILURE;
         }
         printf("DEBUG  file %s successfully launched\n", filename);
-    
+#endif    
     
         return 0;
 
