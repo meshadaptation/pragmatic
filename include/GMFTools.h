@@ -37,7 +37,7 @@ template<typename real_t> class GMFTools
 {
 public:
 
-    static Mesh<real_t>* import_gmf_mesh(char * meshName)
+    static Mesh<real_t>* import_gmf_mesh(const char * meshName)
     {
         
         int             dim;
@@ -71,17 +71,17 @@ public:
 
 
 
-    static Mesh<real_t>* import_gmf_metric(std::string meshname)
+    static Mesh<real_t>* import_gmf_metric(const char * meshname)
     {
 
     }
 
-    static Mesh<real_t>* export_gmf_mesh(std::string meshname)
+    static Mesh<real_t>* export_gmf_mesh(const char * meshname)
     {
 
     }
 
-    static Mesh<real_t>* export_gmf_metric(std::string meshname)
+    static Mesh<real_t>* export_gmf_metric(const char * meshname)
     {
 
     }
@@ -122,7 +122,7 @@ private:
         for(index_t i=0; i<NElements; i++) {
             GmfGetLin(meshIndex, GmfTriangles, &bufTri[0], &bufTri[1], &bufTri[2], &tag);
             for(int j=0; j<3; j++)
-                ENList.push_back(bufTri[j]);
+                ENList.push_back(bufTri[j]-1);
         }
         
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
@@ -168,7 +168,7 @@ private:
         for(index_t i=0; i<NElements; i++) {
             GmfGetLin(meshIndex, GmfTetrahedra, &bufTet[0], &bufTet[1], &bufTet[2], &bufTet[3], &tag);
             for(int j=0; j<4; j++)
-                ENList.push_back(bufTet[j]);
+                ENList.push_back(bufTet[j]-1);
         }
         
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
