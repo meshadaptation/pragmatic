@@ -443,6 +443,14 @@ public:
         }
     }
 
+    /*! Allocate the metric tensor field. Don't fill it in.
+     */
+    void alloc_metric()
+    {
+        if(_metric==NULL)
+            _metric = new MetricTensor<real_t,dim>[_NNodes];
+    }
+
     /*! Set the metric tensor field. It is assumed that only the top triangle of the tensors are stored.
      * @param metric is a pointer to the buffer where the metric field is to be copied from.
      */

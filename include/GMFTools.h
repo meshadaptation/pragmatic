@@ -10,6 +10,7 @@
 
 #include "Mesh.h"
 #include "MetricTensor.h"
+#include "MetricField.h"
 #include "ElementProperty.h"
 
 extern "C" {
@@ -38,8 +39,7 @@ template<typename real_t> class GMFTools
 public:
 
     static Mesh<real_t>* import_gmf_mesh(const char * meshName)
-    {
-        
+    {  
         int             dim;
         char            fileName[128];
         long long       meshIndex;
@@ -66,20 +66,78 @@ public:
         }
 
         return NULL;
-
     }
 
 
 
-    static Mesh<real_t>* import_gmf_metric(const char * meshname)
+    static MetricField<real_t, 2>* import_gmf_metric2d(const char * solName, 
+                                                Mesh<real_t>& mesh)
     {
+        int             dim;
+        char            fileName[128];
+        long long       solIndex;
+        int             gmfVersion;
 
+        strcpy(fileName, solName);
+        strcat(fileName, ".solb");
+        if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
+            strcpy(fileName, solName);
+            strcat(fileName,".sol");
+            if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
+                fprintf(stderr,"####  ERROR Mesh file %s.sol[b] not found ", solName);
+                exit(1);
+            }    
+        }
+
+        if (dim != 2) {
+            GmfCloseMesh(solIndex);
+            fprintf(stderr, "####  ERROR wrong dimension in sol file %s (%d)",
+                            solName, dim);
+            exit(1);
+        }
+
+        return import_gmf_metric2d_private(solIndex, mesh);
     }
+
+
+
+    static MetricField<real_t, 3>* import_gmf_metric3d(const char * solName, 
+                                                Mesh<real_t>& mesh)
+    {
+        int             dim;
+        char            fileName[128];
+        long long       solIndex;
+        int             gmfVersion;
+
+        strcpy(fileName, solName);
+        strcat(fileName, ".solb");
+        if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
+            strcpy(fileName, solName);
+            strcat(fileName,".sol");
+            if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
+                fprintf(stderr,"####  ERROR Mesh file %s.sol[b] not found ", solName);
+                exit(1);
+            }    
+        }
+
+        if (dim != 3) {
+            GmfCloseMesh(solIndex);
+            fprintf(stderr, "####  ERROR wrong dimension in sol file %s (%d)",
+                            solName, dim);
+            exit(1);
+        }
+
+        return import_gmf_metric3d_private(solIndex, mesh);
+    }
+
+
 
     static Mesh<real_t>* export_gmf_mesh(const char * meshname)
     {
 
     }
+
+
 
     static Mesh<real_t>* export_gmf_metric(const char * meshname)
     {
@@ -87,11 +145,11 @@ public:
     }
 
 
+
 private:
 
     static Mesh<real_t>* import_gmf_mesh2d(long long meshIndex)
     {
-
         int                 tag;
         std::vector<real_t> x, y;
         std::vector<int>    ENList;
@@ -128,14 +186,12 @@ private:
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
 
         return mesh;
-
     }
 
 
 
     static Mesh<real_t>* import_gmf_mesh3d(long long meshIndex)
     {
-
         int                 tag;
         std::vector<real_t> x, y, z;
         std::vector<int>    ENList;
@@ -166,15 +222,96 @@ private:
 
         GmfGotoKwd(meshIndex, GmfTetrahedra);
         for(index_t i=0; i<NElements; i++) {
-            GmfGetLin(meshIndex, GmfTetrahedra, &bufTet[0], &bufTet[1], &bufTet[2], &bufTet[3], &tag);
+            GmfGetLin(meshIndex, GmfTetrahedra, 
+                      &bufTet[0], &bufTet[1], &bufTet[2], &bufTet[3], &tag);
             for(int j=0; j<4; j++)
                 ENList.push_back(bufTet[j]-1);
         }
         
-        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]));
+        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), 
+                                &(x[0]), &(y[0]), &(z[0]));
 
         return mesh;
+    }
 
+
+
+    static MetricField<real_t,2>* import_gmf_metric2d_private(long long solIndex, 
+                                                  Mesh<real_t> &mesh)
+    {
+        int numSolAtVerticesLines, numSolTypes, solSize, NNodes;
+        int solTypesTable[GmfMaxTyp];
+        real_t buf[3];
+        MetricField<real_t,2> *metric; 
+
+        numSolAtVerticesLines = GmfStatKwd(solIndex, GmfSolAtVertices, 
+                                           &numSolTypes, &solSize, solTypesTable);  
+  
+        NNodes = mesh.get_number_nodes();
+        if (numSolAtVerticesLines != NNodes) {
+            printf("####  ERROR  Number of solution lines != number of mesh vertices: %d != %d\n",
+                    numSolAtVerticesLines, NNodes);
+            exit(1);
+        }
+        if (numSolTypes > 1)
+            printf("####  Warning  Several sol. fields in file. Reading only the 1st one (type %d)\n",
+                solTypesTable[0]);
+        if (solTypesTable[0] != 3)
+            printf("####  ERROR  Solution field is not a metric. solType: %d\n",
+                   solTypesTable[0]);  
+
+        metric = new MetricField<real_t,2>(mesh);
+        metric->alloc_metric();
+  
+        GmfGotoKwd(solIndex, GmfSolAtVertices);
+        for(index_t i=0; i<NNodes; i++) {
+            GmfGetLin(solIndex, GmfSolAtVertices, buf);
+            metric->set_metric(buf, i);
+        }
+
+        GmfCloseMesh(solIndex);
+
+        return metric;
+    }
+
+
+
+    static MetricField<real_t,3>* import_gmf_metric3d_private(long long solIndex, 
+                                                  Mesh<real_t> &mesh)
+    {
+        int numSolAtVerticesLines, numSolTypes, solSize, NNodes;
+        int solTypesTable[GmfMaxTyp];
+        real_t buf[6];
+        MetricField<real_t,3> *metric; 
+
+        numSolAtVerticesLines = GmfStatKwd(solIndex, GmfSolAtVertices, 
+                                           &numSolTypes, &solSize, solTypesTable);  
+  
+        NNodes = mesh.get_number_nodes();
+        if (numSolAtVerticesLines != NNodes) {
+            printf("####  ERROR  Number of solution lines != number of mesh vertices: %d != %d\n",
+                    numSolAtVerticesLines, NNodes);
+            exit(1);
+        }
+        if (numSolTypes > 1)
+            printf("####  Warning  Several sol. fields in file. Reading only the 1st one (type %d)\n",
+                   solTypesTable[0]);
+        if (solTypesTable[0] != 3)
+            printf("####  ERROR  Solution field is not a metric. solType: %d\n",
+                   solTypesTable[0]);  
+
+        metric = new MetricField<real_t,3>(mesh);
+        metric->alloc_metric();
+  
+        GmfGotoKwd(solIndex, GmfSolAtVertices);
+        for(index_t i=0; i<NNodes; i++) {
+            GmfGetLin(solIndex, GmfSolAtVertices, buf);
+            metric->set_metric(buf, i);
+        }
+
+        GmfCloseMesh(solIndex);
+
+        return metric; 
     }
 
 

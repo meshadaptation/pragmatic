@@ -17,24 +17,23 @@ int main(int argc, char **argv)
 #endif
     
     Mesh<double> *mesh2 = GMFTools<double>::import_gmf_mesh("../data/mesh2d");
-
-
     index_t Nnodes = mesh2->get_number_nodes();
     index_t Nelements = mesh2->get_number_elements();
-
     printf("DEBUG  Number of vertices: %d   Number of elements: %d\n", Nnodes, Nelements);
+    printf("pass\n");
+
+    MetricField<double,2> *metric2 = GMFTools<double>::import_gmf_metric2d("../data/mesh2d", *mesh2);
+    printf("pass\n");
 
 
     Mesh<double> *mesh3 = GMFTools<double>::import_gmf_mesh("../data/mesh3d");
-
-
     Nnodes = mesh3->get_number_nodes();
     Nelements = mesh3->get_number_elements();
-
     printf("DEBUG  Number of vertices: %d   Number of elements: %d\n", Nnodes, Nelements);
+    printf("pass\n");
 
-
-
+    MetricField<double,3> *metric3 = GMFTools<double>::import_gmf_metric3d("../data/mesh3d", *mesh3);
+    printf("pass\n");
 
 
     return 0;
