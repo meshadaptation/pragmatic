@@ -25,6 +25,9 @@ int main(int argc, char **argv)
     MetricField<double,2> *metric2 = GMFTools<double>::import_gmf_metric2d("../data/mesh2d", *mesh2);
     printf("pass\n");
 
+    GMFTools<double>::export_gmf_mesh("../data/test_gmf_2d", mesh2);
+    printf("pass\n");
+
 
     Mesh<double> *mesh3 = GMFTools<double>::import_gmf_mesh("../data/mesh3d");
     Nnodes = mesh3->get_number_nodes();
@@ -33,6 +36,9 @@ int main(int argc, char **argv)
     printf("pass\n");
 
     MetricField<double,3> *metric3 = GMFTools<double>::import_gmf_metric3d("../data/mesh3d", *mesh3);
+    printf("pass\n");
+
+    GMFTools<double>::export_gmf_mesh("../data/test_gmf_3d", mesh3);
     printf("pass\n");
 
 
