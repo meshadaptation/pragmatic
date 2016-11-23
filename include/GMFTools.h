@@ -163,9 +163,46 @@ public:
 
 
 
-    static void export_gmf_metric(const char * solName)
+    static void export_gmf_metric2d(const char * solName, MetricField<real_t, 2> *metric, Mesh<real_t> *mesh, bool ascii = false, bool B64=true)
     {
+        int             dim = 2;
+        char            fileName[128];
+        long long       solIndex;
+        int             gmfVersion;
 
+        strcpy(fileName, solName);
+        if ( ascii ) strcat(fileName, ".sol");
+        else         strcat(fileName, ".solb");
+        if ( B64 ) gmfVersion = GmfDouble;
+        else       gmfVersion = GmfFloat; 
+        if ( !(solIndex = GmfOpenMesh(fileName, GmfWrite, gmfVersion, dim)) ) {
+            fprintf(stderr,"####  ERROR: mesh file %s cannot be opened\n", fileName);
+            exit(1);
+        }
+        printf("  %%%% %s opened\n",fileName);
+
+        export_gmf_metric2d_private(solIndex, metric, mesh);    
+    }
+
+    static void export_gmf_metric3d(const char * solName, MetricField<real_t, 3> *metric, Mesh<real_t> *mesh, bool ascii = false, bool B64=true)
+    {
+        int             dim = 3;
+        char            fileName[128];
+        long long       solIndex;
+        int             gmfVersion;
+
+        strcpy(fileName, solName);
+        if ( ascii ) strcat(fileName, ".sol");
+        else         strcat(fileName, ".solb");
+        if ( B64 ) gmfVersion = GmfDouble;
+        else       gmfVersion = GmfFloat; 
+        if ( !(solIndex = GmfOpenMesh(fileName, GmfWrite, gmfVersion, dim)) ) {
+            fprintf(stderr,"####  ERROR: mesh file %s cannot be opened\n", fileName);
+            exit(1);
+        }
+        printf("  %%%% %s opened\n",fileName);
+
+        export_gmf_metric3d_private(solIndex, metric, mesh);
     }
 
 
@@ -427,6 +464,8 @@ private:
         GmfCloseMesh(meshIndex);
     }
 
+
+
     static void export_gmf_mesh3d(long long meshIndex, Mesh<real_t> *mesh)
     {
         int             tag;
@@ -449,10 +488,47 @@ private:
         tag = 0;
         for(index_t i=0; i<NElements; i++) {
             tet = mesh->get_element(i);
-            GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1, tet[3]+1, tag);  
+            GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1, 
+                                                tet[3]+1, tag);  
         }
   
         GmfCloseMesh(meshIndex);
+    }
+
+
+
+    static void export_gmf_metric2d_private(long long solIndex, 
+                                            MetricField<real_t,2> *metric, 
+                                            Mesh<real_t> *mesh) 
+    {
+        index_t         NNodes;
+        int             solTypes = 3;
+        const real_t    *met;
+
+        NNodes = mesh->get_number_nodes();
+        GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, 1, &solTypes);
+        for(index_t i=0; i<NNodes; i++) {
+            met = metric->get_metric(i);
+            GmfSetLin(solIndex, GmfSolAtVertices, met);
+        }
+        GmfCloseMesh(solIndex);
+    }
+
+    static void export_gmf_metric3d_private(long long solIndex, 
+                                            MetricField<real_t,3> *metric, 
+                                            Mesh<real_t> *mesh) 
+    {
+        index_t         NNodes;
+        int             solTypes = 3;
+        const real_t    *met;
+
+        NNodes = mesh->get_number_nodes();
+        GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, 1, &solTypes);
+        for(index_t i=0; i<NNodes; i++) {
+            met = metric->get_metric(i);
+            GmfSetLin(solIndex, GmfSolAtVertices, met);
+        }
+        GmfCloseMesh(solIndex);
     }
 
 

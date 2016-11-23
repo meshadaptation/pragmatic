@@ -443,6 +443,14 @@ public:
         }
     }
 
+    /*! Give const pointer to the metric tensor at one node.
+     * @param id is the node index of the metric field being retrieved.
+     */
+    const real_t* get_metric(int id)
+    {
+        return _metric[id].get_metric();
+    }
+
     /*! Allocate the metric tensor field. Don't fill it in.
      */
     void alloc_metric()
