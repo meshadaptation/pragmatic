@@ -211,20 +211,24 @@ private:
 
     static Mesh<real_t>* import_gmf_mesh2d(long long meshIndex, int gmfVersion)
     {
-        int                 tag;
-        std::vector<real_t> x, y;
-        std::vector<int>    ENList;
-        index_t             NNodes, NElements, bufTri[3];
-        double              bufDbl[2];
-        float               bufFlt[2];
-        Mesh<real_t>        *mesh=NULL;
+        int                  tag;
+        std::vector<real_t>  x, y;
+        std::vector<int>     ENList;
+        index_t              NNodes, NElements, NFacets, bufTri[3], bufFac[2];
+        std::vector<index_t> facets, ids;
+        double               bufDbl[2];
+        float                bufFlt[2];
+        Mesh<real_t>         *mesh=NULL;
 
 
         NNodes    = GmfStatKwd(meshIndex, GmfVertices);
         NElements = GmfStatKwd(meshIndex, GmfTriangles);
+        NFacets   = GmfStatKwd(meshIndex, GmfEdges);
         x.reserve(NNodes);
         y.reserve(NNodes);
         ENList.reserve(3*NElements);
+        facets.reserve(2*NFacets);
+        ids.reserve(NFacets);
 
         if (NNodes <= 0 ) {
             fprintf(stderr, "####  ERROR  Number of vertices: %d <= 0\n", NNodes);
@@ -255,10 +259,19 @@ private:
             for(int j=0; j<3; j++)
                 ENList.push_back(bufTri[j]-1);
         }
-        
-        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+
+        GmfGotoKwd(meshIndex, GmfEdges);
+        for(index_t i=0; i<NFacets; i++) {
+            GmfGetLin(meshIndex, GmfEdges, &bufFac[0], &bufFac[1], &tag);
+            facets.push_back(bufFac[0]-1);
+            facets.push_back(bufFac[1]-1);
+            ids.push_back(tag);
+        }
 
         GmfCloseMesh(meshIndex);
+        
+        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
+        mesh->set_boundary(NFacets, &(facets[0]), &(ids[0]));
 
         return mesh;
     }
@@ -267,21 +280,25 @@ private:
 
     static Mesh<real_t>* import_gmf_mesh3d(long long meshIndex, int gmfVersion)
     {
-        int                 tag;
-        std::vector<real_t> x, y, z;
-        std::vector<int>    ENList;
-        index_t             NNodes, NElements, bufTet[4];
-        double              bufDbl[3];
-        float               bufFlt[3];
-        Mesh<real_t>        *mesh=NULL;
+        int                  tag;
+        std::vector<real_t>  x, y, z;
+        std::vector<int>     ENList;
+        index_t              NNodes, NElements, NFacets, bufTet[4], bufFac[3];
+        std::vector<index_t> facets, ids;
+        double               bufDbl[3];
+        float                bufFlt[3];
+        Mesh<real_t>         *mesh=NULL;
 
 
         NNodes    = GmfStatKwd(meshIndex, GmfVertices);
         NElements = GmfStatKwd(meshIndex, GmfTetrahedra);
+        NFacets   = GmfStatKwd(meshIndex, GmfTriangles);
         x.reserve(NNodes);
         y.reserve(NNodes);
         z.reserve(NNodes);
         ENList.reserve(3*NElements);
+        facets.reserve(3*NFacets);
+        ids.reserve(NFacets);
 
         if (NNodes <= 0 ) {
             fprintf(stderr, "####  ERROR  Number of vertices: %d <= 0\n", NNodes);
@@ -318,10 +335,19 @@ private:
                 ENList.push_back(bufTet[j]-1);
         }
         
-        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), 
-                                &(x[0]), &(y[0]), &(z[0]));
+        GmfGotoKwd(meshIndex, GmfTriangles);
+        for(index_t i=0; i<NFacets; i++) {
+            GmfGetLin(meshIndex, GmfTriangles, &bufFac[0], &bufFac[1], &bufFac[2], &tag);
+            for(int j=0; j<3; ++j)
+                facets.push_back(bufFac[j]-1);
+            ids.push_back(tag);
+        }
 
         GmfCloseMesh(meshIndex);
+        
+        mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]),
+                                &(x[0]), &(y[0]), &(z[0]));
+        mesh->set_boundary(NFacets, &(facets[0]), &(ids[0]));
 
         return mesh;
     }
