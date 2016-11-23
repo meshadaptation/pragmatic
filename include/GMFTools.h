@@ -465,10 +465,10 @@ private:
 
     static void export_gmf_mesh2d(long long meshIndex, Mesh<real_t> *mesh)
     {
-        int             tag;
+        int             tag, NFacets;
         index_t         NElements, NNodes;
         const real_t    *coords;
-        const int       *tri;
+        const int       *tri, *fac, * facets, * ids;
 
         NElements = mesh->get_number_elements();
         NNodes = mesh->get_number_nodes();
@@ -486,18 +486,28 @@ private:
             tri = mesh->get_element(i);
             GmfSetLin(meshIndex, GmfTriangles, tri[0]+1, tri[1]+1, tri[2]+1, tag);  
         }
+
+        mesh->get_boundary(&NFacets, &facets, &ids);
+        GmfSetKwd(meshIndex, GmfEdges, NFacets);
+        for(index_t i=0; i<NFacets; i++) {
+            fac = &facets[2*i];
+            tag = ids[i];
+        }
   
         GmfCloseMesh(meshIndex);
+
+        if (facets) free((int*)facets);
+        if (ids) free((int*)ids);
     }
 
 
 
     static void export_gmf_mesh3d(long long meshIndex, Mesh<real_t> *mesh)
     {
-        int             tag;
+        int             tag, NFacets;
         index_t         NElements, NNodes;
         const real_t    *coords;
-        const int       *tet;
+        const int       *tet, *fac, * facets, * ids;
         
 
         NElements = mesh->get_number_elements();
@@ -516,6 +526,14 @@ private:
             tet = mesh->get_element(i);
             GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1, 
                                                 tet[3]+1, tag);  
+        }
+
+        mesh->get_boundary(&NFacets, &facets, &ids);
+        GmfSetKwd(meshIndex, GmfTriangles, NFacets);
+        for(index_t i=0; i<NFacets; i++) {
+            fac = &facets[3*i];
+            tag = ids[i];
+            GmfSetLin(meshIndex, GmfTriangles, fac[0]+1, fac[1]+1, fac[2]+1, tag);  
         }
   
         GmfCloseMesh(meshIndex);
