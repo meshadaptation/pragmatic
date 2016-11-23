@@ -17,14 +17,22 @@ install:
   - sudo make install
   - popd
   - popd
+  - git clone https://github.com/LoicMarechal/libMeshb.git git.libmeshb
+  - pushd git.libmeshb
+  - git reset --hard 86789547c052aeaa3ea012dec1af0924e7006a96
+  - mkdir build
+  - pushd build
+  - cmake ../
+  - sudo make
+  - popd
+  - popd
 compiler:
   - gcc
 # Change this to your needs
 env:
-  - ENABLE_VTK=FALSE ENABLE_LIBMESHB=FALSE
-  - ENABLE_VTK=TRUE  ENABLE_LIBMESHB=FALSE
-  - ENABLE_MPI=FALSE ENABLE_LIBMESHB=FALSE
-  - ENABLE_MPI=TRUE  ENABLE_LIBMESHB=FALSE
+  - ENABLE_VTK=FALSE -DCMAKE_BUILD_TYPE=Release
+  - ENABLE_MPI=FALSE -DCMAKE_BUILD_TYPE=Release
+  - ENABLE_MPI=TRUE  -DCMAKE_BUILD_TYPE=Release
 script:
   - mkdir build
   - cd build
