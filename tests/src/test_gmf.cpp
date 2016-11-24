@@ -15,7 +15,8 @@ int main(int argc, char **argv)
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 #endif
-    
+
+#ifdef HAVE_LIBMESHB
     Mesh<double> *mesh2 = GMFTools<double>::import_gmf_mesh("../data/mesh2d");
     index_t Nnodes = mesh2->get_number_nodes();
     index_t Nelements = mesh2->get_number_elements();
@@ -29,7 +30,7 @@ int main(int argc, char **argv)
     printf("pass\n");
 
     GMFTools<double>::export_gmf_metric2d("../data/test_gmf_2d", metric2, mesh2);
-    printf("pass\n");    
+    printf("pass\n");
 
 
     Mesh<double> *mesh3 = GMFTools<double>::import_gmf_mesh("../data/mesh3d");
@@ -45,8 +46,14 @@ int main(int argc, char **argv)
     printf("pass\n");
 
     GMFTools<double>::export_gmf_metric3d("../data/test_gmf_3d", metric3, mesh3);
-    printf("pass\n");  
+    printf("pass\n");
+#else
+    std::cerr<<"Pragmatic was configured without libMeshb"<<std::endl;
+#endif
 
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
 
     return 0;
 }

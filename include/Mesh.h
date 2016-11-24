@@ -410,10 +410,9 @@ public:
     // Returns the list of facets and corresponding ids
     void get_boundary(int* nfacets, const int** facets, const int** ids)
     {
-        int                   NFacets;
-        index_t               i_elm, i_loc, off;
-        int                   *Facets, *Ids;
-
+        int      NFacets;
+        index_t  i_elm, i_loc, off;
+        int      *Facets, *Ids;
 
         // compute number facets = number of ids > 0
         NFacets = 0;
@@ -439,14 +438,14 @@ public:
                     }
                 }
                 Ids[k/ndims-1] = boundary[i];
-            }   
+            }
         }
 
         *nfacets = NFacets;
         *facets = Facets;
         *ids = Ids;
     }
-    
+
     /// Return the array of boundary facets and associated tags
     inline  int * get_boundaryTags() 
     {
