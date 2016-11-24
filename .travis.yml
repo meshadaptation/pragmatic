@@ -25,7 +25,7 @@ install:
   - git reset --hard 86789547c052aeaa3ea012dec1af0924e7006a96
   - mkdir build
   - pushd build
-  - cmake ../
+  - ${DEPS_DIR}/cmake/bin/cmake ../
   - make
   - sudo make install
   - popd
