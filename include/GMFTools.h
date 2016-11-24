@@ -51,10 +51,11 @@ public:
             strcpy(fileName, meshName);
             strcat(fileName,".mesh");
             if ( !(meshIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
-                fprintf(stderr,"####  ERROR Mesh file %s.mesh[b] not found ", meshName);
+                fprintf(stderr,"####  ERROR  Mesh file %s.mesh[b] not found\n", meshName);
                 exit(1);
             }    
         }
+        printf("  %%%% %s opened\n",fileName);
 
         if (dim == 2)
             return import_gmf_mesh2d(meshIndex, gmfVersion);    
@@ -62,7 +63,9 @@ public:
             return import_gmf_mesh3d(meshIndex, gmfVersion);
         else {
             GmfCloseMesh(meshIndex);
-            exit(45);
+            fprintf(stderr, "####  ERROR  Wrong dimension in mesh file %s (%d)\n", 
+                            meshName, dim);
+            exit(1);
         }
 
         return NULL;
@@ -84,19 +87,21 @@ public:
             strcpy(fileName, solName);
             strcat(fileName,".sol");
             if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
-                fprintf(stderr,"####  ERROR Mesh file %s.sol[b] not found ", solName);
+                fprintf(stderr,"####  ERROR  Mesh file %s.sol[b] not found\n", solName);
                 exit(1);
             }    
         }
+        printf("  %%%% %s opened\n", solName);
+
 
         if (dim != 2) {
             GmfCloseMesh(solIndex);
-            fprintf(stderr, "####  ERROR wrong dimension in sol file %s (%d)",
+            fprintf(stderr, "####  ERROR  Wrong dimension in sol file %s (%d)\n",
                             solName, dim);
             exit(1);
         }
 
-        return import_gmf_metric2d_private(solIndex, mesh, gmfVersion);
+        return import_gmf_metric2d(solIndex, mesh, gmfVersion);
     }
 
 
@@ -115,19 +120,21 @@ public:
             strcpy(fileName, solName);
             strcat(fileName,".sol");
             if ( !(solIndex = GmfOpenMesh(fileName, GmfRead, &gmfVersion, &dim)) ) {
-                fprintf(stderr,"####  ERROR Mesh file %s.sol[b] not found ", solName);
+                fprintf(stderr,"####  ERROR  Mesh file %s.sol[b] not found\n", solName);
                 exit(1);
             }    
         }
+        printf("  %%%% %s opened\n", solName);
+
 
         if (dim != 3) {
             GmfCloseMesh(solIndex);
-            fprintf(stderr, "####  ERROR wrong dimension in sol file %s (%d)",
+            fprintf(stderr, "####  ERROR  Wrong dimension in sol file %s (%d)\n",
                             solName, dim);
             exit(1);
         }
 
-        return import_gmf_metric3d_private(solIndex, mesh, gmfVersion);
+        return import_gmf_metric3d(solIndex, mesh, gmfVersion);
     }
 
 
@@ -147,7 +154,7 @@ public:
         if ( B64 ) gmfVersion = GmfDouble;
         else       gmfVersion = GmfFloat; 
         if ( !(meshIndex = GmfOpenMesh(fileName, GmfWrite, gmfVersion, dim)) ) {
-            fprintf(stderr,"####  ERROR: mesh file %s cannot be opened\n", fileName);
+            fprintf(stderr,"####  ERROR  mesh file %s cannot be opened\n", fileName);
             exit(1);
         }
         printf("  %%%% %s opened\n",fileName);
@@ -176,13 +183,15 @@ public:
         if ( B64 ) gmfVersion = GmfDouble;
         else       gmfVersion = GmfFloat; 
         if ( !(solIndex = GmfOpenMesh(fileName, GmfWrite, gmfVersion, dim)) ) {
-            fprintf(stderr,"####  ERROR: mesh file %s cannot be opened\n", fileName);
+            fprintf(stderr,"####  ERROR  Mesh file %s cannot be opened\n", fileName);
             exit(1);
         }
         printf("  %%%% %s opened\n",fileName);
 
-        export_gmf_metric2d_private(solIndex, metric, mesh);    
+        export_gmf_metric2d(solIndex, metric, mesh);    
     }
+
+
 
     static void export_gmf_metric3d(const char * solName, MetricField<real_t, 3> *metric, Mesh<real_t> *mesh, bool ascii = false, bool B64=true)
     {
@@ -202,7 +211,7 @@ public:
         }
         printf("  %%%% %s opened\n",fileName);
 
-        export_gmf_metric3d_private(solIndex, metric, mesh);
+        export_gmf_metric3d(solIndex, metric, mesh);
     }
 
 
@@ -237,14 +246,14 @@ private:
 
         GmfGotoKwd(meshIndex, GmfVertices);
         if (gmfVersion == GmfFloat) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(meshIndex, GmfVertices, &bufFlt[0], &bufFlt[1], &tag);
                 x.push_back((real_t)bufFlt[0]);
                 y.push_back((real_t)bufFlt[1]);
             }
         }
         else if (gmfVersion == GmfFloat) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(meshIndex, GmfVertices, &bufDbl[0], &bufDbl[1], &tag);
                 x.push_back((real_t)bufDbl[0]);
                 y.push_back((real_t)bufDbl[1]);
@@ -254,14 +263,14 @@ private:
             exit(72);
 
         GmfGotoKwd(meshIndex, GmfTriangles);
-        for(index_t i=0; i<NElements; i++) {
+        for (index_t i=0; i<NElements; i++) {
             GmfGetLin(meshIndex, GmfTriangles, &bufTri[0], &bufTri[1], &bufTri[2], &tag);
             for(int j=0; j<3; j++)
                 ENList.push_back(bufTri[j]-1);
         }
 
         GmfGotoKwd(meshIndex, GmfEdges);
-        for(index_t i=0; i<NFacets; i++) {
+        for (index_t i=0; i<NFacets; i++) {
             GmfGetLin(meshIndex, GmfEdges, &bufFac[0], &bufFac[1], &tag);
             facets.push_back(bufFac[0]-1);
             facets.push_back(bufFac[1]-1);
@@ -307,7 +316,7 @@ private:
 
         GmfGotoKwd(meshIndex, GmfVertices);
         if (gmfVersion == GmfFloat) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(meshIndex, GmfVertices, &bufFlt[0], &bufFlt[1], &bufFlt[2], &tag);
                 x.push_back((real_t)bufFlt[0]);
                 y.push_back((real_t)bufFlt[1]);
@@ -315,7 +324,7 @@ private:
             }
         }
         else if (gmfVersion == GmfDouble) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(meshIndex, GmfVertices, &bufDbl[0], &bufDbl[1], &bufDbl[2], &tag);
                 x.push_back((real_t)bufDbl[0]);
                 y.push_back((real_t)bufDbl[1]);
@@ -324,21 +333,21 @@ private:
         }
         else {
             fprintf(stderr, "Wrong GmfVersion: %d\n", gmfVersion);
-            exit(72);
+            exit(1);
         }
 
         GmfGotoKwd(meshIndex, GmfTetrahedra);
-        for(index_t i=0; i<NElements; i++) {
+        for (index_t i=0; i<NElements; i++) {
             GmfGetLin(meshIndex, GmfTetrahedra, 
                       &bufTet[0], &bufTet[1], &bufTet[2], &bufTet[3], &tag);
-            for(int j=0; j<4; j++)
+            for (int j=0; j<4; j++)
                 ENList.push_back(bufTet[j]-1);
         }
         
         GmfGotoKwd(meshIndex, GmfTriangles);
-        for(index_t i=0; i<NFacets; i++) {
+        for (index_t i=0; i<NFacets; i++) {
             GmfGetLin(meshIndex, GmfTriangles, &bufFac[0], &bufFac[1], &bufFac[2], &tag);
-            for(int j=0; j<3; ++j)
+            for (int j=0; j<3; ++j)
                 facets.push_back(bufFac[j]-1);
             ids.push_back(tag);
         }
@@ -354,7 +363,7 @@ private:
 
 
 
-    static MetricField<real_t,2>* import_gmf_metric2d_private(long long solIndex, 
+    static MetricField<real_t,2>* import_gmf_metric2d(long long solIndex, 
                                                   Mesh<real_t> &mesh, int gmfVersion)
     {
         int numSolAtVerticesLines, numSolTypes, solSize, NNodes;
@@ -385,22 +394,23 @@ private:
   
         GmfGotoKwd(solIndex, GmfSolAtVertices);
         if (gmfVersion == GmfFloat){
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufFlt);
                 for (int j=0; j<3; ++j) buf[j] = (real_t)bufFlt[j];
                 metric->set_metric(buf, i);
             }            
         }
         else if (gmfVersion == GmfDouble) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufDbl);
                 for (int j=0; j<3; ++j) buf[j] = (real_t)bufDbl[j];
                 metric->set_metric(buf, i);
             }
         }
-        else
-            exit(76);
-
+        else {
+            fprintf(stderr, "Wrong GmfVersion: %d\n", gmfVersion);
+            exit(1);
+        }
 
         GmfCloseMesh(solIndex);
 
@@ -409,7 +419,7 @@ private:
 
 
 
-    static MetricField<real_t,3>* import_gmf_metric3d_private(long long solIndex, 
+    static MetricField<real_t,3>* import_gmf_metric3d(long long solIndex, 
                                                   Mesh<real_t> &mesh, int gmfVersion)
     {
         int numSolAtVerticesLines, numSolTypes, solSize, NNodes;
@@ -440,21 +450,23 @@ private:
   
         GmfGotoKwd(solIndex, GmfSolAtVertices);
         if (gmfVersion == GmfFloat){
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufFlt);
                 for (int j=0; j<6; ++j) buf[j] = (real_t)bufFlt[j];
                 metric->set_metric(buf, i);
             }            
         }
         else if (gmfVersion == GmfDouble) {
-            for(index_t i=0; i<NNodes; i++) {
+            for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufDbl);
                 for (int j=0; j<6; ++j) buf[j] = (real_t)bufDbl[j];
                 metric->set_metric(buf, i);
             }
         }
-        else
-            exit(76);
+        else {
+            fprintf(stderr, "Wrong GmfVersion: %d\n", gmfVersion);
+            exit(1);
+        }
 
         GmfCloseMesh(solIndex);
 
@@ -475,21 +487,21 @@ private:
 
         GmfSetKwd(meshIndex, GmfVertices, NNodes);
         tag = 0;
-        for(index_t i=0; i<NNodes; i++) {
+        for (index_t i=0; i<NNodes; i++) {
             coords = mesh->get_coords(i);
             GmfSetLin(meshIndex, GmfVertices, coords[0], coords[1], tag);  
         }
     
         GmfSetKwd(meshIndex, GmfTriangles, NElements);
         tag = 0;
-        for(index_t i=0; i<NElements; i++) {
+        for (index_t i=0; i<NElements; i++) {
             tri = mesh->get_element(i);
             GmfSetLin(meshIndex, GmfTriangles, tri[0]+1, tri[1]+1, tri[2]+1, tag);  
         }
 
         mesh->get_boundary(&NFacets, &facets, &ids);
         GmfSetKwd(meshIndex, GmfEdges, NFacets);
-        for(index_t i=0; i<NFacets; i++) {
+        for (index_t i=0; i<NFacets; i++) {
             fac = &facets[2*i];
             tag = ids[i];
         }
@@ -515,14 +527,14 @@ private:
 
         GmfSetKwd(meshIndex, GmfVertices, NNodes);
         tag = 0;
-        for(index_t i=0; i<NNodes; i++) {
+        for (index_t i=0; i<NNodes; i++) {
             coords = mesh->get_coords(i);
             GmfSetLin(meshIndex, GmfVertices, coords[0], coords[1], coords[2], tag);  
         }
     
         GmfSetKwd(meshIndex, GmfTetrahedra, NElements);
         tag = 0;
-        for(index_t i=0; i<NElements; i++) {
+        for (index_t i=0; i<NElements; i++) {
             tet = mesh->get_element(i);
             GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1, 
                                                 tet[3]+1, tag);  
@@ -530,7 +542,7 @@ private:
 
         mesh->get_boundary(&NFacets, &facets, &ids);
         GmfSetKwd(meshIndex, GmfTriangles, NFacets);
-        for(index_t i=0; i<NFacets; i++) {
+        for (index_t i=0; i<NFacets; i++) {
             fac = &facets[3*i];
             tag = ids[i];
             GmfSetLin(meshIndex, GmfTriangles, fac[0]+1, fac[1]+1, fac[2]+1, tag);  
@@ -541,7 +553,7 @@ private:
 
 
 
-    static void export_gmf_metric2d_private(long long solIndex, 
+    static void export_gmf_metric2d(long long solIndex, 
                                             MetricField<real_t,2> *metric, 
                                             Mesh<real_t> *mesh) 
     {
@@ -551,14 +563,14 @@ private:
 
         NNodes = mesh->get_number_nodes();
         GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, 1, &solTypes);
-        for(index_t i=0; i<NNodes; i++) {
+        for (index_t i=0; i<NNodes; i++) {
             met = metric->get_metric(i);
             GmfSetLin(solIndex, GmfSolAtVertices, met);
         }
         GmfCloseMesh(solIndex);
     }
 
-    static void export_gmf_metric3d_private(long long solIndex, 
+    static void export_gmf_metric3d(long long solIndex, 
                                             MetricField<real_t,3> *metric, 
                                             Mesh<real_t> *mesh) 
     {
@@ -568,7 +580,7 @@ private:
 
         NNodes = mesh->get_number_nodes();
         GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, 1, &solTypes);
-        for(index_t i=0; i<NNodes; i++) {
+        for (index_t i=0; i<NNodes; i++) {
             met = metric->get_metric(i);
             GmfSetLin(solIndex, GmfSolAtVertices, met);
         }

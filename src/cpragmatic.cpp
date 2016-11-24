@@ -48,9 +48,6 @@
 #include "VTKTools.h"
 #endif
 
-#ifdef HAVE_LIBMESHB
-#include "GMFTools.h"
-#endif
 
 static void *_pragmatic_mesh=NULL;
 static void *_pragmatic_metric_field=NULL;
