@@ -35,6 +35,11 @@ TARGET_LINK_LIBRARIES(test_generate_Steiner_ellipse_3d ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(test_eigen ${PRAGMATIC_TEST_SRC}/test_eigen.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_eigen ${PRAGMATIC_LIBRARIES})
 
+if (ENABLE_LIBMESHB)
+  ADD_EXECUTABLE(test_gmf ${PRAGMATIC_TEST_SRC}/test_gmf.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_gmf ${PRAGMATIC_LIBRARIES} -lrt)
+endif()
+
 # tests with VTK:
 if (ENABLE_VTK)
 

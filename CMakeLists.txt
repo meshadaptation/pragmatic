@@ -101,6 +101,30 @@ include_directories(${EIGEN_INCLUDE_DIR})
 # Use Eigen in release mode. TODO add flag for vectorization support
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG")
 
+
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_LIBMESHB) AND (NOT (x$ENV{ENABLE_LIBMESHB} STREQUAL x)))
+  set(ENABLE_LIBMESHB $ENV{ENABLE_LIBMESHB})
+else()
+  option(ENABLE_LIBMESHB "Enable libMeshb support." ON)
+endif()
+if (ENABLE_LIBMESHB)
+  FIND_PACKAGE(LibMeshb)
+  if(LIBMESHB_FOUND)
+    add_definitions(-DHAVE_LIBMESHB)
+    include_directories(${LIBMESHB_INCLUDE_DIR})
+    set (PRAGMATIC_LIBRARIES ${LIBMESHB_LIBRARIES} ${PRAGMATIC_LIBRARIES})
+#    set (CMAKE_EXE_LINKER_FLAGS "-lrt")
+#    set (CMAKE_SHARED_LINKER_FLAGS "-lrt")
+  endif()
+endif()
+if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
+  message(STATUS "Configured without libMeshb support.")
+endif()
+
+
+
+
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
 # ADD_CUSTOM_COMMAND(TARGET ${PROJECT_NAME} POST_BUILD COMMAND cp ${PROJECT_NAME} ${PROJECT_NAME}.o )
@@ -117,8 +141,8 @@ install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN 
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} -lrt)
 
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} -lrt)
 
