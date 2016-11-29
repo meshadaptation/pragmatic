@@ -83,8 +83,8 @@ src="""
    in the code generation script generation.
  */
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 #include <%s>
 
@@ -110,8 +110,9 @@ src+="""
   Eigen::Matrix<double, 6, 1> R;
   R<<1,1,1,1,1,1;
   Eigen::Matrix<double, 6, 1> S;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-  M.svd().solve(R, &S);
+  S = svd().solve(R);
 
   sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
                 sm[3] = S[1]; sm[4] = S[3];
@@ -139,7 +140,7 @@ testsrc="""
 int main(){
   double x1[]={ 1,  0, -4/sqrt(2)};
   double x2[]={-1,  0, -4/sqrt(2)};
-  double x3[]={ 0,  2,  4/sqrt(2)};  
+  double x3[]={ 0,  2,  4/sqrt(2)};
   double x4[]={ 0, -2,  4/sqrt(2)};
   double sm[6];
   pragmatic::generate_Steiner_ellipse(x1, x2, x3, x4, sm);
