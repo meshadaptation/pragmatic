@@ -80,15 +80,10 @@ public:
             break;
         }
 
-#ifdef HAVE_MPI
         MPI_Comm comm = _mesh->get_mpi_comm();
 
         nprocs = pragmatic_nprocesses(comm);
         rank = pragmatic_process_id(comm);
-#else
-        nprocs = 1;
-        rank = 0;
-#endif
 
         nthreads = pragmatic_nthreads();
 
@@ -380,7 +375,6 @@ public:
             }
 
             // Update halo.
-#ifdef HAVE_MPI
             if(nprocs>1) {
                 #pragma omp single
                 {
@@ -487,7 +481,6 @@ public:
                     _mesh->trim_halo();
                 }
             }
-#endif
 
 #if !defined NDEBUG
             if(dim==2) {
@@ -2748,7 +2741,6 @@ private:
                 _mesh->node_owner[cid] = 0;
                 _mesh->lnn2gnn[cid] = cid;
             }
-#ifdef HAVE_MPI
             else {
                 int owner = nprocs;
                 for(int j=0; j<nloc; ++j)
@@ -2783,7 +2775,6 @@ private:
                     _mesh->lnn2gnn[cid] = _mesh->gnn_offset+cid;
                 }
             }
-#endif
         }
     }
 

@@ -9,12 +9,10 @@
 int main(int argc, char **argv)
 {
 
-#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
-#endif
 
 #ifdef HAVE_LIBMESHB
     Mesh<double> *mesh2 = GMFTools<double>::import_gmf_mesh("../data/mesh2d");
@@ -51,9 +49,7 @@ int main(int argc, char **argv)
     std::cerr<<"Pragmatic was configured without libMeshb"<<std::endl;
 #endif
 
-#ifdef HAVE_MPI
     MPI_Finalize();
-#endif
 
     return 0;
 }

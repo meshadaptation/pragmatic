@@ -81,13 +81,10 @@ public:
      */
     Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y)
     {
-#ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
-#endif
         _init(NNodes, NElements, ENList, x, y, NULL, NULL, NNodes);
     }
 
-#ifdef HAVE_MPI
     /*! 2D triangular mesh constructor. This is used when parallelised with MPI.
      *
      * @param NNodes number of nodes in the local mesh.
@@ -106,7 +103,6 @@ public:
         _mpi_comm = mpi_comm;
         _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, NPNodes);
     }
-#endif
 
     /*! 3D tetrahedra mesh constructor. This is for use when there is no MPI.
      *
@@ -120,13 +116,10 @@ public:
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const real_t *z)
     {
-#ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
-#endif
         _init(NNodes, NElements, ENList, x, y, z, NULL, NNodes);
     }
 
-#ifdef HAVE_MPI
     /*! 3D tetrahedra mesh constructor. This is used when parallelised with MPI.
      *
      * @param NNodes number of nodes in the local mesh.
@@ -146,7 +139,6 @@ public:
         _mpi_comm = mpi_comm;
         _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
-#endif
 
     /// Default destructor.
     ~Mesh()
@@ -483,12 +475,10 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
             MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
-#endif
 
         double mean = total_length/nedges;
 
@@ -519,10 +509,9 @@ public:
                 }
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
             return total_length;
         } else {
             std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
@@ -577,10 +566,9 @@ public:
                 total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
         } else { // 3D
             for(int i=0; i<NElements; i++) {
                 const index_t *n=get_element(i);
@@ -633,10 +621,9 @@ public:
                 }
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
         }
         return total_area;
     }
@@ -681,9 +668,8 @@ public:
                     total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
                 }
 
-#ifdef HAVE_MPI
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
             } else {
                 #pragma omp parallel for reduction(+:total_volume)
                 for(int i=0; i<NElements; i++) {
@@ -740,12 +726,10 @@ public:
             nele++;
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
             MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
-#endif
 
         if(nele>0)
             return sum/nele;
@@ -802,10 +786,8 @@ public:
                             get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-#endif
 
         return qmin;
     }
@@ -824,21 +806,17 @@ public:
                             get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-#endif
 
         return qmin;
     }
 
-#ifdef HAVE_MPI
     /// Return the MPI communicator.
     MPI_Comm get_mpi_comm() const
     {
         return _mpi_comm;
     }
-#endif
 
     /// Return the node id's connected to the specified node_id
     std::set<index_t> get_node_patch(index_t nid) const
@@ -917,10 +895,8 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
-#endif
 
         return L_max;
     }
@@ -1296,11 +1272,9 @@ public:
                 max_ele_area = std::max(max_ele_area, larea);
             }
 
-#ifdef HAVE_MPI
             MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
-#endif
 
             if(rank==0) {
                 std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
@@ -1338,11 +1312,9 @@ public:
                 max_ele_vol = std::max(max_ele_vol, lvolume);
             }
 
-#ifdef HAVE_MPI
             MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
-#endif
 
             if(rank==0) {
                 std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
@@ -1359,9 +1331,7 @@ public:
             cachedq += quality[i];
         }
 
-#ifdef HAVE_MPI
         MPI_Allreduce(MPI_IN_PLACE, &cachedq, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-#endif
 
         double qmean = get_qmean();
         double qmin = get_qmin();
@@ -1371,13 +1341,11 @@ public:
             std::cout<<"VERIFY: cached quality....."<<cachedq<<std::endl;
         }
 
-#ifdef HAVE_MPI
         int false_cnt = state?0:1;
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &false_cnt, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
         state = (false_cnt == 0);
-#endif
 
         return state;
     }
@@ -1385,7 +1353,6 @@ public:
     void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
                          std::vector< std::vector<index_t> > *recv_vec)
     {
-#ifdef HAVE_MPI
         int ierr, recv_size, tag = 123456;
         std::vector<MPI_Status> status(num_processes);
         std::vector<MPI_Request> send_req(num_processes);
@@ -1421,7 +1388,6 @@ public:
 
         MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
         MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
-#endif
     }
 
 private:
@@ -1443,7 +1409,6 @@ private:
         NElements = _NElements;
         NNodes = _NNodes;
 
-#ifdef HAVE_MPI
         MPI_Comm_size(_mpi_comm, &num_processes);
         MPI_Comm_rank(_mpi_comm, &rank);
 
@@ -1452,7 +1417,6 @@ private:
         MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
         mpi_type_wrapper<real_t> mpi_real_t_wrapper;
         MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
-#endif
 
         nthreads = pragmatic_nthreads();
 
@@ -1473,7 +1437,6 @@ private:
         std::map<index_t, index_t> gnn2lnn;
 #endif
         if(num_processes>1) {
-#ifdef HAVE_MPI
             assert(lnn2gnn!=NULL);
             for(size_t i=0; i<(size_t)NNodes; i++) {
                 gnn2lnn[lnn2gnn[i]] = i;
@@ -1552,7 +1515,6 @@ private:
                 }
             }
 
-#endif
         }
 
         _ENList.resize(NElements*nloc);
@@ -1825,7 +1787,6 @@ private:
     void create_global_node_numbering()
     {
         if(num_processes>1) {
-#ifdef HAVE_MPI
             // Calculate the global numbering offset for this partition.
             int gnn_offset;
             int NPNodes = NNodes - recv_halo.size();
@@ -1851,7 +1812,6 @@ private:
                     node_owner[*it] = i;
                 }
             }
-#endif
         } else {
             memset(&node_owner[0], 0, NNodes*sizeof(int));
             for(index_t i=0; i < (index_t) NNodes; i++)
@@ -1861,7 +1821,6 @@ private:
 
     void create_gappy_global_numbering(size_t pNElements)
     {
-#ifdef HAVE_MPI
         // We expect to have NElements_predict/2 nodes in the partition,
         // so let's reserve 10 times more space for global node numbers.
         index_t gnn_reserve = 5*pNElements;
@@ -1890,12 +1849,10 @@ private:
                 recv_map[i][lnn2gnn[*it]] = *it;
             }
         }
-#endif
     }
 
     void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt)
     {
-#ifdef HAVE_MPI
         // MPI_Requests for all non-blocking communications.
         std::vector<MPI_Request> request(num_processes*2);
 
@@ -1932,7 +1889,6 @@ private:
             for(typename std::vector<index_t>::const_iterator it=recv[i].end()-recv_cnt[i]; it!=recv[i].end(); ++it, ++k)
                 lnn2gnn[*it] = recv_buff[i][k];
         }
-#endif
     }
 
     template<int dim>
@@ -2009,13 +1965,11 @@ private:
     std::vector<index_t> lnn2gnn;
 
     index_t gnn_offset;
-#ifdef HAVE_MPI
     MPI_Comm _mpi_comm;
 
     // MPI data type for index_t and real_t
     MPI_Datatype MPI_INDEX_T;
     MPI_Datatype MPI_REAL_T;
-#endif
 };
 
 #endif

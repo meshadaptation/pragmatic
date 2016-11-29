@@ -19,9 +19,7 @@ extern "C" {
 #endif
 }
 
-#ifdef HAVE_MPI
 #include "mpi_tools.h"
-#endif
 
 #ifdef HAVE_LIBMESHB
 extern "C" {

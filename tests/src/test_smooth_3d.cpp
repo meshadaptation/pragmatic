@@ -52,9 +52,7 @@
 #include "Smooth.h"
 #include "ticker.h"
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 void test_block(double qmean, double qmin, long double area, long double volume)
 {
@@ -76,14 +74,12 @@ void test_block(double qmean, double qmin, long double area, long double volume)
 int main(int argc, char **argv)
 {
     int rank=0;
-#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
 
     const double target_quality_mean = 0.3;
     const double target_quality_min = 0.01;
@@ -184,9 +180,7 @@ int main(int argc, char **argv)
     std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
-#ifdef HAVE_MPI
     MPI_Finalize();
-#endif
 
     return 0;
 }

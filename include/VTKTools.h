@@ -82,9 +82,7 @@ extern "C" {
 #endif
 }
 
-#ifdef HAVE_MPI
 #include "mpi_tools.h"
-#endif
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
 #include <boost/unordered_map.hpp>
@@ -122,13 +120,11 @@ public:
     {
         int rank=0;
 	int nparts=1;
-#ifdef HAVE_MPI
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &nparts);
 
         mpi_type_wrapper<index_t> mpi_index_t_wrapper;
         MPI_Datatype MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
-#endif
 
         std::vector<real_t> x, y, z;
         std::vector<int> ENList;
@@ -211,12 +207,10 @@ public:
             NElements = ENList.size()/nloc;
         }
 
-#ifdef HAVE_MPI
         MPI_Bcast(&NNodes, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
         MPI_Bcast(&NElements, 1, MPI_INDEX_T, 0, MPI_COMM_WORLD);
         MPI_Bcast(&nloc, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Bcast(&ndims, 1, MPI_INT, 0, MPI_COMM_WORLD);
-#endif
 
         if (rank!=0) {
             ENList.resize(nloc*NElements);
@@ -224,7 +218,6 @@ public:
 
         Mesh<real_t> *mesh=NULL;
 
-#ifdef HAVE_MPI
         MPI_Bcast(ENList.data(), nloc*NElements, MPI_INDEX_T, 0, MPI_COMM_WORLD);
 
         if(nparts>1) {
@@ -386,7 +379,6 @@ public:
             else
                 mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]), &(lnn2gnn[0]), pNNodes, comm);
         }
-#endif
 
         if(nparts==1) { // If nparts!=1, then the mesh has been created already by the code a few lines above.
             if(ndims==2)
@@ -606,10 +598,8 @@ public:
         ug->GetCellData()->AddArray(vtk_boundary);
 
         int rank=0, nparts=1;
-#ifdef HAVE_MPI
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &nparts);
-#endif
 
         if(nparts==1) {
             vtkSmartPointer<vtkXMLUnstructuredGridWriter> writer = vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
@@ -622,7 +612,6 @@ public:
 #endif
             writer->Write();
         }
-#ifdef HAVE_MPI
         else {
             // Set ghost levels
             vtkSmartPointer<vtkUnsignedCharArray> vtk_ghost = vtkSmartPointer<vtkUnsignedCharArray>::New();
@@ -673,7 +662,6 @@ public:
 #endif
             writer->Write();
         }
-#endif
 
         delete property;
 
