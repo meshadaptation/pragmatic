@@ -377,12 +377,14 @@ public:
 
             NNodes = lNNodes;
 
+            int pNNodes = node_partition[rank].size();
+
             MPI_Comm comm = MPI_COMM_WORLD;
 
             if(ndims==2)
-                mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(lnn2gnn[0]), &(owner_range[0]), comm);
+                mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(lnn2gnn[0]), pNNodes, comm);
             else
-                mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]), &(lnn2gnn[0]), &(owner_range[0]), comm);
+                mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]), &(z[0]), &(lnn2gnn[0]), pNNodes, comm);
         }
 #endif
 

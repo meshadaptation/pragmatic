@@ -84,7 +84,7 @@ public:
 #ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
 #endif
-        _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
+        _init(NNodes, NElements, ENList, x, y, NULL, NULL, NNodes);
     }
 
 #ifdef HAVE_MPI
@@ -123,7 +123,7 @@ public:
 #ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
 #endif
-        _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
+        _init(NNodes, NElements, ENList, x, y, z, NULL, NNodes);
     }
 
 #ifdef HAVE_MPI
@@ -1475,7 +1475,7 @@ private:
         if(num_processes>1) {
 #ifdef HAVE_MPI
             assert(lnn2gnn!=NULL);
-            nfor(size_t i=0; i<(size_t)NNodes; i++) {
+            for(size_t i=0; i<(size_t)NNodes; i++) {
                 gnn2lnn[lnn2gnn[i]] = i;
             }
 
