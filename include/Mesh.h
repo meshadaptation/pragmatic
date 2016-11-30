@@ -1443,11 +1443,10 @@ private:
             }
 
             std::vector<index_t> owner_range(num_processes+1);
-            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, (index_t*)owner_range.data()+1, 1, MPI_INDEX_T, _mpi_comm);
+            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, &(owner_range[1]), 1, MPI_INDEX_T, _mpi_comm);
             for(int i=1;i<=num_processes;i++) {
                 owner_range[i]+=owner_range[i-1];
             }
-
             std::vector< std::set<index_t> > recv_set(num_processes);
             for(size_t i=0; i<(size_t)NElements*nloc; i++) {
                 index_t lnn = ENList[i];
@@ -1625,10 +1624,10 @@ private:
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	NNList.clear();
-	NNList.resize(NNodes);
-	NEList.clear();
-	NEList.resize(NNodes);
+	    NNList.clear();
+	    NNList.resize(NNodes);
+	    NEList.clear();
+	    NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
