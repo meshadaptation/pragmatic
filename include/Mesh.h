@@ -1443,8 +1443,8 @@ private:
             }
 
             std::vector<index_t> owner_range(num_processes+1);
-            index_t owner_range2[num_processes+1];
-            MPI_Allgather(&NPNodes, 1, MPI_INDEX_T, &(owner_range2[1]), 1, MPI_INDEX_T, _mpi_comm);
+            index_t bufIn = NPNodes;
+            MPI_Allgather(&bufIn, 1, MPI_INDEX_T, owner_range.data()+1, 1, MPI_INDEX_T, _mpi_comm);
             for(int i=1;i<=num_processes;i++) {
                 owner_range[i]+=owner_range[i-1];
             }
