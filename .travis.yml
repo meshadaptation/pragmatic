@@ -33,8 +33,8 @@ compiler:
   - gcc
 # Change this to your needs
 env:
-  - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release COMPILER=g++-5
-  - CMAKE_BUILD_TYPE=Release COMPILER=g++-5
+  - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release
+  - CMAKE_BUILD_TYPE=Release
 script:
   - mkdir build
   - cd build

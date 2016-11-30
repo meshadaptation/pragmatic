@@ -98,7 +98,7 @@ public:
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const index_t *lnn2gnn,
-         const index_t NPNodes, MPI_Comm mpi_comm)
+         index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
         _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, NPNodes);
@@ -134,7 +134,7 @@ public:
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const real_t *z, const index_t *lnn2gnn,
-         const index_t NPNodes, MPI_Comm mpi_comm)
+         index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
         _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
@@ -1401,7 +1401,7 @@ private:
 
     void _init(int _NNodes, int _NElements, const index_t *ENList,
                const real_t *x, const real_t *y, const real_t *z,
-               const index_t *lnn2gnn, const index_t NPNodes)
+               const index_t *lnn2gnn, index_t NPNodes)
     {
         num_processes = 1;
         rank=0;
