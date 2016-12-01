@@ -21,6 +21,8 @@ set(INSTALL_BIN_DIR "bin" CACHE PATH
 set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
     "Installation directory for header files")
 
+include_directories(include)
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -66,32 +68,14 @@ if (ENABLE_MPI)
     add_definitions(-DHAVE_MPI)
     include_directories(${MPI_CXX_INCLUDE_PATH} ${MPI_C_INCLUDE_PATH})
 
-    set (CMAKE_CXX_FLAGS ${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS})
-    set (CMAKE_C_FLAGS ${MPI_C_COMPILE_FLAGS} ${CMAKE_C_FLAGS})
-    set (CMAKE_LINK_FLAGS ${MPI_C_LINK_FLAGS} ${CMAKE_LINK_FLAGS})
+    set (CMAKE_CXX_FLAGS "${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS}")
+    set (CMAKE_C_FLAGS "${MPI_C_COMPILE_FLAGS} ${CMAKE_C_FLAGS}")
+    set (CMAKE_LINK_FLAGS "${MPI_C_LINK_FLAGS} ${CMAKE_LINK_FLAGS}")
     set (PRAGMATIC_LIBRARIES ${MPI_CXX_LIBRARIES} ${MPI_C_LIBRARIES} ${PRAGMATIC_LIBRARIES})
   endif()
 endif()
 if (NOT ENABLE_MPI OR NOT MPI_FOUND)
   message(STATUS "Configured without MPI support.")
-endif()
-
-# Use env variable iff it exists and command line arg was not given:
-if (NOT (DEFINED ENABLE_OPENMP) AND (NOT (x$ENV{ENABLE_OPENMP} STREQUAL x)))
-  set(ENABLE_OPENMP $ENV{ENABLE_OPENMP})
-else()
-  option(ENABLE_OPENMP "Enable OpenMP support." ON)
-endif()
-if (ENABLE_OPENMP)
-  find_package(OpenMP)
-  if (OPENMP_FOUND)
-    add_definitions(-DHAVE_OPENMP)
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  endif()
-endif()
-if (NOT ENABLE_OPENMP OR NOT OPENMP_FOUND)
-  message(STATUS "Configured without OpenMP support.")
 endif()
 
 if (MPI_FOUND)
@@ -112,7 +96,34 @@ if(PYTHONINTERP_FOUND)
     configure_file(${ADAPTIVITY_PY_IN} ${ADAPTIVITY_PY})
 endif()
 
-include_directories(include)
+find_package(Eigen REQUIRED)
+include_directories(${EIGEN_INCLUDE_DIR})
+# Use Eigen in release mode. TODO add flag for vectorization support
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG")
+
+
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_LIBMESHB) AND (NOT (x$ENV{ENABLE_LIBMESHB} STREQUAL x)))
+  set(ENABLE_LIBMESHB $ENV{ENABLE_LIBMESHB})
+else()
+  option(ENABLE_LIBMESHB "Enable libMeshb support." ON)
+endif()
+if (ENABLE_LIBMESHB)
+  FIND_PACKAGE(LibMeshb)
+  if(LIBMESHB_FOUND)
+    add_definitions(-DHAVE_LIBMESHB)
+    include_directories(${LIBMESHB_INCLUDE_DIR})
+    set (PRAGMATIC_LIBRARIES ${LIBMESHB_LIBRARIES} ${PRAGMATIC_LIBRARIES})
+#    set (CMAKE_EXE_LINKER_FLAGS "-lrt")
+#    set (CMAKE_SHARED_LINKER_FLAGS "-lrt")
+  endif()
+endif()
+if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
+  message(STATUS "Configured without libMeshb support.")
+endif()
+
+
+
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
@@ -130,8 +141,8 @@ install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN 
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} -lrt)
 
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} -lrt)
 

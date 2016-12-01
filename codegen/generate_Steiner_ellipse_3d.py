@@ -1,16 +1,16 @@
 from __future__ import print_function
-from sympy import *
+from sympy import symbols, Matrix
 import sys
 
 # Lets work this out symbolically first and perform python unit test.
 
 # From http://en.wikipedia.org/wiki/Steiner_ellipse
-x1=symbols('x1[:3]')
-x2=symbols('x2[:3]')
-x3=symbols('x3[:3]')
-x4=symbols('x4[:3]')
+x1 = symbols('x1[:3]')
+x2 = symbols('x2[:3]')
+x3 = symbols('x3[:3]')
+x4 = symbols('x4[:3]')
 
-Mij=symbols('Mij[:36]')
+Mij = symbols('Mij[:36]')
 
 M = Matrix([
     [(x1[0] - x2[0])**2, (x1[1] - x2[1])**2, (x1[2] - x2[2])**2, (x1[1] - x2[1])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[1] - x2[1])],
@@ -20,7 +20,7 @@ M = Matrix([
     [(x2[0] - x4[0])**2, (x2[1] - x4[1])**2, (x2[2] - x4[2])**2, (x2[1] - x4[1])*(x2[2] - x4[2]), (x2[0] - x4[0])*(x2[2] - x4[2]), (x2[0] - x4[0])*(x2[1] - x4[1])],
     [(x3[0] - x4[0])**2, (x3[1] - x4[1])**2, (x3[2] - x4[2])**2, (x3[1] - x4[1])*(x3[2] - x4[2]), (x3[0] - x4[0])*(x3[2] - x4[2]), (x3[0] - x4[0])*(x3[1] - x4[1])]])
 
-R=Matrix([[1], [1], [1], [1], [1], [1]])
+R = Matrix([[1], [1], [1], [1], [1], [1]])
 
 # http://en.wikipedia.org/wiki/Tetrahedron#Formulas_for_a_regular_tetrahedron
 tetrahedron = {x1[0]:1,  x1[1]:0,  x1[2]:-4/sqrt(2),
@@ -110,8 +110,9 @@ src+="""
   Eigen::Matrix<double, 6, 1> R;
   R<<1,1,1,1,1,1;
   Eigen::Matrix<double, 6, 1> S;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-  M.svd().solve(R, &S);
+  S = svd().solve(R);
 
   sm[0] = S[0]; sm[1] = S[5]; sm[2] = S[4];
                 sm[3] = S[1]; sm[4] = S[3];
@@ -139,7 +140,7 @@ testsrc="""
 int main(){
   double x1[]={ 1,  0, -4/sqrt(2)};
   double x2[]={-1,  0, -4/sqrt(2)};
-  double x3[]={ 0,  2,  4/sqrt(2)};  
+  double x3[]={ 0,  2,  4/sqrt(2)};
   double x4[]={ 0, -2,  4/sqrt(2)};
   double sm[6];
   pragmatic::generate_Steiner_ellipse(x1, x2, x3, x4, sm);

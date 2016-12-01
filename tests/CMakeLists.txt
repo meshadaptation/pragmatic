@@ -5,8 +5,8 @@ if (NOT(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR}))
   add_custom_target(test
   make
   COMMAND mkdir -p data
-  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/data/* data/
-  COMMAND cp -u ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
+  COMMAND cp ${CMAKE_SOURCE_DIR}/tests/data/* data/
+  COMMAND cp ${CMAKE_SOURCE_DIR}/tests/src/*.mpi bin/
   COMMAND python ${CMAKE_SOURCE_DIR}/tests/unittest bin)
 else()
   add_custom_target(test
@@ -35,6 +35,11 @@ TARGET_LINK_LIBRARIES(test_generate_Steiner_ellipse_3d ${PRAGMATIC_LIBRARIES})
 ADD_EXECUTABLE(test_eigen ${PRAGMATIC_TEST_SRC}/test_eigen.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_eigen ${PRAGMATIC_LIBRARIES})
 
+if (ENABLE_LIBMESHB)
+  ADD_EXECUTABLE(test_gmf ${PRAGMATIC_TEST_SRC}/test_gmf.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_gmf ${PRAGMATIC_LIBRARIES} -lrt)
+endif()
+
 # tests with VTK:
 if (ENABLE_VTK)
 
@@ -49,6 +54,15 @@ if (ENABLE_VTK)
 
   ADD_EXECUTABLE(test_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_3d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_coarsen_3d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_gradation_3d ${PRAGMATIC_TEST_SRC}/test_gradation_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_gradation_3d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_coarsen_boundary_2d ${PRAGMATIC_TEST_SRC}/test_coarsen_boundary_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_boundary_2d ${PRAGMATIC_LIBRARIES})
+
+  ADD_EXECUTABLE(test_coarsen_boundary_3d ${PRAGMATIC_TEST_SRC}/test_coarsen_boundary_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_coarsen_boundary_3d ${PRAGMATIC_LIBRARIES})
 
   ADD_EXECUTABLE(test_refine_2d ${PRAGMATIC_TEST_SRC}/test_refine_2d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_refine_2d ${PRAGMATIC_LIBRARIES})

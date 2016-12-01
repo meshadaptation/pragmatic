@@ -65,6 +65,25 @@ class UnitTest:
 
         return (passcount, warncount, failcount)
 
+class UnitTestTimer:
+    def __init__(self, min):
+        from multiprocessing import Process
+        self.minutes = min
+        self.waitsec = 7*60
+        self.cp = Process(target=self.run)
+
+    def run(self):
+        import time
+        for i in range(self.minutes):
+            time.sleep(self.waitsec)
+            print "Still running..."
+
+    def start(self):
+        self.cp.start()
+
+    def terminate(self):
+        self.cp.terminate()
+
 class UnitTestHarness:
     def __init__(self, dir):
         self.tests = []
@@ -85,8 +104,12 @@ class UnitTestHarness:
         failtests = []
 
         for test in self.tests:
+
+            UTTimer = UnitTestTimer(60)
+            UTTimer.start()
+
             exitStatus = test.run()
-            
+
             (P, W, F) = test.parse()
 
             if (W, F) == (0, 0) and P > 0:
@@ -105,7 +128,7 @@ class UnitTestHarness:
 
             if F > 0:
               failtests.append(test.exe)
-              
+
             if not exitStatus == 0:
               print "    Failure: non-zero exit code from test"
               failcount += 1
@@ -115,6 +138,8 @@ class UnitTestHarness:
             passcount += P
             warncount += W
             failcount += F
+
+            UTTimer.terminate()
 
         print "  RESULTS"
         print "    Passes:   %d" % passcount

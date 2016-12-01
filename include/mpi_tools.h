@@ -44,8 +44,8 @@
 
 template <typename TYPE>
 struct mpi_type_wrapper {
-  const MPI_Datatype mpi_type;
-  mpi_type_wrapper();
+    const MPI_Datatype mpi_type;
+    mpi_type_wrapper();
 };
 
 // Explicit instantiation for `char'
