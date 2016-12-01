@@ -114,8 +114,12 @@ if (ENABLE_LIBMESHB)
     add_definitions(-DHAVE_LIBMESHB)
     include_directories(${LIBMESHB_INCLUDE_DIR})
     set (PRAGMATIC_LIBRARIES ${LIBMESHB_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-#    set (CMAKE_EXE_LINKER_FLAGS "-lrt")
-#    set (CMAKE_SHARED_LINKER_FLAGS "-lrt")
+    if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+      set(LIB_RT "")
+    else()
+      set(LIB_RT "rt")
+    endif()
+
   endif()
 endif()
 if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
@@ -141,8 +145,8 @@ install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN 
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} -lrt)
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} ${LIB_RT})
 
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} -lrt)
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} ${LIB_RT})
 
