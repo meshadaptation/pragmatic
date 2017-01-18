@@ -128,8 +128,9 @@ if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
   message(STATUS "Configured without libMeshb support.")
 endif()
 
-
-
+# Make sure libpragmatic.dylib works properly from the prefix location
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
