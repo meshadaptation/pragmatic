@@ -530,6 +530,146 @@ public:
         return;
     }
 
+    // Tetrahedral Element smoothing via the Jacobian determinant and Condition Number
+    void condition_number(int max_iterations=10)
+    {
+        int NNodes = _mesh->get_number_nodes();
+        int NElements = _mesh->get_number_elements();
+
+        std::vector< std::atomic<bool> > is_boundary(NNodes);
+        std::vector< std::atomic<bool> > active_vertices(NNodes);
+        if(vLocks.size() < NNodes)
+            vLocks.resize(NNodes);
+
+        // init is_boundary
+        #pragma omp parallel for
+        for(int n=0; n<NNodes; ++n) {
+            is_boundary[n].store(false, std::memory_order_relaxed);
+        }
+
+        #pragma omp parallel
+        {
+            // set the active_vertices
+            #pragma omp for schedule(static)
+            for(int n=0; n<NNodes; ++n) {
+                // this line of code is repeated
+                is_boundary[n].store(false, std::memory_order_relaxed);
+
+                //to tess whether a node has any adjacent node, if yes, then it is active
+                if(_mesh->NNList[n].empty()) {
+                    assert(_mesh->NEList[n].empty());
+                    active_vertices[n].store(false, std::memory_order_relaxed);
+                } else {
+                    active_vertices[n].store(true, std::memory_order_relaxed);
+                }
+                // atomic operation: store(0, std::memory_order_release)
+                vLocks[n].unlock();
+            }
+
+            // set is_boundary
+            #pragma omp for schedule(guided)
+            for(int i=0; i<NElements; i++) {
+                // a list contains 4 vertex(node) id
+                const int *n=_mesh->get_element(i);
+                if(n[0]<0)
+                    continue;
+
+                for(size_t j=0; j<nloc; j++) {
+                    // test the vertex with id i*nloc+j is on boundary or not
+                    if(_mesh->boundary[i*nloc+j]>0) {
+                        for(size_t k=1; k<nloc; k++) {
+                            // node with id i*nloc+j is still fault while three other node are set to true
+                            is_boundary[n[(j+k)%nloc]].store(true, std::memory_order_relaxed);
+                        }
+                    }
+                }
+            }
+            // First sweep through all vertices. Add vertices adjacent to any
+            // vertex moved into the active_vertex list.
+            std::vector<index_t> retry, next_retry;
+
+            int iter=0;
+            while((iter++) < max_iterations) {
+                #pragma omp for schedule(guided) nowait
+                for(index_t node=0; node<NNodes; ++node) {
+                    //halo node is ???
+                    if(_mesh->is_halo_node(node) || is_boundary[node].load(std::memory_order_relaxed) || !active_vertices[node].load(std::memory_order_relaxed))
+                        continue;
+
+                    // what does try_lock() do?
+                    if(!vLocks[node].try_lock()) {
+                        retry.push_back(node);
+                        continue;
+                    }
+
+                    bool abort = false;
+                    for(const auto& it : _mesh->NNList[node]) {
+                        if(vLocks[it].is_locked()) {
+                            abort = true;
+                            break;
+                        }
+                    }
+
+                    if(!abort) {
+                        if(condition_number_kernel(node)) {
+                            for(auto& it : _mesh->NNList[node]) {
+                                assert(!_mesh->NNList[node].empty());
+                                assert(!_mesh->NEList[node].empty());
+                                active_vertices[it].store(true, std::memory_order_relaxed);
+                            }
+                        } else {
+                            active_vertices[node].store(false, std::memory_order_relaxed);
+                        }
+                    } else {
+                        retry.push_back(node);
+                    }
+                    vLocks[node].unlock();
+                }
+
+                for(int iretry=0; iretry<100; iretry++) { // Put a hard limit on the number of times we try to get a lock.
+                    next_retry.clear();
+
+                    for(const auto& node : retry) {
+                        bool abort = false;
+
+                        if(!vLocks[node].try_lock()) {
+                            next_retry.push_back(node);
+                            continue;
+                        }
+
+                        for(const auto& it : _mesh->NNList[node]) {
+                            if(vLocks[it].is_locked()) {
+                                abort = true;
+                                break;
+                            }
+                        }
+
+                        if(!abort) {
+                            if(condition_number_kernel(node)) {
+                                for(auto& it : _mesh->NNList[node]) {
+                                    assert(!_mesh->NNList[node].empty());
+                                    assert(!_mesh->NEList[node].empty());
+                                    active_vertices[it].store(true, std::memory_order_relaxed);
+                                }
+                            } else {
+                                active_vertices[node].store(false, std::memory_order_relaxed);
+                            }
+                        } else {
+                            next_retry.push_back(node);
+                        }
+                        vLocks[node].unlock();
+                    }
+
+                    // exchange the content between retry and next_retry
+                    retry.swap(next_retry);
+                    if(retry.empty())
+                        break;
+                }
+            }
+        }
+        return;
+    }
+
 private:
 
     // Laplacian smooth kernels
@@ -1316,6 +1456,209 @@ private:
         return functional;
     }
 
+    inline bool condition_number_kernel(index_t node)
+    {
+        real_t p[3];
+        condition_number_kernel(node, p);
+
+        double mp[6];
+
+        bool valid = generate_location_3d(node, p, mp);
+        if (!valid) {
+            for (size_t j=0; j < 3; j++) {
+                p[j] = 0.5 * (p[j] + _mesh->_coords[node*3+j]);
+            }
+
+            valid = generate_location_3d(node, p, mp);
+        }
+
+        if (!valid)
+            return false;
+
+        for(size_t j = 0; j < 3; j++)
+            _mesh->_coords[node*3+j] = p[j];
+
+        for(size_t j=0; j < 6; j++)
+            _mesh->metric[node*6+j] = mp[j];
+
+        for(auto & e: _mesh->NEList[node])
+            update_quality(e);
+
+        return true;
+    }
+
+    inline void condition_number_kernel(index_t node, real_t* p)
+    {
+        /*
+         *  Pseudo code of algorithm
+         *  x = initial position
+         *  while(flag)
+         *      flag = flase
+         *      f_tem = f(x)
+         *      sig = sig0
+         *      while(sig > sigm)
+         *          sig = sig/8
+         *          x_new = x, f_new = 1e20
+         *          loop over M attached elements
+         *              x_avg = (1 - sig)*x+(sum of edge vectors from x)/2
+         *              compute f(x_avg)
+         *              if( f(x_avg) < f_new), f_new = f(x_avg), x_new = x_avg
+         *          end loop over elements
+         *          if (f_tem - f_new > eps * abs(f_tem) )
+         *              d = abs(x - x_new)
+         *              x = x_new
+         *              sig = 0
+         *              if ( d > tau) flag = true
+         *      end while
+         * end while
+         *
+         */
+
+        // set up the termination criteria
+        bool flag = true;
+        real_t eps = 1e-4;
+        real_t tau = 1e-5;
+        real_t sig0 = 1.0;
+        real_t sigm = 1e-3;
+        real_t tem_func_value;
+        real_t sig;
+        const real_t* init_coords = _mesh->get_coords(node);
+        real_t position[3] = {init_coords[0], init_coords[1], init_coords[2]};
+
+         while(flag)
+         {
+             flag = false;
+             tem_func_value = l_two_norm(node, position);
+             sig = sig0;
+
+             while(sig > sigm)
+             {
+                 sig = sig / 8.0;
+                 real_t* new_position = (real_t *) malloc(3 * sizeof(real_t));
+                 memcpy(new_position, position, 3*sizeof(real_t));
+
+                 real_t new_func_value = 1e20;
+
+                 for (const auto &ie: _mesh->NEList[node])
+                 {
+                     const index_t *nodes = _mesh->get_element(ie);
+                     real_t sum_of_edge_vector[3] = {0.0, 0.0, 0.0};
+
+                     for (size_t i = 0; i < 4; i++)
+                     {
+                         if (nodes[i] != node)
+                         {
+                             const real_t *pos = _mesh->get_coords(nodes[i]);
+                             sum_of_edge_vector[0] += pos[0];
+                             sum_of_edge_vector[1] += pos[1];
+                             sum_of_edge_vector[2] += pos[3];
+                         }
+                     }
+
+                     real_t avg_position[3] = {0.0, 0.0, 0.0};
+
+                     avg_position[0] = (1.0-sig)*position[0] + sum_of_edge_vector[0]/2.0;
+                     avg_position[1] = (1.0-sig)*position[1] + sum_of_edge_vector[1]/2.0;
+                     avg_position[2] = (1.0-sig)*position[2] + sum_of_edge_vector[2]/2.0;
+
+                     real_t avg_func_value = l_two_norm(node, avg_position);
+
+                     if (avg_func_value < new_func_value)
+                     {
+                         new_func_value = avg_func_value;
+                         memcpy(new_position, avg_position, 3*sizeof(real_t));
+                     }
+                 }
+
+                 if (tem_func_value - new_func_value > eps * fabs(tem_func_value))
+                 {
+                     real_t distance = 0;
+                     for (size_t i = 0; i < 3; i++)
+                     {
+                         distance += (position[i]-new_position[i]) * (position[i]-new_position[i]);
+                         assert(distance >= 0);
+                         position[i] = new_position[i];
+                     }
+
+                     distance = sqrt(distance);
+                     sig = 0;
+                     if (distance > tau) flag = true;
+                 }
+
+                 free(new_position);
+             }
+         }
+
+        p[0] = position[0];
+        p[1] = position[1];
+        p[2] = position[2];
+
+        return;
+    }
+
+    inline real_t l_two_norm(index_t node, real_t* position)
+    {
+        real_t ans = 0.0;
+        for (const auto &ie : _mesh->NEList[node])
+        {
+            real_t cond = weighted_condition_number(node, ie, position);
+            ans+= cond * cond;
+        }
+
+        return sqrt(ans);
+    }
+
+    inline real_t weighted_condition_number(index_t node, index_t ie, real_t* position)
+    {
+        Eigen::Matrix<real_t, 3, 3> A = construct_jacobian_matrix(node, ie, position);
+
+        Eigen::Matrix<real_t, 3, 3> w0;
+        w0 << 1.0, 1.0/2.0,     1.0/2.0,
+              0,   sqrt(3)/2.0, sqrt(3)/6.0,
+              0,   0,           sqrt(2)/sqrt(3);
+
+        Eigen::Matrix<real_t, 3, 3> S = A * w0.inverse();
+
+        return (real_t) sqrt((S * S.transpose()).trace()) * sqrt((S.inverse() * S.inverse().transpose()).trace());
+    }
+
+    inline Eigen::Matrix<real_t, 3, 3> construct_jacobian_matrix(index_t node, index_t ie, real_t *input)
+    {
+        const index_t *n = _mesh->get_element(ie);
+
+        // four vertex
+        const real_t *x0 = _mesh->get_coords(n[0]);
+        const real_t *x1 = _mesh->get_coords(n[1]);
+        const real_t *x2 = _mesh->get_coords(n[2]);
+        const real_t *x3 = _mesh->get_coords(n[3]);
+
+        const real_t x = input[0];
+        const real_t y = input[1];
+        const real_t z = input[2];
+
+        Eigen::Matrix<real_t, 3, 3> A;
+        // form the jacobian matrix
+        if (n[0] == node) {
+            A << (x1[0] - x), (x2[0] - x), (x3[0] - x),
+                 (x1[1] - y), (x2[1] - y), (x3[1] - y),
+                 (x1[2] - z), (x2[2] - z), (x3[2] - z);
+        } else if (n[1] == node) {
+            A << (x2[0] - x), (x3[0] - x), (x0[0] - x),
+                 (x2[1] - y), (x3[1] - y), (x0[1] - y),
+                 (x2[2] - z), (x3[2] - z), (x0[2] - z);
+        } else if (n[2] == node) {
+            A << (x3[0] - x), (x0[0] - x), (x1[0] - x),
+                 (x3[1] - y), (x0[1] - y), (x1[1] - y),
+                 (x3[2] - z), (x0[2] - z), (x1[2] - z);
+        } else {
+            assert(n[3] == node);
+            A << (x0[0] - x), (x1[0] - x), (x2[0] - x),
+                 (x0[1] - y), (x1[1] - y), (x2[1] - y),
+                 (x0[2] - z), (x1[2] - z), (x2[2] - z);
+        }
+
+        return A;
+    }
     inline bool generate_location_2d(index_t node, const real_t *p, double *mp) const
     {
         // Interpolate metric at this new position.
@@ -1507,6 +1850,8 @@ private:
 
         return;
     }
+
+
 
     /*
     // Compute barycentric coordinates (u, v, w) for

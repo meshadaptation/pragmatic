@@ -109,7 +109,7 @@ int main(int argc, char **argv)
         double m[] = {1.0/pow(hx, 2), 0,              0,
                       1.0/pow(hx, 2), 0,
                       1.0/pow(hx, 2)
-                     };
+        };
 
         metric_field.set_metric(m, i);
     }
@@ -126,10 +126,33 @@ int main(int argc, char **argv)
     }
 
     Smooth<double, 3> smooth(*mesh);
+    double tic, toc;
+    std::string vtu_filename;
+    // =================================
+#if 0
+    tic = get_wtime();
+    smooth.condition_number(200);
+    toc = get_wtime();
 
-    double tic = get_wtime();
+    qmean = mesh->get_qmean();
+    qmin = mesh->get_qmin();
+
+    area = mesh->calculate_area();
+    volume = mesh->calculate_volume();
+
+    if(rank==0) {
+        std::cout << "Condtion number time  " << toc-tic << std::endl;
+        test_block(qmean, qmin, area, volume);
+    }
+
+    std::string vtu_filename = std::string("../data/test_condition_number_3d");
+    VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
+#endif
+    // =================================
+
+    tic = get_wtime();
     smooth.laplacian(100);
-    double toc = get_wtime();
+    toc = get_wtime();
 
     qmean = mesh->get_qmean();
     qmin = mesh->get_qmin();
@@ -142,9 +165,10 @@ int main(int argc, char **argv)
         test_block(qmean, qmin, area, volume);
     }
 
-    std::string vtu_filename = std::string("../data/test_smooth_laplacian_3d");
+    vtu_filename = std::string("../data/test_smooth_laplacian_3d");
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 
+    // =================================
     tic = get_wtime();
     smooth.smart_laplacian(200);
     toc = get_wtime();
@@ -163,6 +187,7 @@ int main(int argc, char **argv)
     vtu_filename = std::string("../data/test_smooth_smart_laplacian_3d");
     VTKTools<double>::export_vtu(vtu_filename.c_str(), mesh);
 
+    // =================================
     tic = get_wtime();
     smooth.optimisation_linf(400);
     toc = get_wtime();
