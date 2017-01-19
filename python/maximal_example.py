@@ -46,7 +46,7 @@ def maximal_example(eta_list = array([0.001]), Nadapt=5, timet=1., period=2*pi):
         ### SETUP MESH
     #   mesh = RectangleMesh(0.4,-0.1,0.6,0.3,1*meshsz,1*meshsz,"left/right") #shock
     #   mesh = RectangleMesh(-0.75,-0.3,-0.3,0.5,1*meshsz,1*meshsz,"left/right") #waves
-        mesh = RectangleMesh(-1.5,-0.25,0.5,0.75,1*meshsz,1*meshsz,"left/right") #shock+waves
+        mesh = RectangleMesh(Point(-1.5,-0.25),Point(0.5,0.75),1*meshsz,1*meshsz,"left/right") #shock+waves
         
         def boundary(x):
               return near(x[0],mesh.coordinates()[:,0].min()) or near(x[0],mesh.coordinates()[:,0].max()) \
