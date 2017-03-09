@@ -1390,6 +1390,7 @@ public:
         MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
     }
 
+
 private:
     template<typename _real_t, int _dim> friend class MetricField;
     template<typename _real_t, int _dim> friend class Smooth;
@@ -1430,7 +1431,7 @@ private:
             msize = 6;
         }
 
-        // From the globalENList, create the halo and a local ENList if num_processes>1.
+        // From the (local) ENList, create the halo.
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
         boost::unordered_map<index_t, index_t> gnn2lnn;
 #else
@@ -1448,6 +1449,7 @@ private:
             for(int i=1;i<=num_processes;i++) {
                 owner_range[i]+=owner_range[i-1];
             }
+
             std::vector< std::set<index_t> > recv_set(num_processes);
             for(size_t i=0; i<(size_t)NElements*nloc; i++) {
                 index_t lnn = ENList[i];

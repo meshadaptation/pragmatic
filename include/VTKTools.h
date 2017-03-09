@@ -71,6 +71,7 @@ typedef float vtkFloatingPointType;
 #include <string>
 #include <cfloat>
 #include <typeinfo>
+#include <iterator>
 
 #include "Mesh.h"
 #include "MetricTensor.h"
@@ -223,6 +224,7 @@ public:
         if(nparts>1) {
             std::vector<index_t> owner_range;
             std::vector<index_t> lnn2gnn;
+            std::map<index_t, index_t> gnn2lnn;
             std::vector<int> node_owner;
 
             std::vector<int> epart(NElements, 0), npart(NNodes, 0);
@@ -311,6 +313,8 @@ public:
                 }
             }
 
+            int pNNodes = node_partition[rank].size();   // number of nodes owned by the proc -> before the halo!
+
             // Append halo nodes to local node partition.
             for(typename std::set<index_t>::const_iterator it=halo_nodes.begin(); it!=halo_nodes.end(); ++it) {
                 node_partition[rank].push_back(*it);
@@ -325,6 +329,7 @@ public:
                 index_t nid = node_partition[rank][i];
                 index_t gnn = renumber[nid];
                 lnn2gnn[i] = gnn;
+                gnn2lnn[gnn] = i;
                 node_owner[i] = npart[nid];
             }
 
@@ -333,7 +338,7 @@ public:
             std::vector<index_t> lENList(NElements*nloc);
             for(index_t i=0; i<NElements; i++) {
                 for(int j=0; j<nloc; j++) {
-                    index_t nid = renumber[ENList[element_partition[i]*nloc+j]];
+                    index_t nid = gnn2lnn[renumber[ENList[element_partition[i]*nloc+j]]];
                     lENList[i*nloc+j] = nid;
                 }
             }
@@ -369,8 +374,6 @@ public:
             }
 
             NNodes = lNNodes;
-
-            int pNNodes = node_partition[rank].size();
 
             MPI_Comm comm = MPI_COMM_WORLD;
 
