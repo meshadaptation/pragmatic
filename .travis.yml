@@ -15,7 +15,7 @@ install:
   - pushd hg.eigen/
   - mkdir build
   - pushd build
-  - cmake ../
+  - ${TRAVIS_BUILD_DIR}/cmake/bin/cmake ../
   - sudo make install
   - popd
   - popd
