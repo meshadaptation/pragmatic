@@ -100,13 +100,13 @@ extern "C" {
       @param [in] mpi_comm is the mpi comm.
       */
     void pragmatic_2d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y,
-                               const index_t *lnn2gnn, const index_t *NPNodes, MPI_Comm mpi_comm)
+                               const index_t *lnn2gnn, const index_t NPNodes, MPI_Comm mpi_comm)
     {
         if(_pragmatic_mesh!=NULL) {
             throw new std::string("PRAgMaTIc: only one mesh can be adapted at a time");
         }
 
-        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, lnn2gnn, *NPNodes, mpi_comm);
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, lnn2gnn, NPNodes, mpi_comm);
 
         _pragmatic_mesh = mesh;
     }
@@ -148,12 +148,12 @@ extern "C" {
 
       */
     void pragmatic_3d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z,
-                           const index_t *lnn2gnn, const index_t *NPNodes, MPI_Comm mpi_comm)
+                           const index_t *lnn2gnn, const index_t NPNodes, MPI_Comm mpi_comm)
     {
         assert(_pragmatic_mesh==NULL);
         assert(_pragmatic_metric_field==NULL);
 
-        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z, lnn2gnn, *NPNodes, mpi_comm);
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z, lnn2gnn, NPNodes, mpi_comm);
 
         _pragmatic_mesh = mesh;
     }
