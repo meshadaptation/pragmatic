@@ -5,9 +5,9 @@
 extern "C" {
 #endif
 void pragmatic_2d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y);
-void pragmatic_2d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const index_t *lnn2gnn, const index_t *NPNodes, MPI_Comm mpi_comm);
+void pragmatic_2d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const int *lnn2gnn, const int *NPNodes, MPI_Comm mpi_comm);
 void pragmatic_3d_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z);
-void pragmatic_3d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z, const index_t *lnn2gnn, const index_t *NPNodes, MPI_Comm mpi_comm);
+void pragmatic_3d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z, const int *lnn2gnn, const int *NPNodes, MPI_Comm mpi_comm);
 void pragmatic_set_boundary(const int *nfacets, const int *facets, const int *ids);
 void pragmatic_set_metric(const double *metric);
 void pragmatic_add_field(const double *psi, const double *error, int *pnorm);
