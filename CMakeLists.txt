@@ -23,6 +23,12 @@ set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
 
 include_directories(include)
 
+find_library(LIBRT_LIBRARIES rt)
+if (NOT LIBRT_LIBRARIES)
+  set (LIBRT_LIBRARIES "")
+endif()
+MESSAGE( STATUS "LIBRT_LIBRARIES: " ${LIBRT_LIBRARIES} )
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -95,16 +101,17 @@ if (ENABLE_LIBMESHB)
     add_definitions(-DHAVE_LIBMESHB)
     include_directories(${LIBMESHB_INCLUDE_DIR})
     set (PRAGMATIC_LIBRARIES ${LIBMESHB_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-#    set (CMAKE_EXE_LINKER_FLAGS "-lrt")
-#    set (CMAKE_SHARED_LINKER_FLAGS "-lrt")
+#    set (CMAKE_EXE_LINKER_FLAGS ${LIBRT_LIBRARIES})
+#    set (CMAKE_SHARED_LINKER_FLAGS ${LIBRT_LIBRARIES})
   endif()
 endif()
 if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
   message(STATUS "Configured without libMeshb support.")
 endif()
 
-
-
+# Make sure libpragmatic.dylib works properly from the prefix location
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
@@ -122,8 +129,8 @@ install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN 
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} -lrt)
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} -lrt)
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
