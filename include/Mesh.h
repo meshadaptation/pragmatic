@@ -356,6 +356,16 @@ public:
     {
         return NNodes;
     }
+    
+    size_t get_number_owned_nodes() const
+    {
+        int NNodes_owned = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_owner[iVer] == rank)
+                NNodes_owned++;
+        }
+        return NNodes_owned;
+    }
 
     /// Return the number of elements in the mesh.
     inline size_t get_number_elements() const
@@ -454,6 +464,24 @@ public:
     inline bool is_owned_node(index_t nid) const
     {
         return node_owner[nid] == rank;
+    }
+    
+    /// Returns global node numbering offset.
+    inline int get_gnn_offset()
+    {
+        if (num_processes > 1)
+            return gnn_offset;
+        else
+            return 0;
+    }
+    
+    // Returns the global node numbering of a local node numbering number
+    inline int get_global_numbering(index_t nid)
+    {
+        if (num_processes > 1)
+            return lnn2gnn[nid];
+        else
+            return nid;
     }
 
     /// Get the mean edge length metric space.
@@ -1389,6 +1417,37 @@ public:
         MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
         MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
     }
+    
+    
+    
+    void remove_overlap_elements() {
+        
+        // -- Get rid of gappy global numbering and get contiguous global numbering
+        create_global_node_numbering();
+        
+        if (num_processes == 1)
+            return;
+            
+        int NPNodes = NNodes - recv_halo.size();            
+        MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+        gnn_offset-=NPNodes;
+        
+        // -- Get rid of shared elements: ownership of an element is defined by min(owner(vertices))
+        int iElm_new = 0;
+        for (int iElm=0; iElm<NElements; ++iElm) {
+            int owner = node_owner[_ENList[iElm*nloc]];
+            for (int i=1; i<nloc; ++i)
+                if (node_owner[_ENList[iElm*nloc+i]] < owner)
+                    owner = node_owner[_ENList[iElm*nloc+i]];
+            if (owner == rank) {
+                for (int i=0; i<nloc; ++i) 
+                    _ENList[iElm_new*nloc+i] = lnn2gnn[_ENList[iElm*nloc+i]];
+                iElm_new++;
+            }
+        }
+        NElements = iElm_new;
+        
+    }
 
 
 private:
@@ -1788,6 +1847,7 @@ private:
 
     void create_global_node_numbering()
     {
+        
         if(num_processes>1) {
             // Calculate the global numbering offset for this partition.
             int gnn_offset;
@@ -1798,7 +1858,7 @@ private:
             // Write global node numbering and ownership for nodes assigned to local process.
             for(index_t i=0; i < (index_t) NNodes; i++) {
                 if(recv_halo.count(i)) {
-                    lnn2gnn[i] = 0;
+                    lnn2gnn[i] = -2;
                 } else {
                     lnn2gnn[i] = gnn_offset++;
                     node_owner[i] = rank;
@@ -1807,14 +1867,15 @@ private:
 
             // Update GNN's for the halo nodes.
             halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
-
+            
             // Finish writing node ownerships.
             for(int i=0; i<num_processes; i++) {
                 for(std::vector<int>::const_iterator it=recv[i].begin(); it!=recv[i].end(); ++it) {
                     node_owner[*it] = i;
                 }
             }
-        } else {
+        } 
+        else {
             memset(&node_owner[0], 0, NNodes*sizeof(int));
             for(index_t i=0; i < (index_t) NNodes; i++)
                 lnn2gnn[i] = i;
@@ -1892,6 +1953,8 @@ private:
                 lnn2gnn[*it] = recv_buff[i][k];
         }
     }
+    
+    
 
     template<int dim>
     inline double calculate_quality(const index_t* n)
