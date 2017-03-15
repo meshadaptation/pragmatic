@@ -263,7 +263,7 @@ extern "C" {
         double L_up = sqrt(2.0);
         double L_low = L_up*0.5;
 
-/*        if(ndims==2) {
+        if(ndims==2) {
             Coarsen<double, 2> coarsen(*mesh);
             Smooth<double, 2> smooth(*mesh);
             Refine<double, 2> refine(*mesh);
@@ -318,7 +318,7 @@ extern "C" {
             smooth.smart_laplacian(10);
             smooth.optimisation_linf(10);
         }
-*/
+
 
         mesh->remove_overlap_elements();
     }
