@@ -1419,7 +1419,8 @@ public:
     }
     
     
-    
+    //// This function does a bit more than its name implies:
+    ////    it trims the elements list, converts it to global node numbering, and trims the boundary structure at the same time.
     void remove_overlap_elements() {
         
         // -- Get rid of gappy global numbering and get contiguous global numbering
@@ -1440,8 +1441,10 @@ public:
                 if (node_owner[_ENList[iElm*nloc+i]] < owner)
                     owner = node_owner[_ENList[iElm*nloc+i]];
             if (owner == rank) {
-                for (int i=0; i<nloc; ++i) 
+                for (int i=0; i<nloc; ++i) {
                     _ENList[iElm_new*nloc+i] = lnn2gnn[_ENList[iElm*nloc+i]];
+                    boundary[iElm_new*nloc+i] = boundary[iElm*nloc+i];
+                }
                 iElm_new++;
             }
         }
