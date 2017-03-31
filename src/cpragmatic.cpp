@@ -259,6 +259,9 @@ extern "C" {
 
         const size_t ndims = mesh->get_number_dimensions();
 
+//        // trim halo if input halo is too large
+//        mesh->defragment();
+
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
         double L_up = sqrt(2.0);
         double L_low = L_up*0.5;
@@ -295,15 +298,33 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
+            // TODO HACK CAD
+            mesh->set_isOnBoundarySize();
+            for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+            int * boundary = mesh->get_boundaryTags();
+            index_t * ENList = mesh->get_ENList();
+            for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+              if (boundary[j] == 5) {
+                int iElem = j/4;
+                int iEdg = j % 4;
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+              }
+            }
+
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
             for(size_t i=0; i<10; i++) {
+
+//                printf("DEBUG i: %d\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
+//                printf("DEBUG i: %d  COIN\n", i);
                 coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
 
@@ -311,6 +332,25 @@ extern "C" {
 
                 if((L_max-L_up)<0.01)
                     break;
+
+//                printf("DEBUG i: %d  pouet\n", i);
+
+                // TODO HACK CAD
+                mesh->set_isOnBoundarySize();
+                for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+                int * boundary = mesh->get_boundaryTags();
+                index_t * ENList = mesh->get_ENList();
+                for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+                  if (boundary[j] == 5) {
+                    int iElem = j/4;
+                    int iEdg = j % 4;
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+                  }
+                }
+
+//                printf("DEBUG i: %d  end\n", i);
             }
 
             mesh->defragment();
@@ -321,6 +361,8 @@ extern "C" {
 
 
         mesh->remove_overlap_elements();
+//                                    exit(12);
+
     }
 
     /** Coarsen the mesh.

@@ -84,15 +84,34 @@ int main(int argc, char **argv)
     size_t NNodes = mesh->get_number_nodes();
     double eta=0.001;
 
-    std::vector<double> psi(NNodes);
-    for(size_t i=0; i<NNodes; i++) {
-        double x = 2*mesh->get_coords(i)[0]-1;
-        double y = 2*mesh->get_coords(i)[1]-1;
 
-        psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
+    double metric[3];
+    double lmax = 1/(0.7*0.7);
+    for(size_t i=0; i<NNodes; i++) {
+        double x = mesh->get_coords(i)[0];
+        double h = 0.7*fabs(1-exp(-fabs(x-0.5))) + 0.0001;
+        double lbd = 1/(h*h);
+
+        metric[0] = lbd;
+        metric[1] = 0;
+        metric[2] = lmax;
+
+
+        metric_field.set_metric(metric, i);
     }
 
-    metric_field.add_field(&(psi[0]), eta, 2);
+
+
+    std::vector<double> psi(NNodes);
+//    for(size_t i=0; i<NNodes; i++) {
+//        double x = 2*mesh->get_coords(i)[0]-1;
+//        double y = 2*mesh->get_coords(i)[1]-1;
+//        
+//        psi[i] = 0.1*sin(50*x) + atan2(-0.1, (double)(2*x - sin(5*y)));
+//    }
+//
+//    metric_field.add_field(&(psi[0]), eta, 2);
+
     metric_field.update_mesh();
 
     if(verbose) {
@@ -173,12 +192,12 @@ int main(int argc, char **argv)
 
     NNodes = mesh->get_number_nodes();
     psi.resize(NNodes);
-    for(size_t i=0; i<NNodes; i++) {
-        double x = 2*mesh->get_coords(i)[0]-1;
-        double y = 2*mesh->get_coords(i)[1]-1;
-
-        psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
-    }
+//    for(size_t i=0; i<NNodes; i++) {
+//        double x = 2*mesh->get_coords(i)[0]-1;
+//        double y = 2*mesh->get_coords(i)[1]-1;
+//
+//        psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
+//    }
 
     VTKTools<double>::export_vtu("../data/test_adapt_2d", mesh, &(psi[0]));
 
