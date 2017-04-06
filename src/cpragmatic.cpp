@@ -173,6 +173,10 @@ extern "C" {
     }
 #endif
 
+    void pragmatic_init_light(void * mesh){
+        _pragmatic_mesh = mesh;
+    }
+
     /** Add field which should be adapted to.
 
       @param [in] psi Node centred field variable
