@@ -71,7 +71,6 @@ typedef float vtkFloatingPointType;
 #include <string>
 #include <cfloat>
 #include <typeinfo>
-#include <iterator>
 
 #include "Mesh.h"
 #include "MetricTensor.h"
