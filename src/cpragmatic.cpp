@@ -218,6 +218,8 @@ extern "C" {
 
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
+        mesh->defragment();
+
         if(_pragmatic_metric_field==NULL) {
             if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
                 MetricField<double,2> *metric_field = new MetricField<double,2>(*mesh);
