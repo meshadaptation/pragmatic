@@ -48,7 +48,7 @@ def minimal_example3D(width=2e-2, Nadapt=10, eta = 0.04):
      solve(a == L, u, bc)
      fid << u
      startTime = time()
-     H = metric_pnorm(u, eta, max_edge_length=2., max_edge_ratio=50, CG1out=True)
+     H = metric_pnorm(u, eta, max_edge_length=2., max_edge_ratio=None, CG1out=True)
      #H = logproject(H)
      if iii != Nadapt-1:
       mesh = adapt(H) 
