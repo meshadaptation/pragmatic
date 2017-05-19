@@ -1454,6 +1454,43 @@ public:
 
 
 
+    /// redistribute the mesh given the list of new owners of the vertices
+    void migrate_mesh(int * vertex_new_owner) 
+    {
+
+        std::vector< std::vector<index_t> > send_nodes, send_halo_nodes, send_elements;
+
+        send_nodes.resize(num_processes);
+        send_elements.resize(num_processes);
+        
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            int new_owner = vertex_new_owner[iVer];
+            if (new_owner == node_owner[iVer]) 
+                continue;
+            // TODO if node is already on other proc, don't send it
+            send_nodes[new_owner].push_back(lnn2gnn[iVer]);         
+        }
+
+        for (int iElm = 0; iElm < NElements; ++iElm) {
+            std::set<index_t> new_procs;
+            int gnnElm[nloc];
+            for (int i=0; i<nloc; ++i) {
+                int iVer = _ENList[iElm*nloc+i];
+                int new_owner = vertex_new_owner[iVer];
+                gnnElm[i] = lnn2gnn[iVer];
+                if (new_owner == node_owner[iVer]) 
+                    continue;
+                new_procs.insert(new_owner);
+            }
+            for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it)
+                send_elements[*it].insert(send_elements.end(), gnnElm, gnnElm+nloc);
+        }
+
+    }
+
+
+
+
     /// debug function to print mesh and halo related structures
     void print_halo(char * text)
     {
