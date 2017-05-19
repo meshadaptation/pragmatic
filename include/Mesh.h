@@ -1489,22 +1489,29 @@ public:
     }
 
 
-
-
-    /// debug function to print mesh and halo related structures
-    void print_halo(char * text)
+    /// debug function to print mesh related structures
+    void print_mesh(char * text)
     {
         printf("DBG(%d)  %s\n", rank, text);
 
         for (int iVer=0; iVer<get_number_nodes(); ++iVer){
           const double * coords = get_coords(iVer);
-          printf("DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f\n", rank, iVer, get_global_numbering(iVer), coords[0], coords[1]);
+          printf("DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d\n", 
+            rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer]);
         }
         for (int iTri=0; iTri<get_number_elements(); ++iTri){
             const int * tri = get_element(iTri);
             printf("DBG(%d)  triangle[%d]  %d %d %d\n", rank, iTri, tri[0], tri[1], tri[2]);
         }
 
+    }
+
+
+    /// debug function to print halo related structures
+    void print_halo(char * text)
+    {
+        printf("DBG(%d)  %s\n", rank, text);
+        
         printf("DBG(%d)  recv:\n", rank);
         for (int i=0; i<recv.size(); ++i) {
             printf("DBG(%d)       [%d]", rank, i);
