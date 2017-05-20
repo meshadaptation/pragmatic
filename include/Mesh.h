@@ -1492,16 +1492,19 @@ public:
     /// debug function to print mesh related structures
     void print_mesh(char * text)
     {
-        printf("DBG(%d)  %s\n", rank, text);
+
+        char filename[128];
+        sprintf(filename, "mesh_%s_%d", text, rank);
+        FILE * logfile = fopen(filename, "w");
 
         for (int iVer=0; iVer<get_number_nodes(); ++iVer){
           const double * coords = get_coords(iVer);
-          printf("DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d\n", 
+          fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d\n", 
             rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer]);
         }
         for (int iTri=0; iTri<get_number_elements(); ++iTri){
             const int * tri = get_element(iTri);
-            printf("DBG(%d)  triangle[%d]  %d %d %d\n", rank, iTri, tri[0], tri[1], tri[2]);
+            fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d\n", rank, iTri, tri[0], tri[1], tri[2]);
         }
 
     }
@@ -1510,49 +1513,52 @@ public:
     /// debug function to print halo related structures
     void print_halo(char * text)
     {
-        printf("DBG(%d)  %s\n", rank, text);
+        char filename[128];
+        sprintf(filename, "halo_%s_%d", text, rank);
+        FILE * logfile = fopen(filename, "w");
+
         
-        printf("DBG(%d)  recv:\n", rank);
+        fprintf(logfile, "DBG(%d)  recv:\n", rank);
         for (int i=0; i<recv.size(); ++i) {
-            printf("DBG(%d)       [%d]", rank, i);
-            for (int j=0; j<recv[i].size(); ++j) printf("  %d", recv[i][j]);
-            printf("\n");
+            fprintf(logfile, "DBG(%d)       [%d]", rank, i);
+            for (int j=0; j<recv[i].size(); ++j) fprintf(logfile, "  %d", recv[i][j]);
+            fprintf(logfile, "\n");
         }
-        printf("DBG(%d)  send:\n", rank);
+        fprintf(logfile, "DBG(%d)  send:\n", rank);
         for (int i=0; i<send.size(); ++i) {
-            printf("DBG(%d)       [%d]", rank, i);
-            for (int j=0; j<send[i].size(); ++j) printf("  %d", send[i][j]);
-            printf("\n");
+            fprintf(logfile, "DBG(%d)       [%d]", rank, i);
+            for (int j=0; j<send[i].size(); ++j) fprintf(logfile, "  %d", send[i][j]);
+            fprintf(logfile, "\n");
         }
-        printf("DBG(%d)  recv_map:\n", rank);
+        fprintf(logfile, "DBG(%d)  recv_map:\n", rank);
         for (int i=0; i<recv_map.size(); ++i){
-            printf("DBG(%d)           [%d]", rank, i);
+            fprintf(logfile, "DBG(%d)           [%d]", rank, i);
             for (std::map<index_t,index_t>::const_iterator it=recv_map[i].begin(); it!=recv_map[i].end(); ++it)
-                printf("  %d->%d", it->first, it->second);
-            printf("\n");
+                fprintf(logfile, "  %d->%d", it->first, it->second);
+            fprintf(logfile, "\n");
         }
-        printf("DBG(%d)  send_map:\n", rank);
+        fprintf(logfile, "DBG(%d)  send_map:\n", rank);
         for (int i=0; i<send_map.size(); ++i){
-            printf("DBG(%d)           [%d]", rank, i);
+            fprintf(logfile, "DBG(%d)           [%d]", rank, i);
             for (std::map<index_t,index_t>::const_iterator it=send_map[i].begin(); it!=send_map[i].end(); ++it)
-                printf("  %d->%d", it->first, it->second);
-            printf("\n");
+                fprintf(logfile, "  %d->%d", it->first, it->second);
+            fprintf(logfile, "\n");
         }
-        printf("DBG(%d)  recv_halo:\n", rank);
-        printf("DBG(%d)            ", rank);
+        fprintf(logfile, "DBG(%d)  recv_halo:\n", rank);
+        fprintf(logfile, "DBG(%d)            ", rank);
         for (std::set<index_t>::const_iterator it=recv_halo.begin(); it!=recv_halo.end(); ++it)
-            printf("  %d", *it);
-        printf("\n");
-        printf("DBG(%d)  send_halo:\n", rank);
-        printf("DBG(%d)            ", rank);
+            fprintf(logfile, "  %d", *it);
+        fprintf(logfile, "\n");
+        fprintf(logfile, "DBG(%d)  send_halo:\n", rank);
+        fprintf(logfile, "DBG(%d)            ", rank);
         for (std::set<index_t>::const_iterator it=send_halo.begin(); it!=send_halo.end(); ++it)
-            printf("  %d", *it);
-        printf("\n");
-        printf("DBG(%d)  node_owner:\n", rank);
-        printf("DBG(%d)             ", rank);
+            fprintf(logfile, "  %d", *it);
+        fprintf(logfile, "\n");
+        fprintf(logfile, "DBG(%d)  node_owner:\n", rank);
+        fprintf(logfile, "DBG(%d)             ", rank);
         for (int i=0; i<node_owner.size();++i)
-            printf("  %d->%d", i, node_owner[i]);
-        printf("\n");
+            fprintf(logfile, "  %d->%d", i, node_owner[i]);
+        fprintf(logfile, "\n");
     }
 
 
