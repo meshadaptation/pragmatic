@@ -465,6 +465,18 @@ public:
     {
         return node_owner[nid] == rank;
     }
+
+    /// Returns the rank of the process that owns the node
+    inline int get_node_owner(index_t nid)
+    {
+        return node_owner[nid];
+    }
+
+    /// Debug function to change ownership of a node
+    inline void set_node_owner(int nid, int proc_id)
+    {
+        node_owner[nid] = proc_id;
+    }    
     
     /// Returns global node numbering offset.
     inline int get_gnn_offset()
@@ -1461,30 +1473,118 @@ public:
         std::vector< std::vector<index_t> > send_nodes, send_halo_nodes, send_elements;
 
         send_nodes.resize(num_processes);
+        send_halo_nodes.resize(num_processes);
         send_elements.resize(num_processes);
         
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int new_owner = vertex_new_owner[iVer];
+            if (new_owner == rank) 
+                continue;
             if (new_owner == node_owner[iVer]) 
                 continue;
-            // TODO if node is already on other proc, don't send it
-            send_nodes[new_owner].push_back(lnn2gnn[iVer]);         
+            int gnn = lnn2gnn[iVer];
+            // if node is already on other proc, don't send it
+            if (!(send_map[new_owner].count(gnn)))
+                send_nodes[new_owner].push_back(gnn);         
+        }
+        ////// TODO: WILL HAVE TO SEND COORDINATES AS WELL
+
+        printf("DEBUG(%d)  send_nodes:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+            printf("DEBUG(%d)             [%d]:", rank, iPrc);
+            for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
+                printf("%d ", send_nodes[iPrc][iVer]);
+            }
+            printf("\n");
         }
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
-            std::set<index_t> new_procs;
+            std::set<index_t> new_procs, old_procs;
             int gnnElm[nloc];
+
             for (int i=0; i<nloc; ++i) {
                 int iVer = _ENList[iElm*nloc+i];
                 int new_owner = vertex_new_owner[iVer];
-                gnnElm[i] = lnn2gnn[iVer];
-                if (new_owner == node_owner[iVer]) 
-                    continue;
+                int old_owner = node_owner[iVer];
+                old_procs.insert(old_owner);
                 new_procs.insert(new_owner);
+
+                gnnElm[i] = lnn2gnn[iVer];
             }
-            for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it)
-                send_elements[*it].insert(send_elements.end(), gnnElm, gnnElm+nloc);
+
+            for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) {
+                int new_proc = *it;
+                if (new_proc == rank) 
+                    continue;
+                if (!(old_procs.count(new_proc)))
+                    send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
+
+                for (int i=0; i<nloc; ++i) {
+                    int iVer = _ENList[iElm*nloc+i];
+                    if (vertex_new_owner[iVer] != new_proc) {
+                        if (!(send_map[new_proc].count(gnnElm[i])))
+                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
+                    }
+                }
+            }
         }
+
+        printf("DEBUG(%d)  send_halo_nodes:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+            printf("DEBUG(%d)                   [%d]: ", rank, iPrc);
+            for (int iVer = 0; iVer < send_halo_nodes[iPrc].size(); ++iVer) {
+                printf("%d ", send_halo_nodes[iPrc][iVer]);
+            }
+            printf("\n");
+        }
+
+        printf("DEBUG(%d)  send_elements:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+            printf("DEBUG(%d)                [%d]: ", rank, iPrc);
+            for (int i = 0; i < send_elements[iPrc].size(); ++i) {
+                printf("%d ", send_elements[iPrc][i]);
+            }
+            printf("\n");
+        }        
+
+        std::vector<int> send_nodes_size(num_processes);
+        for(int j=0; j<num_processes; j++) {
+            send_nodes_size[j] = send_nodes[j].size();
+        }
+        std::vector<int> recv_nodes_size(num_processes);
+        MPI_Alltoall(send_nodes_size.data(), 1, MPI_INT,
+                     recv_nodes_size.data(), 1, MPI_INT, _mpi_comm);
+
+        // Setup non-blocking receives
+        std::vector<MPI_Request> request(num_processes*2);
+        std::vector<std::vector<int>> recv_nodes(num_processes);
+        for(int i=0; i<num_processes; i++) {
+            if((i==rank)||(recv_nodes_size[i]==0)) {
+                request[i] =  MPI_REQUEST_NULL;
+            } else {
+                recv_nodes[i].resize(recv_nodes_size[i]);
+                MPI_Irecv(&(recv_nodes[i][0]), recv_nodes_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[i]));
+            }
+        }
+
+        // Non-blocking sends.
+        for(int i=0; i<num_processes; i++) {
+            if((i==rank)||(send_nodes_size[i]==0)) {
+                request[num_processes+i] =  MPI_REQUEST_NULL;
+            } else {
+                MPI_Isend(&(send_nodes[i][0]), send_nodes_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[num_processes+i]));
+            }
+        }
+
+        std::vector<MPI_Status> status(num_processes*2);
+        MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+        MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
+
+        // Now treat new vertices
+        for(int i=0; i<num_processes; i++) {
+        }
+
+
 
     }
 
