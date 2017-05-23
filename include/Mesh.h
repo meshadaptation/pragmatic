@@ -1465,8 +1465,8 @@ public:
     }
 
 
-
-    void communicate(std::vector<std::vector<int>> &send_vector, std::vector<std::vector<int>> &recv_vector, MPI_Datatype datatype) 
+    template <typename DATATYPE>
+    void communicate(std::vector<std::vector<DATATYPE>> &send_vector, std::vector<std::vector<DATATYPE>> &recv_vector, MPI_Datatype datatype) 
     {
         std::vector<int> send_size(num_processes);
         for(int j=0; j<num_processes; j++) {
@@ -1478,7 +1478,6 @@ public:
 
         // Setup non-blocking receives
         std::vector<MPI_Request> request(num_processes*2);
-        std::vector<std::vector<int>> recv_nodes(num_processes);
         for(int i=0; i<num_processes; i++) {
             if((i==rank)||(recv_size[i]==0)) {
                 request[i] =  MPI_REQUEST_NULL;
@@ -1595,7 +1594,7 @@ public:
 
         // First send the nodes
         std::vector<std::vector<int>> recv_nodes(num_processes);
-        communicate(send_nodes, recv_nodes, MPI_INDEX_T);
+        communicate<int>(send_nodes, recv_nodes, MPI_INDEX_T);
 
         // Now treat new vertices
         std::map<int, int> gnn2lnn;
@@ -1655,8 +1654,36 @@ public:
         // TODO NEW GLOBAL NUMBERING
 
         // Now send the elements
-        
+        std::vector<std::vector<int>> recv_elements(num_processes);
+        communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
 
+        // Now treat new elements
+        // -> update _ENList, NEList, NNList
+        int NNewElements = NElements;
+        for(int i=0; i<num_processes; i++) 
+            NNewElements += recv_elements[i].size()/2;
+        _ENList.resize(NNewElements*nloc);
+        NEList.resize(NNodes);
+        NNList.resize(NNodes);
+
+
+        for(int i=0; i<num_processes; i++) {
+            for (int j = 0; j < recv_elements[i].size(); j+=nloc){
+                int *elm_gnn = &recv_elements[i][j];
+                int elm[nloc];
+                for (int k=0; k<nloc; ++k) {
+                    // if I receive an element, then none of his vertices belonged to me
+                    // so either they were sent previously (so in gnn2lnn)
+                    //    either they were in the halo, in recv_map[sender]
+                    elm[k] = gnn2lnn.count(elm_gnn[k]) ? gnn2lnn[elm_gnn[k]] : recv_map[i][elm_gnn[k]];
+                }
+                // TODO here check if element already exists through neighbors
+                for (int k=0; k<nloc; ++k) {
+                    _ENList[NNodes*nloc+k] = elm[k];
+                }
+                NElements++;
+            }
+        }
 
     }
 
