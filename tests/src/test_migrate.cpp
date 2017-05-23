@@ -37,6 +37,7 @@ int main(int argc, char **argv)
         new_owners[5] = 1;
         new_owners[6] = 1;
         new_owners[7] = 1;
+        new_owners[4] = 1;
     }
     else if (rank == 1) {
         new_owners[8] = 1;
@@ -52,15 +53,17 @@ int main(int argc, char **argv)
         mesh->set_node_owner(5, 1);
         mesh->set_node_owner(6, 1);
         mesh->set_node_owner(7, 1);
+        mesh->set_node_owner(4, 1);
     }
     else if (rank == 1) {
         mesh->set_node_owner(8, 1);
         mesh->set_node_owner(9, 1);
         mesh->set_node_owner(10, 1);
         mesh->set_node_owner(11, 1);
+
     }
 
-    mesh->defragment();
+//    mesh->defragment();
 
     mesh->print_mesh("After update");
     mesh->print_halo("After update");

@@ -1466,6 +1466,45 @@ public:
 
 
 
+    void communicate(std::vector<std::vector<int>> &send_vector, std::vector<std::vector<int>> &recv_vector, MPI_Datatype datatype) 
+    {
+        std::vector<int> send_size(num_processes);
+        for(int j=0; j<num_processes; j++) {
+            send_size[j] = send_vector[j].size();
+        }
+        std::vector<int> recv_size(num_processes);
+        MPI_Alltoall(send_size.data(), 1, MPI_INT,
+                     recv_size.data(), 1, MPI_INT, _mpi_comm);
+
+        // Setup non-blocking receives
+        std::vector<MPI_Request> request(num_processes*2);
+        std::vector<std::vector<int>> recv_nodes(num_processes);
+        for(int i=0; i<num_processes; i++) {
+            if((i==rank)||(recv_size[i]==0)) {
+                request[i] =  MPI_REQUEST_NULL;
+            } else {
+                recv_vector[i].resize(recv_size[i]);
+                MPI_Irecv(&(recv_vector[i][0]), recv_size[i], datatype, i, 0, _mpi_comm, &(request[i]));
+            }
+        }
+
+        // Non-blocking sends.
+        for(int i=0; i<num_processes; i++) {
+            if((i==rank)||(send_size[i]==0)) {
+                request[num_processes+i] =  MPI_REQUEST_NULL;
+            } else {
+                MPI_Isend(&(send_vector[i][0]), send_size[i], datatype, i, 0, _mpi_comm, &(request[num_processes+i]));
+            }
+        }
+
+        std::vector<MPI_Status> status(num_processes*2);
+        MPI_Waitall(num_processes, &(request[0]), &(status[0]));
+        MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
+    }
+
+
+
+
     /// redistribute the mesh given the list of new owners of the vertices
     void migrate_mesh(int * vertex_new_owner) 
     {
@@ -1483,20 +1522,15 @@ public:
             if (new_owner == node_owner[iVer]) 
                 continue;
             int gnn = lnn2gnn[iVer];
+            printf("DEBUG(%d)   iVer: %d should be sent to other proc: %d\n", rank, iVer, new_owner);
             // if node is already on other proc, don't send it
-            if (!(send_map[new_owner].count(gnn)))
-                send_nodes[new_owner].push_back(gnn);         
+            if (!(send_map[new_owner].count(gnn))) {
+                send_nodes[new_owner].push_back(gnn);
+                send_nodes[new_owner].push_back(new_owner);
+            }
         }
         ////// TODO: WILL HAVE TO SEND COORDINATES AS WELL
 
-        printf("DEBUG(%d)  send_nodes:\n", rank);
-        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-            printf("DEBUG(%d)             [%d]:", rank, iPrc);
-            for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
-                printf("%d ", send_nodes[iPrc][iVer]);
-            }
-            printf("\n");
-        }
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
             std::set<index_t> new_procs, old_procs;
@@ -1521,19 +1555,28 @@ public:
 
                 for (int i=0; i<nloc; ++i) {
                     int iVer = _ENList[iElm*nloc+i];
-                    if (vertex_new_owner[iVer] != new_proc) {
-                        if (!(send_map[new_proc].count(gnnElm[i])))
-                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
+                    int new_owner = vertex_new_owner[iVer];
+                    if (node_owner[iVer] != rank)
+                        // TODO check! 
+                        // I don't need to send nodes from the halo that are my own
+                        // that makes things easier when reading the received nodes to avoid duplicates
+                        continue ; 
+                    if (new_owner != new_proc) { // I already check I'm not sending something that belongs to the other proc
+                        if (!(send_map[new_proc].count(gnnElm[i]))) {
+//                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
+                            send_nodes[new_proc].push_back(gnnElm[i]);
+                            send_nodes[new_proc].push_back(new_owner);
+                        }
                     }
                 }
             }
         }
 
-        printf("DEBUG(%d)  send_halo_nodes:\n", rank);
+        printf("DEBUG(%d)  send_nodes:\n", rank);
         for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-            printf("DEBUG(%d)                   [%d]: ", rank, iPrc);
-            for (int iVer = 0; iVer < send_halo_nodes[iPrc].size(); ++iVer) {
-                printf("%d ", send_halo_nodes[iPrc][iVer]);
+            printf("DEBUG(%d)             [%d]:", rank, iPrc);
+            for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
+                printf("%d ", send_nodes[iPrc][iVer]);
             }
             printf("\n");
         }
@@ -1547,43 +1590,72 @@ public:
             printf("\n");
         }        
 
-        std::vector<int> send_nodes_size(num_processes);
-        for(int j=0; j<num_processes; j++) {
-            send_nodes_size[j] = send_nodes[j].size();
-        }
-        std::vector<int> recv_nodes_size(num_processes);
-        MPI_Alltoall(send_nodes_size.data(), 1, MPI_INT,
-                     recv_nodes_size.data(), 1, MPI_INT, _mpi_comm);
 
-        // Setup non-blocking receives
-        std::vector<MPI_Request> request(num_processes*2);
+        ////// ---- Actually send the data: for now, one comm / array. TODO; serialize somehow
+
+        // First send the nodes
         std::vector<std::vector<int>> recv_nodes(num_processes);
-        for(int i=0; i<num_processes; i++) {
-            if((i==rank)||(recv_nodes_size[i]==0)) {
-                request[i] =  MPI_REQUEST_NULL;
-            } else {
-                recv_nodes[i].resize(recv_nodes_size[i]);
-                MPI_Irecv(&(recv_nodes[i][0]), recv_nodes_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[i]));
-            }
-        }
-
-        // Non-blocking sends.
-        for(int i=0; i<num_processes; i++) {
-            if((i==rank)||(send_nodes_size[i]==0)) {
-                request[num_processes+i] =  MPI_REQUEST_NULL;
-            } else {
-                MPI_Isend(&(send_nodes[i][0]), send_nodes_size[i], MPI_INDEX_T, i, 0, _mpi_comm, &(request[num_processes+i]));
-            }
-        }
-
-        std::vector<MPI_Status> status(num_processes*2);
-        MPI_Waitall(num_processes, &(request[0]), &(status[0]));
-        MPI_Waitall(num_processes, &(request[num_processes]), &(status[num_processes]));
+        communicate(send_nodes, recv_nodes, MPI_INDEX_T);
 
         // Now treat new vertices
-        for(int i=0; i<num_processes; i++) {
-        }
+        std::map<int, int> gnn2lnn;
+        int NNewNodes = NNodes;
+        for(int i=0; i<num_processes; i++) 
+            NNewNodes += recv_nodes[i].size()/2;
+        _coords.resize(NNewNodes*ndims);
+        node_owner.resize(NNewNodes);
+        lnn2gnn.resize(NNewNodes);
 
+
+        for(int i=0; i<num_processes; i++) {
+            for (int j = 0; j < recv_nodes[i].size(); j+=2){
+                int new_owner = recv_nodes[i][j+1];
+                int gid = recv_nodes[i][j];
+                if (new_owner == rank) {
+                    // if another proc sends me a vertex that belongs to me, it means I don't have it already
+                    node_owner[NNodes] = new_owner;
+                    lnn2gnn[NNodes] = gid;
+                    gnn2lnn[gid] = NNodes;
+                    for (int k=0; k<ndims; ++k)
+                        _coords[NNodes*ndims+k] = -1;
+                    NNodes++;
+                }
+                else {
+                    // it is a halo node, I got to be careful and check wether it already is there
+                    // it cannot already belong to me
+                    // but it could be on my halo --> check send_map
+                    if (!(gnn2lnn.count(gid))) {
+                        int isThere = 0;
+                        for (int p=0; p<num_processes; ++p) {
+                            if (recv_map[p].count(gid)) {
+                                isThere = 1;
+                                break;
+                            }
+                        }
+                        if (!isThere) {
+                            node_owner[NNodes] = new_owner;
+                            lnn2gnn[NNodes] = gid;
+                            gnn2lnn[gid] = NNodes;
+                            for (int k=0; k<ndims; ++k)
+                                _coords[NNodes*ndims+k] = -1;
+                            NNodes++;
+                        } 
+                    }
+
+                    // TODO add to halo structures
+                }
+                
+            }
+        }
+        assert(NNodes<=NNewNodes);
+        _coords.resize(NNodes*ndims);
+        node_owner.resize(NNodes);
+        lnn2gnn.resize(NNodes);
+
+        // TODO NEW GLOBAL NUMBERING
+
+        // Now send the elements
+        
 
 
     }
