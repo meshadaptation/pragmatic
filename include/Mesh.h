@@ -1516,12 +1516,11 @@ public:
         send_coords.resize(num_processes);
         
         for (int iVer = 0; iVer < NNodes; ++iVer) {
-            // TODO  maybe I should fix ownerships here ?
             int new_owner = vertex_new_owner[iVer];
-            if (new_owner == rank) 
+            if (new_owner == rank || node_owner[iVer] != rank) 
                 continue;
-            if (new_owner == node_owner[iVer]) 
-                continue;
+            //if (new_owner == node_owner[iVer]) 
+            //    continue;
             int gnn = lnn2gnn[iVer];
             printf("DEBUG(%d)   iVer: %d should be sent to other proc: %d\n", rank, iVer, new_owner);
             // if node is already on other proc, don't send it
@@ -1559,21 +1558,29 @@ public:
 
                 for (int i=0; i<nloc; ++i) {
                     int iVer = _ENList[iElm*nloc+i];
+                    int gid = gnnElm[i];
                     int new_owner = vertex_new_owner[iVer];
+                    //if (node_owner[iVer] != rank)
                     if (node_owner[iVer] != rank)
                         // TODO check! 
                         // I don't need to send nodes from the halo that are my own
                         // that makes things easier when reading the received nodes to avoid duplicates
                         continue ; 
-                    if (new_owner != new_proc) { // I already check I'm not sending something that belongs to the other proc
-                        if (!(send_map[new_proc].count(gnnElm[i]))) {
+                    if (new_owner != new_proc) { // I check I'm not sending something that belongs to the other proc
+                        if (!(send_map[new_proc].count(gid))) {
 //                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
-                            send_nodes[new_proc].push_back(gnnElm[i]);
+                            send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
                             real_t *coords = &_coords[iVer*ndims];
                             send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
                         }
                     }
+                    if (new_owner == rank) {
+                        send_map[new_proc][gid] = iVer;
+                        send[new_proc].push_back(gid);
+                        send_halo.insert(iVer);
+                    }
+                    // TODO at this point the halo is not completely ok as I can could need to add vertices to the send lists that I don't have yet
                 }
             }
         }
@@ -1629,14 +1636,16 @@ public:
                     NNodes++;
                 }
                 else {
+                    int lid; // local id
                     // it is a halo node, I got to be careful and check wether it already is there
                     // it cannot already belong to me
-                    // but it could be on my halo --> check send_map
+                    // but it could be on my halo --> check recv_map
                     if (!(gnn2lnn.count(gid))) {
                         int isThere = 0;
                         for (int p=0; p<num_processes; ++p) {
                             if (recv_map[p].count(gid)) {
                                 isThere = 1;
+                                lid = recv_map[p][gid];
                                 break;
                             }
                         }
@@ -1644,13 +1653,16 @@ public:
                             node_owner[NNodes] = new_owner;
                             lnn2gnn[NNodes] = gid;
                             gnn2lnn[gid] = NNodes;
+                            lid = NNodes;
                             for (int k=0; k<ndims; ++k)
                                 _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
                             NNodes++;
-                        } 
-                    }
+                        }
 
-                    // TODO add to halo structures
+                    }
+                    recv_map[new_owner][gid] = lid;
+                    recv[new_owner].push_back(gid);
+                    recv_halo.insert(lid);
                 }
                 
             }
@@ -1659,6 +1671,8 @@ public:
         _coords.resize(NNodes*ndims);
         node_owner.resize(NNodes);
         lnn2gnn.resize(NNodes);
+
+        // Remove useless vertices
 
         // TODO NEW LOCAL GLOBAL NUMBERING: this requires fixing the halos first ?
 
@@ -1713,12 +1727,25 @@ public:
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
-                    _ENList[NElements*nloc+k] = elm[k];
-                    NEList[elm[k]].insert(NElements);
-                    for (int ngb=1; ngb<nloc; ++ngb) 
-                        NNList[elm[k]].push_back(elm[(k+ngb)%nloc]);
+                    int iVer = elm[k];
+                    int gid = elm_gnn[k];
+                    _ENList[NElements*nloc+k] = iVer;
+                    NEList[iVer].insert(NElements);
+                    for (int ngb=1; ngb<nloc; ++ngb) {
+                        int iVerNgb = elm[(k+ngb)%nloc];
+                        NNList[iVer].push_back(iVerNgb);
+                        if (node_owner[iVerNgb] != rank ) { // then node k is on the halo and needs to be sent to this proc
+                            int send_proc = node_owner[iVerNgb];
+                            send_map[send_proc][gid] = iVer;
+                            send[send_proc].push_back(gid);
+                            send_halo.insert(iVer);
+                        }
+                    }
                 }
                 NElements++;
+
+
+
             }
         }
         assert(NElements<=NNewElements);
