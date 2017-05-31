@@ -1675,15 +1675,46 @@ public:
                     // if I receive an element, then none of his vertices belonged to me
                     // so either they were sent previously (so in gnn2lnn)
                     //    either they were in the halo, in recv_map[sender]
-                    elm[k] = gnn2lnn.count(elm_gnn[k]) ? gnn2lnn[elm_gnn[k]] : recv_map[i][elm_gnn[k]];
+                    //elm[k] = gnn2lnn.count(elm_gnn[k]) ? gnn2lnn[elm_gnn[k]] : recv_map[i][elm_gnn[k]];
+                    if (gnn2lnn.count(elm_gnn[k])) 
+                        elm[k] = gnn2lnn[elm_gnn[k]];
+                    else 
+                        elm[k] = recv_map[i][elm_gnn[k]];
                 }
-                // TODO here check if element already exists through neighbors
+                // check if element already exists (could have been sent by other proc ? TODO check) 
+                std::set<index_t> intersect1, intersect;
+                std::set_intersection(NEList[elm[0]].begin(), NEList[elm[0]].end(), 
+                                      NEList[elm[1]].begin(), NEList[elm[1]].end(),
+                                      std::inserter(intersect1, intersect1.begin()));
+                if (ndims == 2) {
+                    std::set_intersection(intersect1.begin(), intersect1.end(), 
+                                          NEList[elm[2]].begin(), NEList[elm[2]].end(),
+                                          std::inserter(intersect, intersect.begin()));
+                }
+                else {
+                    std::set<index_t> intersect2;
+                    std::set_intersection(NEList[elm[2]].begin(), NEList[elm[2]].end(), 
+                                          NEList[elm[3]].begin(), NEList[elm[3]].end(),
+                                         std::inserter(intersect2, intersect2.begin()));
+                    std::set_intersection(intersect1.begin(), intersect1.end(), 
+                                          intersect2.begin(), intersect2.end(),
+                                          std::inserter(intersect, intersect.begin()));
+                }
+                if (!intersect.empty()) {
+                    printf("skipped : %d %d %d\n", elm[0], elm[1], elm[2]);
+                    continue;
+                }
                 for (int k=0; k<nloc; ++k) {
-                    _ENList[NNodes*nloc+k] = elm[k];
+                    _ENList[NElements*nloc+k] = elm[k];
+                    NEList[elm[k]].insert(NElements);
+                    for (int ngb=1; ngb<nloc; ++ngb) 
+                        NNList[elm[k]].push_back(elm[(k+ngb)%nloc]);
                 }
                 NElements++;
             }
         }
+        assert(NElements<=NNewElements);
+        _ENList.resize(NElements*nloc);
 
     }
 
