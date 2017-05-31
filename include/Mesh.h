@@ -1508,13 +1508,15 @@ public:
     void migrate_mesh(int * vertex_new_owner) 
     {
 
-        std::vector< std::vector<index_t> > send_nodes, send_halo_nodes, send_elements;
+        std::vector< std::vector<index_t> > send_nodes, send_elements;
+        std::vector< std::vector<real_t> > send_coords;
 
         send_nodes.resize(num_processes);
-        send_halo_nodes.resize(num_processes);
         send_elements.resize(num_processes);
+        send_coords.resize(num_processes);
         
         for (int iVer = 0; iVer < NNodes; ++iVer) {
+            // TODO  maybe I should fix ownerships here ?
             int new_owner = vertex_new_owner[iVer];
             if (new_owner == rank) 
                 continue;
@@ -1526,9 +1528,12 @@ public:
             if (!(send_map[new_owner].count(gnn))) {
                 send_nodes[new_owner].push_back(gnn);
                 send_nodes[new_owner].push_back(new_owner);
+                real_t *coords = &_coords[iVer*ndims];
+                send_coords[new_owner].insert(send_coords[new_owner].end(), coords, coords+ndims);
             }
         }
         ////// TODO: WILL HAVE TO SEND COORDINATES AS WELL
+
 
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
@@ -1565,6 +1570,8 @@ public:
 //                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
                             send_nodes[new_proc].push_back(gnnElm[i]);
                             send_nodes[new_proc].push_back(new_owner);
+                            real_t *coords = &_coords[iVer*ndims];
+                            send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
                         }
                     }
                 }
@@ -1595,6 +1602,8 @@ public:
         // First send the nodes
         std::vector<std::vector<int>> recv_nodes(num_processes);
         communicate<int>(send_nodes, recv_nodes, MPI_INDEX_T);
+        std::vector<std::vector<double>> recv_coords(num_processes);
+        communicate<double>(send_coords, recv_coords, MPI_REAL_T);
 
         // Now treat new vertices
         std::map<int, int> gnn2lnn;
@@ -1616,7 +1625,7 @@ public:
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
                     for (int k=0; k<ndims; ++k)
-                        _coords[NNodes*ndims+k] = -1;
+                        _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
                     NNodes++;
                 }
                 else {
@@ -1636,7 +1645,7 @@ public:
                             lnn2gnn[NNodes] = gid;
                             gnn2lnn[gid] = NNodes;
                             for (int k=0; k<ndims; ++k)
-                                _coords[NNodes*ndims+k] = -1;
+                                _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
                             NNodes++;
                         } 
                     }
@@ -1651,14 +1660,13 @@ public:
         node_owner.resize(NNodes);
         lnn2gnn.resize(NNodes);
 
-        // TODO NEW GLOBAL NUMBERING
+        // TODO NEW LOCAL GLOBAL NUMBERING: this requires fixing the halos first ?
 
         // Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
         communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
 
         // Now treat new elements
-        // -> update _ENList, NEList, NNList
         int NNewElements = NElements;
         for(int i=0; i<num_processes; i++) 
             NNewElements += recv_elements[i].size()/2;
