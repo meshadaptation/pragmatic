@@ -1502,11 +1502,77 @@ public:
     }
 
 
+    ///  recreate halo structures, 
+    ///  assuming :
+    ///      that all vertices are on the right procs 
+    ///      and that node ownership is consistant accross partitions
+    void fix_halos() {
+        // I know all the nodes I have that don't belong to me, so I know who to claim them
+        // so I can build the recv structures, then send them to build the send ones
+
+        std::vector< std::vector<index_t> > send_new, recv_new, recv_glob, send_glob;
+#ifdef HAVE_BOOST_UNORDERED_MAP_HPP
+        std::vector< boost::unordered_map<index_t, index_t> > send_map_new, recv_map_new;
+#else
+        std::vector< std::map<index_t, index_t> > send_map_new, recv_map_new;
+#endif
+        std::set<index_t> send_halo_new, recv_halo_new;
+
+        // 1- build recv structures
+        recv_new.resize(num_processes);
+        recv_glob.resize(num_processes);
+        recv_map_new.resize(num_processes);
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            int owner = node_owner[iVer];
+            int gid = lnn2gnn[iVer];
+            if (owner != rank) {
+                recv_new[owner].push_back(iVer);
+                recv_glob[owner].push_back(gid);
+                recv_map_new[owner][gid] = iVer;
+                recv_halo_new.insert(iVer);
+            }
+        }
+
+
+        // 2- communicate recv structures
+        send_glob.resize(num_processes);
+        communicate<int>(recv_glob, send_glob, MPI_INDEX_T); 
+
+
+        // 3- build send structures
+        std::map<index_t,index_t> gnn2lnn;
+        // TODO this gnn2lnn map can prob be built before this function
+        for (int iVer=0; iVer<NNodes; ++iVer) 
+            gnn2lnn[lnn2gnn[iVer]] = iVer;
+        send_new.resize(num_processes);
+        send_map_new.resize(num_processes);
+        for (int p=0; p<num_processes; ++p){
+            for (int i=0; i<send_glob[p].size(); ++i) {
+                int gid = send_glob[p][i];
+                int lid = gnn2lnn[gid];
+                send_new[p].push_back(lid);
+                send_map_new[p][gid] = lid;
+                send_halo_new.insert(lid);
+            }
+        }
+
+        // 4- swap structures
+        recv.swap(recv_new);
+        send.swap(send_new);
+        recv_map.swap(recv_map_new);
+        send_map.swap(send_map_new);
+        recv_halo.swap(recv_halo_new);
+        send_halo.swap(send_halo_new);
+    }
+
+
 
 
     /// redistribute the mesh given the list of new owners of the vertices
     void migrate_mesh(int * vertex_new_owner) 
     {
+
+        // TODO: will have to send the metric together with the coordinates, and update it...+
 
         std::vector< std::vector<index_t> > send_nodes, send_elements;
         std::vector< std::vector<real_t> > send_coords;
@@ -1522,7 +1588,6 @@ public:
             //if (new_owner == node_owner[iVer]) 
             //    continue;
             int gnn = lnn2gnn[iVer];
-            printf("DEBUG(%d)   iVer: %d should be sent to other proc: %d\n", rank, iVer, new_owner);
             // if node is already on other proc, don't send it
             if (!(send_map[new_owner].count(gnn))) {
                 send_nodes[new_owner].push_back(gnn);
@@ -1566,19 +1631,12 @@ public:
                         continue ; 
                     if (new_owner != new_proc) { // I check I'm not sending something that belongs to the other proc
                         if (!(send_map[new_proc].count(gid))) {
-//                            send_halo_nodes[new_proc].push_back(gnnElm[i]);
                             send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
                             real_t *coords = &_coords[iVer*ndims];
                             send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
                         }
                     }
-                    if (new_owner == rank) {
-                        send_map[new_proc][gid] = iVer;
-                        send[new_proc].push_back(gid);
-                        send_halo.insert(iVer);
-                    }
-                    // TODO at this point the halo is not completely ok as I can could need to add vertices to the send lists that I don't have yet
                 }
             }
         }
@@ -1588,26 +1646,7 @@ public:
         }
 
 
-        printf("DEBUG(%d)  send_nodes:\n", rank);
-        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-            printf("DEBUG(%d)             [%d]:", rank, iPrc);
-            for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
-                printf("%d ", send_nodes[iPrc][iVer]);
-            }
-            printf("\n");
-        }
-
-        printf("DEBUG(%d)  send_elements:\n", rank);
-        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-            printf("DEBUG(%d)                [%d]: ", rank, iPrc);
-            for (int i = 0; i < send_elements[iPrc].size(); ++i) {
-                printf("%d ", send_elements[iPrc][i]);
-            }
-            printf("\n");
-        }        
-
-
-        ////// ---- Actually send the data: for now, one comm / array. TODO; serialize somehow
+        ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
 
         // First send the nodes
         std::vector<std::vector<int>> recv_nodes(num_processes);
@@ -1618,6 +1657,7 @@ public:
         // Now treat new vertices
         std::map<int, int> gnn2lnn;
         int NNewNodes = NNodes;
+        int NOldNodes = NNodes;
         for(int i=0; i<num_processes; i++) 
             NNewNodes += recv_nodes[i].size()/2;
         _coords.resize(NNewNodes*ndims);
@@ -1663,9 +1703,6 @@ public:
                         }
 
                     }
-                    recv_map[new_owner][gid] = lid;
-                    recv[new_owner].push_back(gid);
-                    recv_halo.insert(lid);
                 }
                 
             }
@@ -1674,15 +1711,68 @@ public:
         _coords.resize(NNodes*ndims);
         node_owner.resize(NNodes);
         lnn2gnn.resize(NNodes);
+        NEList.resize(NNodes);
+        NNList.resize(NNodes);
 
         // Remove useless vertices
+        std::vector<int> new_local_numbering(NNodes);
+        int count = 0;
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            int tag = 0; // tells is vertex should be there
+            if (node_owner[iVer] == rank)
+                tag = 1;
+            else if (iVer >= NOldNodes)
+                tag = 1;
+            else {
+                for (int ngb=0; ngb < NNList[iVer].size(); ++ngb) {
+                    if (node_owner[NNList[iVer][ngb]] == rank) {
+                        tag = 1;
+                        break;
+                    }
+                }
+            }
+            int new_lnn = count;
+            if (tag) {
+                new_local_numbering[iVer] = new_lnn;
+                assert(new_lnn<=iVer);
+                for (int k=0; k<ndims; ++k) {
+                    _coords[ndims*new_lnn+k] = _coords[ndims*iVer+k];
+                }
+                NNList[new_lnn] = NNList[iVer];
+                NEList[new_lnn] = NEList[iVer];
+                lnn2gnn[new_lnn] = lnn2gnn[iVer];
+                count++;
+            }
+            else {
+                new_local_numbering[iVer] = -1;
+                for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it) {
+                    for (int k=0; k<nloc; ++k) {
+                        _ENList[*it*nloc+k] = -1;            
+                    }
+                }
+            }
+        }
 
-//        int count = 0;
-//        for (iVer = 0; iVer < NNodes; ++iVer) {
-//            if (new_owner)
-//        }
+        assert(count<=NNodes);
+        NNodes = count;
+        _coords.resize(NNodes*ndims);
+        node_owner.resize(NNodes);
+        lnn2gnn.resize(NNodes);
+        NEList.resize(NNodes);
+        NNList.resize(NNodes);
 
-        // TODO NEW LOCAL GLOBAL NUMBERING: this requires fixing the halos first ?
+        // fix structures
+        for (int i=0; i<_ENList.size(); ++i) {
+            if (_ENList[i] >= 0)
+                _ENList[i] = new_local_numbering[_ENList[i]];
+        }
+
+        for (int iVer=0; iVer < NNodes; ++iVer) {
+            for (int i=0; i< NNList[iVer].size(); ++i) {
+                NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
+            }
+        }
+
 
         // Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
@@ -1693,8 +1783,6 @@ public:
         for(int i=0; i<num_processes; i++) 
             NNewElements += recv_elements[i].size()/2;
         _ENList.resize(NNewElements*nloc);
-        NEList.resize(NNodes);
-        NNList.resize(NNodes);
 
 
         for(int i=0; i<num_processes; i++) {
@@ -1708,8 +1796,13 @@ public:
                     //elm[k] = gnn2lnn.count(elm_gnn[k]) ? gnn2lnn[elm_gnn[k]] : recv_map[i][elm_gnn[k]];
                     if (gnn2lnn.count(elm_gnn[k])) 
                         elm[k] = gnn2lnn[elm_gnn[k]];
-                    else 
+                    else {
+                        if (!recv_map[i].count(elm_gnn[k])) {
+                            printf("DEBUG(%d)  received element: %d %d %d from proc %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
+                        }
+                        assert(recv_map[i].count(elm_gnn[k]));
                         elm[k] = recv_map[i][elm_gnn[k]];
+                    }
                 }
                 // check if element already exists (could have been sent by other proc ? TODO check) 
                 std::set<index_t> intersect1, intersect;
@@ -1752,12 +1845,64 @@ public:
                 }
                 NElements++;
 
-
-
             }
         }
         assert(NElements<=NNewElements);
         _ENList.resize(NElements*nloc);
+
+
+        // Remove dead elements
+        std::vector<int> new_elm_numbering(NElements);
+        count = 0;
+        for (int iElm = 0; iElm < NElements; ++iElm) {
+            int *elm = &_ENList[iElm*nloc];
+            if (elm[0] >= 0) {
+                for (int k=0; k<nloc; ++k) {
+                    _ENList[count*nloc+k] = elm[k];
+                }
+                new_elm_numbering[iElm] = count;
+                count++;
+            }
+            else {
+                new_elm_numbering[iElm] = -1;
+            }
+        }
+        assert(count<=NElements);
+        NElements = count;
+        _ENList.resize(NElements*nloc);
+
+        // fix NEList
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            std::set<index_t> NESet;
+            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it){
+                if (new_elm_numbering[*it] >= 0)
+                NESet.insert(new_elm_numbering[*it]);
+            }
+            NEList[iVer].swap(NESet);
+        }
+
+
+        ///  Fix halos and global numbering
+
+        fix_halos();
+        create_global_node_numbering();
+
+        // fix structures with gnn
+        for (int i=0; i<send_map.size(); ++i){
+            for (std::map<index_t,index_t>::iterator it=send_map[i].begin(); it!=send_map[i].end(); ++it) {
+                int lid = it->second;
+                send_map[i].erase(it);
+                send_map[i][lnn2gnn[lid]] = lid;
+            }
+        }
+        for (int i=0; i<recv_map.size(); ++i){
+            for (std::map<index_t,index_t>::iterator it=recv_map[i].begin(); it!=recv_map[i].end(); ++it) {
+                int lid = it->second;
+                recv_map[i].erase(it);
+                recv_map[i][lnn2gnn[lid]] = lid;
+            }
+        }
+
 
     }
 
