@@ -1531,8 +1531,6 @@ public:
                 send_coords[new_owner].insert(send_coords[new_owner].end(), coords, coords+ndims);
             }
         }
-        ////// TODO: WILL HAVE TO SEND COORDINATES AS WELL
-
 
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
@@ -1584,6 +1582,11 @@ public:
                 }
             }
         }
+
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            node_owner[iVer] = vertex_new_owner[iVer];
+        }
+
 
         printf("DEBUG(%d)  send_nodes:\n", rank);
         for (int iPrc = 0; iPrc < num_processes; ++iPrc){
@@ -1673,6 +1676,11 @@ public:
         lnn2gnn.resize(NNodes);
 
         // Remove useless vertices
+
+//        int count = 0;
+//        for (iVer = 0; iVer < NNodes; ++iVer) {
+//            if (new_owner)
+//        }
 
         // TODO NEW LOCAL GLOBAL NUMBERING: this requires fixing the halos first ?
 
