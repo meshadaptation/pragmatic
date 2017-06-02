@@ -1855,30 +1855,9 @@ public:
                     int gid = elm_gnn[k];
                     _ENList[NElements*nloc+k] = iVer;
                     boundary[NElements*nloc+k] = recv_boundary[i][j+k];
-                    NEList[iVer].insert(NElements);
-                    for (int ngb=1; ngb<nloc; ++ngb) {
-                        int iVerNgb = elm[(k+ngb)%nloc];
-                        // TODO it is probably cheaper to rebuild the NNList from scratch
-                        int tag = 1;
-                        for (int l=0; l<NNList[iVerNgb].size(); ++l) {
-                            if (NNList[iVerNgb][l] == iVer) {
-                                tag = 0;
-                                break;
-                            }
-                        }
-                        if (tag) {
-                            NNList[iVer].push_back(iVerNgb);
-                        }
-                    }
                 }
                 NElements++;
             }
-        }
-        printf("DBG(%d)  NNList:\n", rank);
-        for (int i=0; i<NNList.size(); ++i) {
-            printf("DBG(%d)       [%d]", rank, i);
-            for (int j=0; j<NNList[i].size(); ++j) printf("  %d", NNList[i][j]);
-            printf("\n");
         }
         assert(NElements<=NNewElements);
         _ENList.resize(NElements*nloc);
@@ -1903,20 +1882,11 @@ public:
         NElements = count;
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
-
-        // fix NEList
-        for (int iVer=0; iVer<NNodes; ++iVer) {
-            std::set<index_t> NESet;
-            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it){
-                if (new_elm_numbering[*it] >= 0)
-                NESet.insert(new_elm_numbering[*it]);
-            }
-            NEList[iVer].swap(NESet);
-        }
-
+        
+        // Fix NEList and NNList by recreating them
+        create_adjacency();
 
         ///  Fix halos and global numbering
-
         fix_halos();
         create_global_node_numbering();
 
