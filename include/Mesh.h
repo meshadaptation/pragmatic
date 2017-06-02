@@ -1572,8 +1572,9 @@ public:
     void migrate_mesh(int * vertex_new_owner) 
     {
 
-        // TODO: will have to send the metric together with the coordinates, and update it...+
+        // TODO: will have to send the metric together with the coordinates, and update it...
 
+        std::map<index_t, index_t> gnn2lnn;
         std::vector< std::vector<index_t> > send_nodes, send_elements;
         std::vector< std::vector<real_t> > send_coords;
 
@@ -1583,11 +1584,12 @@ public:
         
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int new_owner = vertex_new_owner[iVer];
+            int gnn = lnn2gnn[iVer];
+            gnn2lnn[gnn] = iVer;
             if (new_owner == rank || node_owner[iVer] != rank) 
                 continue;
             //if (new_owner == node_owner[iVer]) 
             //    continue;
-            int gnn = lnn2gnn[iVer];
             // if node is already on other proc, don't send it
             if (!(send_map[new_owner].count(gnn))) {
                 send_nodes[new_owner].push_back(gnn);
@@ -1645,6 +1647,24 @@ public:
             node_owner[iVer] = vertex_new_owner[iVer];
         }
 
+        printf("DEBUG(%d)  send_nodes:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
+                 printf("%d ", send_nodes[iPrc][iVer]);
+             }
+             printf("\n");
+        }
+        printf("DEBUG(%d)  send_elements:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int i = 0; i < send_elements[iPrc].size(); ++i) {
+                 printf("%d ", send_elements[iPrc][i]);
+                 if ((i%nloc)==2) printf("  ");
+             }
+             printf("\n");
+        }
+
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
 
@@ -1655,7 +1675,7 @@ public:
         communicate<double>(send_coords, recv_coords, MPI_REAL_T);
 
         // Now treat new vertices
-        std::map<int, int> gnn2lnn;
+//        std::map<int, int> gnn2lnn;
         int NNewNodes = NNodes;
         int NOldNodes = NNodes;
         for(int i=0; i<num_processes; i++) 
@@ -1669,7 +1689,9 @@ public:
             for (int j = 0; j < recv_nodes[i].size(); j+=2){
                 int new_owner = recv_nodes[i][j+1];
                 int gid = recv_nodes[i][j];
+                printf("DEBUG(%d)  node gid %d received from proc %d\n", rank, gid, i);
                 if (new_owner == rank) {
+                    printf("DEBUG(%d)    it belongs to me\n", rank);
                     // if another proc sends me a vertex that belongs to me, it means I don't have it already
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
@@ -1679,30 +1701,19 @@ public:
                     NNodes++;
                 }
                 else {
-                    int lid; // local id
+                    printf("DEBUG(%d)    it does not belong to me\n", rank);
                     // it is a halo node, I got to be careful and check wether it already is there
-                    // it cannot already belong to me
-                    // but it could be on my halo --> check recv_map
+                    // it cannot already belong to me but it could be on my halo
                     if (!(gnn2lnn.count(gid))) {
-                        int isThere = 0;
-                        for (int p=0; p<num_processes; ++p) {
-                            if (recv_map[p].count(gid)) {
-                                isThere = 1;
-                                lid = recv_map[p][gid];
-                                break;
-                            }
-                        }
-                        if (!isThere) {
-                            node_owner[NNodes] = new_owner;
-                            lnn2gnn[NNodes] = gid;
-                            gnn2lnn[gid] = NNodes;
-                            lid = NNodes;
-                            for (int k=0; k<ndims; ++k)
-                                _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
-                            NNodes++;
-                        }
-
+                        printf("DEBUG(%d)    ... and it wasn't there\n", rank);
+                        node_owner[NNodes] = new_owner;
+                        lnn2gnn[NNodes] = gid;
+                        gnn2lnn[gid] = NNodes;
+                        for (int k=0; k<ndims; ++k)
+                            _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
+                        NNodes++;
                     }
+                    else printf("DEBUG(%d)    ... and it was already there\n", rank);
                 }
                 
             }
@@ -1772,6 +1783,9 @@ public:
                 NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
             }
         }
+        for (std::map<index_t,index_t>::iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it) {
+            it->second = new_local_numbering[it->second];
+        }
 
 
         // Now send the elements
@@ -1784,25 +1798,18 @@ public:
             NNewElements += recv_elements[i].size()/2;
         _ENList.resize(NNewElements*nloc);
 
-
         for(int i=0; i<num_processes; i++) {
             for (int j = 0; j < recv_elements[i].size(); j+=nloc){
                 int *elm_gnn = &recv_elements[i][j];
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
-                    // if I receive an element, then none of his vertices belonged to me
-                    // so either they were sent previously (so in gnn2lnn)
-                    //    either they were in the halo, in recv_map[sender]
-                    //elm[k] = gnn2lnn.count(elm_gnn[k]) ? gnn2lnn[elm_gnn[k]] : recv_map[i][elm_gnn[k]];
-                    if (gnn2lnn.count(elm_gnn[k])) 
-                        elm[k] = gnn2lnn[elm_gnn[k]];
-                    else {
-                        if (!recv_map[i].count(elm_gnn[k])) {
-                            printf("DEBUG(%d)  received element: %d %d %d from proc %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
-                        }
-                        assert(recv_map[i].count(elm_gnn[k]));
-                        elm[k] = recv_map[i][elm_gnn[k]];
+                    // if I receive an element, I should already have all the vertices
+                    if (!gnn2lnn.count(elm_gnn[k])) {
+                        printf("DEBUG(%d)  received element: %d %d %d from proc %d and I can't find %d in my db\n", 
+                            rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i, elm_gnn[k]);
                     }
+                    assert(gnn2lnn.count(elm_gnn[k])); 
+                    elm[k] = gnn2lnn[elm_gnn[k]];
                 }
                 // check if element already exists (could have been sent by other proc ? TODO check) 
                 std::set<index_t> intersect1, intersect;
@@ -1824,7 +1831,7 @@ public:
                                           std::inserter(intersect, intersect.begin()));
                 }
                 if (!intersect.empty()) {
-                    printf("skipped : %d %d %d\n", elm[0], elm[1], elm[2]);
+                    printf("DEBUG(%d) skipped : %d %d %d received from %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
@@ -1835,12 +1842,12 @@ public:
                     for (int ngb=1; ngb<nloc; ++ngb) {
                         int iVerNgb = elm[(k+ngb)%nloc];
                         NNList[iVer].push_back(iVerNgb);
-                        if (node_owner[iVerNgb] != rank ) { // then node k is on the halo and needs to be sent to this proc
-                            int send_proc = node_owner[iVerNgb];
-                            send_map[send_proc][gid] = iVer;
-                            send[send_proc].push_back(gid);
-                            send_halo.insert(iVer);
-                        }
+//                        if (node_owner[iVerNgb] != rank ) { // then node k is on the halo and needs to be sent to this proc
+//                            int send_proc = node_owner[iVerNgb];
+//                            send_map[send_proc][gid] = iVer;
+//                            send[send_proc].push_back(gid);
+//                            send_halo.insert(iVer);
+//                        }
                     }
                 }
                 NElements++;
