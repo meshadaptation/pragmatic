@@ -1657,7 +1657,7 @@ public:
             node_owner[iVer] = vertex_new_owner[iVer];
         }
 
-        printf("DEBUG(%d)  send_nodes:\n", rank);
+/*        printf("DEBUG(%d)  send_nodes:\n", rank);
         for (int iPrc = 0; iPrc < num_processes; ++iPrc){
              printf("DEBUG(%d)             [%d]:", rank, iPrc);
              for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
@@ -1673,7 +1673,7 @@ public:
                  if ((i%nloc)==2) printf("  ");
              }
              printf("\n");
-        }
+        } */
 
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
@@ -1703,9 +1703,9 @@ public:
             for (int j = 0; j < recv_nodes[i].size(); j+=2){
                 int new_owner = recv_nodes[i][j+1];
                 int gid = recv_nodes[i][j];
-                printf("DEBUG(%d)  node gid %d received from proc %d\n", rank, gid, i);
+//                printf("DEBUG(%d)  node gid %d received from proc %d\n", rank, gid, i);
                 if (new_owner == rank) {
-                    printf("DEBUG(%d)    it belongs to me\n", rank);
+//                    printf("DEBUG(%d)    it belongs to me\n", rank);
                     // if another proc sends me a vertex that belongs to me, it means I don't have it already
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
@@ -1715,18 +1715,18 @@ public:
                     NNodes++;
                 }
                 else {
-                    printf("DEBUG(%d)    it does not belong to me\n", rank);
+//                    printf("DEBUG(%d)    it does not belong to me\n", rank);
                     // it is a halo node, I got to be careful and check wether it already is there
                     // it cannot already belong to me but it could be on my halo
                     if (!(gnn2lnn.count(gid))) {
-                        printf("DEBUG(%d)    ... and it wasn't there\n", rank);
+//                        printf("DEBUG(%d)    ... and it wasn't there\n", rank);
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
                         memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(double));
                         NNodes++;
                     }
-                    else printf("DEBUG(%d)    ... and it was already there\n", rank);
+//                    else printf("DEBUG(%d)    ... and it was already there\n", rank);
                 }
                 
             }
@@ -1762,8 +1762,8 @@ public:
                 assert(new_lnn<=iVer);
                 memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
                 memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
-                NNList[new_lnn] = NNList[iVer];
-                NEList[new_lnn] = NEList[iVer];
+                NNList[new_lnn].swap(NNList[iVer]);
+                NEList[new_lnn].swap(NEList[iVer]);
                 lnn2gnn[new_lnn] = lnn2gnn[iVer];
                 count++;
             }
@@ -1794,12 +1794,15 @@ public:
 
         for (int iVer=0; iVer < NNodes; ++iVer) {
             for (int i=0; i< NNList[iVer].size(); ++i) {
-                NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
+                if (new_local_numbering[NNList[iVer][i]] >= 0) {
+                    NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
+                }
             }
         }
         for (std::map<index_t,index_t>::iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it) {
             it->second = new_local_numbering[it->second];
         }
+        new_local_numbering.clear();
 
 
         // Now send the elements
@@ -1844,7 +1847,7 @@ public:
                                           std::inserter(intersect, intersect.begin()));
                 }
                 if (!intersect.empty()) {
-                    printf("DEBUG(%d) skipped : %d %d %d received from %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
+//                    printf("DEBUG(%d) skipped : %d %d %d received from %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
@@ -1855,12 +1858,27 @@ public:
                     NEList[iVer].insert(NElements);
                     for (int ngb=1; ngb<nloc; ++ngb) {
                         int iVerNgb = elm[(k+ngb)%nloc];
-                        NNList[iVer].push_back(iVerNgb);
+                        // TODO it is probably cheaper to rebuild the NNList from scratch
+                        int tag = 1;
+                        for (int l=0; l<NNList[iVerNgb].size(); ++l) {
+                            if (NNList[iVerNgb][l] == iVer) {
+                                tag = 0;
+                                break;
+                            }
+                        }
+                        if (tag) {
+                            NNList[iVer].push_back(iVerNgb);
+                        }
                     }
                 }
                 NElements++;
-
             }
+        }
+        printf("DBG(%d)  NNList:\n", rank);
+        for (int i=0; i<NNList.size(); ++i) {
+            printf("DBG(%d)       [%d]", rank, i);
+            for (int j=0; j<NNList[i].size(); ++j) printf("  %d", NNList[i][j]);
+            printf("\n");
         }
         assert(NElements<=NNewElements);
         _ENList.resize(NElements*nloc);
