@@ -1598,12 +1598,11 @@ public:
                 send_nodes[new_owner].push_back(gnn);
                 send_nodes[new_owner].push_back(new_owner);
                 real_t *coords = &_coords[iVer*ndims];
-                real_t *metric = &metric[iVer*msize];
+                double *met = &metric[iVer*msize];
                 send_coords[new_owner].insert(send_coords[new_owner].end(), coords, coords+ndims);
-                send_metric[new_owner].insert(send_metric[new_owner].end(), metric, metric+msize);
+                send_metric[new_owner].insert(send_metric[new_owner].end(), met, met+msize);
             }
         }
-
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
             std::set<index_t> new_procs, old_procs;
@@ -1641,15 +1640,16 @@ public:
                             send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
                             real_t *coords = &_coords[iVer*ndims];
-                            real_t *metric = &metric[iVer*msize];
+                            double *met = &metric[iVer*msize];
                             send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
-                            send_metric[new_proc].insert(send_metric[new_proc].end(), metric, metric+msize);
+                            send_metric[new_proc].insert(send_metric[new_proc].end(), met, met+msize);
                         }
                     }
                 }
             }
         }
 
+        /// fix ownerships
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             node_owner[iVer] = vertex_new_owner[iVer];
         }
@@ -1682,6 +1682,7 @@ public:
         communicate<double>(send_coords, recv_coords, MPI_REAL_T);
         std::vector<std::vector<double>> recv_metric(num_processes);
         communicate<double>(send_metric, recv_metric, MPI_REAL_T);
+
 
         // Now treat new vertices
 //        std::map<int, int> gnn2lnn;
