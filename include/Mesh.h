@@ -1573,15 +1573,18 @@ public:
     {
 
         // TODO: will have to send the metric together with the coordinates, and update it...
+        //                    send the boundary together with the elements
+        //                    recompute qualities 
 
         std::map<index_t, index_t> gnn2lnn;
-        std::vector< std::vector<index_t> > send_nodes, send_elements;
-        std::vector< std::vector<real_t> > send_coords;
+        std::vector< std::vector<index_t> > send_nodes, send_elements, send_boundary;
+        std::vector< std::vector<real_t> > send_coords, send_metric;
 
         send_nodes.resize(num_processes);
         send_elements.resize(num_processes);
         send_coords.resize(num_processes);
-        
+        send_metric.resize(num_processes);
+
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int new_owner = vertex_new_owner[iVer];
             int gnn = lnn2gnn[iVer];
@@ -1595,7 +1598,9 @@ public:
                 send_nodes[new_owner].push_back(gnn);
                 send_nodes[new_owner].push_back(new_owner);
                 real_t *coords = &_coords[iVer*ndims];
+                real_t *metric = &metric[iVer*msize];
                 send_coords[new_owner].insert(send_coords[new_owner].end(), coords, coords+ndims);
+                send_metric[new_owner].insert(send_metric[new_owner].end(), metric, metric+msize);
             }
         }
 
@@ -1636,7 +1641,9 @@ public:
                             send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
                             real_t *coords = &_coords[iVer*ndims];
+                            real_t *metric = &metric[iVer*msize];
                             send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
+                            send_metric[new_proc].insert(send_metric[new_proc].end(), metric, metric+msize);
                         }
                     }
                 }
@@ -1673,6 +1680,8 @@ public:
         communicate<int>(send_nodes, recv_nodes, MPI_INDEX_T);
         std::vector<std::vector<double>> recv_coords(num_processes);
         communicate<double>(send_coords, recv_coords, MPI_REAL_T);
+        std::vector<std::vector<double>> recv_metric(num_processes);
+        communicate<double>(send_metric, recv_metric, MPI_REAL_T);
 
         // Now treat new vertices
 //        std::map<int, int> gnn2lnn;
@@ -1681,6 +1690,7 @@ public:
         for(int i=0; i<num_processes; i++) 
             NNewNodes += recv_nodes[i].size()/2;
         _coords.resize(NNewNodes*ndims);
+        metric.resize(NNewNodes*msize);
         node_owner.resize(NNewNodes);
         lnn2gnn.resize(NNewNodes);
 
@@ -1696,8 +1706,8 @@ public:
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
-                    for (int k=0; k<ndims; ++k)
-                        _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
+                    memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(real_t));
+                    memcpy(&_metric[NNodes*msize], &recv_metric[i][msize*j], msize*sizeof(real_t));
                     NNodes++;
                 }
                 else {
@@ -1709,8 +1719,7 @@ public:
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
-                        for (int k=0; k<ndims; ++k)
-                            _coords[NNodes*ndims+k] = recv_coords[i][ndims*j+k];
+                        memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(real_t));
                         NNodes++;
                     }
                     else printf("DEBUG(%d)    ... and it was already there\n", rank);
@@ -1746,9 +1755,8 @@ public:
             if (tag) {
                 new_local_numbering[iVer] = new_lnn;
                 assert(new_lnn<=iVer);
-                for (int k=0; k<ndims; ++k) {
-                    _coords[ndims*new_lnn+k] = _coords[ndims*iVer+k];
-                }
+                memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
+                memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
                 NNList[new_lnn] = NNList[iVer];
                 NEList[new_lnn] = NEList[iVer];
                 lnn2gnn[new_lnn] = lnn2gnn[iVer];
@@ -1842,12 +1850,6 @@ public:
                     for (int ngb=1; ngb<nloc; ++ngb) {
                         int iVerNgb = elm[(k+ngb)%nloc];
                         NNList[iVer].push_back(iVerNgb);
-//                        if (node_owner[iVerNgb] != rank ) { // then node k is on the halo and needs to be sent to this proc
-//                            int send_proc = node_owner[iVerNgb];
-//                            send_map[send_proc][gid] = iVer;
-//                            send[send_proc].push_back(gid);
-//                            send_halo.insert(iVer);
-//                        }
                     }
                 }
                 NElements++;
