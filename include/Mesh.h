@@ -1572,8 +1572,7 @@ public:
     void migrate_mesh(int * vertex_new_owner) 
     {
 
-        // TODO: will have to send the metric together with the coordinates, and update it...
-        //                    send the boundary together with the elements
+        // TODO: will have to send the boundary together with the elements
         //                    recompute qualities 
 
         std::map<index_t, index_t> gnn2lnn;
@@ -1584,6 +1583,7 @@ public:
         send_elements.resize(num_processes);
         send_coords.resize(num_processes);
         send_metric.resize(num_processes);
+        send_boundary.resize(num_processes);
 
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int new_owner = vertex_new_owner[iVer];
@@ -1606,7 +1606,7 @@ public:
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
             std::set<index_t> new_procs, old_procs;
-            int gnnElm[nloc];
+            int gnnElm[nloc], *bdy;
 
             for (int i=0; i<nloc; ++i) {
                 int iVer = _ENList[iElm*nloc+i];
@@ -1622,8 +1622,11 @@ public:
                 int new_proc = *it;
                 if (new_proc == rank) 
                     continue;
-                if (!(old_procs.count(new_proc)))
+                if (!(old_procs.count(new_proc))) {
+                    bdy = &boundary[iElm*nloc];
                     send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
+                    send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
+                }
 
                 for (int i=0; i<nloc; ++i) {
                     int iVer = _ENList[iElm*nloc+i];
@@ -1708,7 +1711,7 @@ public:
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
                     memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(real_t));
-                    memcpy(&metric[NNodes*msize], &recv_metric[i][msize*j], msize*sizeof(real_t));
+                    memcpy(&metric[NNodes*msize], &recv_metric[i][msize*j], msize*sizeof(double));
                     NNodes++;
                 }
                 else {
@@ -1720,7 +1723,7 @@ public:
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
-                        memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(real_t));
+                        memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(double));
                         NNodes++;
                     }
                     else printf("DEBUG(%d)    ... and it was already there\n", rank);
@@ -1730,6 +1733,7 @@ public:
         }
         assert(NNodes<=NNewNodes);
         _coords.resize(NNodes*ndims);
+        metric.resize(NNodes*msize);
         node_owner.resize(NNodes);
         lnn2gnn.resize(NNodes);
         NEList.resize(NNodes);
@@ -1776,6 +1780,7 @@ public:
         assert(count<=NNodes);
         NNodes = count;
         _coords.resize(NNodes*ndims);
+        metric.resize(NNodes*msize);
         node_owner.resize(NNodes);
         lnn2gnn.resize(NNodes);
         NEList.resize(NNodes);
@@ -1800,12 +1805,15 @@ public:
         // Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
         communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
+        std::vector<std::vector<int>> recv_boundary(num_processes);
+        communicate<int>(send_boundary, recv_boundary, MPI_INDEX_T);
 
         // Now treat new elements
         int NNewElements = NElements;
         for(int i=0; i<num_processes; i++) 
             NNewElements += recv_elements[i].size()/2;
         _ENList.resize(NNewElements*nloc);
+        boundary.resize(NNewElements*nloc);
 
         for(int i=0; i<num_processes; i++) {
             for (int j = 0; j < recv_elements[i].size(); j+=nloc){
@@ -1813,10 +1821,6 @@ public:
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
                     // if I receive an element, I should already have all the vertices
-                    if (!gnn2lnn.count(elm_gnn[k])) {
-                        printf("DEBUG(%d)  received element: %d %d %d from proc %d and I can't find %d in my db\n", 
-                            rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i, elm_gnn[k]);
-                    }
                     assert(gnn2lnn.count(elm_gnn[k])); 
                     elm[k] = gnn2lnn[elm_gnn[k]];
                 }
@@ -1847,6 +1851,7 @@ public:
                     int iVer = elm[k];
                     int gid = elm_gnn[k];
                     _ENList[NElements*nloc+k] = iVer;
+                    boundary[NElements*nloc+k] = recv_boundary[i][j+k];
                     NEList[iVer].insert(NElements);
                     for (int ngb=1; ngb<nloc; ++ngb) {
                         int iVerNgb = elm[(k+ngb)%nloc];
@@ -1859,17 +1864,16 @@ public:
         }
         assert(NElements<=NNewElements);
         _ENList.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
 
 
         // Remove dead elements
         std::vector<int> new_elm_numbering(NElements);
         count = 0;
         for (int iElm = 0; iElm < NElements; ++iElm) {
-            int *elm = &_ENList[iElm*nloc];
-            if (elm[0] >= 0) {
-                for (int k=0; k<nloc; ++k) {
-                    _ENList[count*nloc+k] = elm[k];
-                }
+            if (_ENList[iElm*nloc] >= 0) {
+                memmove(&_ENList[count*nloc], &_ENList[iElm*nloc], nloc*sizeof(index_t));
+                memmove(&boundary[count*nloc], &boundary[iElm*nloc], nloc*sizeof(int));
                 new_elm_numbering[iElm] = count;
                 count++;
             }
@@ -1880,6 +1884,7 @@ public:
         assert(count<=NElements);
         NElements = count;
         _ENList.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
 
         // fix NEList
         for (int iVer=0; iVer<NNodes; ++iVer) {
