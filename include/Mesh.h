@@ -1707,7 +1707,7 @@ public:
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
                     memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(real_t));
-                    memcpy(&_metric[NNodes*msize], &recv_metric[i][msize*j], msize*sizeof(real_t));
+                    memcpy(&metric[NNodes*msize], &recv_metric[i][msize*j], msize*sizeof(real_t));
                     NNodes++;
                 }
                 else {
