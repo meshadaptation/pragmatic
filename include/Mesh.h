@@ -1191,6 +1191,19 @@ public:
                 mpi_ele_owner[i] = owner;
             }
 
+
+        // Check consistency of ownership
+        if(rank==0) std::cout<<"VERIFY: ownership...............";
+        int tag=0;
+        for(int iVer=0; iVer<NNodes; ++iVer) {
+            if (mpi_node_owner[iVer] != node_owner[iVer]) {
+                tag++;
+                printf("Node %d on rank %d has an ownership problem\n", iVer, rank);
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE, &tag, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+        if (!tag && rank==0)  std::cout << "pass\n";
+
         // Check for the correctness of NNList and NEList.
         std::vector< std::set<index_t> > local_NEList(NNodes);
         std::vector< std::set<index_t> > local_NNList(NNodes);
@@ -1284,12 +1297,14 @@ public:
             size_t i=0;
             for(; i<NElements; i++) {
                 const index_t *n=get_element(i);
+//                printf("DEBUG(%d)  element: %d %d %d owned by %d\n", rank, lnn2gnn[n[0]], lnn2gnn[n[1]], lnn2gnn[n[2]], mpi_ele_owner[i]);
                 if((mpi_ele_owner[i]!=rank) || (n[0]<0))
                     continue;
 
                 area = property->area(get_coords(n[0]),
                                       get_coords(n[1]),
                                       get_coords(n[2]));
+//                printf("DEBUG(%d)          larea: %Lf   --> total area: %Lf\n", rank, area, area);
                 min_ele_area = area;
                 max_ele_area = area;
                 i++;
@@ -1297,6 +1312,7 @@ public:
             }
             for(; i<NElements; i++) {
                 const index_t *n=get_element(i);
+//                printf("DEBUG(%d)  element: %d %d %d owned by %d\n", rank, lnn2gnn[n[0]], lnn2gnn[n[1]], lnn2gnn[n[2]], mpi_ele_owner[i]);
                 if((mpi_ele_owner[i]!=rank) || (n[0]<0))
                     continue;
 
@@ -1308,6 +1324,7 @@ public:
                 }
 
                 area += larea;
+//                printf("DEBUG(%d)          larea: %Lf   --> total area: %Lf\n", rank, larea, area);
                 min_ele_area = std::min(min_ele_area, larea);
                 max_ele_area = std::max(max_ele_area, larea);
             }
@@ -1703,9 +1720,7 @@ public:
             for (int j = 0; j < recv_nodes[i].size(); j+=2){
                 int new_owner = recv_nodes[i][j+1];
                 int gid = recv_nodes[i][j];
-//                printf("DEBUG(%d)  node gid %d received from proc %d\n", rank, gid, i);
                 if (new_owner == rank) {
-//                    printf("DEBUG(%d)    it belongs to me\n", rank);
                     // if another proc sends me a vertex that belongs to me, it means I don't have it already
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
@@ -1715,20 +1730,16 @@ public:
                     NNodes++;
                 }
                 else {
-//                    printf("DEBUG(%d)    it does not belong to me\n", rank);
                     // it is a halo node, I got to be careful and check wether it already is there
                     // it cannot already belong to me but it could be on my halo
                     if (!(gnn2lnn.count(gid))) {
-//                        printf("DEBUG(%d)    ... and it wasn't there\n", rank);
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
                         memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j], ndims*sizeof(double));
                         NNodes++;
                     }
-//                    else printf("DEBUG(%d)    ... and it was already there\n", rank);
                 }
-                
             }
         }
         assert(NNodes<=NNewNodes);
@@ -1847,7 +1858,6 @@ public:
                                           std::inserter(intersect, intersect.begin()));
                 }
                 if (!intersect.empty()) {
-//                    printf("DEBUG(%d) skipped : %d %d %d received from %d\n", rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
@@ -1855,6 +1865,7 @@ public:
                     int gid = elm_gnn[k];
                     _ENList[NElements*nloc+k] = iVer;
                     boundary[NElements*nloc+k] = recv_boundary[i][j+k];
+                    NEList[iVer].insert(NElements); // I need to update NEList because this is how I check if elements are already there 
                 }
                 NElements++;
             }
@@ -1906,6 +1917,15 @@ public:
             }
         }
 
+
+        /// recompute qualities
+        quality.resize(NElements);
+        for (int iElm=0; iElm<NElements; ++iElm) {
+            if (ndims==2)
+                update_quality<2>(iElm);
+            else 
+                update_quality<3>(iElm);
+        }
 
     }
 
