@@ -2003,6 +2003,98 @@ public:
     }
 
 
+
+    /// Debug function to bring the whole mesh on 1 proc and print it.
+    void print_mesh() {
+
+        if (num_processes == 1) return;
+
+        std::vector< std::vector<int>> send_ids(num_processes), send_elm(num_processes);
+        std::vector< std::vector<double>> send_coords(num_processes);
+
+        send_ids[0].resize(2*NNodes);
+        send_coords[0].resize(ndims*NNodes);
+        int NOwnedNodes = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            send_ids[0][2*iVer] = lnn2gnn[iVer];
+            send_ids[0][2*iVer+1] = iVer;
+            memcpy(&send_coords[0][ndims*iVer], &_coords[ndims*iVer], ndims*sizeof(double));
+            if (node_owner[iVer] == rank)
+                NOwnedNodes++;
+        }
+        int NElm = 0;
+        send_elm[0].resize(nloc*NElements);
+        for (int iElm=0; iElm<NElements; ++iElm) {
+            int *elm = &_ENList[iElm*nloc];
+            int owner = node_owner[elm[0]];
+            for (int k=1; k<nloc; ++k) {
+                owner = std::min(owner, node_owner[elm[k]]);
+            }
+            if (owner == rank) {
+                memcpy(&send_elm[0][NElm*nloc], &_ENList[iElm*nloc], nloc*sizeof(int));
+                NElm++;
+            }
+        }
+        send_elm[0].resize(nloc*NElm);
+
+//        MPI_Barrier(_mpi_comm); exit(12);
+
+        std::vector<std::vector<int>> recv_ids(num_processes);
+        communicate<int>(send_ids, recv_ids, MPI_INDEX_T);
+        if (rank==0) recv_ids[0].swap(send_ids[0]);
+        std::vector<std::vector<double>> recv_coords(num_processes);
+        communicate<double>(send_coords, recv_coords, MPI_DOUBLE);
+        if (rank==0) recv_coords[0].swap(send_coords[0]);
+        std::vector<std::vector<int>> recv_elm(num_processes);
+        communicate<int>(send_elm, recv_elm, MPI_INDEX_T);
+        if (rank==0) recv_elm[0].swap(send_elm[0]);
+
+        MPI_Allreduce(MPI_IN_PLACE, &NOwnedNodes, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &NElm, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+        printf("DEBUG(%d)  NNodesTot: %d, NElementsTot: %d\n", rank, NOwnedNodes, NElm);
+
+        if (rank != 0) return;
+
+        int NNodesTot = NOwnedNodes;
+        int NElmTot = NElm;
+
+        std::vector<int> gENList;
+        std::vector<double> gCoords;
+        std::vector<std::map<int,int>> g2l_ids;
+        
+        gENList.reserve(NElmTot*nloc);
+        gCoords.resize(NNodesTot*ndims);
+        g2l_ids.resize(NNodesTot);
+
+        for (int p=0; p<num_processes; ++p) {
+            assert(recv_ids[p].size()/2 == recv_coords[p].size()/ndims);
+            for (int i=0; i<recv_ids[p].size()/2; ++i){
+                int gid = recv_ids[p][2*i];
+                int lid = recv_ids[p][2*i+1];
+                g2l_ids[gid][p] = lid;
+                memcpy(&gCoords[ndims*gid], &recv_coords[p][i*ndims], ndims*sizeof(double));
+            }
+            for (int i=0; i<recv_elm[p].size(); ++i) {
+                gENList.push_back(recv_elm[p][i]);
+            }
+        }
+
+        
+        for (int iVer=0; iVer<NNodesTot; ++iVer) {
+            if (ndims ==2) printf("DEBUG  Vertex gid: %d (%1.3f %1.3f) ", iVer, gCoords[iVer*ndims],  gCoords[iVer*ndims+1]);
+            else printf("DEBUG  Vertex gid: %d (%1.3f %1.3f %1.3f) ", iVer, gCoords[iVer*ndims],  gCoords[iVer*ndims+1],  gCoords[iVer*ndims+2]);
+            for (std::map<index_t,index_t>::const_iterator it=g2l_ids[iVer].begin(); it!=g2l_ids[iVer].end(); ++it)
+                printf("  (%d) -> %d", it->first, it->second);
+            printf("\n");
+        }
+        for (int iElm=0; iElm<NElmTot; ++iElm) 
+            if (ndims ==2) printf("DEBUG  element %d:  %d %d %d\n", iElm, gENList[3*iElm], gENList[3*iElm+1], gENList[3*iElm+2]);
+            else printf("DEBUG  element %d:  %d %d %d %d\n", iElm, gENList[4*iElm], gENList[4*iElm+1], gENList[4*iElm+2],  gENList[4*iElm+3]);
+
+
+    }
+
+
 private:
     template<typename _real_t, int _dim> friend class MetricField;
     template<typename _real_t, int _dim> friend class Smooth;
