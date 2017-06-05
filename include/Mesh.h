@@ -1633,13 +1633,23 @@ public:
                 new_procs.insert(new_owner);
 
                 gnnElm[i] = lnn2gnn[iVer];
+//                if (rank==0) printf("DEBUG(%d)  gid: %d  new_owner: %d\n", rank, lnn2gnn[iVer], new_owner);
             }
+
+//            if (rank==0) printf("DEBUG(%d)\n", rank);
+//            if (rank==0) printf("DEBUG(%d) iElm: %d,  gnnElm: %d %d %d\n", rank, iElm, gnnElm[0],gnnElm[1], gnnElm[2]);
+//            if (rank==0) printf("DEBUG(%d)   new_procs: ", rank);
+//            for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) 
+//                if (rank==0) printf("%d ", *it);
+//            if (rank==0) printf("\n");
 
             for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) {
                 int new_proc = *it;
+//                if (rank==0) printf("DEBUG(%d)   new proc: %d\n", rank, new_proc);
                 if (new_proc == rank) 
                     continue;
                 if (!(old_procs.count(new_proc))) {
+//                    if (rank==0) printf("DEBUG(%d)   I'm going to send that element\n", rank);
                     bdy = &boundary[iElm*nloc];
                     send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
                     send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
@@ -1668,11 +1678,30 @@ public:
                 }
             }
         }
-
+        //MPI_Barrier(_mpi_comm); exit(12);
         /// fix ownerships
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             node_owner[iVer] = vertex_new_owner[iVer];
+//            printf("DEBUG(%d)  iVer: %d  owner: %d\n", rank, iVer, node_owner[iVer]);
         }
+
+/*        printf("DEBUG(%d)  send_nodes:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
+                 printf("%d ", send_nodes[iPrc][iVer]);
+             }
+             printf("\n");
+        }
+        printf("DEBUG(%d)  send_elements:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int i = 0; i < send_elements[iPrc].size(); ++i) {
+                 printf("%d ", send_elements[iPrc][i]);
+                 if ((i%nloc)==2) printf("  ");
+             }
+             printf("\n");
+        } */
 
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
@@ -1757,6 +1786,7 @@ public:
                 assert(new_lnn<=iVer);
                 memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
                 memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
+                node_owner[new_lnn] = node_owner[iVer];
                 NNList[new_lnn].swap(NNList[iVer]);
                 NEList[new_lnn].swap(NEList[iVer]);
                 lnn2gnn[new_lnn] = lnn2gnn[iVer];
@@ -1820,6 +1850,9 @@ public:
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
                     // if I receive an element, I should already have all the vertices
+//                    if (!gnn2lnn.count(elm_gnn[k])) 
+//                        printf("DEBUG(%d)  %d-th vertex (%d) in %d %d %d from proc %d not found in current db\n", 
+//                                rank, k, elm_gnn[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     assert(gnn2lnn.count(elm_gnn[k])); 
                     elm[k] = gnn2lnn[elm_gnn[k]];
                 }
