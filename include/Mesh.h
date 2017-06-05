@@ -1615,8 +1615,6 @@ public:
                 send_nodes[new_owner].push_back(gnn);
                 send_nodes[new_owner].push_back(new_owner);
                 real_t *coords = &_coords[iVer*ndims];
-                if (rank==2 && new_owner==0) printf("DEBUG(%d) send node (gid: %d, lid: %d) coords: %1.2f %1.2f to proc %d\n", rank,
-                                            gnn, iVer, coords[0], coords[1], new_owner); 
                 double *met = &metric[iVer*msize];
                 send_coords[new_owner].insert(send_coords[new_owner].end(), coords, coords+ndims);
                 send_metric[new_owner].insert(send_metric[new_owner].end(), met, met+msize);
@@ -1662,8 +1660,6 @@ public:
                             send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
                             real_t *coords = &_coords[iVer*ndims];
-                            if (rank==2 && new_proc==0) printf("DEBUG(%d) send node (gid: %d, lid: %d) coords: %1.2f %1.2f to proc %d\n", rank,
-                                                        gid, iVer, coords[0], coords[1], new_proc); 
                             double *met = &metric[iVer*msize];
                             send_coords[new_proc].insert(send_coords[new_proc].end(), coords, coords+ndims);
                             send_metric[new_proc].insert(send_metric[new_proc].end(), met, met+msize);
@@ -1678,24 +1674,6 @@ public:
             node_owner[iVer] = vertex_new_owner[iVer];
         }
 
-/*        printf("DEBUG(%d)  send_nodes:\n", rank);
-        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-             printf("DEBUG(%d)             [%d]:", rank, iPrc);
-             for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
-                 printf("%d ", send_nodes[iPrc][iVer]);
-             }
-             printf("\n");
-        }
-        printf("DEBUG(%d)  send_elements:\n", rank);
-        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
-             printf("DEBUG(%d)             [%d]:", rank, iPrc);
-             for (int i = 0; i < send_elements[iPrc].size(); ++i) {
-                 printf("%d ", send_elements[iPrc][i]);
-                 if ((i%nloc)==2) printf("  ");
-             }
-             printf("\n");
-        } */
-
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
 
@@ -1703,29 +1681,12 @@ public:
         std::vector<std::vector<int>> recv_nodes(num_processes);
         communicate<int>(send_nodes, recv_nodes, MPI_INDEX_T);
         std::vector<std::vector<double>> recv_coords(num_processes);
-        if (rank==2) {
-            printf("DEBUG(%d)  send_coords[0]: ", rank);
-            for (int i=0; i<send_coords[0].size(); ++i) {
-                printf("%1.2f ", send_coords[0][i]);
-                if ((i%2)==1) printf(" ");
-            }
-            printf("\n");
-        }
         communicate<double>(send_coords, recv_coords, MPI_REAL_T);
-        if (rank==0) {
-            printf("DEBUG(%d)  recv_coords[2]: ", rank);
-            for (int i=0; i<recv_coords[2].size(); ++i) {
-                printf("%1.2f ", recv_coords[2][i]);
-                if ((i%2)==1) printf(" ");
-            }
-            printf("\n");
-        }
         std::vector<std::vector<double>> recv_metric(num_processes);
         communicate<double>(send_metric, recv_metric, MPI_REAL_T);
 
 
         // Now treat new vertices
-//        std::map<int, int> gnn2lnn;
         int NNewNodes = NNodes;
         int NOldNodes = NNodes;
         for(int i=0; i<num_processes; i++) 
@@ -1740,15 +1701,14 @@ public:
             for (int j = 0; j < recv_nodes[i].size(); j+=2){
                 int new_owner = recv_nodes[i][j+1];
                 int gid = recv_nodes[i][j];
+                int jVer = j/2;
                 if (new_owner == rank) {
                     // if another proc sends me a vertex that belongs to me, it means I don't have it already
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
-                    memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j/2], ndims*sizeof(real_t));
-                    memcpy(&metric[NNodes*msize], &recv_metric[i][msize*j/2], msize*sizeof(double));
-                    if (rank==0) printf("DEBUG(%d) received (v1) vertex (gid: %d, lid: %d) from proc %d with coords: %1.2f %1.2f\n", rank,
-                                        gid, NNodes, i, recv_coords[i][ndims*j/2], recv_coords[i][ndims*j/2+1]);
+                    memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*jVer], ndims*sizeof(real_t));
+                    memcpy(&metric[NNodes*msize], &recv_metric[i][msize*jVer], msize*sizeof(double));
                     NNodes++;
                 }
                 else {
@@ -1758,10 +1718,8 @@ public:
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
-                        memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*j/2], ndims*sizeof(real_t));
-                        if (rank==0) printf("DEBUG(%d) received (v2) vertex (gid: %d, lid: %d) from proc %d with coords: %1.2f %1.2f  (i,j): %d %d\n", 
-                                        rank, gid, NNodes, i, recv_coords[i][ndims*j/2], recv_coords[i][ndims*j/2+1], i, j);
-                        memcpy(&metric[NNodes*msize], &recv_metric[i][msize*j/2], msize*sizeof(double));
+                        memcpy(&_coords[NNodes*ndims], &recv_coords[i][ndims*jVer], ndims*sizeof(real_t));
+                        memcpy(&metric[NNodes*msize], &recv_metric[i][msize*jVer], msize*sizeof(double));
                         NNodes++;
                     }
                 }
@@ -1775,8 +1733,6 @@ public:
         NEList.resize(NNodes);
         NNList.resize(NNodes);
 
-//        for (int iVer=0; iVer<NNodes; ++iVer)
-//            if (rank==0) printf("DEBUG (%d) _coords[%d] %1.2f %1.2f\n", rank, iVer, _coords[iVer*ndims], _coords[iVer*ndims+1]);
 
         // Remove useless vertices
         std::vector<int> new_local_numbering(NNodes);
@@ -1799,18 +1755,7 @@ public:
             if (tag) {
                 new_local_numbering[iVer] = new_lnn;
                 assert(new_lnn<=iVer);
-                double old_coords[2];
-                old_coords[0] = _coords[ndims*iVer];
-                old_coords[1] = _coords[ndims*iVer+1];
-//                if (rank==0) printf("DEBUG (%d) old_coords[%d] %1.2f %1.2f\n", rank, iVer, old_coords[0], old_coords[1]);
                 memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
-//                if (_coords[ndims*new_lnn] != old_coords[0] || _coords[ndims*new_lnn+1] != old_coords[1]) {
-//                    printf("DEBUG(%d)  Bug here: old vertex: %d  %1.2f %1.2f   new vertex: %d  %1.2f %1.2f\n", rank,
-//                        iVer, old_coords[0], old_coords[1], new_lnn, _coords[ndims*new_lnn], _coords[ndims*new_lnn+1]);
-//                }
-                if (rank==0) printf("DEBUG (%d) new_coords[%d] %1.2f %1.2f\n", rank, iVer, _coords[new_lnn*ndims], _coords[new_lnn*ndims+1]);
-//                for (int k=0; k<ndims; ++k)
-//                    assert(!std::isnan(_coords[new_lnn*ndims+k]));
                 memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
                 NNList[new_lnn].swap(NNList[iVer]);
                 NEList[new_lnn].swap(NEList[iVer]);
@@ -1836,9 +1781,6 @@ public:
         NEList.resize(NNodes);
         NNList.resize(NNodes);
 
-        for (int iVer=0; iVer<NNodes; ++iVer)
-            for (int k=0; k<ndims; ++k)
-                assert(!std::isnan(_coords[iVer*ndims+k]));
 
         // fix structures
         for (int i=0; i<_ENList.size(); ++i) {
