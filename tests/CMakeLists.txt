@@ -106,7 +106,7 @@ if (ENABLE_VTK)
   ADD_EXECUTABLE(test_mpi_adapt_3d ${PRAGMATIC_TEST_SRC}/test_mpi_adapt_3d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
 
-  ADD_EXECUTABLE(test_migrate ${PRAGMATIC_TEST_SRC}/test_migrate.cpp ${src_lite})
-  TARGET_LINK_LIBRARIES(test_migrate ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_migrate_2d ${PRAGMATIC_TEST_SRC}/test_migrate_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_migrate_2d ${PRAGMATIC_LIBRARIES})
 
 endif()
