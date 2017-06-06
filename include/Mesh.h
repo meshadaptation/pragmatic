@@ -311,7 +311,7 @@ public:
     {
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
-	boundary.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
                 boundary[i*nloc+j] = _boundary[i*nloc+j];
@@ -1293,6 +1293,7 @@ public:
         }
         if(ndims==2) {
             long double area=0, min_ele_area=0, max_ele_area=0;
+//            std::set<std::set<int>> owned_triangles;
 
             size_t i=0;
             for(; i<NElements; i++) {
@@ -1300,6 +1301,11 @@ public:
 //                printf("DEBUG(%d)  element: %d %d %d owned by %d\n", rank, lnn2gnn[n[0]], lnn2gnn[n[1]], lnn2gnn[n[2]], mpi_ele_owner[i]);
                 if((mpi_ele_owner[i]!=rank) || (n[0]<0))
                     continue;
+
+//                std::set<int> tri;
+//                for (int k=0; k<nloc; ++k) 
+//                    tri.insert(lnn2gnn[n[k]]);
+//                owned_triangles.insert(tri);
 
                 area = property->area(get_coords(n[0]),
                                       get_coords(n[1]),
@@ -1316,6 +1322,11 @@ public:
                 if((mpi_ele_owner[i]!=rank) || (n[0]<0))
                     continue;
 
+//                std::set<int> tri;
+//                for (int k=0; k<nloc; ++k) 
+//                    tri.insert(lnn2gnn[n[k]]);
+//                owned_triangles.insert(tri);
+
                 long double larea = property->area(get_coords(n[0]),
                                                    get_coords(n[1]),
                                                    get_coords(n[2]));
@@ -1328,6 +1339,18 @@ public:
                 min_ele_area = std::min(min_ele_area, larea);
                 max_ele_area = std::max(max_ele_area, larea);
             }
+
+//            std::set<std::set<int>>::const_iterator it;
+//            int iTri;
+//            std::set<int>::const_iterator itl;
+//            for (iTri =0, it=owned_triangles.begin(); it!=owned_triangles.end(); ++it, ++iTri) {
+//                printf("DEBUG(%d)  tri: ", rank);
+//                for (itl=(*it).begin(); itl!=(*it).end(); ++itl)
+//                    printf("%d ", *itl);
+//                printf("\n");
+//            }
+
+
 
             MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
@@ -1380,22 +1403,26 @@ public:
             }
         }
 
-        double cachedq=0;
+        double cachedq=0, cachedownedq=0;
         for(size_t i=0; i<NElements; i++) {
             const index_t *n=get_element(i);
             if(n[0]<0)
                 continue;
             cachedq += quality[i];
+            if (mpi_ele_owner[i]==rank)
+                cachedownedq += quality[i];
         }
 
         MPI_Allreduce(MPI_IN_PLACE, &cachedq, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
+        MPI_Allreduce(MPI_IN_PLACE, &cachedownedq, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
 
         double qmean = get_qmean();
         double qmin = get_qmin();
         if(rank==0) {
-            std::cout<<"VERIFY: mean quality......."<<qmean<<std::endl;
-            std::cout<<"VERIFY: min quality........"<<qmin<<std::endl;
-            std::cout<<"VERIFY: cached quality....."<<cachedq<<std::endl;
+            std::cout<<"VERIFY: mean quality............"<<qmean<<std::endl;
+            std::cout<<"VERIFY: min quality............."<<qmin<<std::endl;
+            std::cout<<"VERIFY: cached quality.........."<<cachedq<<std::endl;
+            std::cout<<"VERIFY: cached owned quality...."<<cachedownedq<<std::endl;
         }
 
         int false_cnt = state?0:1;
@@ -1588,6 +1615,10 @@ public:
     /// redistribute the mesh given the list of new owners of the vertices
     void migrate_mesh(int * vertex_new_owner) 
     {
+
+        // TODO: will have to send the boundary together with the elements
+        //                    recompute qualities 
+
         std::map<index_t, index_t> gnn2lnn;
         std::vector< std::vector<index_t> > send_nodes, send_elements, send_boundary;
         std::vector< std::vector<real_t> > send_coords, send_metric;
@@ -1629,12 +1660,23 @@ public:
                 new_procs.insert(new_owner);
 
                 gnnElm[i] = lnn2gnn[iVer];
+//                if (rank==0) printf("DEBUG(%d)  gid: %d  new_owner: %d\n", rank, lnn2gnn[iVer], new_owner);
             }
+
+//            if (rank==0) printf("DEBUG(%d)\n", rank);
+//            if (rank==0) printf("DEBUG(%d) iElm: %d,  gnnElm: %d %d %d\n", rank, iElm, gnnElm[0],gnnElm[1], gnnElm[2]);
+//            if (rank==0) printf("DEBUG(%d)   new_procs: ", rank);
+//            for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) 
+//                if (rank==0) printf("%d ", *it);
+//            if (rank==0) printf("\n");
+
             for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) {
                 int new_proc = *it;
+//                if (rank==0) printf("DEBUG(%d)   new proc: %d\n", rank, new_proc);
                 if (new_proc == rank) 
                     continue;
                 if (!(old_procs.count(new_proc))) {
+//                    if (rank==0) printf("DEBUG(%d)   I'm going to send that element\n", rank);
                     bdy = &boundary[iElm*nloc];
                     send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
                     send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
@@ -1663,10 +1705,30 @@ public:
                 }
             }
         }
+        //MPI_Barrier(_mpi_comm); exit(12);
         /// fix ownerships
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             node_owner[iVer] = vertex_new_owner[iVer];
+//            printf("DEBUG(%d)  iVer: %d  owner: %d\n", rank, iVer, node_owner[iVer]);
         }
+
+/*        printf("DEBUG(%d)  send_nodes:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int iVer = 0; iVer < send_nodes[iPrc].size(); ++iVer) {
+                 printf("%d ", send_nodes[iPrc][iVer]);
+             }
+             printf("\n");
+        }
+        printf("DEBUG(%d)  send_elements:\n", rank);
+        for (int iPrc = 0; iPrc < num_processes; ++iPrc){
+             printf("DEBUG(%d)             [%d]:", rank, iPrc);
+             for (int i = 0; i < send_elements[iPrc].size(); ++i) {
+                 printf("%d ", send_elements[iPrc][i]);
+                 if ((i%nloc)==2) printf("  ");
+             }
+             printf("\n");
+        } */
 
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
@@ -1815,6 +1877,9 @@ public:
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
                     // if I receive an element, I should already have all the vertices
+//                    if (!gnn2lnn.count(elm_gnn[k])) 
+//                        printf("DEBUG(%d)  %d-th vertex (%d) in %d %d %d from proc %d not found in current db\n", 
+//                                rank, k, elm_gnn[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     assert(gnn2lnn.count(elm_gnn[k])); 
                     elm[k] = gnn2lnn[elm_gnn[k]];
                 }
@@ -1919,13 +1984,17 @@ public:
         FILE * logfile = fopen(filename, "w");
 
         for (int iVer=0; iVer<get_number_nodes(); ++iVer){
-          const double * coords = get_coords(iVer);
-          fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d\n", 
-            rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer]);
+            const double * coords = get_coords(iVer);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2]);
         }
         for (int iTri=0; iTri<get_number_elements(); ++iTri){
             const int * tri = get_element(iTri);
-            fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d\n", rank, iTri, tri[0], tri[1], tri[2]);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f\n", 
+                    rank, iTri, tri[0], tri[1], tri[2], lnn2gnn[tri[0]], lnn2gnn[tri[1]], lnn2gnn[tri[2]], quality[iTri]);
         }
 
     }
@@ -2304,17 +2373,17 @@ private:
         }
 
         create_adjacency();
-	    
+        
         create_global_node_numbering();
     }
 
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	    NNList.clear();
-	    NNList.resize(NNodes);
-	    NEList.clear();
-	    NEList.resize(NNodes);
+        NNList.clear();
+        NNList.resize(NNodes);
+        NEList.clear();
+        NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -2322,12 +2391,12 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-		        assert(nid_j<NNodes);
+                assert(nid_j<NNodes);
                 NEList[nid_j].insert(NEList[nid_j].end(), i);
                 for(size_t k=0; k<nloc; k++) {
                     if(j!=k) {
                         index_t nid_k = _ENList[i*nloc+k];
-	                    assert(nid_k<NNodes);
+                        assert(nid_k<NNodes);
                         NNList[nid_j].push_back(nid_k);
                     }
                 }
