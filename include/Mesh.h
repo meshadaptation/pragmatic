@@ -1481,6 +1481,41 @@ public:
     }
 
 
+    void redistribute_halo(int way) 
+    {
+        std::vector<int> node_new_owner(node_owner);
+
+        if (way == -1) {
+            for (int p=rank-1; p>=0; --p) {
+                for (int i=0; i<send[p].size(); ++i) {
+                    node_new_owner[send[p][i]] = p;
+                }
+            }
+        }
+        else if (way == 1) {
+            for (int p=rank+1; p<num_processes; ++p) {
+                for (int i=0; i<send[p].size(); ++i) {
+                    node_new_owner[send[p][i]] = p;
+                }
+            }
+        }
+
+        halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
+
+//        for (int iVer=0; iVer<NNodes; ++iVer) {
+//            if (node_new_owner[iVer] != node_owner[iVer])
+//                printf("DEBUG(%d) gid: %d  new_owner: %d\n", rank,lnn2gnn[iVer], node_new_owner[iVer]);
+//        }
+
+        migrate_mesh(&node_new_owner[0]) ;
+    }
+
+
+
+
+
+
+
     template <typename DATATYPE>
     void communicate(std::vector<std::vector<DATATYPE>> &send_vector, std::vector<std::vector<DATATYPE>> &recv_vector, MPI_Datatype datatype) 
     {
