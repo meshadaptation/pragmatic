@@ -62,6 +62,9 @@
 #include "MetricTensor.h"
 #include "HaloExchange.h"
 
+//#include "MetricField.h"
+
+
 /*! \brief Manages mesh data.
  *
  * This class is used to store the mesh and associated meta-data.
@@ -398,6 +401,13 @@ public:
     {
         assert(metric.size()>0);
         return &(metric[nid*msize]);
+    }
+
+    /// Return metric global array
+    inline const double *get_metric() const 
+    {
+        assert(metric.size()>0);
+        return &(metric[0]);
     }
 
     /// Return copy of metric.
@@ -1850,6 +1860,7 @@ public:
                     // if I receive an element, I should already have all the vertices
                     assert(gnn2lnn.count(elm_gnn[k])); 
                     elm[k] = gnn2lnn[elm_gnn[k]];
+                    assert(elm[k]<NNodes);
                 }
                 // check if element already exists (could have been sent by other proc ? TODO check) 
                 std::set<index_t> intersect1, intersect;
