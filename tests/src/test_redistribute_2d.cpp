@@ -28,15 +28,10 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
 
-//    if (num_processes==1) 
-//        return 0;
-
     bool verbose = false;
     if(argc>1) {
         verbose = std::string(argv[1])=="-v";
     }
-
-//    int imax = atoi(argv[1]);
 
 #ifdef HAVE_VTK
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
@@ -48,23 +43,12 @@ int main(int argc, char **argv)
 
     double m[3] = {0};
     for(size_t i=0; i<NNodes; i++) {
-        double x = mesh->get_coords(i)[0];
-        double h = 0.3*fabs(1-exp(-fabs(x-0.5))) + 0.003;
-        double lbd = 1/(h*h);
-        double lmax = 1/(0.3*0.3);
-        m[0] = lbd;
-        m[1] = lmax;
-        m[2] = lmax;
+        double lmax = 1/(0.01*0.01);
+        m[0] = m[2] = lmax;
+        m[1] = 0;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();
-
-    if(verbose) {
-        std::cout<<"Initial quality:\n";
-        mesh->verify();
-    }
-
-    mesh->redistribute_halo(1);
 
 
     double L_up = sqrt(2.0);
@@ -80,7 +64,6 @@ int main(int argc, char **argv)
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
     for(i=0; i<15; i++) {
-//        printf("DEBUG  ite adapt: %d\n", i);
         double L_ref = std::max(alpha*L_max, L_up);
 
         coarsen.coarsen(L_low, L_ref, false);
@@ -89,9 +72,10 @@ int main(int argc, char **argv)
 
         L_max = mesh->maximal_edge_length();
 
-//        if ( i%5==0 ) 
-//            mesh->redistribute_halo();
-
+        if (i%5==1) {
+            mesh->redistribute_halo(1);
+            metric_field.update_mesh();
+        }
     }
 
     mesh->defragment();
@@ -106,6 +90,7 @@ int main(int argc, char **argv)
 
     VTKTools<double>::export_vtu("../data/test_redistribute_2d", mesh);
     
+    if (rank==0) printf("DEBUG  verify at the end\n");
     if (mesh->verify())
         std::cout<<"pass"<<std::endl;
 

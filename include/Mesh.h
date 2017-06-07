@@ -1203,6 +1203,7 @@ public:
         }
         MPI_Allreduce(MPI_IN_PLACE, &tag, 1, MPI_INT, MPI_SUM, get_mpi_comm());
         if (!tag && rank==0)  std::cout << "pass\n";
+        if (tag) exit(1);
 
         // Check for the correctness of NNList and NEList.
         std::vector< std::set<index_t> > local_NEList(NNodes);
@@ -1502,12 +1503,10 @@ public:
 
         halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
 
-//        for (int iVer=0; iVer<NNodes; ++iVer) {
-//            if (node_new_owner[iVer] != node_owner[iVer])
-//                printf("DEBUG(%d) gid: %d  new_owner: %d\n", rank,lnn2gnn[iVer], node_new_owner[iVer]);
-//        }
-
         migrate_mesh(&node_new_owner[0]) ;
+
+        // TODO here update through the metric
+
     }
 
 
@@ -1962,10 +1961,22 @@ public:
         for (int iTri=0; iTri<get_number_elements(); ++iTri){
             const int * tri = get_element(iTri);
             if (ndims==2) 
-                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f\n", 
-                    rank, iTri, tri[0], tri[1], tri[2], lnn2gnn[tri[0]], lnn2gnn[tri[1]], lnn2gnn[tri[2]], quality[iTri]);
+                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
+                    rank, iTri, tri[0], tri[1], tri[2], lnn2gnn[tri[0]], lnn2gnn[tri[1]], lnn2gnn[tri[2]], quality[iTri],
+                    boundary[tri[0]], boundary[tri[1]], boundary[tri[2]]);
         }
 
+        fprintf(logfile, "DBG(%d)  Adjacency:\n");
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            fprintf(logfile, "DBG(%d)  vertex[%d (%d)] ", rank, iVer, lnn2gnn[iVer]);
+            fprintf(logfile, "  Neighboring nodes: ");
+            for (int i=0; i<NNList[iVer].size(); ++i) 
+                fprintf(logfile, "%d (%d) ", NNList[iVer][i], lnn2gnn[NNList[iVer][i]]);
+            fprintf(logfile, "  Neighboring elements: ");
+            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it)
+                fprintf(logfile, " %d ", *it); 
+            fprintf(logfile, "\n");
+        }
     }
 
 
