@@ -2037,6 +2037,12 @@ public:
                 update_quality<3>(iElm);
         }
 
+
+
+        halo_update<int, 1>(_mpi_comm, send, recv, node_owner);
+        fix_halos();
+
+
     }
 
 

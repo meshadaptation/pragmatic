@@ -166,6 +166,7 @@ public:
 #pragma single
                 {
                     good_q = qsum/NElements;
+                    //if (!(std::isnormal(good_q))) printf("DEBUG(%d)  good_q is %d\n", rank, good_q);
                     assert(std::isnormal(good_q));
                 }
             }
