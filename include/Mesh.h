@@ -1208,7 +1208,8 @@ public:
         for(int iVer=0; iVer<NNodes; ++iVer) {
             if (mpi_node_owner[iVer] != node_owner[iVer]) {
                 tag++;
-                printf("Node %d on rank %d has an ownership problem\n", iVer, rank);
+                printf("Node %d on rank %d has an ownership problem: node_owner: %d but received from %d\n", 
+                    iVer, rank, node_owner[iVer], mpi_node_owner[iVer]);
             }
         }
         MPI_Allreduce(MPI_IN_PLACE, &tag, 1, MPI_INT, MPI_SUM, get_mpi_comm());
@@ -1513,6 +1514,9 @@ public:
 
         halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
 
+//        for (int iVer=0; iVer<NNodes; ++iVer) 
+//            printf("DEBUG(%d)  l(g)id: %d (%d), new(old) owner: %d %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer], node_owner[iVer]);
+
         migrate_mesh(&node_new_owner[0]) ;
 
         // TODO here update through the metric
@@ -1661,6 +1665,8 @@ public:
         }
 
         for (int iElm = 0; iElm < NElements; ++iElm) {
+            if (_ENList[iElm*nloc] < 0) 
+                continue;
             std::set<index_t> new_procs, old_procs;
             int gnnElm[nloc], *bdy;
 
@@ -1771,6 +1777,142 @@ public:
         NNList.resize(NNodes);
 
 
+#if 0
+        // Remove useless vertices
+        std::vector<int> new_local_numbering(NNodes);
+        int count = 0;
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            int tag = 0; // tells is vertex should be there
+            if (node_owner[iVer] == rank)
+                tag = 1;
+            else if (iVer >= NOldNodes)
+                tag = 1;
+            else {
+                for (int ngb=0; ngb < NNList[iVer].size(); ++ngb) {
+                    if (node_owner[NNList[iVer][ngb]] == rank) {
+                        tag = 1;
+                        break;
+                    }
+                }
+            }
+            int new_lnn = count;
+            if (tag) {
+                new_local_numbering[iVer] = new_lnn;
+                assert(new_lnn<=iVer);
+                memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
+                memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
+                node_owner[new_lnn] = node_owner[iVer];
+                NNList[new_lnn].swap(NNList[iVer]);
+                NEList[new_lnn].swap(NEList[iVer]);
+                lnn2gnn[new_lnn] = lnn2gnn[iVer];
+                count++;
+            }
+            else {
+                new_local_numbering[iVer] = -1;
+                for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it) {
+                    for (int k=0; k<nloc; ++k) {
+                        _ENList[*it*nloc+k] = -1;            
+                    }
+                }
+            }
+        }
+
+        assert(count<=NNodes);
+        NNodes = count;
+        _coords.resize(NNodes*ndims);
+        metric.resize(NNodes*msize);
+        node_owner.resize(NNodes);
+        lnn2gnn.resize(NNodes);
+        NEList.resize(NNodes);
+        NNList.resize(NNodes);
+
+
+        // fix structures
+        for (int i=0; i<_ENList.size(); ++i) {
+            if (_ENList[i] >= 0)
+                _ENList[i] = new_local_numbering[_ENList[i]];
+        }
+
+        for (int iVer=0; iVer < NNodes; ++iVer) {
+            for (int i=0; i< NNList[iVer].size(); ++i) {
+                if (new_local_numbering[NNList[iVer][i]] >= 0) {
+                    NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
+                }
+            }
+        }
+        for (std::map<index_t,index_t>::iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it) {
+            it->second = new_local_numbering[it->second];
+        }
+        new_local_numbering.clear();
+#endif
+
+        // Now send the elements
+        std::vector<std::vector<int>> recv_elements(num_processes);
+        communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
+        std::vector<std::vector<int>> recv_boundary(num_processes);
+        communicate<int>(send_boundary, recv_boundary, MPI_INDEX_T);
+
+        // Now treat new elements
+        int NNewElements = NElements;
+        for(int i=0; i<num_processes; i++) 
+            NNewElements += recv_elements[i].size()/2;
+        _ENList.resize(NNewElements*nloc);
+        boundary.resize(NNewElements*nloc);
+
+        for(int i=0; i<num_processes; i++) {
+            for (int j = 0; j < recv_elements[i].size(); j+=nloc){
+                int *elm_gnn = &recv_elements[i][j];
+                int elm[nloc];
+                for (int k=0; k<nloc; ++k) {
+                    // if I receive an element, I should already have all the vertices
+                    if (!gnn2lnn.count(elm_gnn[k])) 
+                        printf("DEBUG(%d)  %d-th vertex (%d) in %d %d %d from proc %d not found in current db\n", 
+                                rank, k, elm_gnn[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
+                    assert(gnn2lnn.count(elm_gnn[k])); 
+                    elm[k] = gnn2lnn[elm_gnn[k]];
+                    if (!(elm[k]<NNodes)) 
+                        printf("DEBUG(%d)  %d-th vertex (lid %d) of element gnn: %d %d %d  from proc %d is above NNode: %d \n", 
+                                rank, k, elm[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i, NNodes );
+                    assert(elm[k]<NNodes);
+                }
+                // check if element already exists (could have been sent by other proc ? TODO check) 
+                std::set<index_t> intersect1, intersect;
+                std::set_intersection(NEList[elm[0]].begin(), NEList[elm[0]].end(), 
+                                      NEList[elm[1]].begin(), NEList[elm[1]].end(),
+                                      std::inserter(intersect1, intersect1.begin()));
+                if (ndims == 2) {
+                    std::set_intersection(intersect1.begin(), intersect1.end(), 
+                                          NEList[elm[2]].begin(), NEList[elm[2]].end(),
+                                          std::inserter(intersect, intersect.begin()));
+                }
+                else {
+                    std::set<index_t> intersect2;
+                    std::set_intersection(NEList[elm[2]].begin(), NEList[elm[2]].end(), 
+                                          NEList[elm[3]].begin(), NEList[elm[3]].end(),
+                                         std::inserter(intersect2, intersect2.begin()));
+                    std::set_intersection(intersect1.begin(), intersect1.end(), 
+                                          intersect2.begin(), intersect2.end(),
+                                          std::inserter(intersect, intersect.begin()));
+                }
+                if (!intersect.empty()) {
+                    continue;
+                }
+                for (int k=0; k<nloc; ++k) {
+                    int iVer = elm[k];
+                    int gid = elm_gnn[k];
+                    _ENList[NElements*nloc+k] = iVer;
+                    boundary[NElements*nloc+k] = recv_boundary[i][j+k];
+                    NEList[iVer].insert(NElements); // I need to update NEList because this is how I check if elements are already there 
+                }
+                NElements++;
+            }
+        }
+        assert(NElements<=NNewElements);
+        _ENList.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
+
+
+#if 1
         // Remove useless vertices
         std::vector<int> new_local_numbering(NNodes);
         int count = 0;
@@ -1838,66 +1980,7 @@ public:
         }
         new_local_numbering.clear();
 
-
-        // Now send the elements
-        std::vector<std::vector<int>> recv_elements(num_processes);
-        communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
-        std::vector<std::vector<int>> recv_boundary(num_processes);
-        communicate<int>(send_boundary, recv_boundary, MPI_INDEX_T);
-
-        // Now treat new elements
-        int NNewElements = NElements;
-        for(int i=0; i<num_processes; i++) 
-            NNewElements += recv_elements[i].size()/2;
-        _ENList.resize(NNewElements*nloc);
-        boundary.resize(NNewElements*nloc);
-
-        for(int i=0; i<num_processes; i++) {
-            for (int j = 0; j < recv_elements[i].size(); j+=nloc){
-                int *elm_gnn = &recv_elements[i][j];
-                int elm[nloc];
-                for (int k=0; k<nloc; ++k) {
-                    // if I receive an element, I should already have all the vertices
-                    assert(gnn2lnn.count(elm_gnn[k])); 
-                    elm[k] = gnn2lnn[elm_gnn[k]];
-                    assert(elm[k]<NNodes);
-                }
-                // check if element already exists (could have been sent by other proc ? TODO check) 
-                std::set<index_t> intersect1, intersect;
-                std::set_intersection(NEList[elm[0]].begin(), NEList[elm[0]].end(), 
-                                      NEList[elm[1]].begin(), NEList[elm[1]].end(),
-                                      std::inserter(intersect1, intersect1.begin()));
-                if (ndims == 2) {
-                    std::set_intersection(intersect1.begin(), intersect1.end(), 
-                                          NEList[elm[2]].begin(), NEList[elm[2]].end(),
-                                          std::inserter(intersect, intersect.begin()));
-                }
-                else {
-                    std::set<index_t> intersect2;
-                    std::set_intersection(NEList[elm[2]].begin(), NEList[elm[2]].end(), 
-                                          NEList[elm[3]].begin(), NEList[elm[3]].end(),
-                                         std::inserter(intersect2, intersect2.begin()));
-                    std::set_intersection(intersect1.begin(), intersect1.end(), 
-                                          intersect2.begin(), intersect2.end(),
-                                          std::inserter(intersect, intersect.begin()));
-                }
-                if (!intersect.empty()) {
-                    continue;
-                }
-                for (int k=0; k<nloc; ++k) {
-                    int iVer = elm[k];
-                    int gid = elm_gnn[k];
-                    _ENList[NElements*nloc+k] = iVer;
-                    boundary[NElements*nloc+k] = recv_boundary[i][j+k];
-                    NEList[iVer].insert(NElements); // I need to update NEList because this is how I check if elements are already there 
-                }
-                NElements++;
-            }
-        }
-        assert(NElements<=NNewElements);
-        _ENList.resize(NElements*nloc);
-        boundary.resize(NElements*nloc);
-
+#endif
 
         // Remove dead elements
         std::vector<int> new_elm_numbering(NElements);
@@ -1917,6 +2000,7 @@ public:
         NElements = count;
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
+
         
         // Fix NEList and NNList by recreating them
         create_adjacency();
@@ -1927,18 +2011,20 @@ public:
 
         // fix structures with gnn
         for (int i=0; i<send_map.size(); ++i){
+            std::map<index_t,index_t> send_map_new;
             for (std::map<index_t,index_t>::iterator it=send_map[i].begin(); it!=send_map[i].end(); ++it) {
                 int lid = it->second;
-                send_map[i].erase(it);
-                send_map[i][lnn2gnn[lid]] = lid;
+                send_map_new[lnn2gnn[lid]] = lid;
             }
+            send_map[i].swap(send_map_new);
         }
         for (int i=0; i<recv_map.size(); ++i){
+            std::map<index_t,index_t> recv_map_new;
             for (std::map<index_t,index_t>::iterator it=recv_map[i].begin(); it!=recv_map[i].end(); ++it) {
                 int lid = it->second;
-                recv_map[i].erase(it);
-                recv_map[i][lnn2gnn[lid]] = lid;
+                recv_map_new[lnn2gnn[lid]] = lid;
             }
+            recv_map[i].swap(recv_map_new);
         }
 
 
@@ -1977,7 +2063,7 @@ public:
                     boundary[tri[0]], boundary[tri[1]], boundary[tri[2]]);
         }
 
-        fprintf(logfile, "DBG(%d)  Adjacency:\n");
+        fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);
         for (int iVer=0; iVer<get_number_nodes(); ++iVer){
             fprintf(logfile, "DBG(%d)  vertex[%d (%d)] ", rank, iVer, lnn2gnn[iVer]);
             fprintf(logfile, "  Neighboring nodes: ");
@@ -1988,6 +2074,7 @@ public:
                 fprintf(logfile, " %d ", *it); 
             fprintf(logfile, "\n");
         }
+        fclose(logfile);
     }
 
 
@@ -2040,6 +2127,7 @@ public:
         for (int i=0; i<node_owner.size();++i)
             fprintf(logfile, "  %d->%d", i, node_owner[i]);
         fprintf(logfile, "\n");
+        fclose(logfile);
     }
 
 
@@ -2587,6 +2675,9 @@ private:
         for(int i=0; i<num_processes; i++) {
             send_map[i].clear();
             for(std::vector<int>::const_iterator it=send[i].begin(); it!=send[i].end(); ++it) {
+                if (node_owner[*it]!=rank) 
+                    printf("DEBUG(%d)  vertex %d (%d, %1.2f %1.2f) is sent to proc %d but owner is proc %d\n", 
+                        rank, *it, lnn2gnn[*it], _coords[2*(*it)], _coords[2*(*it)+1],i, node_owner[*it]);
                 assert(node_owner[*it]==rank);
                 send_map[i][lnn2gnn[*it]] = *it;
             }
