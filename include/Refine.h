@@ -208,7 +208,7 @@ public:
             memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
             memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
 
-            // Fix IDs of new vertices
+            // Fix local IDs of new vertices
             assert(newVertices[tid].size()==splitCnt[tid]);
             for(size_t i=0; i<splitCnt[tid]; i++) {
                 newVertices[tid][i].id = threadIdx[tid]+i;
@@ -270,6 +270,10 @@ public:
 
                     if(_mesh->node_owner[vid] == rank)
                         _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
+
+                    const double *coords = _mesh->get_coords(vid);
+                    if (fabs(coords[0]-0.5)<1.e-5 && fabs(coords[1]-0.3)<1.e-5) 
+                        printf("DEBUG(%d)  flagged vertex has lid: %d  gid: %d after being inserted\n", rank, vid, _mesh->lnn2gnn[vid]);
                 }
             }
 
@@ -374,7 +378,9 @@ public:
                 }
             }
 
-            printf("DEBUG(%d)  fucu\n", rank);
+//            printf("DEBUG(%d)  fucu\n", rank);
+            _mesh->print_mesh("bfhu");
+            _mesh->print_halo("bfhu");
 
             // Update halo.
             if(nprocs>1) {
@@ -385,6 +391,9 @@ public:
                     for(size_t i=0; i<edgeSplitCnt; ++i)
                     {
                         DirectedEdge<index_t> *vert = &allNewVertices[i];
+                        const double * coords = _mesh->get_coords(vert->id);
+                        int flag = 0;
+                        if (fabs(coords[0]-0.5)<1.e-5 && fabs(coords[1]-0.3)<1.e-5) flag = 1;
 
                         if(_mesh->node_owner[vert->id] != rank) {
                             // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
@@ -396,6 +405,7 @@ public:
                                     visible = true;
                                     DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
                                     recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
+                                    if (flag) printf("DEBUG(%d)  flagged vertex added to recv_additional[%d] with lid: %d\n", rank, _mesh->node_owner[vert->id], gnn_edge.id);
                                     break;
                                 }
                             }
@@ -413,6 +423,7 @@ public:
                                 for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc) {
                                     DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
                                     send_additional[*proc].insert(gnn_edge);
+                                    if (flag) printf("DEBUG(%d)  flagged vertex added to send_additional[%d] with lid: %d\n", rank, *proc, gnn_edge.id);
                                 }
                             }
                         }
@@ -479,14 +490,19 @@ public:
                             cidSend_additional[i].clear();
                         }
                     }
-                                printf("DEBUG(%d)  fucu2\n", rank);
-                                MPI_Barrier(MPI_COMM_WORLD);
+
+                    _mesh->print_mesh("bftrim");
+                    _mesh->print_halo("bftrim");
+
                                 
-//                    _mesh->trim_halo();
-                    _mesh->fix_halos();
-                    printf("DEBUG(%d)  fucu2\n", rank);
-                                MPI_Barrier(MPI_COMM_WORLD);
-                                if (tag==3) exit(3);
+                    _mesh->trim_halo();
+
+                    // trim vertices
+                    for (int iVer=0; iVer<_mesh->get_number_nodes(); ++iVer) {
+                        if (_mesh->NNList[iVer].empty() && _mesh->NEList[iVer].empty())
+                            _mesh->erase_vertex(iVer);
+                    }
+
                 }
             }
 

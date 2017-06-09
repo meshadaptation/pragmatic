@@ -1500,6 +1500,7 @@ public:
         if (way == -1) {
             for (int p=rank-1; p>=0; --p) {
                 for (int i=0; i<send[p].size(); ++i) {
+                    assert(lnn2gnn[send[p][i]] >= 0);
                     node_new_owner[send[p][i]] = p;
                 }
             }
@@ -1507,15 +1508,40 @@ public:
         else if (way == 1) {
             for (int p=rank+1; p<num_processes; ++p) {
                 for (int i=0; i<send[p].size(); ++i) {
+                    assert(lnn2gnn[send[p][i]] >= 0);
                     node_new_owner[send[p][i]] = p;
                 }
             }
         }
 
+        std::set<int> flagged;
+        flagged.insert(4801);
+        flagged.insert(36653);
+        flagged.insert(36665);
+        flagged.insert(52976);
+        flagged.insert(36664);
+        flagged.insert(36669);
+        flagged.insert(36654);
+        flagged.insert(52911);
+        flagged.insert(52981);
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (flagged.count(lnn2gnn[iVer])) {
+                printf("DEBUG(%d)  before hu new_owner[%d (%d)] : %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer]);
+            }
+        }
+
+
         halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
 
 //        for (int iVer=0; iVer<NNodes; ++iVer) 
 //            printf("DEBUG(%d)  l(g)id: %d (%d), new(old) owner: %d %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer], node_owner[iVer]);
+
+        MPI_Barrier(_mpi_comm);
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (flagged.count(lnn2gnn[iVer])) {
+                printf("DEBUG(%d)  after hu new_owner[%d (%d)] : %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer]);
+            }
+        }
 
         migrate_mesh(&node_new_owner[0]) ;
 
@@ -1594,6 +1620,7 @@ public:
                 recv_glob[owner].push_back(gid);
                 recv_map_new[owner][gid] = iVer;
                 recv_halo_new.insert(iVer);
+                if (gid==36664) printf("DEBUG(%d) I put %d in recv_new[%d]\n", rank, gid, owner);
             }
         }
 
@@ -1617,6 +1644,7 @@ public:
                 send_new[p].push_back(lid);
                 send_map_new[p][gid] = lid;
                 send_halo_new.insert(lid);
+                if (gid==36664) printf("DEBUG(%d) I put %d in send_new[%d]\n", rank, gid, p);
             }
         }
 
