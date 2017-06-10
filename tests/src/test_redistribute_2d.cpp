@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 //        m[0] = m[2] = lmax;
 //        m[1] = 0;
         double x = mesh->get_coords(i)[0];
-        double h = 0.3*fabs(1-exp(-fabs(x-0.5))) + 0.002;
+        double h = 0.2*fabs(1-exp(-fabs(x-0.5))) + 0.001;
         double lbd = 1/(h*h);
         double lmax = 1/(0.2*0.2);
         m[0] = lbd;
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
-    for(i=0; i<15; i++) {
+    for(i=0; i<30; i++) {
         printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
@@ -90,8 +90,8 @@ int main(int argc, char **argv)
         mesh->print_halo(name);
 //        VTKTools<double>::export_vtu(name, mesh);
 
-        if (rank==0)printf("DEBUG(%d)  verify after coarsen\n", rank);
-        mesh->verify();
+//        if (rank==0)printf("DEBUG(%d)  verify after coarsen\n", rank);
+//        mesh->verify();
 
         swapping.swap(0.7);
 
@@ -101,8 +101,8 @@ int main(int argc, char **argv)
         mesh->print_halo(name);
 //        if (i==2) VTKTools<double>::export_vtu(name, mesh);
 
-        if (rank==0)printf("DEBUG(%d)  verify after swap\n", rank);
-        mesh->verify();
+//        if (rank==0)printf("DEBUG(%d)  verify after swap\n", rank);
+//        mesh->verify();
 
         refine.refine(L_ref, i);
 
@@ -111,13 +111,13 @@ int main(int argc, char **argv)
         mesh->print_halo(name);
 //        VTKTools<double>::export_vtu(name, mesh);
 
-        if (rank==0)printf("DEBUG(%d)  verify after refine\n", rank);
-        mesh->verify();
+//        if (rank==0)printf("DEBUG(%d)  verify after refine\n", rank);
+//        mesh->verify();
 
         L_max = mesh->maximal_edge_length();
 
 #if 1
-        int ite_red = 1;
+        int ite_red = 7;
         if (i>=0 && i%ite_red==0) {
             printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
@@ -127,16 +127,17 @@ int main(int argc, char **argv)
 //            VTKTools<double>::export_vtu(name, mesh);
 
             mesh->fix_halos();
-            mesh->verify();
+//            mesh->verify();
 
             sprintf(name, "beforered.%d", i/ite_red);
-            mesh->defragment();
+//            if (i==6) mesh->defragment();
             mesh->print_mesh(name);
             mesh->print_halo(name);
-            VTKTools<double>::export_vtu(name, mesh);
+//            if (i==6)  VTKTools<double>::export_vtu(name, mesh);
 
-            int tag = 2*(i%2)-1;
-            if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
+//            int tag = 2*(i%2)-1;
+//            if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
+            int tag = 0;
             mesh->redistribute_halo(tag);
 
             sprintf(name, "afterred.%d", i/ite_red);
@@ -160,7 +161,7 @@ int main(int argc, char **argv)
 
     mesh->defragment();
     if (rank==0)printf("DEBUG(%d)  verify after defrag\n", rank);
-    mesh->verify();
+//    mesh->verify();
 
     smooth.smart_laplacian(20);
     smooth.optimisation_linf(20);

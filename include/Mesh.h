@@ -406,7 +406,7 @@ public:
     /// Return metric global array
     inline const double *get_metric() const 
     {
-        assert(metric.size()>0);
+        assert(metric.size()>0 || NNodes==0);
         return &(metric[0]);
     }
 
@@ -1497,7 +1497,7 @@ public:
     {
         std::vector<int> node_new_owner(node_owner);
 
-        if (way == -1) {
+        if (way == -1) { // give to smaller rank
             for (int p=rank-1; p>=0; --p) {
                 for (int i=0; i<send[p].size(); ++i) {
                     assert(lnn2gnn[send[p][i]] >= 0);
@@ -1505,7 +1505,7 @@ public:
                 }
             }
         }
-        else if (way == 1) {
+        else if (way == 1) { // give to larger rank
             for (int p=rank+1; p<num_processes; ++p) {
                 for (int i=0; i<send[p].size(); ++i) {
                     assert(lnn2gnn[send[p][i]] >= 0);
@@ -1513,35 +1513,44 @@ public:
                 }
             }
         }
-
-        std::set<int> flagged;
-        flagged.insert(4801);
-        flagged.insert(36653);
-        flagged.insert(36665);
-        flagged.insert(52976);
-        flagged.insert(36664);
-        flagged.insert(36669);
-        flagged.insert(36654);
-        flagged.insert(52911);
-        flagged.insert(52981);
-        for (int iVer=0; iVer<NNodes; ++iVer) {
-            if (flagged.count(lnn2gnn[iVer])) {
-                printf("DEBUG(%d)  before hu new_owner[%d (%d)] : %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer]);
+        else if (way==0) { // give to rank with the least vertices
+            std::vector<int> NNodesPerRank(num_processes);
+            MPI_Allgather(&NNodes, 1, MPI_INDEX_T, &NNodesPerRank[0], 1, MPI_INDEX_T, _mpi_comm);
+            for (int p=0; p<num_processes; ++p) {
+                for (int i=0; i<send[p].size(); ++i) {
+                    int iVer = send[p][i];
+                    if (NNodesPerRank[p] < NNodesPerRank[node_new_owner[iVer]] || node_new_owner[iVer] == node_owner[iVer]) {
+                        assert(lnn2gnn[iVer] >= 0);
+                        node_new_owner[iVer] = p;
+                    }
+                }
             }
+            for (int iElm=0; iElm<NElements; ++iElm) {
+                int is_halo_elm = 0;
+                for (int k=0; k<nloc; ++k) {
+                    if (is_halo_node(_ENList[iElm*nloc+k])){
+                        is_halo_elm = 1;
+                        break;
+                    }
+                }
+                if (is_halo_elm) {
+                    int min_rank = 0;
+                    int min_nnodes = NNodesPerRank[_ENList[iElm*nloc]];
+                    for (int k=1; k<nloc; ++k) {
+                        if (NNodesPerRank[_ENList[iElm*nloc+k]] < min_nnodes) {
+                            min_nnodes = NNodesPerRank[_ENList[iElm*nloc+k]];
+                            min_rank = node_new_owner[_ENList[iElm*nloc+k]];
+                        }
+                    }
+                    for (int k=1; k<nloc; ++k) {
+                        node_new_owner[_ENList[iElm*nloc+k]] = min_rank;
+                    }
+                }
+            }
+                
         }
-
 
         halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
-
-//        for (int iVer=0; iVer<NNodes; ++iVer) 
-//            printf("DEBUG(%d)  l(g)id: %d (%d), new(old) owner: %d %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer], node_owner[iVer]);
-
-        MPI_Barrier(_mpi_comm);
-        for (int iVer=0; iVer<NNodes; ++iVer) {
-            if (flagged.count(lnn2gnn[iVer])) {
-                printf("DEBUG(%d)  after hu new_owner[%d (%d)] : %d\n", rank, iVer, lnn2gnn[iVer], node_new_owner[iVer]);
-            }
-        }
 
         migrate_mesh(&node_new_owner[0]) ;
 
@@ -1706,14 +1715,17 @@ public:
                 new_procs.insert(new_owner);
                 gnnElm[i] = lnn2gnn[iVer];
             }
+            // Only send elements that belong to *this* processor
             for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) {
                 int new_proc = *it;
                 if (new_proc == rank) 
                     continue;
                 if (!(old_procs.count(new_proc))) {
-                    bdy = &boundary[iElm*nloc];
-                    send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
-                    send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
+//                    if (*old_procs.begin() == rank) {
+                        bdy = &boundary[iElm*nloc];
+                        send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
+                        send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
+//                    }
                 }
 
                 for (int i=0; i<nloc; ++i) {
@@ -1743,8 +1755,7 @@ public:
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             node_owner[iVer] = vertex_new_owner[iVer];
         }
-
-
+        
 
         ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
 
@@ -1805,75 +1816,6 @@ public:
         NNList.resize(NNodes);
 
 
-#if 0
-        // Remove useless vertices
-        std::vector<int> new_local_numbering(NNodes);
-        int count = 0;
-        for (int iVer = 0; iVer < NNodes; ++iVer) {
-            int tag = 0; // tells is vertex should be there
-            if (node_owner[iVer] == rank)
-                tag = 1;
-            else if (iVer >= NOldNodes)
-                tag = 1;
-            else {
-                for (int ngb=0; ngb < NNList[iVer].size(); ++ngb) {
-                    if (node_owner[NNList[iVer][ngb]] == rank) {
-                        tag = 1;
-                        break;
-                    }
-                }
-            }
-            int new_lnn = count;
-            if (tag) {
-                new_local_numbering[iVer] = new_lnn;
-                assert(new_lnn<=iVer);
-                memmove(&_coords[ndims*new_lnn], &_coords[ndims*iVer], ndims*sizeof(real_t));
-                memmove(&metric[msize*new_lnn], &metric[msize*iVer], msize*sizeof(real_t));
-                node_owner[new_lnn] = node_owner[iVer];
-                NNList[new_lnn].swap(NNList[iVer]);
-                NEList[new_lnn].swap(NEList[iVer]);
-                lnn2gnn[new_lnn] = lnn2gnn[iVer];
-                count++;
-            }
-            else {
-                new_local_numbering[iVer] = -1;
-                for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it) {
-                    for (int k=0; k<nloc; ++k) {
-                        _ENList[*it*nloc+k] = -1;            
-                    }
-                }
-            }
-        }
-
-        assert(count<=NNodes);
-        NNodes = count;
-        _coords.resize(NNodes*ndims);
-        metric.resize(NNodes*msize);
-        node_owner.resize(NNodes);
-        lnn2gnn.resize(NNodes);
-        NEList.resize(NNodes);
-        NNList.resize(NNodes);
-
-
-        // fix structures
-        for (int i=0; i<_ENList.size(); ++i) {
-            if (_ENList[i] >= 0)
-                _ENList[i] = new_local_numbering[_ENList[i]];
-        }
-
-        for (int iVer=0; iVer < NNodes; ++iVer) {
-            for (int i=0; i< NNList[iVer].size(); ++i) {
-                if (new_local_numbering[NNList[iVer][i]] >= 0) {
-                    NNList[iVer][i] = new_local_numbering[NNList[iVer][i]];
-                }
-            }
-        }
-        for (std::map<index_t,index_t>::iterator it=gnn2lnn.begin(); it!=gnn2lnn.end(); ++it) {
-            it->second = new_local_numbering[it->second];
-        }
-        new_local_numbering.clear();
-#endif
-
         // Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
         communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
@@ -1893,14 +1835,8 @@ public:
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
                     // if I receive an element, I should already have all the vertices
-                    if (!gnn2lnn.count(elm_gnn[k])) 
-                        printf("DEBUG(%d)  %d-th vertex (%d) in %d %d %d from proc %d not found in current db\n", 
-                                rank, k, elm_gnn[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
-                    assert(gnn2lnn.count(elm_gnn[k])); 
+                   assert(gnn2lnn.count(elm_gnn[k])); 
                     elm[k] = gnn2lnn[elm_gnn[k]];
-                    if (!(elm[k]<NNodes)) 
-                        printf("DEBUG(%d)  %d-th vertex (lid %d) of element gnn: %d %d %d  from proc %d is above NNode: %d \n", 
-                                rank, k, elm[k], elm_gnn[0], elm_gnn[1], elm_gnn[2], i, NNodes );
                     assert(elm[k]<NNodes);
                 }
                 // check if element already exists (could have been sent by other proc ? TODO check) 
@@ -1931,6 +1867,12 @@ public:
                     _ENList[NElements*nloc+k] = iVer;
                     boundary[NElements*nloc+k] = recv_boundary[i][j+k];
                     NEList[iVer].insert(NElements); // I need to update NEList because this is how I check if elements are already there 
+                    // updte neighbors: useful to know when I need to delete a vertex
+                    for (int l=k+1; l<k+nloc; ++l) {
+                        int iVerNgb = elm[l%nloc];
+                        NNList[iVer].push_back(iVerNgb);
+                        NNList[iVerNgb].push_back(iVer);
+                    }
                 }
                 NElements++;
             }
@@ -1938,11 +1880,10 @@ public:
         assert(NElements<=NNewElements);
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
+        
 
-
-#if 1
         // Remove useless vertices
-        std::vector<int> new_local_numbering(NNodes);
+        std::vector<int> new_local_numbering(NNodes, -1);
         int count = 0;
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int tag = 0; // tells is vertex should be there
@@ -1952,7 +1893,11 @@ public:
                 tag = 1;
             else {
                 for (int ngb=0; ngb < NNList[iVer].size(); ++ngb) {
-                    if (node_owner[NNList[iVer][ngb]] == rank) {
+                    int ngb_vid = NNList[iVer][ngb]; // this is the old id because we don't update NNList now
+                    int ngb_new_vid = new_local_numbering[ngb_vid];
+                    if (ngb_vid > iVer) ngb_new_vid = ngb_vid; // has not yet been treated
+                    if (ngb_new_vid < 0) continue;  // has been deleted previously
+                    if (node_owner[ngb_new_vid] == rank) {
                         tag = 1;
                         break;
                     }
@@ -1971,7 +1916,6 @@ public:
                 count++;
             }
             else {
-                new_local_numbering[iVer] = -1;
                 for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it) {
                     for (int k=0; k<nloc; ++k) {
                         _ENList[*it*nloc+k] = -1;            
@@ -2008,7 +1952,6 @@ public:
         }
         new_local_numbering.clear();
 
-#endif
 
         // Remove dead elements
         std::vector<int> new_elm_numbering(NElements);
@@ -2094,7 +2037,7 @@ public:
             if (ndims==2) 
                 fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
                     rank, iTri, tri[0], tri[1], tri[2], lnn2gnn[tri[0]], lnn2gnn[tri[1]], lnn2gnn[tri[2]], quality[iTri],
-                    boundary[tri[0]], boundary[tri[1]], boundary[tri[2]]);
+                    boundary[nloc*iTri], boundary[nloc*iTri+1], boundary[nloc*iTri+2]);
         }
 
         fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);
@@ -2725,7 +2668,7 @@ private:
     }
 
     void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt)
-    {
+    {    
         // MPI_Requests for all non-blocking communications.
         std::vector<MPI_Request> request(num_processes*2);
 
@@ -2738,7 +2681,7 @@ private:
                 recv_buff[i].resize(recv_cnt[i]);
                 MPI_Irecv(&(recv_buff[i][0]), recv_buff[i].size(), MPI_INDEX_T, i, 0, _mpi_comm, &(request[i]));
             }
-        }
+        }        
 
         // Non-blocking sends.
         std::vector< std::vector<index_t> > send_buff(num_processes);
