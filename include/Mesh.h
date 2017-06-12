@@ -277,6 +277,93 @@ public:
         }
     }
 
+    void recreate_boundary()
+    {
+
+        size_t NNodes = get_number_nodes();
+        size_t NElements = get_number_elements();
+
+        // Initialise the boundary array
+        boundary.resize(NElements*nloc);
+        std::fill(boundary.begin(), boundary.end(), -2);
+
+        #pragma omp parallel
+        {
+            if(ndims==2) {
+                // Check neighbourhood of each element
+                #pragma omp for schedule(guided)
+                for(size_t i=0; i<NElements; i++) {
+                    if(_ENList[i*3]==-1)
+                        continue;
+
+                    for(int j=0; j<3; j++) {
+                        int n1 = _ENList[i*3+(j+1)%3];
+                        int n2 = _ENList[i*3+(j+2)%3];
+
+                        if(is_owned_node(n1)||is_owned_node(n2)) {
+                            std::set<int> neighbours;
+                            set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                                             NEList[n2].begin(), NEList[n2].end(),
+                                             inserter(neighbours, neighbours.begin()));
+
+                            if(neighbours.size()==2) {
+                                if(*neighbours.begin()==(int)i)
+                                    boundary[i*3+j] = *neighbours.rbegin();
+                                else
+                                    boundary[i*3+j] = *neighbours.begin();
+                            }
+                        } else {
+                            // This is a halo facet.
+                            boundary[i*3+j] = -1;
+                        }
+                    }
+                }
+            } else { // ndims==3
+                // Check neighbourhood of each element
+                #pragma omp for schedule(guided)
+                for(size_t i=0; i<NElements; i++) {
+                    if(_ENList[i*4]==-1)
+                        continue;
+
+                    for(int j=0; j<4; j++) {
+                        int n1 = _ENList[i*4+(j+1)%4];
+                        int n2 = _ENList[i*4+(j+2)%4];
+                        int n3 = _ENList[i*4+(j+3)%4];
+
+                        if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)) {
+                            std::set<int> edge_neighbours;
+                            set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                                             NEList[n2].begin(), NEList[n2].end(),
+                                             inserter(edge_neighbours, edge_neighbours.begin()));
+
+                            std::set<int> neighbours;
+                            set_intersection(NEList[n3].begin(), NEList[n3].end(),
+                                             edge_neighbours.begin(), edge_neighbours.end(),
+                                             inserter(neighbours, neighbours.begin()));
+
+                            if(neighbours.size()==2) {
+                                if(*neighbours.begin()==(int)i)
+                                    boundary[i*4+j] = *neighbours.rbegin();
+                                else
+                                    boundary[i*4+j] = *neighbours.begin();
+                            }
+                        } else {
+                            // This is a halo facet.
+                            boundary[i*4+j] = -1;
+                        }
+                    }
+                }
+            }
+        }
+
+        for(std::vector<int>::iterator it=boundary.begin(); it!=boundary.end(); ++it) {
+            if(*it==-2)
+                *it = 1;
+            else if(*it>=0)
+                *it = 0;
+        }
+    }
+
 
     void set_boundary(int nfacets, const int *facets, const int *ids)
     {

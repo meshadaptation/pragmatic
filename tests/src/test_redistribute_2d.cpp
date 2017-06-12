@@ -36,6 +36,8 @@ int main(int argc, char **argv)
     }
 
 #ifdef HAVE_VTK
+    char name[256];
+
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
     mesh->create_boundary();
 
@@ -76,7 +78,6 @@ int main(int argc, char **argv)
         printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
-        char name[256];
 
         sprintf(name, "beforeadp.%lu", i);
         mesh->print_mesh(name);
@@ -149,6 +150,8 @@ int main(int argc, char **argv)
             metric_field_new.set_metric(mesh->get_metric());
             metric_field_new.update_mesh();
 
+            mesh->recreate_boundary();
+
             sprintf(name, "aftermetu.%d", i/ite_red);
             mesh->print_mesh(name);
             mesh->print_halo(name);
@@ -158,10 +161,19 @@ int main(int argc, char **argv)
 #endif
     }
 
+    sprintf(name, "beforedef");
+    mesh->print_mesh(name);
+    mesh->print_halo(name);
 
     mesh->defragment();
-    if (rank==0)printf("DEBUG(%d)  verify after defrag\n", rank);
+//    if (rank==0)printf("DEBUG(%d)  verify after defrag\n", rank);
 //    mesh->verify();
+
+    sprintf(name, "beforesmo");
+    mesh->print_mesh(name);
+    mesh->print_halo(name);
+    VTKTools<double>::export_vtu(name, mesh);
+
 
     smooth.smart_laplacian(20);
     smooth.optimisation_linf(20);
