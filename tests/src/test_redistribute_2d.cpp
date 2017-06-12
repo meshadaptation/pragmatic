@@ -75,121 +75,46 @@ int main(int argc, char **argv)
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
     for(i=0; i<30; i++) {
-        printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
+        if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
-
-        sprintf(name, "beforeadp.%lu", i);
-        mesh->print_mesh(name);
-        mesh->print_halo(name);
-//        VTKTools<double>::export_vtu(name, mesh);
         
         coarsen.coarsen(L_low, L_ref, false);
-        
-        sprintf(name, "aftercor.%lu", i);
-        mesh->print_mesh(name);
-        mesh->print_halo(name);
-//        VTKTools<double>::export_vtu(name, mesh);
-
-//        if (rank==0)printf("DEBUG(%d)  verify after coarsen\n", rank);
-//        mesh->verify();
-
         swapping.swap(0.7);
-
-        sprintf(name, "afterswp.%lu", i);
-//        if (i==2) mesh->defragment();
-        mesh->print_mesh(name);
-        mesh->print_halo(name);
-//        if (i==2) VTKTools<double>::export_vtu(name, mesh);
-
-//        if (rank==0)printf("DEBUG(%d)  verify after swap\n", rank);
-//        mesh->verify();
-
         refine.refine(L_ref, i);
-
-        sprintf(name, "afterref.%lu", i);
-        mesh->print_mesh(name);
-        mesh->print_halo(name);
-//        VTKTools<double>::export_vtu(name, mesh);
-
-//        if (rank==0)printf("DEBUG(%d)  verify after refine\n", rank);
-//        mesh->verify();
 
         L_max = mesh->maximal_edge_length();
 
-#if 1
         int ite_red = 7;
         if (i>=0 && i%ite_red==0) {
-            printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
-
-            sprintf(name, "beforedef.%d", i/ite_red);
-            mesh->print_mesh(name);
-            mesh->print_halo(name);
-//            VTKTools<double>::export_vtu(name, mesh);
+            if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
             mesh->fix_halos();
-//            mesh->verify();
-
-            sprintf(name, "beforered.%d", i/ite_red);
-//            if (i==6) mesh->defragment();
-            mesh->print_mesh(name);
-            mesh->print_halo(name);
-//            if (i==6)  VTKTools<double>::export_vtu(name, mesh);
 
 //            int tag = 2*(i%2)-1;
 //            if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
             int tag = 0;
             mesh->redistribute_halo(tag);
 
-            sprintf(name, "afterred.%d", i/ite_red);
-            mesh->print_mesh(name);
-            mesh->print_halo(name);
-//            VTKTools<double>::export_vtu(name, mesh);
-
             MetricField<double,2> metric_field_new(*mesh);
             metric_field_new.set_metric(mesh->get_metric());
             metric_field_new.update_mesh();
 
             mesh->recreate_boundary();
-
-            sprintf(name, "aftermetu.%d", i/ite_red);
-            mesh->print_mesh(name);
-            mesh->print_halo(name);
-//            VTKTools<double>::export_vtu(name, mesh);            
-
         }
-#endif
+
     }
 
-    sprintf(name, "beforedef");
-    mesh->print_mesh(name);
-    mesh->print_halo(name);
-
     mesh->defragment();
-//    if (rank==0)printf("DEBUG(%d)  verify after defrag\n", rank);
-//    mesh->verify();
-
-    sprintf(name, "beforesmo");
-    mesh->print_mesh(name);
-    mesh->print_halo(name);
-    VTKTools<double>::export_vtu(name, mesh);
-
 
     smooth.smart_laplacian(20);
     smooth.optimisation_linf(20);
-
-
-//    char name[256];
-//    sprintf(name, "../data/test_redistribute_2d.%d", i);
-//    VTKTools<double>::export_vtu(name, mesh);
 
     VTKTools<double>::export_vtu("../data/test_redistribute_2d", mesh);
     
     if (rank==0) printf("DEBUG  verify at the end\n");
     if (mesh->verify())
         std::cout<<"pass"<<std::endl;
-
-
 
 #else
     std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
