@@ -1583,12 +1583,35 @@ public:
     void redistribute_halo(int way) 
     {
         std::vector<int> node_new_owner(node_owner);
+        std::vector<std::set<int>> node_visible_procs(NNodes); // set of ranks visible by a node (=0 if not a halo node)
 
         if (way == -1) { // give to smaller rank
             for (int p=rank-1; p>=0; --p) {
                 for (int i=0; i<send[p].size(); ++i) {
                     assert(lnn2gnn[send[p][i]] >= 0);
                     node_new_owner[send[p][i]] = p;
+                    node_visible_procs[send[p][i]].insert(p);
+                }
+            }
+            for (int iElm=0; iElm<NElements; ++iElm) {
+                if (_ENList[iElm*nloc] < 0)
+                    continue;
+                int is_halo_elm = 0;
+                for (int k=0; k<nloc; ++k) {
+                    if (is_halo_node(_ENList[iElm*nloc+k])){
+                        is_halo_elm = 1;
+                        break;
+                    }
+                }
+                if (is_halo_elm) {
+                    int min_rank = node_new_owner[_ENList[iElm*nloc]];
+                    for (int k=1; k<nloc; ++k) {
+                        min_rank = std::min(min_rank, node_new_owner[_ENList[iElm*nloc+k]]);
+                    }
+                    for (int k=0; k<nloc; ++k) {
+//                        if (node_visible_procs[_ENList[iElm*nloc+k]].count(min_rank))
+                            node_new_owner[_ENList[iElm*nloc+k]] = min_rank;
+                    }
                 }
             }
         }
@@ -1597,6 +1620,28 @@ public:
                 for (int i=0; i<send[p].size(); ++i) {
                     assert(lnn2gnn[send[p][i]] >= 0);
                     node_new_owner[send[p][i]] = p;
+                    node_visible_procs[send[p][i]].insert(p);
+                }
+            }
+            for (int iElm=0; iElm<NElements; ++iElm) {
+                if (_ENList[iElm*nloc] < 0)
+                    continue;
+                int is_halo_elm = 0;
+                for (int k=0; k<nloc; ++k) {
+                    if (is_halo_node(_ENList[iElm*nloc+k])){
+                        is_halo_elm = 1;
+                        break;
+                    }
+                }
+                if (is_halo_elm) {
+                    int max_rank = node_new_owner[_ENList[iElm*nloc]];;
+                    for (int k=1; k<nloc; ++k) {
+                        max_rank = std::max(max_rank, node_new_owner[_ENList[iElm*nloc+k]]);
+                    }
+                    for (int k=0; k<nloc; ++k) {
+//                        if (node_visible_procs[_ENList[iElm*nloc+k]].count(max_rank))
+                            node_new_owner[_ENList[iElm*nloc+k]] = max_rank;
+                    }
                 }
             }
         }
@@ -1606,6 +1651,7 @@ public:
             for (int p=0; p<num_processes; ++p) {
                 for (int i=0; i<send[p].size(); ++i) {
                     int iVer = send[p][i];
+                    node_visible_procs[iVer].insert(p);
                     if (NNodesPerRank[p] < NNodesPerRank[node_new_owner[iVer]] || node_new_owner[iVer] == node_owner[iVer]) {
                         assert(lnn2gnn[iVer] >= 0);
                         node_new_owner[iVer] = p;
@@ -1613,6 +1659,8 @@ public:
                 }
             }
             for (int iElm=0; iElm<NElements; ++iElm) {
+                if (_ENList[iElm*nloc] < 0)
+                        continue;
                 int is_halo_elm = 0;
                 for (int k=0; k<nloc; ++k) {
                     if (is_halo_node(_ENList[iElm*nloc+k])){
@@ -1629,8 +1677,9 @@ public:
                             min_rank = node_new_owner[_ENList[iElm*nloc+k]];
                         }
                     }
-                    for (int k=1; k<nloc; ++k) {
-                        node_new_owner[_ENList[iElm*nloc+k]] = min_rank;
+                    for (int k=0; k<nloc; ++k) {
+                        if (node_visible_procs[_ENList[iElm*nloc+k]].count(min_rank))
+                            node_new_owner[_ENList[iElm*nloc+k]] = min_rank;
                     }
                 }
             }
@@ -1640,7 +1689,7 @@ public:
         halo_update<int, 1>(_mpi_comm, send, recv, node_new_owner);
 
         migrate_mesh(&node_new_owner[0]) ;
-
+        
         // TODO here update through the metric
 
     }
@@ -1716,7 +1765,6 @@ public:
                 recv_glob[owner].push_back(gid);
                 recv_map_new[owner][gid] = iVer;
                 recv_halo_new.insert(iVer);
-                if (gid==36664) printf("DEBUG(%d) I put %d in recv_new[%d]\n", rank, gid, owner);
             }
         }
 
@@ -1740,7 +1788,6 @@ public:
                 send_new[p].push_back(lid);
                 send_map_new[p][gid] = lid;
                 send_halo_new.insert(lid);
-                if (gid==36664) printf("DEBUG(%d) I put %d in send_new[%d]\n", rank, gid, p);
             }
         }
 

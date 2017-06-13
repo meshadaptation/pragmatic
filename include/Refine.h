@@ -133,7 +133,7 @@ public:
      * three-dimensional unstructured grids", Applied Numerical
      * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
      */
-    void refine(real_t L_max, int tag)
+    void refine(real_t L_max)
     {
         size_t origNElements = _mesh->get_number_elements();
         size_t origNNodes = _mesh->get_number_nodes();
@@ -378,10 +378,6 @@ public:
                 }
             }
 
-//            printf("DEBUG(%d)  fucu\n", rank);
-            _mesh->print_mesh("bfhu");
-            _mesh->print_halo("bfhu");
-
             // Update halo.
             if(nprocs>1) {
                 #pragma omp single
@@ -490,10 +486,6 @@ public:
                             cidSend_additional[i].clear();
                         }
                     }
-
-                    _mesh->print_mesh("bftrim");
-                    _mesh->print_halo("bftrim");
-
                                 
                     _mesh->trim_halo();
 

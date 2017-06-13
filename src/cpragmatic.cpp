@@ -261,6 +261,9 @@ extern "C" {
 
         const size_t ndims = mesh->get_number_dimensions();
 
+        int rank=0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
         double L_up = sqrt(2.0);
         double L_low = L_up*0.5;
@@ -285,6 +288,28 @@ extern "C" {
 
                 if(L_max>1.0 && (L_max-L_up)<0.01)
                     break;
+
+                int ite_red = 11;
+                if (i>0 && i%ite_red==0) {
+                    if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
+
+                    mesh->fix_halos();
+
+                    int tag = 2*(i%2)-1;
+                    if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
+//                    int tag = 0;
+                    mesh->redistribute_halo(tag);
+
+                    MetricField<double,2> metric_field_new(*mesh);
+                    metric_field_new.set_metric(mesh->get_metric());
+                    metric_field_new.update_mesh();
+
+                    mesh->recreate_boundary();
+
+                    smooth.smart_laplacian(20);
+                    smooth.optimisation_linf(20);
+                }
+
             }
 
             mesh->defragment();

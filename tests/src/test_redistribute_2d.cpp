@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <unistd.h>
+#include <math.h>
 
 #include <mpi.h>
 
@@ -38,16 +39,18 @@ int main(int argc, char **argv)
 #ifdef HAVE_VTK
     char name[256];
 
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
     mesh->create_boundary();
 
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
 
+#if 0
+    // define metric analytically
     double m[3] = {0};
     for(size_t i=0; i<NNodes; i++) {
-//        double lmax = 1/(0.01*0.01);
+//        double lmax = 1/(0.005*0.005);
 //        m[0] = m[2] = lmax;
 //        m[1] = 0;
         double x = mesh->get_coords(i)[0];
@@ -59,6 +62,19 @@ int main(int argc, char **argv)
         m[2] = lmax;
         metric_field.set_metric(m, i);
     }
+#endif
+#if 1
+    // define metric from function
+    std::vector<double> psi(NNodes);
+    for(size_t i=0; i<NNodes; i++) {
+        double x = mesh->get_coords(i)[0]-0.5;
+        double y = mesh->get_coords(i)[1]-0.5;
+
+        psi[i] = (50*fabs(x*y) >= 2*M_PI) ? 0.01*sin(50*x*y) : sin(50*x*y);
+    }
+    double eta=0.0001;
+    metric_field.add_field(&(psi[0]), eta, 2);
+#endif
     metric_field.update_mesh();
 
 
@@ -74,26 +90,26 @@ int main(int argc, char **argv)
 
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
-    for(i=0; i<30; i++) {
+    for(i=0; i<33; i++) {
         if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
         
         coarsen.coarsen(L_low, L_ref, false);
         swapping.swap(0.7);
-        refine.refine(L_ref, i);
+        refine.refine(L_ref);
 
         L_max = mesh->maximal_edge_length();
 
-        int ite_red = 7;
-        if (i>=0 && i%ite_red==0) {
+        int ite_red = 50;
+        if (i>0 && i%ite_red==0) {
             if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
             mesh->fix_halos();
 
-//            int tag = 2*(i%2)-1;
-//            if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
-            int tag = 0;
+            int tag = 2*(i%2)-1;
+            if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
+//            int tag = 0;
             mesh->redistribute_halo(tag);
 
             MetricField<double,2> metric_field_new(*mesh);
@@ -101,6 +117,9 @@ int main(int argc, char **argv)
             metric_field_new.update_mesh();
 
             mesh->recreate_boundary();
+
+            smooth.smart_laplacian(20);
+            smooth.optimisation_linf(20);
         }
 
     }
