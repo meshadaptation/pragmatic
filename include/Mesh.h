@@ -406,7 +406,46 @@ public:
             m[i] = metric[nid*msize+i];
         return;
     }
-    
+
+    // Returns the list of facets and corresponding ids
+    void get_boundary(int* nfacets, const int** facets, const int** ids)
+    {
+        int      NFacets;
+        index_t  i_elm, i_loc, off;
+        int      *Facets, *Ids;
+
+        // compute number facets = number of ids > 0
+        NFacets = 0;
+        for (index_t i=0; i<NElements*(ndims+1); ++i) {
+            if (boundary[i] > 0)
+                NFacets++;
+        }
+
+        Facets = (int*)malloc(NFacets*ndims*sizeof(int));
+        Ids = (int*)malloc(NFacets*sizeof(int));
+
+        // loop over ids to build the vectors
+        int k = 0;
+        for (index_t i=0; i<NElements*(ndims+1); ++i) {
+            if (boundary[i] > 0) {
+                i_elm = i / (ndims+1); // index of the corresponding element
+                i_loc = i % (ndims+1); // local index of the node in its element
+                off = i_elm*(ndims+1);   // offset in the ElementNode list
+                for (int j=0; j<ndims+1; ++j) {
+                    if (j != i_loc){
+                        Facets[k] = _ENList[off+j];
+                        k++;
+                    }
+                }
+                Ids[k/ndims-1] = boundary[i];
+            }
+        }
+
+        *nfacets = NFacets;
+        *facets = Facets;
+        *ids = Ids;
+    }
+
     /// Return the array of boundary facets and associated tags
     inline  int * get_boundaryTags() 
     {

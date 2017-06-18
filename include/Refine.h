@@ -2648,9 +2648,9 @@ private:
             }
 
             // Use the 3D laplacian smoothing kernel to find the barycentre of the wedge in metric space.
-            Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic> A =
-                Eigen::Matrix<real_t, Eigen::Dynamic, Eigen::Dynamic>::Zero(3, 3);
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> q = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
+            Eigen::Matrix<real_t, 3, 3> A =
+                Eigen::Matrix<real_t, 3, 3>::Zero(3, 3);
+            Eigen::Matrix<real_t, 3, 1> q = Eigen::Matrix<real_t, 3, 1>::Zero(3);
 
             for(typename std::map<Coords_t, index_t>::const_iterator it=coords_map.begin(); it!=coords_map.end(); ++it) {
                 const real_t *il = _mesh->get_coords(it->second);
@@ -2662,20 +2662,22 @@ private:
                 q[1] += nm[1]*x + nm[3]*y + nm[4]*z;
                 q[2] += nm[2]*x + nm[4]*y + nm[5]*z;
 
-                A[0] += nm[0];
-                A[1] += nm[1];
-                A[2] += nm[2];
-                A[4] += nm[3];
-                A[5] += nm[4];
-                A[8] += nm[5];
+                A(0,0) += nm[0];
+                A(0,1) += nm[1];
+                A(0,2) += nm[2];
+                A(1,1) += nm[3];
+                A(1,2) += nm[4];
+                A(2,2) += nm[5];
             }
-            A[3] = A[1];
-            A[6] = A[2];
-            A[7] = A[5];
+            A(1,0) = A(0,1);
+            A(2,0) = A(0,2);
+            A(2,1) = A(1,2);
 
             // Want to solve the system Ap=q to find the new position, p.
-            Eigen::Matrix<real_t, Eigen::Dynamic, 1> b = Eigen::Matrix<real_t, Eigen::Dynamic, 1>::Zero(3);
-            A.svd().solve(q, &b);
+            Eigen::Matrix<real_t, 3, 1> b = Eigen::Matrix<real_t, 3, 1>::Zero(3);
+            Eigen::JacobiSVD<Eigen::Matrix3d, Eigen::HouseholderQRPreconditioner> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+            b = svd.solve(q);
 
             for(int i=0; i<3; ++i) {
                 nc[i] += b[i];

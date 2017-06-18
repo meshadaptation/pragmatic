@@ -14,6 +14,12 @@ void pragmatic::generate_Steiner_ellipse(const double *x1, const double *x2, con
 {
     // # From http://en.wikipedia.org/wiki/Steiner_ellipse
 
+#ifdef EIGEN_NO_DEBUG
+    printf("DEBUG mode release\n");
+#else
+    printf("DEBUG mode debug\n"); 
+#endif   
+
     Eigen::Matrix<double, 6, 6> M;
 
     M <<pow(x1[0] - x2[0], 2), pow(x1[1] - x2[1], 2), pow(x1[2] - x2[2], 2), (x1[1] - x2[1])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[2] - x2[2]), (x1[0] - x2[0])*(x1[1] - x2[1]),
@@ -26,8 +32,9 @@ void pragmatic::generate_Steiner_ellipse(const double *x1, const double *x2, con
     Eigen::Matrix<double, 6, 1> R;
     R<<1,1,1,1,1,1;
     Eigen::Matrix<double, 6, 1> S;
+    Eigen::JacobiSVD<Eigen::Matrix<double, 6, 6>, Eigen::HouseholderQRPreconditioner> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    M.svd().solve(R, &S);
+    S = svd.solve(R);
 
     sm[0] = S[0];
     sm[1] = S[5];

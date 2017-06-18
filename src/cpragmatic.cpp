@@ -48,6 +48,7 @@
 #include "VTKTools.h"
 #endif
 
+
 static void *_pragmatic_mesh=NULL;
 static void *_pragmatic_metric_field=NULL;
 
