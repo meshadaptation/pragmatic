@@ -2165,13 +2165,22 @@ public:
                 fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f\n", 
                    rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer],
                    metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2]);
+            else 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], coords[2], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2], metric[msize*iVer+3], metric[msize*iVer+4], metric[msize*iVer+5]);
         }
-        for (int iTri=0; iTri<get_number_elements(); ++iTri){
-            const int * tri = get_element(iTri);
+        for (int iElm=0; iElm<get_number_elements(); ++iElm){
+            const int * elm = get_element(iElm);
             if (ndims==2) 
                 fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
-                    rank, iTri, tri[0], tri[1], tri[2], lnn2gnn[tri[0]], lnn2gnn[tri[1]], lnn2gnn[tri[2]], quality[iTri],
-                    boundary[nloc*iTri], boundary[nloc*iTri+1], boundary[nloc*iTri+2]);
+                    rank, iElm, elm[0], elm[1], elm[2], lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], 
+                    quality[iElm], boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2]);
+            else
+                fprintf(logfile, "DBG(%d)  tet[%d]  %d %d %d %d  (gnn: %d %d %d %d)  quality: %1.2f  boundary: %d %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], elm[3], 
+                    lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], lnn2gnn[elm[3]], quality[iElm], 
+                    boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2], boundary[nloc*iElm+3]);
         }
 
         fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);

@@ -139,6 +139,9 @@ public:
         size_t origNNodes = _mesh->get_number_nodes();
         size_t edgeSplitCnt = 0;
 
+        double crd1[3] = {0.525, 0., 0.325};
+        double crd2[3] = {0.525, 0.025, 0.350};
+
         #pragma omp parallel
         {
             #pragma omp single nowait
@@ -179,7 +182,12 @@ public:
                         double length = _mesh->calc_edge_length(i, otherVertex);
                         if(length>L_max) {
                             ++splitCnt[tid];
-                            refine_edge(i, otherVertex, tid);
+                            double newCrd[3];
+                            refine_edge(i, otherVertex, tid, newCrd);
+                            if ( fabs(newCrd[0]-crd1[0])+fabs(newCrd[1]-crd1[1])+fabs(newCrd[2]-crd1[2]) < 1.e-2 )
+                                printf("DEBUG(%d)  vertex 1 was created here on edge: %d  %d, splitcnt: %d\n", rank, i, otherVertex, splitCnt[0]);
+                            if ( fabs(newCrd[0]-crd2[0])+fabs(newCrd[1]-crd2[1])+fabs(newCrd[2]-crd2[2]) < 1.e-2 )
+                                printf("DEBUG(%d)  vertex 2 was created here on edge: %d  %d, splitcnt: %d\n", rank, i, otherVertex, splitCnt[0]);
                         }
                     }
                 }
@@ -212,6 +220,11 @@ public:
             assert(newVertices[tid].size()==splitCnt[tid]);
             for(size_t i=0; i<splitCnt[tid]; i++) {
                 newVertices[tid][i].id = threadIdx[tid]+i;
+                int id = newVertices[tid][i].id;
+                if (rank == 0) if (i+1==1192 || i+1==2036) printf("DEBUG(%d) vertex corresponding to splitcnt %d has lid: %d and coords: %1.2f %1.2f %1.2f\n", 
+                    rank, i, id, _mesh->_coords[3*id], _mesh->_coords[3*id+1], _mesh->_coords[3*id+2]);
+                if (rank == 1) if (i+1==486 || i+1==1428) printf("DEBUG(%d) vertex corresponding to splitcnt %d has lid: %d and coords: %1.2f %1.2f %1.2f\n", 
+                    rank, i, id, _mesh->_coords[3*id], _mesh->_coords[3*id+1], _mesh->_coords[3*id+2]);
             }
 
             // Accumulate all newVertices in a contiguous array
@@ -232,10 +245,26 @@ public:
                                       _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
                                       std::inserter(intersection, intersection.begin()));
 
+                int tag =0; if (_mesh->is_halo_node(firstid) && _mesh->is_halo_node(secondid)) tag = 1;
+
                 for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
                     index_t eid = *element;
                     size_t edgeOffset = edgeNumber(eid, firstid, secondid);
                     new_vertices_per_element[nedge*eid+edgeOffset] = vid;
+                    if (rank == 0) if (i+1==1192 || i+1==2036) 
+                        printf("DEBUG(%d) splitcnt: %d (is_halo: %d)  element in inter: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f)\n",
+                            rank, i, tag,
+                            _mesh->_ENList[eid*4], _mesh->_coords[_mesh->_ENList[eid*4]*3], _mesh->_coords[_mesh->_ENList[eid*4]*3+1], _mesh->_coords[_mesh->_ENList[eid*4]*3+2], 
+                            _mesh->_ENList[eid*4+1], _mesh->_coords[_mesh->_ENList[eid*4+1]*3], _mesh->_coords[_mesh->_ENList[eid*4+1]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+1]*3+2],
+                            _mesh->_ENList[eid*4+2], _mesh->_coords[_mesh->_ENList[eid*4+2]*3], _mesh->_coords[_mesh->_ENList[eid*4+2]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+2]*3+2],
+                            _mesh->_ENList[eid*4+3], _mesh->_coords[_mesh->_ENList[eid*4+3]*3], _mesh->_coords[_mesh->_ENList[eid*4+3]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+3]*3+2]);
+                    if (rank == 1) if (i+1==486 || i+1==1428) 
+                        printf("DEBUG(%d) splitcnt: %d (is_halo: %d) element in inter: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f)\n",
+                            rank, i, tag,
+                            _mesh->_ENList[eid*4], _mesh->_coords[_mesh->_ENList[eid*4]*3], _mesh->_coords[_mesh->_ENList[eid*4]*3+1], _mesh->_coords[_mesh->_ENList[eid*4]*3+2], 
+                            _mesh->_ENList[eid*4+1], _mesh->_coords[_mesh->_ENList[eid*4+1]*3], _mesh->_coords[_mesh->_ENList[eid*4+1]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+1]*3+2],
+                            _mesh->_ENList[eid*4+2], _mesh->_coords[_mesh->_ENList[eid*4+2]*3], _mesh->_coords[_mesh->_ENList[eid*4+2]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+2]*3+2],
+                            _mesh->_ENList[eid*4+3], _mesh->_coords[_mesh->_ENList[eid*4+3]*3], _mesh->_coords[_mesh->_ENList[eid*4+3]*3+1], _mesh->_coords[_mesh->_ENList[eid*4+3]*3+2]);
                 }
 
                 /*
@@ -270,10 +299,6 @@ public:
 
                     if(_mesh->node_owner[vid] == rank)
                         _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
-
-                    const double *coords = _mesh->get_coords(vid);
-                    if (fabs(coords[0]-0.5)<1.e-5 && fabs(coords[1]-0.3)<1.e-5) 
-                        printf("DEBUG(%d)  flagged vertex has lid: %d  gid: %d after being inserted\n", rank, vid, _mesh->lnn2gnn[vid]);
                 }
             }
 
@@ -335,8 +360,11 @@ public:
             newBoundaries[tid].reserve(dim*dim*origNElements/nthreads);
             newQualities[tid].reserve(origNElements/nthreads);
 
+            int tag = 0;
+
             #pragma omp for schedule(guided) nowait
             for(size_t eid=0; eid<origNElements; ++eid) {
+                if (tag < 2) tag = 0;
                 //If the element has been deleted, continue.
                 const index_t *n = _mesh->get_element(eid);
                 if(n[0] < 0)
@@ -345,8 +373,57 @@ public:
                 for(size_t j=0; j<nedge; ++j)
                     if(new_vertices_per_element[nedge*eid+j] != -1) {
                         refine_element(eid, tid);
+                        if (tag < 2) tag = 1;
                         break;
                     }
+
+                if (tag < 2 && ((rank==0 && eid == 8947) || (rank==1 && eid==6467))) {
+                    for (int i=0; i<_mesh->_ENList.size()/4; ++i) {
+                        int idx[4];
+                        idx[0] = _mesh->_ENList[4*i  ];
+                        idx[1] = _mesh->_ENList[4*i+1];
+                        idx[2] = _mesh->_ENList[4*i+2];
+                        idx[3] = _mesh->_ENList[4*i+3];
+                        if (rank==0 && eid == 8947 && idx[0] == 7567 && idx[1] == 8411 && idx[2] == 514 && idx[3] == 5124) {
+                            printf("DEBUG(%d)   bad elm was updated here\n", rank);
+                            tag = 2;
+                        }
+                        if (rank==1 && eid==6467 && idx[0] == 7915 && idx[1] == 8857 && idx[2] == 1207 && idx[3] == 6494) {
+                            printf("DEBUG(%d)   bad elm was updated here in upd elm[%d]: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) (tag: %d)\n", 
+                                rank, eid,
+                                n[0], _mesh->_coords[n[0]*3], _mesh->_coords[n[0]*3+1], _mesh->_coords[n[0]*3+2], 
+                                n[1], _mesh->_coords[n[1]*3], _mesh->_coords[n[1]*3+1], _mesh->_coords[n[1]*3+2],
+                                n[2], _mesh->_coords[n[2]*3], _mesh->_coords[n[2]*3+1], _mesh->_coords[n[2]*3+2],
+                                n[3], _mesh->_coords[n[3]*3], _mesh->_coords[n[3]*3+1], _mesh->_coords[n[3]*3+2], tag);
+                            tag = 2;
+                        }
+                    }
+                    for (int i=0; i<newElements[0].size()/4; ++i) {
+                        int idx[4];
+                        idx[0] = newElements[0][4*i  ];
+                        idx[1] = newElements[0][4*i+1];
+                        idx[2] = newElements[0][4*i+2];
+                        idx[3] = newElements[0][4*i+3];
+                        if (rank==0 && eid == 8947 && idx[0] == 7567 && idx[1] == 8411 && idx[2] == 514 && idx[3] == 5124) {
+                            printf("DEBUG(%d)   bad elm was created here in elm[%d]: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) (tag: %d)\n", 
+                                rank, eid, 
+                                n[0], _mesh->_coords[n[0]*3], _mesh->_coords[n[0]*3+1], _mesh->_coords[n[0]*3+2], 
+                                n[1], _mesh->_coords[n[1]*3], _mesh->_coords[n[1]*3+1], _mesh->_coords[n[1]*3+2],
+                                n[2], _mesh->_coords[n[2]*3], _mesh->_coords[n[2]*3+1], _mesh->_coords[n[2]*3+2],
+                                n[3], _mesh->_coords[n[3]*3], _mesh->_coords[n[3]*3+1], _mesh->_coords[n[3]*3+2], tag);
+                            tag = 2;
+                        }
+                        if (rank==1 &&  eid == 6467 && idx[0] == 7915 && idx[1] == 8857 && idx[2] == 1207 && idx[3] == 6494) {
+                            printf("DEBUG(%d)   bad elm was created here in elm[%d]: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) (tag: %d)\n", 
+                                rank, eid,
+                                n[0], _mesh->_coords[n[0]*3], _mesh->_coords[n[0]*3+1], _mesh->_coords[n[0]*3+2], 
+                                n[1], _mesh->_coords[n[1]*3], _mesh->_coords[n[1]*3+1], _mesh->_coords[n[1]*3+2],
+                                n[2], _mesh->_coords[n[2]*3], _mesh->_coords[n[2]*3+1], _mesh->_coords[n[2]*3+2],
+                                n[3], _mesh->_coords[n[3]*3], _mesh->_coords[n[3]*3+1], _mesh->_coords[n[3]*3+2], tag);
+                            tag = 2;
+                        }
+                    }
+                }
             }
 
             threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt[tid]);
@@ -387,9 +464,6 @@ public:
                     for(size_t i=0; i<edgeSplitCnt; ++i)
                     {
                         DirectedEdge<index_t> *vert = &allNewVertices[i];
-                        const double * coords = _mesh->get_coords(vert->id);
-                        int flag = 0;
-                        if (fabs(coords[0]-0.5)<1.e-5 && fabs(coords[1]-0.3)<1.e-5) flag = 1;
 
                         if(_mesh->node_owner[vert->id] != rank) {
                             // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
@@ -401,7 +475,6 @@ public:
                                     visible = true;
                                     DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
                                     recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
-                                    if (flag) printf("DEBUG(%d)  flagged vertex added to recv_additional[%d] with lid: %d\n", rank, _mesh->node_owner[vert->id], gnn_edge.id);
                                     break;
                                 }
                             }
@@ -419,7 +492,6 @@ public:
                                 for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc) {
                                     DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
                                     send_additional[*proc].insert(gnn_edge);
-                                    if (flag) printf("DEBUG(%d)  flagged vertex added to send_additional[%d] with lid: %d\n", rank, *proc, gnn_edge.id);
                                 }
                             }
                         }
@@ -533,7 +605,7 @@ public:
 
 private:
 
-    inline void refine_edge(index_t n0, index_t n1, int tid)
+    inline void refine_edge(index_t n0, index_t n1, int tid, double * newCrd)
     {
         if(_mesh->lnn2gnn[n0] > _mesh->lnn2gnn[n1]) {
             // Needs to be swapped because we want the lesser gnn first.
@@ -559,6 +631,7 @@ private:
         for(size_t i=0; i<dim; i++) {
             x = x0[i]+weight*(x1[i] - x0[i]);
             newCoords[tid].push_back(x);
+            newCrd[i] = x;
         }
 
         // Interpolate new metric and append it to OMP thread's temp storage
@@ -578,6 +651,16 @@ private:
     inline void refine_facet(index_t eid, const index_t *facet, int tid)
     {
         const index_t *n=_mesh->get_element(eid);
+        std::set<int> facet_set(facet, facet+3);
+        int tag = 0;
+        if (rank==0 && facet_set.count(2103) && facet_set.count(2124) && facet_set.count(514)) {
+            printf("DEBUG(%d)  facet is refined here\n", rank);
+            tag = 1;
+        }
+        if (rank==1 && facet_set.count(1127) && facet_set.count(1207) && facet_set.count(177)) {
+            printf("DEBUG(%d)  facet is refined here\n", rank);
+            tag = 1;
+        }
 
         index_t newVertex[3] = {-1, -1, -1};
         newVertex[0] = new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[1], facet[2])];
@@ -588,6 +671,9 @@ private:
         for(size_t i=0; i<3; ++i)
             if(newVertex[i]!=-1)
                 ++refine_cnt;
+
+        if (tag) printf("DEBUG(%d)  facet: %d %d %d   newVertex: %d %d %d\n", rank, facet[0], facet[1], facet[2], newVertex[0], newVertex[1], newVertex[2]);
+        if (tag) printf("DEBUG(%d)  refine_cnt: %d\n", rank, refine_cnt);
 
         switch(refine_cnt) {
         case 0:
@@ -677,12 +763,24 @@ private:
             for(int j=0, pos=0; j<4; j++)
                 for(int k=j+1; k<4; k++) {
                     index_t vertexID = new_vertices_per_element[nedge*eid+pos];
+                     if ((rank==0 && eid==8947) || (rank==1 && eid==6467))
+                        printf("DEBUG(%d)  eid: %d  j,k: %d,%d => pos: %d  vertexID: %d  ==> splitEdge(%d, %d, %d)\n",
+                            rank, eid, j, k, pos, vertexID, n[j], n[k], vertexID);
                     if(vertexID >= 0) {
                         splitEdges.push_back(DirectedEdge<index_t>(n[j], n[k], vertexID));
+                        if ((rank==0 && eid==8947) || (rank==1 && eid==6467))
+                            printf("DEBUG(%d)  eid: %d ==> splitEdge(%d (%1.2f %1.2f %1.2f), %d (%1.2f %1.2f %1.2f), %d (%1.2f %1.2f %1.2f))\n",
+                                rank, eid, 
+                                n[j], _mesh->_coords[3*n[j]], _mesh->_coords[3*n[j]+1], _mesh->_coords[3*n[j]+2],
+                                n[k], _mesh->_coords[3*n[k]], _mesh->_coords[3*n[k]+1], _mesh->_coords[3*n[k]+2],
+                                vertexID, _mesh->_coords[3*vertexID], _mesh->_coords[3*vertexID+1], _mesh->_coords[3*vertexID+2]);
                     }
                     ++pos;
                 }
             refine_cnt=splitEdges.size();
+
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467))
+                printf("DEBUG(%d)  element %d has %d refined edges\n", rank, eid, refine_cnt);
 
             if(refine_cnt > 0)
                 (this->*refineMode3D[refine_cnt-1])(splitEdges, eid, tid);
@@ -955,17 +1053,36 @@ private:
              * Case 2(a) *
              *************
              */
+
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467)) {
+                printf("DEBUG(%d)  refining 2(a) of element[%d]: %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f) %d (%1.2f %1.2f %1.2f)\n", rank, eid,
+                    n[0], _mesh->_coords[n[0]*3], _mesh->_coords[n[0]*3+1], _mesh->_coords[n[0]*3+2], 
+                    n[1], _mesh->_coords[n[1]*3], _mesh->_coords[n[1]*3+1], _mesh->_coords[n[1]*3+2],
+                    n[2], _mesh->_coords[n[2]*3], _mesh->_coords[n[2]*3+1], _mesh->_coords[n[2]*3+2],
+                                n[3], _mesh->_coords[n[3]*3], _mesh->_coords[n[3]*3+1], _mesh->_coords[n[3]*3+2]);
+            }
+
             int n1 = (n0 == splitEdges[0].edge.first) ? splitEdges[0].edge.second : splitEdges[0].edge.first;
             int n2 = (n0 == splitEdges[1].edge.first) ? splitEdges[1].edge.second : splitEdges[1].edge.first;
 
             // Opposite vertex
             int n3;
-            for(int j=0; j<nloc; ++j)
+            for(int j=0; j<nloc; ++j) {
                 if(n[j] != n0 && n[j] != n1 && n[j] != n2) {
                     n3 = n[j];
                     break;
                 }
+            }
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467))
+                printf("DEBUG(%d)  refining 2(a) of element[%d]: n0: %d n1: %d  n2: %d n3: %d\n", rank, eid, n0, n1, n2, n3);
 
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467)) {
+                std::vector<int> setdbg = _mesh->NNList[splitEdges[0].id];
+                printf("DEBUG(%d)  _mesh->NNList[%d]: ", rank, splitEdges[0].id);
+                for (std::vector<index_t>::const_iterator it=setdbg.begin(); it!=setdbg.end(); ++it)
+                    printf("%d  ", *it);
+                printf("\n");
+            }
             // Find the diagonal which has bisected the trapezoid.
             DirectedEdge<index_t> diagonal, offdiagonal;
             std::vector<index_t>::const_iterator p = std::find(_mesh->NNList[splitEdges[0].id].begin(),
@@ -983,6 +1100,9 @@ private:
                 offdiagonal.edge.first = splitEdges[0].id;
                 offdiagonal.edge.second = n2;
             }
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467))
+                printf("DEBUG(%d)  refining 2(a) of element[%d]: diagonal: %d %d  offdiagonal: %d %d\n", rank, eid, 
+                    diagonal.edge.first, diagonal.edge.second, offdiagonal.edge.first, offdiagonal.edge.second);            
 
             const int ele0[] = {n0, splitEdges[0].id, splitEdges[1].id, n3};
             const int ele1[] = {diagonal.edge.first, offdiagonal.edge.first, diagonal.edge.second, n3};
@@ -1023,6 +1143,9 @@ private:
              * Case 2(b) *
              *************
              */
+            if ((rank==0 && eid==8947) || (rank==1 && eid==6467)) 
+                printf("DEBUG(%d)  tet[%d]  case 2(b)\n", rank, eid);
+
             const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};
             const int ele1[] = {splitEdges[0].edge.first, splitEdges[0].id, splitEdges[1].edge.second, splitEdges[1].id};
             const int ele2[] = {splitEdges[0].edge.second, splitEdges[0].id, splitEdges[1].edge.first, splitEdges[1].id};

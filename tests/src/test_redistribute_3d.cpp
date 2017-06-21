@@ -43,31 +43,31 @@ int main(int argc, char **argv)
 #ifdef HAVE_VTK
     char name[256];
 
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box200x200.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
     mesh->create_boundary();
 
-    MetricField<double,2> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
 
-#if 0
+#if 1
     // define metric analytically
     double m[3] = {0};
     for(size_t i=0; i<NNodes; i++) {
-//        double lmax = 1/(0.005*0.005);
-//        m[0] = m[2] = lmax;
-//        m[1] = 0;
-        double x = mesh->get_coords(i)[0];
-        double h = 0.5*fabs(1-exp(-fabs(x-0.5))) + 0.003;
-        double lbd = 1/(h*h);
-        double lmax = 1/(0.5*0.5);
-        m[0] = lbd;
-        m[1] = 0.0;
-        m[2] = lmax;
+        double lmax = 1/(0.05*0.05);
+        m[0] = m[3] = m[5] = lmax;
+        m[1] = m[2] = m[4] = 0;
+//        double x = mesh->get_coords(i)[0];
+//        double h = 0.5*fabs(1-exp(-fabs(x-0.5))) + 0.003;
+//        double lbd = 1/(h*h);
+//        double lmax = 1/(0.5*0.5);
+//        m[0] = lbd;
+//        m[1] = 0.0;
+//        m[2] = lmax;
         metric_field.set_metric(m, i);
     }
 #endif
-#if 1
+#if 0
     // define metric from function
     std::vector<double> psi(NNodes);
     for(size_t i=0; i<NNodes; i++) {
@@ -88,31 +88,63 @@ int main(int argc, char **argv)
     double L_up = sqrt(2.0);
     double L_low = L_up*0.5;
 
-    Coarsen<double, 2> coarsen(*mesh);
-    Smooth<double, 2> smooth(*mesh);
-    Refine<double, 2> refine(*mesh);
-    Swapping<double, 2> swapping(*mesh);
+    Coarsen<double, 3> coarsen(*mesh);
+    Smooth<double, 3> smooth(*mesh);
+    Refine<double, 3> refine(*mesh);
+    Swapping<double, 3> swapping(*mesh);
 
     double L_max = mesh->maximal_edge_length();
 
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
-    for(i=0; i<20; i++) {
+    for(i=0; i<10; i++) {
         if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
+        sprintf(name, "beforeadp.%lu", i);
+        mesh->print_mesh(name);
+        mesh->print_halo(name);
         
-        coarsen.coarsen(L_low, L_ref, false);
-        swapping.swap(0.7);
         refine.refine(L_ref);
+
+        sprintf(name, "afterref.%lu", i);
+        mesh->print_mesh(name);
+        mesh->print_halo(name);
+
+        if (i==2) {
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Finalize();
+            return 3;
+        }
+
+        coarsen.coarsen(L_low, L_ref, false);
+
+        sprintf(name, "aftercoa.%lu", i);
+        mesh->print_mesh(name);
+        mesh->print_halo(name);
+
+        swapping.swap(0.95);
+
+        sprintf(name, "afterswp.%lu", i);
+        mesh->print_mesh(name);
+        mesh->print_halo(name);
 
         L_max = mesh->maximal_edge_length();
 
-        int ite_red = 100;
+        int ite_red = 3;
         if (i>0 && i%ite_red==0) {
+
+            sprintf(name, "beforedef.%lu", i/ite_red);
+            mesh->print_mesh(name);
+            mesh->print_halo(name);
+
             if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
             mesh->fix_halos();
+
+            sprintf(name, "beforered.%lu", i/ite_red);
+            mesh->print_mesh(name);
+            mesh->print_halo(name);
 
 //            int tag = 2*(i%2)-1;
             int tag = (i/ite_red)%4 <2 ? 1 : -1;
@@ -120,24 +152,36 @@ int main(int argc, char **argv)
 //            int tag = 0;
             mesh->redistribute_halo(tag);
 
-            MetricField<double,2> metric_field_new(*mesh);
+            sprintf(name, "afterred.%lu", i/ite_red);
+            mesh->print_mesh(name);
+            mesh->print_halo(name);
+
+            MetricField<double,3> metric_field_new(*mesh);
             metric_field_new.set_metric(mesh->get_metric());
             metric_field_new.update_mesh();
 
             mesh->recreate_boundary();
 
-            smooth.smart_laplacian(20);
-            smooth.optimisation_linf(20);
+            sprintf(name, "aftermetu.%lu", i/ite_red);
+            mesh->print_mesh(name);
+            mesh->print_halo(name);
+
+            smooth.smart_laplacian(10);
+            smooth.optimisation_linf(10);
+
+            sprintf(name, "aftersmored.%lu", i/ite_red);
+            mesh->print_mesh(name);
+            mesh->print_halo(name);
         }
 
     }
 
     mesh->defragment();
 
-    smooth.smart_laplacian(20);
-    smooth.optimisation_linf(20);
+    smooth.smart_laplacian(10);
+    smooth.optimisation_linf(10);
 
-    VTKTools<double>::export_vtu("../data/test_redistribute_2d", mesh);
+    VTKTools<double>::export_vtu("../data/test_redistribute_3d", mesh);
     
 //    GMFTools<double>::export_gmf_mesh("ex_metric2d_resV2", mesh);
 //    GMFTools<double>::export_gmf_metric2d("ex_metric2d_resV2", &metric_field, mesh);
