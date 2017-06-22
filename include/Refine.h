@@ -376,7 +376,6 @@ public:
                         if (tag < 2) tag = 1;
                         break;
                     }
-
                 if (tag < 2 && ((rank==0 && eid == 8947) || (rank==1 && eid==6467))) {
                     for (int i=0; i<_mesh->_ENList.size()/4; ++i) {
                         int idx[4];
@@ -697,9 +696,19 @@ private:
 
                     if (tag) printf("DEBUG(%d)  addNN: %d %d  and %d %d\n", rank, newVertex[(j+1)%3], newVertex[(j+2)%3], newVertex[(j+2)%3], newVertex[(j+1)%3]);
 
-                    real_t ldiag1 = _mesh->calc_edge_length(newVertex[(j+1)%3], facet[(j+1)%3]);
-                    real_t ldiag2 = _mesh->calc_edge_length(newVertex[(j+2)%3], facet[(j+2)%3]);
-                    const int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
+                    int k1, k2;
+                    if (_mesh->lnn2gnn[facet[(j+1)%3]] < _mesh->lnn2gnn[facet[(j+2)%3]]) {
+                        k1 = (j+1)%3;
+                        k2 = (j+2)%3;
+                    }
+                    else {
+                        k1 = (j+2)%3;
+                        k2 = (j+1)%3;
+                    }
+
+                    real_t ldiag1 = _mesh->calc_edge_length(newVertex[k1], facet[k1]);
+                    real_t ldiag2 = _mesh->calc_edge_length(newVertex[k2], facet[k2]);
+                    int offset = ldiag1 < ldiag2 ? k1 : k2;
 
                     if (tag) printf("DEBUG(%d)  ldiag1, ldiag2: %1.9e %1.9e  ldiag1 < ldiag2: %d, offset: %d\n", rank, ldiag1, ldiag2, (int)(ldiag1 < ldiag2), offset);
 
