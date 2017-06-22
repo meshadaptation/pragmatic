@@ -695,12 +695,18 @@ private:
                     def_ops->addNN(newVertex[(j+1)%3], newVertex[(j+2)%3], tid);
                     def_ops->addNN(newVertex[(j+2)%3], newVertex[(j+1)%3], tid);
 
+                    if (tag) printf("DEBUG(%d)  addNN: %d %d  and %d %d\n", rank, newVertex[(j+1)%3], newVertex[(j+2)%3], newVertex[(j+2)%3], newVertex[(j+1)%3]);
+
                     real_t ldiag1 = _mesh->calc_edge_length(newVertex[(j+1)%3], facet[(j+1)%3]);
                     real_t ldiag2 = _mesh->calc_edge_length(newVertex[(j+2)%3], facet[(j+2)%3]);
                     const int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
 
+                    if (tag) printf("DEBUG(%d)  ldiag1, ldiag2: %1.9e %1.9e  ldiag1 < ldiag2: %d, offset: %d\n", rank, ldiag1, ldiag2, (int)(ldiag1 < ldiag2), offset);
+
                     def_ops->addNN(newVertex[offset], facet[offset], tid);
                     def_ops->addNN(facet[offset], newVertex[offset], tid);
+
+                    if (tag) printf("DEBUG(%d)  addNN: %d %d  and %d %d\n", rank, newVertex[offset], facet[offset], facet[offset], newVertex[offset]);
 
                     break;
                 }
