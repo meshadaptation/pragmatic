@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 
         psi[i] = (50*fabs(x*y) >= 2*M_PI) ? 0.01*sin(50*x*y) : sin(50*x*y);
     }
-    double eta=0.01;
+    double eta=0.002;
     metric_field.add_field(&(psi[0]), eta, 2);
 #endif
     metric_field.update_mesh();
@@ -97,7 +97,8 @@ int main(int argc, char **argv)
 
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
-    for(i=0; i<20; i++) {
+	int cnt_red = 0;
+    for(i=0; i<24; i++) {
         if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
@@ -109,26 +110,32 @@ int main(int argc, char **argv)
         L_max = mesh->maximal_edge_length();
 
         int ite_red = 100;
-        if (i>0 && i%ite_red==0) {
+        //if (i>0 && i%ite_red==0) {
+        if (i==1 || i==3 || i==5 || i==10 || i==17 || i==25) {
             if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
             mesh->fix_halos();
 
 //            int tag = 2*(i%2)-1;
-            int tag = (i/ite_red)%4 <2 ? 1 : -1;
+//            int tag = (i/ite_red)%4 <2 ? 1 : -1;
+			int tag = cnt_red%4 <2 ? 1 : -1;
             if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
-//            int tag = 0;
-            mesh->redistribute_halo(tag);
+			if (num_processes>1) {
+                mesh->redistribute_halo(tag);
 
-            MetricField<double,2> metric_field_new(*mesh);
-            metric_field_new.set_metric(mesh->get_metric());
-            metric_field_new.update_mesh();
+                MetricField<double,2> metric_field_new(*mesh);
+                metric_field_new.set_metric(mesh->get_metric());
+                metric_field_new.update_mesh();
 
-            mesh->recreate_boundary();
+                mesh->recreate_boundary();
+			}
 
             smooth.smart_laplacian(20);
-            smooth.optimisation_linf(20);
+            //smooth.optimisation_linf(20);
+            cnt_red++;
         }
+//		mesh->compute_print_quality();
+//        mesh->compute_print_NNodes_global();
 
     }
 
@@ -144,8 +151,11 @@ int main(int argc, char **argv)
 //    return 0;
     
     if (rank==0) printf("DEBUG  verify at the end\n");
-    if (mesh->verify())
-        std::cout<<"pass"<<std::endl;
+//    if (mesh->verify())
+//        std::cout<<"pass"<<std::endl;
+
+	mesh->compute_print_quality();
+    mesh->compute_print_NNodes_global();
 
 #else
     std::cerr<<"Pragmatic was configured without VTK"<<std::endl;

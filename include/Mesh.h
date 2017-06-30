@@ -1505,6 +1505,31 @@ public:
         return state;
     }
 
+	void compute_print_quality() 
+    {
+        double qmean = get_qmean();
+        double qmin = get_qmin();
+        if(rank==0) {
+            std::cout<<"INFO: mean quality............"<<qmean<<std::endl;
+            std::cout<<"INFO: min quality............."<<qmin<<std::endl;
+        }
+    }
+
+	void compute_print_NNodes_global()
+    {   
+		int NNodes_loc = 0;
+		for (int iVer=0; iVer<NNodes; ++iVer) {
+			if (node_owner[iVer] == rank)
+				NNodes_loc++;
+		}
+
+        MPI_Allreduce(MPI_IN_PLACE, &NNodes_loc, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+
+        if(rank==0) {
+            std::cout<<"INFO: num nodes..............."<<NNodes_loc<<std::endl;
+        }
+    }
+
     void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
                          std::vector< std::vector<index_t> > *recv_vec)
     {
@@ -1901,7 +1926,6 @@ public:
         std::vector<std::vector<double>> recv_metric(num_processes);
         communicate<double>(send_metric, recv_metric, MPI_REAL_T);
 
-
         // Now treat new vertices
         int NNewNodes = NNodes;
         int NOldNodes = NNodes;
@@ -1948,7 +1972,6 @@ public:
         lnn2gnn.resize(NNodes);
         NEList.resize(NNodes);
         NNList.resize(NNodes);
-
 
         // Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
@@ -2015,7 +2038,6 @@ public:
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
         
-
         // Remove useless vertices
         std::vector<int> new_local_numbering(NNodes, -1);
         int count = 0;
@@ -2067,7 +2089,6 @@ public:
         NEList.resize(NNodes);
         NNList.resize(NNodes);
 
-
         // fix structures
         for (int i=0; i<_ENList.size(); ++i) {
             if (_ENList[i] >= 0)
@@ -2085,7 +2106,6 @@ public:
             it->second = new_local_numbering[it->second];
         }
         new_local_numbering.clear();
-
 
         // Remove dead elements
         std::vector<int> new_elm_numbering(NElements);
@@ -2105,7 +2125,6 @@ public:
         NElements = count;
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
-
         
         // Fix NEList and NNList by recreating them
         create_adjacency();
@@ -2132,7 +2151,6 @@ public:
             recv_map[i].swap(recv_map_new);
         }
 
-
         /// recompute qualities
         quality.resize(NElements);
         for (int iElm=0; iElm<NElements; ++iElm) {
@@ -2142,11 +2160,7 @@ public:
                 update_quality<3>(iElm);
         }
 
-
-
         halo_update<int, 1>(_mpi_comm, send, recv, node_owner);
-        fix_halos();
-
 
     }
 
