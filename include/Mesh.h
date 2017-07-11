@@ -407,6 +407,63 @@ public:
         return;
     }
 
+    /// Return the number of boundary facets in the mesh.
+    inline size_t get_number_facets() const
+    {
+        size_t NFacets = 0;
+        for (index_t i=0; i<NElements*(ndims+1); ++i) {
+            if (boundary[i] > 0)
+                NFacets++;
+        }
+        return NFacets;
+    }
+
+    void get_boundary(int *facets, int *ids) const
+    {
+        // Sweep through boundary and set ids.
+        size_t NElements = get_number_elements();
+        int *facet = facets;
+        int *id = ids;
+        for(int i=0;i<NElements;i++){
+            const int *n=get_element(i);
+            if(n[0]==-1)                            // TODO: why do you need to check that ?
+                continue;
+      
+            for(int j=0;j<nloc;j++){
+                if(boundary[i*nloc+j]<=0)
+                    continue;
+
+                if(ndims==2){                       // TODO; why don't you care about the orientation in 2d ?
+                    facet[0] = n[(j+1)%3];
+                    facet[1] = n[(j+2)%3];
+                } else{                             // TODO: why is it different depending on j?
+                    if(j==0){                       // TODO: I assume it's for the orientation ?
+                        facet[0] = n[(j+1)%3];
+                        facet[1] = n[(j+3)%3];
+                        facet[2] = n[(j+2)%3];
+                    }else if(j==1){
+                        facet[0] = n[(j+0)%3];      // TODO:  why 0 and not 1 ? 0 looks wrong since it's j+...
+                        facet[1] = n[(j+2)%3];
+                        facet[2] = n[(j+3)%3];
+                    }else if(j==2){
+                        facet[0] = n[(j+0)%3];
+                        facet[1] = n[(j+3)%3];
+                        facet[2] = n[(j+1)%3];
+                    }else if(j==3){
+                        facet[0] = n[(j+0)%3];
+                        facet[1] = n[(j+1)%3];
+                        facet[2] = n[(j+2)%3];
+                    }   
+                }
+                *id = boundary[i*nloc+j];
+    
+                facet+=ndims;
+                ++id;
+            }
+        }
+    }
+
+
     // Returns the list of facets and corresponding ids
     void get_boundary(int* nfacets, const int** facets, const int** ids)
     {
@@ -415,11 +472,7 @@ public:
         int      *Facets, *Ids;
 
         // compute number facets = number of ids > 0
-        NFacets = 0;
-        for (index_t i=0; i<NElements*(ndims+1); ++i) {
-            if (boundary[i] > 0)
-                NFacets++;
-        }
+        NFacets = get_number_facets();
 
         Facets = (int*)malloc(NFacets*ndims*sizeof(int));
         Ids = (int*)malloc(NFacets*sizeof(int));
@@ -433,7 +486,7 @@ public:
                 off = i_elm*(ndims+1);   // offset in the ElementNode list
                 for (int j=0; j<ndims+1; ++j) {
                     if (j != i_loc){
-                        Facets[k] = _ENList[off+j];
+                        Facets[k] = _ENList[off+j];  // TODO: Here I don't care about the orientation
                         k++;
                     }
                 }
