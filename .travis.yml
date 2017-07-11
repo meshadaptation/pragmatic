@@ -15,7 +15,7 @@ install:
   - pushd hg.eigen/
   - mkdir build
   - pushd build
-  - cmake ../
+  - ${TRAVIS_BUILD_DIR}/cmake/bin/cmake ../
   - sudo make install
   - popd
   - popd
@@ -45,3 +45,5 @@ script:
   - make
   - make test ARGS="-v"
 
+
+hg clone https://bitbucket.org/eigen/eigen/ hg.eigen; pushd hg.eigen/; mkdir build; pushd build; cmake ../
