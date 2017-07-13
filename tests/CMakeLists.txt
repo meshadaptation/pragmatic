@@ -88,27 +88,22 @@ if (ENABLE_VTK)
   ADD_EXECUTABLE(benchmark_adapt_3d ${PRAGMATIC_TEST_SRC}/benchmark_adapt_3d.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(benchmark_adapt_3d ${PRAGMATIC_LIBRARIES})
 
-  # tests with mpi:
-  if (ENABLE_MPI)
+  ADD_EXECUTABLE(test_mpi_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_coarsen_2d ${PRAGMATIC_LIBRARIES})
 
-    ADD_EXECUTABLE(test_mpi_coarsen_2d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_2d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_mpi_coarsen_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
 
-    ADD_EXECUTABLE(test_mpi_coarsen_3d ${PRAGMATIC_TEST_SRC}/test_mpi_coarsen_3d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_mpi_coarsen_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_refine_2d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_refine_2d ${PRAGMATIC_LIBRARIES})
 
-    ADD_EXECUTABLE(test_mpi_refine_2d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_2d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_mpi_refine_2d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_mpi_refine_3d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_refine_3d ${PRAGMATIC_LIBRARIES})
 
-    ADD_EXECUTABLE(test_mpi_refine_3d ${PRAGMATIC_TEST_SRC}/test_mpi_refine_3d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_mpi_refine_3d ${PRAGMATIC_LIBRARIES})
+  ADD_EXECUTABLE(test_smooth_3d ${PRAGMATIC_TEST_SRC}/test_smooth_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_smooth_3d ${PRAGMATIC_LIBRARIES})
 
-    ADD_EXECUTABLE(test_smooth_3d ${PRAGMATIC_TEST_SRC}/test_smooth_3d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_smooth_3d ${PRAGMATIC_LIBRARIES})
-
-    ADD_EXECUTABLE(test_mpi_adapt_3d ${PRAGMATIC_TEST_SRC}/test_mpi_adapt_3d.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
-
-  endif()
+  ADD_EXECUTABLE(test_mpi_adapt_3d ${PRAGMATIC_TEST_SRC}/test_mpi_adapt_3d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_mpi_adapt_3d ${PRAGMATIC_LIBRARIES})
 
 endif()

@@ -73,10 +73,8 @@ public:
 
         mpi_nparts = 1;
         rank=0;
-#ifdef HAVE_MPI
         MPI_Comm_size(_mesh->get_mpi_comm(), &mpi_nparts);
         MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-#endif
 
         epsilon_q = DBL_EPSILON;
 

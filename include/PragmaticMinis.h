@@ -42,9 +42,7 @@
 #include <omp.h>
 #endif
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 // Definition of size_t
 #include <cstdlib>
@@ -68,7 +66,6 @@ int pragmatic_thread_id()
 #endif
 }
 
-#ifdef HAVE_MPI
 int pragmatic_nprocesses(MPI_Comm comm)
 {
     int nprocesses;
@@ -82,7 +79,6 @@ int pragmatic_process_id(MPI_Comm comm)
     MPI_Comm_rank(comm, &id);
     return id;
 }
-#endif
 
 // Returns the original value of shared, while incrementing *shared by inc.
 size_t pragmatic_omp_atomic_capture(size_t* shared, size_t inc)

@@ -54,9 +54,7 @@
 
 #include "generate_Steiner_ellipse_3d.h"
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 #ifdef HAVE_OPENMP
 #include <omp.h>
@@ -84,10 +82,8 @@ public:
 
         rank = 0;
         nprocs = 1;
-#ifdef HAVE_MPI
         MPI_Comm_size(_mesh->get_mpi_comm(), &nprocs);
         MPI_Comm_rank(_mesh->get_mpi_comm(), &rank);
-#endif
 
         double bbox[dim*2];
         for(int i=0; i<dim; i++) {
@@ -547,11 +543,9 @@ public:
         _mesh->node_owner.resize(pNNodes, -1);
         _mesh->lnn2gnn.resize(pNNodes, -1);
 
-#ifdef HAVE_MPI
         // At this point we can establish a new, gappy global numbering system
         if(nprocs>1)
             _mesh->create_gappy_global_numbering(pNElements);
-#endif
 
         // Enforce first-touch policy
         #pragma omp parallel
@@ -566,10 +560,8 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         // Halo update if parallel
         halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
-#endif
     }
 
 
@@ -609,11 +601,9 @@ public:
         _mesh->node_owner.resize(pNNodes, -1);
         _mesh->lnn2gnn.resize(pNNodes, -1);
 
-#ifdef HAVE_MPI
         // At this point we can establish a new, gappy global numbering system
         if(nprocs>1)
             _mesh->create_gappy_global_numbering(pNElements);
-#endif
 
         // Enforce first-touch policy
         #pragma omp parallel
@@ -628,10 +618,8 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         // Halo update if parallel
         halo_update<double, (dim==2?3:6)>(_mesh->get_mpi_comm(), _mesh->send, _mesh->recv, _mesh->metric);
-#endif
     }
 
     /*! Add the contribution from the metric field from a new field with a target linear interpolation error.
@@ -961,11 +949,9 @@ public:
     {
         double predicted=predict_nelements_part();
 
-#ifdef HAVE_MPI
         if(nprocs>1) {
             MPI_Allreduce(MPI_IN_PLACE, &predicted, 1, _mesh->MPI_REAL_T, MPI_SUM, _mesh->get_mpi_comm());
         }
-#endif
 
         return predicted;
     }
