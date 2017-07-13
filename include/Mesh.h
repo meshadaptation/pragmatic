@@ -1423,11 +1423,11 @@ public:
     ////    it trims the elements list, converts it to global node numbering, and trims the boundary structure at the same time.
     void remove_overlap_elements() {
         
-        // -- Get rid of gappy global numbering and get contiguous global numbering
-        create_global_node_numbering();
-        
         if (num_processes == 1)
             return;
+
+        // -- Get rid of gappy global numbering and get contiguous global numbering
+        create_global_node_numbering();
             
         int NPNodes = NNodes - recv_halo.size();            
         MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());

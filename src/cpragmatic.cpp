@@ -321,7 +321,6 @@ extern "C" {
             smooth.optimisation_linf(10);
         }
 
-
         mesh->remove_overlap_elements();
     }
 
