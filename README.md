@@ -7,12 +7,13 @@ it can also be used as a lossy compression algorithm for 2 and 3D data
 tensor field which encodes desired mesh element size
 anisotropically.
 
-The toolkit is written in C++ but also provides interfaces for Fortran. It 
-has been integrated with [FEniCS/Dolfin](http://fenicsproject.org) and
-integration with PETSc/DMPlex is planned.  One of the design goals of PRAgMaTIc
-is to develop highly scalable algorithms for clusters of multi-core and
-many-core nodes. PRAgMaTIc uses OpenMP for thread parallelism and MPI for
-domain decomposition parallelisation.
+The toolkit is written in C++ but also provides interfaces for C. It has been 
+integrated with [FEniCS/Dolfin](http://fenicsproject.org), with 
+[PETSc/DMPlex](https://www.mcs.anl.gov/petsc) and integration with 
+[Firedrake](http://www.firedrakeproject.org/) is ongoing.  One of the design 
+goals of PRAgMaTIc is to develop highly scalable algorithms for clusters of 
+multi-core and many-core nodes. PRAgMaTIc uses OpenMP for thread parallelism 
+and MPI for domain decomposition parallelisation.
 
 # Publications
 *A thread-parallel algorithm for anisotropic mesh adaptation*
@@ -24,28 +25,66 @@ DOI: [10.1016/j.procs.2012.04.166](http://dx.doi.org/10.1016/j.procs.2012.04.166
 *Accelerating Anisotropic Mesh Adaptivity on nVIDIA's CUDA Using Texture Interpolation*
 DOI: [10.1007/978-3-642-23397-5_38](http://dx.doi.org/10.1007/978-3-642-23397-5_38)
 
+# Requirements
+The following libraries are required to build PRAgMaTIc:
+- Eigen3
+- MPI
+- METIS
+- VTK (optional)
+- LibMeshb (optional).
+
+# Configure
+PRAgMaTIc can be configured with a number of custom options for IOs, which are shown in the following.
+
+ENABLE_VTK=TRUE|FALSE
+
+ENABLE_LIBMESHB=TRUE|FALSE
+
+These can be set as env variables, or given as command line arguments to cmake, e.g. cmake -DENABLE_VTK=FALSE would disable MPI support. If both of the same option are given, the command line argument is given a higher priority over the env variable.
+
+If neither is given the default value is used for the configuration, which is TRUE for all configure options.
+
+Let <SRCDIR> be the path to the source directory of PRAgMaTIc, <BUILDDIR> the build directory in which you want to build PRAgMaTIc, and <INSTALLDIR> the directory in which you wish to install PRAgMaTIc. E.g. execute
+
+$ mkdir <BUILDDIR>
+
+$ cd <BUILDDIR>
+
+Then do
+
+$ cmake <SRCDIR>
+
+If you want to install PRAgMaTIc to a specific location then specify the target location.
+
+$ cmake -DCMAKE_INSTALL_PREFIX=<INSTALLDIR> <SRCDIR>
+
+The default location for <INSTALLDIR> is /usr/local.
+
+By default, PRAgMaTIc is built in debug mode. To build in release mode, set CMAKE_BUILD_TYPE=Release.
+
 # Build
-$ cmake .
+PRAgMaTIc is now ready to be built. In your <BUILDDIR> execute
+
 $ make
 
 # Testing
+To build and run tests, execute
+
 $ make test
 
 # Install
-If you want to install to a specific location then specify the
-argument --prefix=/target_location for ./configure. The default
-location is /usr/local.
+In your <BUILDDIR>, execute
 
 $ make install
 
-# RPM
-A RPM spec file is provided in the source root directory. Typically
-you need to create a tar ball of the source directory and then execute
-rpmbuild, e.g.:
+Depending on <INSTALLDIR> you might have to run with sudo rights.
 
-$ rpmbuild -ta pragmatic-0.1.tar.gz 
+$ sudo make install
 
-See rpmbuild documentation for more details.
+# Examples
+Some examples can be found in <SRCDIR>/python. Dolfin is required to run them.
+
+Note: PRAgMaTIc needs to be built prior to running the examples.
 
 # DEBIAN
 
