@@ -353,6 +353,7 @@ def adapt_boundary_regions(original_mesh, adapted_mesh, original_regions):
     # We loop over all the adapted_mesh boundary facets and compute each facet midpoint.
     # For each midpoint, we find the original_mesh boundary facet that includes (or is closest)
     # to the midpoint and we assign the same region ID as the original_mesh facet to the adapted_mesh facet.
+    # NOTE: this function is deprecated and it will be removed soon.
 
     # compute geometric dimension
     dim = original_mesh.geometry().dim()
@@ -405,10 +406,11 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   # INPUT : bfaces.shape = (n,2) or bfaces.shape = (n,3) is a list of edges or
   #        faces for the mesh boundary. If not specified, it will be calculated. 
   # INPUT : bfaces_func is a FacetFunction that gives each edge and face and ID, so 
-  #         that corners implicitly specified in 2D and edges in 3D. 
+  #         that corners are implicitly specified in 2D and edges in 3D. 
   #         All corners can be specified this way in 3D, but it can require 
   #         definition of dummy IDs, if the corner is in the middle of face and
-  #         thus only related to two IDs.
+  #         thus only related to two IDs. The ID value 0 is reserved for the interior
+  #         of the domain.
   # INPUT : colinearity_tol is the angle tolerance for colinearity detection
   #         (see the function detect_colinearity).
   # INPUT : debugon=True (default) checks for conservation of area/volume
@@ -473,6 +475,11 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
       # detect colinear facets
       info("Colinearity detection ...")  
       bfaces_func = detect_colinearity(mesh, tol = colinearity_tol)
+  else:
+      for f in facets(mesh):
+          if f.exterior():
+              if bfaces_func[f] == 0:
+                  raise ValueError("Zero value specified as a boundary tag in bfaces_func: the tag value 0 is reserved for interior facets.")
 
   bfaces_IDs = numpy.array([bfaces_func[f.index()] for f in bfaces_list], dtype = numpy.intc)
     
@@ -587,6 +594,9 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   # define a FacetFunction with the boundary tags. We need to loop over all boundary cells
   # and find which boundary facet is opposite to which vertex.
   n_bfaces_func = FacetFunction("size_t", n_mesh, 0)
+  # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
+  # Keep track of lost boundary tags in wrong tags.
+  wrong_tags = []
   for cell in cells(n_mesh):
       for facet in facets(cell):
           if facet.exterior():
@@ -599,8 +609,27 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
               # the correct tag to the correct facet.
               pos = nodes_indices.index(opposite_vertex)
               n_bfaces_func[facet.index()] = boundary_tags[(gdim+1)*cell.index() + pos]
-              #if n_bfaces_func[facet.index()] == 0:
-              #    print (facet.index(), boundary_tags[(gdim+1)*cell.index():(gdim+1)*(cell.index()+1)].max())
+              if n_bfaces_func[facet.index()] == 0:
+                  wrong_tags.append(facet.index())
+
+  # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
+  #        the following is a temporary fix and it will be removed soon.
+  if len(wrong_tags) > 0:
+      n_mesh.init(gdim-2,gdim-1) # initialise connectivity
+      for wrong_tag in wrong_tags:
+          facet = Facet(n_mesh, wrong_tag)
+          # find tags of adjacent boundary facets. First get the vertices of the wrong tag facet, then the exterior facets
+          # these vertices belong to.
+          if gdim == 2:
+              adjacent_tags = numpy.array([n_bfaces_func[ff] for ff in [Facet(n_mesh, index) for index in                         \
+                              numpy.unique(numpy.concatenate([v.entities(gdim-1) for v in vertices(Facet(n_mesh, wrong_tag))]))]  \
+                              if ff.exterior() and ff.index() != wrong_tag])
+          else:
+              adjacent_tags = numpy.array([n_bfaces_func[ff] for ff in [Facet(n_mesh, index) for index in                         \
+                              numpy.unique(numpy.concatenate([e.entities(gdim-1) for e in    edges(Facet(n_mesh, wrong_tag))]))]  \
+                              if ff.exterior() and ff.index() != wrong_tag])
+          # replace the wrong tag with any of the adjacent correct tags.
+          n_bfaces_func[wrong_tag] = adjacent_tags[adjacent_tags != 0][0]
 
   info("Finalising PRAgMaTIc ...")
   _libpragmatic.pragmatic_finalize()
