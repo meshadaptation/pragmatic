@@ -64,6 +64,8 @@ __all__ = ["_libpragmatic",
            "NotImplementedException",
            "ParameterException",
            "adapt",
+           "adapt_boundary_regions",
+           "detect_colinearity",
            "edge_lengths",
            "mesh_metric",
            "refine_metric",
@@ -429,8 +431,6 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
       # patchwise projection to CG 1 for speed
       metric = patchwise_projection(metric, mesh)
-      #metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1), solver_type='cg', preconditioner_type='petsc_amg') #metric = logproject(metric)
-  #metric = fix_CG1_metric(metric) #fixes negative eigenvalues
   if grada is not None:
       metric = gradate(metric,grada)
   if maxN is not None:
@@ -456,8 +456,10 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
         or not element.degree() == 1:
     raise InvalidArgumentException("Require 2D P1 function space for metric tensor field")
   
+  gdim = element.cell().geometric_dimension()
+
   nodes = array(range(0,mesh.num_vertices()),dtype=numpy.intc) 
-  cells = mesh.cells().astype(numpy.intc)
+  cells_array = mesh.cells().astype(numpy.intc)
   coords = mesh.coordinates()
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
@@ -476,7 +478,7 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
     
   x = coords[nodes,0]
   y = coords[nodes,1]
-  if element.cell().geometric_dimension() == 3:
+  if gdim == 3:
     z = coords[nodes,2]
   
   # Dolfin stores the tensor as:
@@ -489,7 +491,7 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
       dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
   
   metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
     metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[arange(0,metric.vector().array().size,4)[dof2vtx]]
     metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
     metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
@@ -508,18 +510,18 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
   
-  NElements = ctypes.c_int(cells.shape[0])
+  NElements = ctypes.c_int(cells_array.shape[0])
   
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
       _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
-                                  cells.ctypes.data_as(ctypes.POINTER(ctypes.c_int)), 
+                                  cells_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)), 
                                   x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
                                   y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
   else:
       _libpragmatic.pragmatic_3d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
-                                  cells.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
+                                  cells_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
                                   x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
                                   y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
                                   z.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
@@ -551,15 +553,12 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
                                    ctypes.byref(n_NElements),
                                    ctypes.byref(n_NSElements))
   
-  if element.cell().geometric_dimension() == 2:
-      n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
-  else:
-      n_enlist = numpy.empty(4 * n_NElements.value, numpy.intc)
+  n_enlist = numpy.empty((gdim+1) * n_NElements.value, numpy.intc)
   
   info("Extracting output ...")
   n_x = numpy.empty(n_NNodes.value)
   n_y = numpy.empty(n_NNodes.value)
-  if element.cell().geometric_dimension() == 3:
+  if gdim == 3:
       n_z = numpy.empty(n_NNodes.value)    
       _libpragmatic.pragmatic_get_coords_3d(n_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
                                             n_y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -570,16 +569,44 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
                                         
   _libpragmatic.pragmatic_get_elements(n_enlist.ctypes.data_as(ctypes.POINTER(ctypes.c_int)))
 
-  info("Finalising PRAgMaTIc ...")
-  _libpragmatic.pragmatic_finalize()
-  info("PRAgMaTIc adapt complete")
-  
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
       n_mesh = set_mesh(array([n_x,n_y]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   else:
       n_mesh = set_mesh(array([n_x,n_y,n_z]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   
-  return n_mesh
+  # extracting boundary tags: pragmatic_get_boundaryTags returns an
+  # array of the same size as n_enlist.
+  # For each vertex, boundary_tags contains the tag of the opposite facet in the element.
+  # boundary_tags[3*i+k] gives the tag of the facet opposite to the k-th vertex of the i-th triangle
+  
+  # extract boundary_tags from pragmatic
+  ptr = ctypes.POINTER(ctypes.c_int*(gdim + 1)*n_NElements.value)()
+  _libpragmatic.pragmatic_get_boundaryTags(ctypes.byref(ptr))
+  boundary_tags = numpy.frombuffer(ptr.contents, dtype = numpy.intc)
+
+  # define a FacetFunction with the boundary tags. We need to loop over all boundary cells
+  # and find which boundary facet is opposite to which vertex.
+  n_bfaces_func = FacetFunction("size_t", n_mesh, 0)
+  for cell in cells(n_mesh):
+      for facet in facets(cell):
+          if facet.exterior():
+              # if the cell facet is a boundary facet, get the cell vertex indices from n_enlist
+              # and find the index of the vertex which is opposite to the boundary facet of the cell.
+              # this vertex will be the only vertex which is not a vertex of the boundary facet.
+              nodes_indices = n_enlist[(gdim+1)*cell.index():(gdim+1)*(cell.index()+1)].tolist()
+              opposite_vertex = (set(nodes_indices) - set(facet.entities(0))).pop()
+              # once we know the index of the vertex opposite to the boundary facet assign
+              # the correct tag to the correct facet.
+              pos = nodes_indices.index(opposite_vertex)
+              n_bfaces_func[facet.index()] = boundary_tags[(gdim+1)*cell.index() + pos]
+              #if n_bfaces_func[facet.index()] == 0:
+              #    print (facet.index(), boundary_tags[(gdim+1)*cell.index():(gdim+1)*(cell.index()+1)].max())
+
+  info("Finalising PRAgMaTIc ...")
+  _libpragmatic.pragmatic_finalize()
+  info("PRAgMaTIc adapt complete")
+
+  return n_mesh, n_bfaces_func
 
 def consistent_interpolation(mesh, fields=[]):
   if not isinstance(fields, list):
@@ -1071,20 +1098,32 @@ def logproject(Mp):
 def mesh_metric(mesh):
   # calculates a mesh metric (that is it has unit of squared inverse length,
   # use mesh_metric2 to get units of length)
-  # For each simplex, the function solves the linear problem
+  # On each element, the edge i is delimited by two points of coordinate vectors x_i and y_i.
+  # Define the edge vector Li to be given by Li = yi - xi and define the element mesh metric tensor M such that
+  #
+  # Li^T M Li = 1, for each i .
+  #
+  # The above equation defines a linear system that gives the entries of the metric tensor M.
+  # M is piecewise constant on each element and to compute its value a small linear system
+  # has to be solved for each element. For example, in 2D these linear systems are all in the form,
+  #
   #
   # |'L1x*L1x L1x*L1y L1y*L1y'| |'Mxy |   |'1'|
   # | L2x*L2x L2x*L2y L2y*L2y | | Mxy | = | 1_|
-  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|, where
+  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|,
   #
-  #L1x is p1x-p2x and p1x is the x-coordinate of the 1st vertex in the simplex.
-  #The problem is vectorised by construction of a block diagonal problem.
+  # where Lix, Liy are the x and y coordinates of Li respectively.
+  #
+  # The following code is assembling and solving these linear systems. 
+  # First, all the systems are assembled, then each system is solved one by one.
+  #
   #INPUT : DOLFIN MESH
   #OUTPUT: DOLFIN DG0 SPD TENSOR VARIABLE
   #
   #NOTE: For stabilising advective problems where the local velocity direction 
   #      is vdir (unit length), the local element size, Lh, can be taken as 
   #      htmp = dot(vdir,M); Lh = 1/sqrt(dot(htmp,htmp)), where M is the mesh metric
+
   dim = mesh.geometry().dim()
   cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
   cells_array = mesh.cells()
@@ -1109,25 +1148,8 @@ def mesh_metric(mesh):
     All[:,inds[i,0]] = rall[:,0,i]**2; All[:,inds[i,1]] = 2.*rall[:,0,i]*rall[:,1,i]; All[:,inds[i,2]] = rall[:,1,i]**2
     if dim == 3:
       All[:,inds[i,3]] = 2.*rall[:,0,i]*rall[:,2,i]; All[:,inds[i,4]] = 2.*rall[:,1,i]*rall[:,2,i]; All[:,inds[i,5]] = rall[:,2,i]**2
-  #Ain = zeros([Nedg*2-1,Nedg*n_cells])
-  #ndia = zeros(Nedg*2-1)
-  #for i in range(Nedg):
-  #    for j in range(i,Nedg):
-  #        iks1 = arange(j,Ain.shape[1],Nedg)
-  #        if i==0:
-  #            Ain[i,iks1] = All[:,inds[j,j]]
-  #        else:
-  #            iks2 = arange(j-i,Ain.shape[1],Nedg)
-  #            Ain[2*i-1,iks1] = All[:,inds[j-i,j]]
-  #            Ain[2*i,iks2]   = All[:,inds[j,j-i]]
-  #            ndia[2*i-1] = i
-  #            ndia[2*i]   = -i
-  #  
-  #A = scipy.sparse.spdiags(Ain, ndia, Ain.shape[1], Ain.shape[1]).tocsr()
-  #b = ones(Ain.shape[1])
-  #X = scipy.sparse.linalg.spsolve(A,b)
 
-  X = numpy.hstack([numpy.linalg.solve(item.reshape((Nedg,Nedg)),ones(Nedg)) for item in All])
+  X = numpy.concatenate([numpy.linalg.solve(item.reshape((Nedg,Nedg)),ones(Nedg)) for item in All])
   
   #set solution
   XX = sym2asym(X.reshape([n_cells,Nedg]).transpose())
