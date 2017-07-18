@@ -123,383 +123,362 @@ public:
         size_t origNNodes = _mesh->get_number_nodes();
         size_t edgeSplitCnt = 0;
 
-        std::vector<int> element_tag(origNElements,0);
+        std::vector<int> element_tag(origNElements,0);        
+        
+        new_vertices_per_element.resize(nedge*origNElements);
+        std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
+        
 
-        #pragma omp parallel
-        {
-            #pragma omp single nowait
-            {
-                new_vertices_per_element.resize(nedge*origNElements);
-                std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
-            }
+        int tid = pragmatic_thread_id();
+        splitCnt[tid] = 0;
 
-            int tid = pragmatic_thread_id();
-            splitCnt[tid] = 0;
+        /*
+         * Average vertex degree in 2D is ~6, so there
+         * are approx. (6/2)*NNodes edges in the mesh.
+         * In 3D, average vertex degree is ~12.
+         */
+        size_t reserve_size = nedge*origNNodes/nthreads;
+        newVertices[tid].clear();
+        newVertices[tid].reserve(reserve_size);
+        newCoords[tid].clear();
+        newCoords[tid].reserve(dim*reserve_size);
+        newMetric[tid].clear();
+        newMetric[tid].reserve(msize*reserve_size);
 
-            /*
-             * Average vertex degree in 2D is ~6, so there
-             * are approx. (6/2)*NNodes edges in the mesh.
-             * In 3D, average vertex degree is ~12.
-             */
-            size_t reserve_size = nedge*origNNodes/nthreads;
-            newVertices[tid].clear();
-            newVertices[tid].reserve(reserve_size);
-            newCoords[tid].clear();
-            newCoords[tid].reserve(dim*reserve_size);
-            newMetric[tid].clear();
-            newMetric[tid].reserve(msize*reserve_size);
+        /* Loop through all edges and select them for refinement if
+           its length is greater than L_max in transformed space. */
+        for(size_t i=0; i<origNNodes; ++i) {
+            
+            if (_mesh->is_halo_node(i))
+                continue;
 
-            /* Loop through all edges and select them for refinement if
-               its length is greater than L_max in transformed space. */
-            #pragma omp for schedule(guided) nowait
-            for(size_t i=0; i<origNNodes; ++i) {
-                
-                if (_mesh->is_halo_node(i))
+            for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
+
+                index_t otherVertex = _mesh->NNList[i][it];
+                assert(otherVertex>=0);
+
+                if (_mesh->is_halo_node(otherVertex))
                     continue;
 
-                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
-
-                    index_t otherVertex = _mesh->NNList[i][it];
-                    assert(otherVertex>=0);
-
-                    if (_mesh->is_halo_node(otherVertex))
-                        continue;
-
-                    // compute neighboring elements
-                    std::set<index_t> intersection;
-                    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-                                          _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
-                                          std::inserter(intersection, intersection.begin()));
-
-                    // if one element is tagged => don't refine
-                    int skip = 0;
-                    for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                        index_t eid = *element;
-                        if (element_tag[eid]) {
-                            skip = 1;
-                            break;
-                        }
-                    }
-                    if (skip)
-                        continue;
-
-
-                    /* Conditional statement ensures that the edge length is only calculated once.
-                     * By ordering the vertices according to their gnn, we ensure that all processes
-                     * calculate the same edge length when they fall on the halo.
-                     */
-                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
-                        double length = _mesh->calc_edge_length(i, otherVertex);
-                        if(length>L_max) {
-                            ++splitCnt[tid];
-                            refine_edge(i, otherVertex, tid);
-                            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                                index_t eid = *element;
-                                element_tag[eid] = 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
-            assert(newVertices[tid].size()==splitCnt[tid]);
-
-            #pragma omp barrier
-
-            #pragma omp single
-            {
-                size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
-                if(_mesh->_coords.size()<reserve*dim) {
-                    _mesh->_coords.resize(reserve*dim);
-                    _mesh->metric.resize(reserve*msize);
-                    _mesh->NNList.resize(reserve);
-                    _mesh->NEList.resize(reserve);
-                    _mesh->node_owner.resize(reserve);
-                    _mesh->lnn2gnn.resize(reserve);
-                }
-                edgeSplitCnt = _mesh->NNodes - origNNodes;
-            }
-
-            // Append new coords and metric to the mesh.
-            memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
-            memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
-
-            // Fix IDs of new vertices
-            assert(newVertices[tid].size()==splitCnt[tid]);
-            for(size_t i=0; i<splitCnt[tid]; i++) {
-                newVertices[tid][i].id = threadIdx[tid]+i;
-            }
-
-            // Accumulate all newVertices in a contiguous array
-            memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
-
-            // Mark each element with its new vertices,
-            // update NNList for all split edges.
-            #pragma omp barrier
-            #pragma omp for schedule(guided)
-            for(size_t i=0; i<edgeSplitCnt; ++i) {
-                index_t vid = allNewVertices[i].id;
-                index_t firstid = allNewVertices[i].edge.first;
-                index_t secondid = allNewVertices[i].edge.second;
-
-                // Find which elements share this edge and mark them with their new vertices.
+                // compute neighboring elements
                 std::set<index_t> intersection;
-                std::set_intersection(_mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
-                                      _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
+                std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+                                      _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
                                       std::inserter(intersection, intersection.begin()));
 
+                // if one element is tagged => don't refine
+                int skip = 0;
                 for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
                     index_t eid = *element;
-                    size_t edgeOffset = edgeNumber(eid, firstid, secondid);
-                    new_vertices_per_element[nedge*eid+edgeOffset] = vid;
+                    if (element_tag[eid]) {
+                        skip = 1;
+                        break;
+                    }
                 }
+                if (skip)
+                    continue;
 
-                /*
-                 * Update NNList for newly created vertices. This has to be done here, it cannot be
-                 * done during element refinement, because a split edge is shared between two elements
-                 * and we run the risk that these updates will happen twice, once for each element.
+
+                /* Conditional statement ensures that the edge length is only calculated once.
+                 * By ordering the vertices according to their gnn, we ensure that all processes
+                 * calculate the same edge length when they fall on the halo.
                  */
-                _mesh->NNList[vid].push_back(firstid);
-                _mesh->NNList[vid].push_back(secondid);
-
-                def_ops->remNN(firstid, secondid, tid);
-                def_ops->addNN(firstid, vid, tid);
-                def_ops->remNN(secondid, firstid, tid);
-                def_ops->addNN(secondid, vid, tid);
-
-                // This branch is always taken or always not taken for every vertex,
-                // so the branch predictor should have no problem handling it.
-                if(nprocs==1) {
-                    _mesh->node_owner[vid] = 0;
-                    _mesh->lnn2gnn[vid] = vid;
-                } else {
-                    /*
-                     * Perhaps we should introduce a system of alternating min/max assignments,
-                     * i.e. one time the node is assigned to the min rank, one time to the max
-                     * rank and so on, so as to avoid having the min rank accumulate the majority
-                     * of newly created vertices and disturbing load balance among MPI processes.
-                     */
-                    int owner0 = _mesh->node_owner[firstid];
-                    int owner1 = _mesh->node_owner[secondid];
-                    int owner = std::min(owner0, owner1);
-                    _mesh->node_owner[vid] = owner;
-
-                    if(_mesh->node_owner[vid] == rank)
-                        _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
-                }
-            }
-
-            if(dim==3) {
-                // If in 3D, we need to refine facets first.
-                #pragma omp for schedule(guided)
-                for(index_t eid=0; eid<origNElements; ++eid) {
-                    // Find the 4 facets comprising the element
-                    const index_t *n = _mesh->get_element(eid);
-                    if(n[0] < 0)
-                        continue;
-
-                    const index_t facets[4][3] = {{n[0], n[1], n[2]},
-                        {n[0], n[1], n[3]},
-                        {n[0], n[2], n[3]},
-                        {n[1], n[2], n[3]}
-                    };
-
-                    for(int j=0; j<4; ++j) {
-                        // Find which elements share this facet j
-                        const index_t *facet = facets[j];
-                        std::set<index_t> intersection01, EE;
-                        std::set_intersection(_mesh->NEList[facet[0]].begin(), _mesh->NEList[facet[0]].end(),
-                                              _mesh->NEList[facet[1]].begin(), _mesh->NEList[facet[1]].end(),
-                                              std::inserter(intersection01, intersection01.begin()));
-                        std::set_intersection(_mesh->NEList[facet[2]].begin(), _mesh->NEList[facet[2]].end(),
-                                              intersection01.begin(), intersection01.end(),
-                                              std::inserter(EE, EE.begin()));
-
-                        assert(EE.size() <= 2 );
-                        assert(EE.count(eid) == 1);
-
-                        // Prevent facet from being refined twice:
-                        // Only refine it if this is the element with the highest ID.
-                        if(eid == *EE.rbegin())
-                            for(size_t k=0; k<3; ++k)
-                                if(new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[k], facet[(k+1)%3])] != -1) {
-                                    refine_facet(eid, facet, tid);
-                                    break;
-                                }
-                    }
-                }
-
-                #pragma omp for schedule(guided)
-                for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
-                    for(int i=0; i<nthreads; ++i) {
-                        def_ops->commit_remNN(i, vtid);
-                        def_ops->commit_addNN(i, vtid);
+                if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
+                    double length = _mesh->calc_edge_length(i, otherVertex);
+                    if(length>L_max) {
+                        ++splitCnt[tid];
+                        refine_edge(i, otherVertex, tid);
+                        for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                            index_t eid = *element;
+                            element_tag[eid] = 1;
+                        }
                     }
                 }
             }
+        }
 
-            // Start element refinement.
-            splitCnt[tid] = 0;
-            newElements[tid].clear();
-            newBoundaries[tid].clear();
-            newQualities[tid].clear();
-            newElements[tid].reserve(dim*dim*origNElements/nthreads);
-            newBoundaries[tid].reserve(dim*dim*origNElements/nthreads);
-            newQualities[tid].reserve(origNElements/nthreads);
+        threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
+        assert(newVertices[tid].size()==splitCnt[tid]);
 
-            #pragma omp for schedule(guided) nowait
-            for(size_t eid=0; eid<origNElements; ++eid) {
-                //If the element has been deleted, continue.
+        
+        size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
+        if(_mesh->_coords.size()<reserve*dim) {
+            _mesh->_coords.resize(reserve*dim);
+            _mesh->metric.resize(reserve*msize);
+            _mesh->NNList.resize(reserve);
+            _mesh->NEList.resize(reserve);
+            _mesh->node_owner.resize(reserve);
+            _mesh->lnn2gnn.resize(reserve);
+        }
+        edgeSplitCnt = _mesh->NNodes - origNNodes;
+        
+
+        // Append new coords and metric to the mesh.
+        memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
+        memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
+
+        // Fix IDs of new vertices
+        assert(newVertices[tid].size()==splitCnt[tid]);
+        for(size_t i=0; i<splitCnt[tid]; i++) {
+            newVertices[tid][i].id = threadIdx[tid]+i;
+        }
+
+        // Accumulate all newVertices in a contiguous array
+        memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
+
+        // Mark each element with its new vertices,
+        // update NNList for all split edges.
+        for(size_t i=0; i<edgeSplitCnt; ++i) {
+            index_t vid = allNewVertices[i].id;
+            index_t firstid = allNewVertices[i].edge.first;
+            index_t secondid = allNewVertices[i].edge.second;
+
+            // Find which elements share this edge and mark them with their new vertices.
+            std::set<index_t> intersection;
+            std::set_intersection(_mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
+                                  _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
+                                  std::inserter(intersection, intersection.begin()));
+
+            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                index_t eid = *element;
+                size_t edgeOffset = edgeNumber(eid, firstid, secondid);
+                new_vertices_per_element[nedge*eid+edgeOffset] = vid;
+            }
+
+            /*
+             * Update NNList for newly created vertices. This has to be done here, it cannot be
+             * done during element refinement, because a split edge is shared between two elements
+             * and we run the risk that these updates will happen twice, once for each element.
+             */
+            _mesh->NNList[vid].push_back(firstid);
+            _mesh->NNList[vid].push_back(secondid);
+
+            def_ops->remNN(firstid, secondid, tid);
+            def_ops->addNN(firstid, vid, tid);
+            def_ops->remNN(secondid, firstid, tid);
+            def_ops->addNN(secondid, vid, tid);
+
+            // This branch is always taken or always not taken for every vertex,
+            // so the branch predictor should have no problem handling it.
+            if(nprocs==1) {
+                _mesh->node_owner[vid] = 0;
+                _mesh->lnn2gnn[vid] = vid;
+            } else {
+                /*
+                 * Perhaps we should introduce a system of alternating min/max assignments,
+                 * i.e. one time the node is assigned to the min rank, one time to the max
+                 * rank and so on, so as to avoid having the min rank accumulate the majority
+                 * of newly created vertices and disturbing load balance among MPI processes.
+                 */
+                int owner0 = _mesh->node_owner[firstid];
+                int owner1 = _mesh->node_owner[secondid];
+                int owner = std::min(owner0, owner1);
+                _mesh->node_owner[vid] = owner;
+
+                if(_mesh->node_owner[vid] == rank)
+                    _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
+            }
+        }
+
+        if(dim==3) {
+            // If in 3D, we need to refine facets first.
+            for(index_t eid=0; eid<origNElements; ++eid) {
+                // Find the 4 facets comprising the element
                 const index_t *n = _mesh->get_element(eid);
                 if(n[0] < 0)
                     continue;
 
-                for(size_t j=0; j<nedge; ++j)
-                    if(new_vertices_per_element[nedge*eid+j] != -1) {
-                        refine_element(eid, tid);
-                        break;
-                    }
-            }
+                const index_t facets[4][3] = {{n[0], n[1], n[2]},
+                    {n[0], n[1], n[3]},
+                    {n[0], n[2], n[3]},
+                    {n[1], n[2], n[3]}
+                };
 
-            threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt[tid]);
+                for(int j=0; j<4; ++j) {
+                    // Find which elements share this facet j
+                    const index_t *facet = facets[j];
+                    std::set<index_t> intersection01, EE;
+                    std::set_intersection(_mesh->NEList[facet[0]].begin(), _mesh->NEList[facet[0]].end(),
+                                          _mesh->NEList[facet[1]].begin(), _mesh->NEList[facet[1]].end(),
+                                          std::inserter(intersection01, intersection01.begin()));
+                    std::set_intersection(_mesh->NEList[facet[2]].begin(), _mesh->NEList[facet[2]].end(),
+                                          intersection01.begin(), intersection01.end(),
+                                          std::inserter(EE, EE.begin()));
 
-            #pragma omp barrier
-            #pragma omp single
-            {
-                if(_mesh->_ENList.size()<_mesh->NElements*nloc) {
-                    _mesh->_ENList.resize(_mesh->NElements*nloc);
-                    _mesh->boundary.resize(_mesh->NElements*nloc);
-                    _mesh->quality.resize(_mesh->NElements);
+                    assert(EE.size() <= 2 );
+                    assert(EE.count(eid) == 1);
+
+                    // Prevent facet from being refined twice:
+                    // Only refine it if this is the element with the highest ID.
+                    if(eid == *EE.rbegin())
+                        for(size_t k=0; k<3; ++k)
+                            if(new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[k], facet[(k+1)%3])] != -1) {
+                                refine_facet(eid, facet, tid);
+                                break;
+                            }
                 }
             }
 
-            // Append new elements to the mesh and commit deferred operations
-            memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-            memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
-            memcpy(&_mesh->quality[threadIdx[tid]], &newQualities[tid][0], splitCnt[tid]*sizeof(double));
-
-            // Commit deferred operations.
-            #pragma omp for schedule(guided)
             for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
                 for(int i=0; i<nthreads; ++i) {
                     def_ops->commit_remNN(i, vtid);
                     def_ops->commit_addNN(i, vtid);
-                    def_ops->commit_remNE(i, vtid);
-                    def_ops->commit_addNE(i, vtid);
-                    def_ops->commit_addNE_fix(threadIdx, i, vtid);
+                }
+            }
+        }
+
+        // Start element refinement.
+        splitCnt[tid] = 0;
+        newElements[tid].clear();
+        newBoundaries[tid].clear();
+        newQualities[tid].clear();
+        newElements[tid].reserve(dim*dim*origNElements/nthreads);
+        newBoundaries[tid].reserve(dim*dim*origNElements/nthreads);
+        newQualities[tid].reserve(origNElements/nthreads);
+
+        for(size_t eid=0; eid<origNElements; ++eid) {
+            //If the element has been deleted, continue.
+            const index_t *n = _mesh->get_element(eid);
+            if(n[0] < 0)
+                continue;
+
+            for(size_t j=0; j<nedge; ++j)
+                if(new_vertices_per_element[nedge*eid+j] != -1) {
+                    refine_element(eid, tid);
+                    break;
+                }
+        }
+
+        threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt[tid]);
+
+        
+        if(_mesh->_ENList.size()<_mesh->NElements*nloc) {
+            _mesh->_ENList.resize(_mesh->NElements*nloc);
+            _mesh->boundary.resize(_mesh->NElements*nloc);
+            _mesh->quality.resize(_mesh->NElements);
+        }
+        
+
+        // Append new elements to the mesh and commit deferred operations
+        memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
+        memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
+        memcpy(&_mesh->quality[threadIdx[tid]], &newQualities[tid][0], splitCnt[tid]*sizeof(double));
+
+        // Commit deferred operations.
+        for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
+            for(int i=0; i<nthreads; ++i) {
+                def_ops->commit_remNN(i, vtid);
+                def_ops->commit_addNN(i, vtid);
+                def_ops->commit_remNE(i, vtid);
+                def_ops->commit_addNE(i, vtid);
+                def_ops->commit_addNE_fix(threadIdx, i, vtid);
+            }
+        }
+
+        // Update halo.
+        if(nprocs>1) {
+            
+            std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
+
+            for(size_t i=0; i<edgeSplitCnt; ++i)
+            {
+                DirectedEdge<index_t> *vert = &allNewVertices[i];
+
+                if(_mesh->node_owner[vert->id] != rank) {
+                    // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
+                    // Only update them if the vertex is actually visible by *this* MPI process,
+                    // i.e. if at least one of its neighbours is owned by *this* process.
+                    bool visible = false;
+                    for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh) {
+                        if(_mesh->is_owned_node(*neigh)) {
+                            visible = true;
+                            DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                            recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
+                            break;
+                        }
+                    }
+                } else {
+                    // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
+                    // The latter is true only if both vertices of the original edge were halo vertices.
+                    if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)) {
+                        // Find which processes see this vertex
+                        std::set<int> processes;
+                        for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
+                            processes.insert(_mesh->node_owner[*neigh]);
+
+                        processes.erase(rank);
+
+                        for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc) {
+                            DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
+                            send_additional[*proc].insert(gnn_edge);
+                        }
+                    }
                 }
             }
 
-            // Update halo.
-            if(nprocs>1) {
-                #pragma omp single
-                {
-                    std::vector< std::set< DirectedEdge<index_t> > > recv_additional(nprocs), send_additional(nprocs);
+            // Append vertices in recv_additional and send_additional to recv and send.
+            // Mark how many vertices are added to each of these vectors.
+            std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
 
-                    for(size_t i=0; i<edgeSplitCnt; ++i)
-                    {
-                        DirectedEdge<index_t> *vert = &allNewVertices[i];
+            for(int i=0; i<nprocs; ++i)
+            {
+                recv_cnt[i] = recv_additional[i].size();
+                for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin(); it!=recv_additional[i].end(); ++it) {
+                    _mesh->recv[i].push_back(it->id);
+                    _mesh->recv_halo.insert(it->id);
+                }
 
-                        if(_mesh->node_owner[vert->id] != rank) {
-                            // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
-                            // Only update them if the vertex is actually visible by *this* MPI process,
-                            // i.e. if at least one of its neighbours is owned by *this* process.
-                            bool visible = false;
-                            for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh) {
-                                if(_mesh->is_owned_node(*neigh)) {
-                                    visible = true;
-                                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                                    recv_additional[_mesh->node_owner[vert->id]].insert(gnn_edge);
-                                    break;
-                                }
-                            }
-                        } else {
-                            // Vertex is owned by *this* MPI process, so check whether it is visible by other MPI processes.
-                            // The latter is true only if both vertices of the original edge were halo vertices.
-                            if(_mesh->is_halo_node(vert->edge.first) && _mesh->is_halo_node(vert->edge.second)) {
-                                // Find which processes see this vertex
-                                std::set<int> processes;
-                                for(typename std::vector<index_t>::const_iterator neigh=_mesh->NNList[vert->id].begin(); neigh!=_mesh->NNList[vert->id].end(); ++neigh)
-                                    processes.insert(_mesh->node_owner[*neigh]);
-
-                                processes.erase(rank);
-
-                                for(typename std::set<int>::const_iterator proc=processes.begin(); proc!=processes.end(); ++proc) {
-                                    DirectedEdge<index_t> gnn_edge(_mesh->lnn2gnn[vert->edge.first], _mesh->lnn2gnn[vert->edge.second], vert->id);
-                                    send_additional[*proc].insert(gnn_edge);
-                                }
-                            }
-                        }
-                    }
-
-                    // Append vertices in recv_additional and send_additional to recv and send.
-                    // Mark how many vertices are added to each of these vectors.
-                    std::vector<size_t> recv_cnt(nprocs, 0), send_cnt(nprocs, 0);
-
-                    for(int i=0; i<nprocs; ++i)
-                    {
-                        recv_cnt[i] = recv_additional[i].size();
-                        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin(); it!=recv_additional[i].end(); ++it) {
-                            _mesh->recv[i].push_back(it->id);
-                            _mesh->recv_halo.insert(it->id);
-                        }
-
-                        send_cnt[i] = send_additional[i].size();
-                        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin(); it!=send_additional[i].end(); ++it) {
-                            _mesh->send[i].push_back(it->id);
-                            _mesh->send_halo.insert(it->id);
-                        }
-                    }
-
-                    // Update global numbering
-                    _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
-
-                    // Now that the global numbering has been updated, update send_map and recv_map.
-                    for(int i=0; i<nprocs; ++i)
-                    {
-                        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin(); it!=recv_additional[i].end(); ++it)
-                            _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-
-                        for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin(); it!=send_additional[i].end(); ++it)
-                            _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
-                    }
-
-                    _mesh->trim_halo();
+                send_cnt[i] = send_additional[i].size();
+                for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin(); it!=send_additional[i].end(); ++it) {
+                    _mesh->send[i].push_back(it->id);
+                    _mesh->send_halo.insert(it->id);
                 }
             }
+
+            // Update global numbering
+            _mesh->update_gappy_global_numbering(recv_cnt, send_cnt);
+
+            // Now that the global numbering has been updated, update send_map and recv_map.
+            for(int i=0; i<nprocs; ++i)
+            {
+                for(typename std::set< DirectedEdge<index_t> >::const_iterator it=recv_additional[i].begin(); it!=recv_additional[i].end(); ++it)
+                    _mesh->recv_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+
+                for(typename std::set< DirectedEdge<index_t> >::const_iterator it=send_additional[i].begin(); it!=send_additional[i].end(); ++it)
+                    _mesh->send_map[i][_mesh->lnn2gnn[it->id]] = it->id;
+            }
+
+            _mesh->trim_halo();
+            
+        }
 
 #if !defined NDEBUG
-            if(dim==2) {
-                #pragma omp barrier
-                // Fix orientations of new elements.
-                size_t NElements = _mesh->get_number_elements();
+        if(dim==2) {
+            // Fix orientations of new elements.
+            size_t NElements = _mesh->get_number_elements();
 
-                #pragma omp for schedule(guided)
-                for(size_t i=0; i<NElements; i++) {
-                    index_t n0 = _mesh->_ENList[i*nloc];
-                    if(n0<0)
-                        continue;
+            for(size_t i=0; i<NElements; i++) {
+                index_t n0 = _mesh->_ENList[i*nloc];
+                if(n0<0)
+                    continue;
 
-                    index_t n1 = _mesh->_ENList[i*nloc + 1];
-                    index_t n2 = _mesh->_ENList[i*nloc + 2];
+                index_t n1 = _mesh->_ENList[i*nloc + 1];
+                index_t n2 = _mesh->_ENList[i*nloc + 2];
 
-                    const real_t *x0 = &_mesh->_coords[n0*dim];
-                    const real_t *x1 = &_mesh->_coords[n1*dim];
-                    const real_t *x2 = &_mesh->_coords[n2*dim];
+                const real_t *x0 = &_mesh->_coords[n0*dim];
+                const real_t *x1 = &_mesh->_coords[n1*dim];
+                const real_t *x2 = &_mesh->_coords[n2*dim];
 
-                    real_t av = property->area(x0, x1, x2);
+                real_t av = property->area(x0, x1, x2);
 
-                    if(av<=0) {
-                        #pragma omp critical
-                        std::cerr<<"ERROR: inverted element in refinement"<<std::endl
-                                 <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
-                        exit(-1);
-                    }
+                if(av<=0) {
+                    std::cerr<<"ERROR: inverted element in refinement"<<std::endl
+                             <<"element = "<<n0<<", "<<n1<<", "<<n2<<std::endl;
+                    exit(-1);
                 }
             }
-#endif
         }
+#endif
     }
 
 private:
