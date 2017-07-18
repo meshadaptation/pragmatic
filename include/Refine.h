@@ -84,10 +84,8 @@ public:
 
         nprocs = pragmatic_nprocesses(comm);
         rank = pragmatic_process_id(comm);
-
-        nthreads = pragmatic_nthreads();
         
-        def_ops = new DeferredOperations<real_t>(_mesh, nthreads, defOp_scaling_factor);
+        def_ops = new DeferredOperations<real_t>(_mesh, 1, defOp_scaling_factor);
     }
 
     /// Default destructor.
@@ -124,7 +122,7 @@ public:
          * are approx. (6/2)*NNodes edges in the mesh.
          * In 3D, average vertex degree is ~12.
          */
-        size_t reserve_size = nedge*origNNodes/nthreads;
+        size_t reserve_size = nedge*origNNodes;
         newVertices.clear();
         newVertices.reserve(reserve_size);
         newCoords.clear();
@@ -302,11 +300,9 @@ public:
                 }
             }
 
-            for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
-                for(int i=0; i<nthreads; ++i) {
-                    def_ops->commit_remNN(i, vtid);
-                    def_ops->commit_addNN(i, vtid);
-                }
+            for(int vtid=0; vtid<defOp_scaling_factor; ++vtid) {
+                def_ops->commit_remNN(0, vtid);
+                def_ops->commit_addNN(0, vtid);
             }
         }
 
@@ -315,9 +311,9 @@ public:
         newElements.clear();
         newBoundaries.clear();
         newQualities.clear();
-        newElements.reserve(dim*dim*origNElements/nthreads);
-        newBoundaries.reserve(dim*dim*origNElements/nthreads);
-        newQualities.reserve(origNElements/nthreads);
+        newElements.reserve(dim*dim*origNElements);
+        newBoundaries.reserve(dim*dim*origNElements);
+        newQualities.reserve(origNElements);
 
         for(size_t eid=0; eid<origNElements; ++eid) {
             //If the element has been deleted, continue.
@@ -347,14 +343,12 @@ public:
         memcpy(&_mesh->quality[origNElements], &newQualities[0], splitCnt*sizeof(double));
 
         // Commit deferred operations.
-        for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
-            for(int i=0; i<nthreads; ++i) {
-                def_ops->commit_remNN(i, vtid);
-                def_ops->commit_addNN(i, vtid);
-                def_ops->commit_remNE(i, vtid);
-                def_ops->commit_addNE(i, vtid);
-                def_ops->commit_addNE_fix(origNElements, i, vtid);
-            }
+        for(int vtid=0; vtid<defOp_scaling_factor; ++vtid) {
+            def_ops->commit_remNN(0, vtid);
+            def_ops->commit_addNN(0, vtid);
+            def_ops->commit_remNE(0, vtid);
+            def_ops->commit_addNE(0, vtid);
+            def_ops->commit_addNE_fix(origNElements, 0, vtid);
         }
 
         // Update halo.
@@ -878,10 +872,7 @@ private:
     ElementProperty<real_t> *property;
 
     const size_t nloc, msize, nedge;
-    int nprocs, rank, nthreads;
-
-    void (Refine<real_t,dim>::* refineMode2D[3])(const index_t *, int, int);
-    void (Refine<real_t,dim>::* refineMode3D[6])(std::vector< DirectedEdge<index_t> >&, int, int);
+    int nprocs, rank;
 };
 
 
