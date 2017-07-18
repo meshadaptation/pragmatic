@@ -184,9 +184,8 @@ public:
             }
         }
 
-        threadIdx = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt);
+        _mesh->NNodes += splitCnt;
         assert(newVertices.size()==splitCnt);
-
         
         size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
         if(_mesh->_coords.size()<reserve*dim) {
@@ -201,13 +200,13 @@ public:
         
 
         // Append new coords and metric to the mesh.
-        memcpy(&_mesh->_coords[dim*threadIdx], &newCoords[0], dim*splitCnt*sizeof(real_t));
-        memcpy(&_mesh->metric[msize*threadIdx], &newMetric[0], msize*splitCnt*sizeof(double));
+        memcpy(&_mesh->_coords[dim*origNNodes], &newCoords[0], dim*splitCnt*sizeof(real_t));
+        memcpy(&_mesh->metric[msize*origNNodes], &newMetric[0], msize*splitCnt*sizeof(double));
 
         // Fix IDs of new vertices
         assert(newVertices.size()==splitCnt);
         for(size_t i=0; i<splitCnt; i++) {
-            newVertices[i].id = threadIdx+i;
+            newVertices[i].id = origNNodes+i;
         }
 
         // Mark each element with its new vertices,
@@ -333,7 +332,7 @@ public:
                 }
         }
 
-        threadIdx = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt);
+        _mesh->NElements += splitCnt;
         
         if(_mesh->_ENList.size()<_mesh->NElements*nloc) {
             _mesh->_ENList.resize(_mesh->NElements*nloc);
@@ -343,9 +342,9 @@ public:
         
 
         // Append new elements to the mesh and commit deferred operations
-        memcpy(&_mesh->_ENList[nloc*threadIdx], &newElements[0], nloc*splitCnt*sizeof(index_t));
-        memcpy(&_mesh->boundary[nloc*threadIdx], &newBoundaries[0], nloc*splitCnt*sizeof(int));
-        memcpy(&_mesh->quality[threadIdx], &newQualities[0], splitCnt*sizeof(double));
+        memcpy(&_mesh->_ENList[nloc*origNElements], &newElements[0], nloc*splitCnt*sizeof(index_t));
+        memcpy(&_mesh->boundary[nloc*origNElements], &newBoundaries[0], nloc*splitCnt*sizeof(int));
+        memcpy(&_mesh->quality[origNElements], &newQualities[0], splitCnt*sizeof(double));
 
         // Commit deferred operations.
         for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
@@ -354,7 +353,7 @@ public:
                 def_ops->commit_addNN(i, vtid);
                 def_ops->commit_remNE(i, vtid);
                 def_ops->commit_addNE(i, vtid);
-                def_ops->commit_addNE_fix(threadIdx, i, vtid);
+                def_ops->commit_addNE_fix(origNElements, i, vtid);
             }
         }
 
@@ -870,8 +869,7 @@ private:
     std::vector<double>                  newQualities;
     std::vector<index_t>                 new_vertices_per_element;
 
-    std::vector<size_t> threadIdxV;
-    size_t threadIdx, splitCnt;
+    size_t splitCnt;
 
     DeferredOperations<real_t>* def_ops;
     static const int defOp_scaling_factor = 32;
