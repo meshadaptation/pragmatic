@@ -86,20 +86,7 @@ public:
         rank = pragmatic_process_id(comm);
 
         nthreads = pragmatic_nthreads();
-
-        newVertices.resize(nthreads);
-        newElements.resize(nthreads);
-        newBoundaries.resize(nthreads);
-        newQualities.resize(nthreads);
-        newCoords.resize(nthreads);
-        newMetric.resize(nthreads);
-
-        // Pre-allocate the maximum size that might be required
-        allNewVertices.resize(_mesh->_ENList.size());
-
-        threadIdx.resize(nthreads);
-        splitCnt.resize(nthreads);
-
+        
         def_ops = new DeferredOperations<real_t>(_mesh, nthreads, defOp_scaling_factor);
     }
 
@@ -130,7 +117,7 @@ public:
         
 
         int tid = pragmatic_thread_id();
-        splitCnt[tid] = 0;
+        splitCnt = 0;
 
         /*
          * Average vertex degree in 2D is ~6, so there
@@ -138,12 +125,12 @@ public:
          * In 3D, average vertex degree is ~12.
          */
         size_t reserve_size = nedge*origNNodes/nthreads;
-        newVertices[tid].clear();
-        newVertices[tid].reserve(reserve_size);
-        newCoords[tid].clear();
-        newCoords[tid].reserve(dim*reserve_size);
-        newMetric[tid].clear();
-        newMetric[tid].reserve(msize*reserve_size);
+        newVertices.clear();
+        newVertices.reserve(reserve_size);
+        newCoords.clear();
+        newCoords.reserve(dim*reserve_size);
+        newMetric.clear();
+        newMetric.reserve(msize*reserve_size);
 
         /* Loop through all edges and select them for refinement if
            its length is greater than L_max in transformed space. */
@@ -186,7 +173,7 @@ public:
                 if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
                     double length = _mesh->calc_edge_length(i, otherVertex);
                     if(length>L_max) {
-                        ++splitCnt[tid];
+                        ++splitCnt;
                         refine_edge(i, otherVertex, tid);
                         for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
                             index_t eid = *element;
@@ -197,8 +184,8 @@ public:
             }
         }
 
-        threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
-        assert(newVertices[tid].size()==splitCnt[tid]);
+        threadIdx = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt);
+        assert(newVertices.size()==splitCnt);
 
         
         size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
@@ -214,24 +201,21 @@ public:
         
 
         // Append new coords and metric to the mesh.
-        memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
-        memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
+        memcpy(&_mesh->_coords[dim*threadIdx], &newCoords[0], dim*splitCnt*sizeof(real_t));
+        memcpy(&_mesh->metric[msize*threadIdx], &newMetric[0], msize*splitCnt*sizeof(double));
 
         // Fix IDs of new vertices
-        assert(newVertices[tid].size()==splitCnt[tid]);
-        for(size_t i=0; i<splitCnt[tid]; i++) {
-            newVertices[tid][i].id = threadIdx[tid]+i;
+        assert(newVertices.size()==splitCnt);
+        for(size_t i=0; i<splitCnt; i++) {
+            newVertices[i].id = threadIdx+i;
         }
-
-        // Accumulate all newVertices in a contiguous array
-        memcpy(&allNewVertices[threadIdx[tid]-origNNodes], &newVertices[tid][0], newVertices[tid].size()*sizeof(DirectedEdge<index_t>));
 
         // Mark each element with its new vertices,
         // update NNList for all split edges.
         for(size_t i=0; i<edgeSplitCnt; ++i) {
-            index_t vid = allNewVertices[i].id;
-            index_t firstid = allNewVertices[i].edge.first;
-            index_t secondid = allNewVertices[i].edge.second;
+            index_t vid = newVertices[i].id;
+            index_t firstid = newVertices[i].edge.first;
+            index_t secondid = newVertices[i].edge.second;
 
             // Find which elements share this edge and mark them with their new vertices.
             std::set<index_t> intersection;
@@ -328,13 +312,13 @@ public:
         }
 
         // Start element refinement.
-        splitCnt[tid] = 0;
-        newElements[tid].clear();
-        newBoundaries[tid].clear();
-        newQualities[tid].clear();
-        newElements[tid].reserve(dim*dim*origNElements/nthreads);
-        newBoundaries[tid].reserve(dim*dim*origNElements/nthreads);
-        newQualities[tid].reserve(origNElements/nthreads);
+        splitCnt = 0;
+        newElements.clear();
+        newBoundaries.clear();
+        newQualities.clear();
+        newElements.reserve(dim*dim*origNElements/nthreads);
+        newBoundaries.reserve(dim*dim*origNElements/nthreads);
+        newQualities.reserve(origNElements/nthreads);
 
         for(size_t eid=0; eid<origNElements; ++eid) {
             //If the element has been deleted, continue.
@@ -349,8 +333,7 @@ public:
                 }
         }
 
-        threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt[tid]);
-
+        threadIdx = pragmatic_omp_atomic_capture(&_mesh->NElements, splitCnt);
         
         if(_mesh->_ENList.size()<_mesh->NElements*nloc) {
             _mesh->_ENList.resize(_mesh->NElements*nloc);
@@ -360,9 +343,9 @@ public:
         
 
         // Append new elements to the mesh and commit deferred operations
-        memcpy(&_mesh->_ENList[nloc*threadIdx[tid]], &newElements[tid][0], nloc*splitCnt[tid]*sizeof(index_t));
-        memcpy(&_mesh->boundary[nloc*threadIdx[tid]], &newBoundaries[tid][0], nloc*splitCnt[tid]*sizeof(int));
-        memcpy(&_mesh->quality[threadIdx[tid]], &newQualities[tid][0], splitCnt[tid]*sizeof(double));
+        memcpy(&_mesh->_ENList[nloc*threadIdx], &newElements[0], nloc*splitCnt*sizeof(index_t));
+        memcpy(&_mesh->boundary[nloc*threadIdx], &newBoundaries[0], nloc*splitCnt*sizeof(int));
+        memcpy(&_mesh->quality[threadIdx], &newQualities[0], splitCnt*sizeof(double));
 
         // Commit deferred operations.
         for(int vtid=0; vtid<defOp_scaling_factor*nthreads; ++vtid) {
@@ -382,7 +365,7 @@ public:
 
             for(size_t i=0; i<edgeSplitCnt; ++i)
             {
-                DirectedEdge<index_t> *vert = &allNewVertices[i];
+                DirectedEdge<index_t> *vert = &newVertices[i];
 
                 if(_mesh->node_owner[vert->id] != rank) {
                     // Vertex is owned by another MPI process, so prepare to update recv and recv_halo.
@@ -491,7 +474,7 @@ private:
             n0=n1;
             n1=tmp_n0;
         }
-        newVertices[tid].push_back(DirectedEdge<index_t>(n0, n1));
+        newVertices.push_back(DirectedEdge<index_t>(n0, n1));
 
         // Calculate the position of the new point. From equation 16 in
         // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
@@ -508,7 +491,7 @@ private:
         // Calculate position of new vertex and append it to OMP thread's temp storage
         for(size_t i=0; i<dim; i++) {
             x = x0[i]+weight*(x1[i] - x0[i]);
-            newCoords[tid].push_back(x);
+            newCoords.push_back(x);
         }
 
 #if 0
@@ -528,7 +511,7 @@ private:
         // Interpolate new metric and append it to OMP thread's temp storage
         for(size_t i=0; i<msize; i++) {
             m = m0[i]+weight*(m1[i] - m0[i]);
-            newMetric[tid].push_back(m);
+            newMetric.push_back(m);
             if(pragmatic_isnan(m))
                 std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                          <<"m0[i] = "<<m0[i]<<std::endl
@@ -690,7 +673,7 @@ private:
         const index_t ele1_boundary[] = {rotated_boundary[0], rotated_boundary[1], 0};
 
         index_t ele1ID;
-        ele1ID = splitCnt[tid];
+        ele1ID = splitCnt;
 
         // Add rotated_ele[0] to vertexID's NNList
         def_ops->addNN(vertexID, rotated_ele[0], tid);
@@ -716,7 +699,7 @@ private:
 
         replace_element(eid, ele0, ele0_boundary);
         append_element(ele1, ele1_boundary, tid);
-        splitCnt[tid] += 1;
+        splitCnt += 1;
     }
 
     inline void refine3D_1(std::vector< DirectedEdge<index_t> >& splitEdges, int eid, int tid)
@@ -742,7 +725,7 @@ private:
         const int ele1_boundary[] = {0, b[splitEdges[0].edge.first], b[oe[0]], b[oe[1]]};
 
         index_t ele1ID;
-        ele1ID = splitCnt[tid];
+        ele1ID = splitCnt;
 
         // ele1ID is a new ID which isn't correct yet, it has to be
         // updated once each thread has calculated how many new elements
@@ -761,7 +744,7 @@ private:
 
         replace_element(eid, ele0, ele0_boundary);
         append_element(ele1, ele1_boundary, tid);
-        splitCnt[tid] += 1;
+        splitCnt += 1;
     }
 
     inline void append_element(const index_t *elem, const int *boundary, const size_t tid)
@@ -792,12 +775,12 @@ private:
         }
 
         for(size_t i=0; i<nloc; ++i) {
-            newElements[tid].push_back(elem[i]);
-            newBoundaries[tid].push_back(boundary[i]);
+            newElements.push_back(elem[i]);
+            newBoundaries.push_back(boundary[i]);
         }
 
         double q = _mesh->template calculate_quality<dim>(elem);
-        newQualities[tid].push_back(q);
+        newQualities.push_back(q);
     }
 
     inline void replace_element(const index_t eid, const index_t *n, const int *boundary)
@@ -879,16 +862,16 @@ private:
         }
     }
 
-    std::vector< std::vector< DirectedEdge<index_t> > > newVertices;
-    std::vector< std::vector<real_t> > newCoords;
-    std::vector< std::vector<double> > newMetric;
-    std::vector< std::vector<index_t> > newElements;
-    std::vector< std::vector<int> > newBoundaries;
-    std::vector< std::vector<double> > newQualities;
-    std::vector<index_t> new_vertices_per_element;
+    std::vector< DirectedEdge<index_t> > newVertices;
+    std::vector<real_t>                  newCoords;
+    std::vector<double>                  newMetric;
+    std::vector<index_t>                 newElements;
+    std::vector<int>                     newBoundaries;
+    std::vector<double>                  newQualities;
+    std::vector<index_t>                 new_vertices_per_element;
 
-    std::vector<size_t> threadIdx, splitCnt;
-    std::vector< DirectedEdge<index_t> > allNewVertices;
+    std::vector<size_t> threadIdxV;
+    size_t threadIdx, splitCnt;
 
     DeferredOperations<real_t>* def_ops;
     static const int defOp_scaling_factor = 32;

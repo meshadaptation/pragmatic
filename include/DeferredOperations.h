@@ -146,12 +146,12 @@ public:
         deferred_operations[tid][vtid].addNE.clear();
     }
 
-    inline void commit_addNE_fix(std::vector<size_t>& threadIdx, const int tid, const int vtid)
+    inline void commit_addNE_fix(size_t threadIdx, const int tid, const int vtid)
     {
         for(typename std::vector<index_t>::const_iterator it=deferred_operations[tid][vtid].addNE_fix.begin();
                 it!=deferred_operations[tid][vtid].addNE_fix.end(); it+=2) {
             // Element was created by thread tid
-            index_t fixedId = *(it+1) + threadIdx[tid];
+            index_t fixedId = *(it+1) + threadIdx;
             _mesh->NEList[*it].insert(fixedId);
         }
 
