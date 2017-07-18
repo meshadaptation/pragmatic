@@ -139,6 +139,8 @@ public:
         size_t origNNodes = _mesh->get_number_nodes();
         size_t edgeSplitCnt = 0;
 
+        std::vector<int> element_tag(origNElements,0);
+
         #pragma omp parallel
         {
             #pragma omp single nowait
@@ -167,9 +169,36 @@ public:
                its length is greater than L_max in transformed space. */
             #pragma omp for schedule(guided) nowait
             for(size_t i=0; i<origNNodes; ++i) {
+                
+                if (_mesh->is_halo_node(i))
+                    continue;
+
                 for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
+
                     index_t otherVertex = _mesh->NNList[i][it];
                     assert(otherVertex>=0);
+
+                    if (_mesh->is_halo_node(otherVertex))
+                        continue;
+
+                    // compute neighboring elements
+                    std::set<index_t> intersection;
+                    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+                                          _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
+                                          std::inserter(intersection, intersection.begin()));
+
+                    // if one element is tagged => don't refine
+                    int skip = 0;
+                    for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                        index_t eid = *element;
+                        if (element_tag[eid]) {
+                            skip = 1;
+                            break;
+                        }
+                    }
+                    if (skip)
+                        continue;
+
 
                     /* Conditional statement ensures that the edge length is only calculated once.
                      * By ordering the vertices according to their gnn, we ensure that all processes
@@ -180,6 +209,10 @@ public:
                         if(length>L_max) {
                             ++splitCnt[tid];
                             refine_edge(i, otherVertex, tid);
+                            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                                index_t eid = *element;
+                                element_tag[eid] = 1;
+                            }
                         }
                     }
                 }
