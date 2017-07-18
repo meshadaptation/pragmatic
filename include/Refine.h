@@ -113,8 +113,6 @@ public:
         new_vertices_per_element.resize(nedge*origNElements);
         std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
         
-
-        int tid = pragmatic_thread_id();
         splitCnt = 0;
 
         /*
@@ -234,10 +232,10 @@ public:
             _mesh->NNList[vid].push_back(firstid);
             _mesh->NNList[vid].push_back(secondid);
 
-            def_ops->remNN(firstid, secondid, tid);
-            def_ops->addNN(firstid, vid, tid);
-            def_ops->remNN(secondid, firstid, tid);
-            def_ops->addNN(secondid, vid, tid);
+            def_ops->remNN(firstid, secondid);
+            def_ops->addNN(firstid, vid);
+            def_ops->remNN(secondid, firstid);
+            def_ops->addNN(secondid, vid);
 
             // This branch is always taken or always not taken for every vertex,
             // so the branch predictor should have no problem handling it.
@@ -537,8 +535,8 @@ private:
             // 1:2 facet bisection
             for(int j=0; j<3; j++)
                 if(newVertex[j] >= 0) {
-                    def_ops->addNN(newVertex[j], facet[j], 0);
-                    def_ops->addNN(facet[j], newVertex[j], 0);
+                    def_ops->addNN(newVertex[j], facet[j]);
+                    def_ops->addNN(facet[j], newVertex[j]);
                     break;
                 }
             break;
@@ -546,15 +544,15 @@ private:
             // 1:3 refinement with trapezoid split
             for(int j=0; j<3; j++) {
                 if(newVertex[j] < 0) {
-                    def_ops->addNN(newVertex[(j+1)%3], newVertex[(j+2)%3], 0);
-                    def_ops->addNN(newVertex[(j+2)%3], newVertex[(j+1)%3], 0);
+                    def_ops->addNN(newVertex[(j+1)%3], newVertex[(j+2)%3]);
+                    def_ops->addNN(newVertex[(j+2)%3], newVertex[(j+1)%3]);
 
                     real_t ldiag1 = _mesh->calc_edge_length(newVertex[(j+1)%3], facet[(j+1)%3]);
                     real_t ldiag2 = _mesh->calc_edge_length(newVertex[(j+2)%3], facet[(j+2)%3]);
                     const int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
 
-                    def_ops->addNN(newVertex[offset], facet[offset], 0);
-                    def_ops->addNN(facet[offset], newVertex[offset], 0);
+                    def_ops->addNN(newVertex[offset], facet[offset]);
+                    def_ops->addNN(facet[offset], newVertex[offset]);
 
                     break;
                 }
@@ -563,8 +561,8 @@ private:
         case 3:
             // 1:4 regular refinement
             for(int j=0; j<3; j++) {
-                def_ops->addNN(newVertex[j], newVertex[(j+1)%3], 0);
-                def_ops->addNN(newVertex[(j+1)%3], newVertex[j], 0);
+                def_ops->addNN(newVertex[j], newVertex[(j+1)%3]);
+                def_ops->addNN(newVertex[(j+1)%3], newVertex[j]);
             }
             break;
         default:
@@ -669,23 +667,23 @@ private:
         ele1ID = splitCnt;
 
         // Add rotated_ele[0] to vertexID's NNList
-        def_ops->addNN(vertexID, rotated_ele[0], 0);
+        def_ops->addNN(vertexID, rotated_ele[0]);
         // Add vertexID to rotated_ele[0]'s NNList
-        def_ops->addNN(rotated_ele[0], vertexID, 0);
+        def_ops->addNN(rotated_ele[0], vertexID);
 
         // ele1ID is a new ID which isn't correct yet, it has to be
         // updated once each thread has calculated how many new elements
         // it created, so put ele1ID into addNE_fix instead of addNE.
         // Put ele1 in rotated_ele[0]'s NEList
-        def_ops->addNE_fix(rotated_ele[0], ele1ID, 0);
+        def_ops->addNE_fix(rotated_ele[0], ele1ID);
 
         // Put eid and ele1 in vertexID's NEList
-        def_ops->addNE(vertexID, eid, 0);
-        def_ops->addNE_fix(vertexID, ele1ID, 0);
+        def_ops->addNE(vertexID, eid);
+        def_ops->addNE_fix(vertexID, ele1ID);
 
         // Replace eid with ele1 in rotated_ele[2]'s NEList
-        def_ops->remNE(rotated_ele[2], eid, 0);
-        def_ops->addNE_fix(rotated_ele[2], ele1ID, 0);
+        def_ops->remNE(rotated_ele[2], eid);
+        def_ops->addNE_fix(rotated_ele[2], ele1ID);
 
         assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
         assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
@@ -724,16 +722,16 @@ private:
         // updated once each thread has calculated how many new elements
         // it created, so put ele1ID into addNE_fix instead of addNE.
         // Put ele1 in oe[0] and oe[1]'s NEList
-        def_ops->addNE_fix(oe[0], ele1ID, 0);
-        def_ops->addNE_fix(oe[1], ele1ID, 0);
+        def_ops->addNE_fix(oe[0], ele1ID);
+        def_ops->addNE_fix(oe[1], ele1ID);
 
         // Put eid and ele1 in newVertex[0]'s NEList
-        def_ops->addNE(splitEdges[0].id, eid, 0);
-        def_ops->addNE_fix(splitEdges[0].id, ele1ID, 0);
+        def_ops->addNE(splitEdges[0].id, eid);
+        def_ops->addNE_fix(splitEdges[0].id, ele1ID);
 
         // Replace eid with ele1 in splitEdges[0].edge.second's NEList
-        def_ops->remNE(splitEdges[0].edge.second, eid, 0);
-        def_ops->addNE_fix(splitEdges[0].edge.second, ele1ID, 0);
+        def_ops->remNE(splitEdges[0].edge.second, eid);
+        def_ops->addNE_fix(splitEdges[0].edge.second, ele1ID);
 
         replace_element(eid, ele0, ele0_boundary);
         append_element(ele1, ele1_boundary);

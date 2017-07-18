@@ -56,60 +56,60 @@ public:
 
     ~DeferredOperations() {}
 
-    inline void addNN(const index_t i, const index_t n, const int tid)
+    inline void addNN(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNN.push_back(n);
     }
 
-    inline void remNN(const index_t i, const index_t n, const int tid)
+    inline void remNN(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNN.push_back(n);
     }
 
-    inline void addNE(const index_t i, const index_t n, const int tid)
+    inline void addNE(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE.push_back(n);
     }
 
-    inline void addNE_fix(const index_t i, const index_t n, const int tid)
+    inline void addNE_fix(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE_fix.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].addNE_fix.push_back(n);
     }
 
-    inline void repEN(const size_t pos, const index_t n, const int tid)
+    inline void repEN(const size_t pos, const index_t n, const int tid=0)
     {
         deferred_operations[tid][(pos/16) % (defOp_scaling_factor*nthreads)].repEN.push_back(pos);
         deferred_operations[tid][(pos/16) % (defOp_scaling_factor*nthreads)].repEN.push_back(n);
     }
 
-    inline void remNE(const index_t i, const index_t n, const int tid)
+    inline void remNE(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].remNE.push_back(n);
     }
 
-    inline void propagate_coarsening(const index_t i, const int tid)
+    inline void propagate_coarsening(const index_t i, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].coarsening_propagation.push_back(i);
     }
 
-    inline void propagate_refinement(const index_t i, const index_t n, const int tid)
+    inline void propagate_refinement(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].refinement_propagation.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].refinement_propagation.push_back(n);
     }
 
-    inline void propagate_swapping(const index_t i, const index_t n, const int tid)
+    inline void propagate_swapping(const index_t i, const index_t n, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].swapping_propagation.push_back(i);
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].swapping_propagation.push_back(n);
     }
 
-    inline void reset_colour(const index_t i, const int tid)
+    inline void reset_colour(const index_t i, const int tid=0)
     {
         deferred_operations[tid][hash(i) % (defOp_scaling_factor*nthreads)].reset_colour.push_back(i);
     }
