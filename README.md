@@ -29,7 +29,7 @@ DOI: [10.1007/978-3-642-23397-5_38](http://dx.doi.org/10.1007/978-3-642-23397-5_
 The following libraries are required to build PRAgMaTIc:
 - Eigen3
 - MPI
-- METIS
+- METIS (on debian this can be installed with sudo apt-get install libmetis-dev)
 - VTK (optional)
 - LibMeshb (optional).
 
