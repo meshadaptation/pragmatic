@@ -712,7 +712,7 @@ private:
         addNE(oe[1], ele1ID+origNElements);
 
         // Put eid and ele1 in newVertex[0]'s NEList
-        addNE(splitEdges[0].id, eid+origNElements);
+        addNE(splitEdges[0].id, eid);
         addNE(splitEdges[0].id, ele1ID+origNElements);
 
         // Replace eid with ele1 in splitEdges[0].edge.second's NEList
