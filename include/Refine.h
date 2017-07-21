@@ -94,6 +94,60 @@ public:
         delete property;
         delete def_ops;
     }
+    
+    
+    /*! New refinement function:
+          - edges are split one at a time (dropping template refinement)
+          - algo to select edges to refine based on Ibanez's thesis:
+               + simulate all possible refinements and save resulting quality
+               + local optimization procedure to select edges to refine
+          - introduction of the notion of cavity: here a cavity is an edge + neighboring tris/tets
+     */
+    void refine_new() 
+    {
+        
+        //-- I. Simulate the edge splits if edge length > sqrt(2)
+        
+        //-- hash the edges + array of tags
+        
+        //-- Loop over the edges
+        
+        //---- simulate edge split
+        
+        //---- compute and save quality of the resulting cavity
+        
+        //---- if quality is too bad, reject refinement
+        
+        
+        //-- II. Select edges to split with local optim procedure
+        
+        //-- create array of edge states, initialized with UNKNOWN
+        
+        //-- repeat following procedure until the state of all edges is not UNKNOWN
+        
+        //---- (a) Loop over the edges v
+        
+        //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
+        
+        //------ Loop over the neighboring cavities u
+        
+        //-------- if state[u] = IN: new_state[v] = NOT_IN, goto (a)
+        
+        //------ Loop over the neighboring cavities u
+        
+        //-------- if state[u] = NOT_IN: continue
+        
+        //-------- if quality[u] > quality[v]: new_state[v] = NOT_IN, goto (a)
+        
+        //-------- if quality[u] == quality[v]: if gnn[u] > gnn[v]: new_state[v] = NOT_IN, goto (a)
+        
+        //------ new_state[v] = IN
+        
+    }
+    
+    
+    
+    
 
     /*! Perform one level of refinement See Figure 25; X Li et al, Comp
      * Methods Appl Mech Engrg 194 (2005) 4915-4950. The actual
