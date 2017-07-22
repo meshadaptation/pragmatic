@@ -103,49 +103,172 @@ public:
                + local optimization procedure to select edges to refine
           - introduction of the notion of cavity: here a cavity is an edge + neighboring tris/tets
      */
-    void refine_new() 
+    void refine_new(double L_max) 
     {
         
         //-- I. Simulate the edge splits if edge length > sqrt(2)
         
         //-- hash the edges + array of tags
+        //   edges are hashed by lnn1->lnn2 and we only store those where lnn1 < lnn2
+        //   note that we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
+        
+        int NNodes = _mesh->get_number_nodes();
+        std::vector<int> headV2E(NNodes+1);
+        headV2E[0] = 0;
+        for (int i=0; i<NNodes; ++i) {
+            headV2E[i+1] = headV2E[i];
+            for (int it=0; it<_mesh->NNList[i].size(); ++it) {
+                if (_mesh->NNList[i][it] > i) {
+                    headV2E[i+1]++;
+                }
+            }
+        }
+        int NEdges = headV2E[NNodes];
         
         //-- Loop over the edges
         
-        //---- simulate edge split
+        std::vector<double> qualities(NEdges);
+        int cnt;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            for (int i=0; i<_mesh->NNList[i].size(); ++i) {
+                if (_mesh->NNList[iVer][i] > iVer) {
+                    
+                    int iVer2 = _mesh->NNList[iVer][i];
+                    double quality_old_cavity = compute_quality_cavity();
+                    double length = _mesh->calc_edge_length(iVer, iVer2);
+                    if (length>L_max) {
+                        //---- simulate edge split
+                        //---- compute and save quality of the resulting cavity
+                        double quality_new_cavity = simulate_edge_split(iVer, iVer2);
+
+                        //---- if quality is too bad, reject refinement
+                        if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
+                            qualities[cnt] = -quality_old_cavity;
+                        }
+                        else {
+                            qualities[cnt] = quality_new_cavity;
+                        }
+                    }
+                    else {
+                        qualities[cnt] = -quality_old_cavity;
+                    }
+                    cnt++;
+                }
+            }
+            
+        }
         
-        //---- compute and save quality of the resulting cavity
         
-        //---- if quality is too bad, reject refinement
         
         
         //-- II. Select edges to split with local optim procedure
         
         //-- create array of edge states, initialized with UNKNOWN
+        //    -1 is UNKNOWN, 0 is NOT_IN, 1 is in
+        std::vector<int> state(NEdges, -1);
+        for (int iEdg=0; iEdg<NEdges; ++iEdg) {
+            if (qualities[iEdg]<0) {
+                state[iEdg] = 0;
+            }
+        }
         
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- (a) Loop over the edges v
+        std::vector<int> state_new(NEdges, -1);
+        int stop = 0;
+        while ( !stop ) {
+            
+            
+            for (int iEdg=0; iEdg<NEdges; ++iEdg) {
+                
+                //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
+                if (state[iEdg]>-1) {
+                    state_new[iEdg] = state[iEdg];
+                    continue;
+                }
+                
+                //------ Loop over the neighboring cavities u
+                std::set<int> edges_neighbor;
+                // TODO Fill this set
+                typename std::set<int>::const_iterator edge_it;
+                int cont = 0;
+                for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
+                    int iEdgNgb = *edge_it;
+                    //-------- if state[u] = IN: new_state[v] = NOT_IN, goto (a)
+                    if (state[iEdgNgb == 1]) {
+                        cont = 1;
+                        break;
+                    }
+                }
+                if (cont==1) {
+                    state_new[iEdg] = 0;
+                    continue;
+                }
+                
+                //------ Loop over the neighboring cavities u
+                cont = 0;
+                for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
+                    int iEdgNgb = *edge_it;
+                
+                    //-------- if state[u] = NOT_IN: continue
+                    if (state[iEdgNgb] == 0) {
+                        continue;
+                    }
+
+                    //-------- if quality[u] > quality[v]: new_state[v] = NOT_IN, goto (a)
+                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+                        cont = 1;
+                        break;
+                    }
+
+                    //-------- if quality[u] == quality[v]: if gnn[u] > gnn[v]: new_state[v] = NOT_IN, goto (a)
+                    // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
+                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+                        cont = 1;
+                        break;
+                    }
+
+                }
+                if (cont==1) {
+                    state_new[iEdg] = 0;
+                    continue;
+                }
+                //------ new_state[v] = IN
+                state_new[iEdg] = 1;
+            }
+            
+            state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
+        }
         
-        //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
+                
         
-        //------ Loop over the neighboring cavities u
+            
         
-        //-------- if state[u] = IN: new_state[v] = NOT_IN, goto (a)
         
-        //------ Loop over the neighboring cavities u
         
-        //-------- if state[u] = NOT_IN: continue
-        
-        //-------- if quality[u] > quality[v]: new_state[v] = NOT_IN, goto (a)
-        
-        //-------- if quality[u] == quality[v]: if gnn[u] > gnn[v]: new_state[v] = NOT_IN, goto (a)
-        
-        //------ new_state[v] = IN
+        //-- III. Actually perform the splits
         
     }
     
     
+    /*! Simulate splitting edge e1, e2, and remeshing its cavity in consequence
+        return the worst quality of the new cavity
+     */
+    double simulate_edge_split(int e1, int e2) {
+        
+        double quality = 0;
+        // TODO write function simulate_edge_split
+        return quality;
+    }
+    
+    
+    double compute_quality_cavity() {
+        
+        double quality = 0;
+        // TODO write function compute_quality_cavity
+        return quality;
+    }
     
     
 
