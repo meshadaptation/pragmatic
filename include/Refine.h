@@ -241,11 +241,6 @@ public:
             state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
         }
         
-                
-        
-            
-        
-        
         
         //-- III. Actually perform the splits
         
@@ -257,8 +252,76 @@ public:
      */
     double simulate_edge_split(int e1, int e2) {
         
-        double quality = 0;
+        double quality = 1;
+        double newCoords[3], newMetric[6];
+
+        // Calculate the position of the new point. From equation 16 in
+        // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
+        real_t x, m;
+        const real_t *x0 = _mesh->get_coords(e1);
+        const double *m0 = _mesh->get_metric(e1);
+
+        const real_t *x1 = _mesh->get_coords(e2);
+        const double *m1 = _mesh->get_metric(e2);
+
+        real_t weight = 1.0/(1.0 + sqrt(property->template length<dim>(x0, x1, m0)/
+                                        property->template length<dim>(x0, x1, m1)));
+
+        // Calculate position of new vertex
+        for(size_t i=0; i<dim; i++) {
+            x = x0[i]+weight*(x1[i] - x0[i]);
+            newCoords[i] = x;
+        }
+
+        // Interpolate new metric 
+        for(size_t i=0; i<msize; i++) {
+            m = m0[i]+weight*(m1[i] - m0[i]);
+            newMetric[i] = m;
+            if(pragmatic_isnan(m))
+                std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
+                         <<"m0[i] = "<<m0[i]<<std::endl
+                         <<"m1[i] = "<<m1[i]<<std::endl
+                         <<"property->length(x0, x1, m0) = "<<property->template length<dim>(x0, x1, m0)<<std::endl
+                             <<"property->length(x0, x1, m1) = "<<property->template length<dim>(x0, x1, m1)<<std::endl
+                                     <<"weight = "<<weight<<std::endl;
+        }
+        
+        
         // TODO write function simulate_edge_split
+        if (dim==2) {
+            
+            // find the neighboring triangles
+            std::set<index_t> intersection;
+            std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
+                                  _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
+                                  std::inserter(intersection, intersection.begin()));
+            
+            // loop over theese traingles and split them to compute quality
+            typename std::set<index_t>::const_iterator tri_it;
+            for(tri_it=intersection.begin(); tri_it!=intersection.end(); ++tri_it) {
+                int * v = _mesh->get_element(*tri_it);
+                double * x2, m2;
+                for (int i=0; i<3; ++i) {
+                    if (v[i] != e1 && v[i] != e2)  {
+                        x2 = _mesh->get_coordinates(v[i]);
+                        m2 = _mesh->get_metric(v[i]);
+                    }
+                }
+                // Now I know new triangles are newVertex,e3,e1 and newVertex,e3,e1 - here we don't care about orientation
+                double qual1 = property->lipnikov(newCoords, x2, x0, newMetric, m2, m0);
+                double qual2 = property->lipnikov(newCoords, x2, x1, newMetric, m2, m1);
+                quality = fmin(quality, fmin(qual1, qual2));
+            }
+            
+            
+        }
+        else {
+            printf("ERROR 3d new refinement not yet implemented\n");
+            
+            // find neighboring facets then tets, or tets directly ?
+        }
+        
+        
         return quality;
     }
     
