@@ -123,17 +123,20 @@ public:
                 }
             }
         }
-        int NEdges = headV2E[NNodes];
+        int NEdges = headV2E[NNodes];  
+        printf("DEBUG  NEdges: %d\n", NEdges);      
         
         //-- Loop over the edges
-        
+        std::vector<int> ver2edg(NEdges); // this is the hashmap, corresponding to headV2E
         std::vector<double> qualities(NEdges);
-        int cnt;
+        int cnt=0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
-            for (int i=0; i<_mesh->NNList[i].size(); ++i) {
+            for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
                 if (_mesh->NNList[iVer][i] > iVer) {
                     
                     int iVer2 = _mesh->NNList[iVer][i];
+                    ver2edg[cnt] = iVer2;
+                    assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity();
                     double length = _mesh->calc_edge_length(iVer, iVer2);
                     if (length>L_max) {
@@ -152,6 +155,7 @@ public:
                     else {
                         qualities[cnt] = -quality_old_cavity;
                     }
+                    assert(cnt<NEdges);
                     cnt++;
                 }
             }
@@ -165,7 +169,8 @@ public:
         
         //-- create array of edge states, initialized with UNKNOWN
         //    -1 is UNKNOWN, 0 is NOT_IN, 1 is in
-        std::vector<int> state(NEdges, -1);
+        std::vector<int> state(NEdges);
+        std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
             if (qualities[iEdg]<0) {
                 state[iEdg] = 0;
@@ -175,12 +180,20 @@ public:
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- (a) Loop over the edges v
-        std::vector<int> state_new(NEdges, -1);
+        std::vector<int> state_new(NEdges);
+        std::fill(state_new.begin(), state_new.end(), -1);
         int stop = 0;
         while ( !stop ) {
-            
-            
+            printf("DEBUG  New pass of edge selection\n");
+            stop = 1;
+            int e1, e2; // end vertices of current edge
+            e1 = 0;
             for (int iEdg=0; iEdg<NEdges; ++iEdg) {
+                
+                if (iEdg >= headV2E[e1+1]){
+                    e1++;
+                }
+                e2 = ver2edg[iEdg];
                 
                 //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
                 if (state[iEdg]>-1) {
@@ -188,9 +201,37 @@ public:
                     continue;
                 }
                 
-                //------ Loop over the neighboring cavities u
+                // find neighboring cavities: edges on neighboring elements
                 std::set<int> edges_neighbor;
-                // TODO Fill this set
+                // fill this set
+                std::set<index_t> intersection; 
+                std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
+                                      _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
+                                      std::inserter(intersection, intersection.begin()));
+                typename std::set<index_t>::const_iterator elm_it;
+                for(elm_it=intersection.begin(); elm_it!=intersection.end(); ++elm_it) {
+                    int iElm = *elm_it;
+                    for (int i=0; i<(dim==2?3:6); ++i) {
+                        for (int j=i+1; j<(dim==2?3:6); ++j) {
+                            int iVer1 = _mesh->_ENList[nloc*iElm+i];
+                            int iVer2 = _mesh->_ENList[nloc*iElm+j];
+                            if (iVer1 >= iVer2 ) {
+                                int tmp = iVer1;
+                                iVer1 = iVer2;
+                                iVer2 = tmp;
+                            }
+                            for (int k=headV2E[iVer1]; k<headV2E[iVer1+1]; ++k){
+                                if (ver2edg[k] == iVer2 && k!=iEdg) {
+                                    edges_neighbor.insert(k);
+                                    printf("DEBUG  neighbor of edge %d (%d %d) is %d (%d %d)\n", iEdg, e1, e2, k, iVer1, iVer2);
+                                }
+                            }
+                        }
+                    }
+                }                
+                                    
+                
+                //------ Loop over the neighboring cavities u
                 typename std::set<int>::const_iterator edge_it;
                 int cont = 0;
                 for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
@@ -203,6 +244,7 @@ public:
                 }
                 if (cont==1) {
                     state_new[iEdg] = 0;
+                    printf("DEBUG  edge %d (%d %d) is set to NOT_IN there", iEdg, e1, e2);
                     continue;
                 }
                 
@@ -232,13 +274,56 @@ public:
                 }
                 if (cont==1) {
                     state_new[iEdg] = 0;
+                    printf("DEBUG  edge %d (%d %d) is set to NOT_IN here", iEdg, e1, e2);
                     continue;
                 }
                 //------ new_state[v] = IN
                 state_new[iEdg] = 1;
+                stop = 0;
             }
             
             state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
+            cnt=0;
+            for (int iVer=0; iVer<NNodes; ++iVer) {
+                for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
+                    if (_mesh->NNList[iVer][i] > iVer) {
+                        int iVer2 = _mesh->NNList[iVer][i];
+                        switch (state[cnt]){
+                        case -1:
+                            printf("DEBUG  Edge: %d %d is in state UNKNOWN\n", iVer, iVer2);
+                            break;
+                        case 0:
+                            printf("DEBUG  Edge: %d %d is in state NOT_IN\n", iVer, iVer2);
+                            break;
+                        case 1:
+                            printf("DEBUG  Edge: %d %d is in state IN\n", iVer, iVer2);
+                            break;
+                        }
+                        cnt++;
+                    }
+                }            
+            }
+        }
+        exit(12);
+        cnt=0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
+                if (_mesh->NNList[iVer][i] > iVer) {
+                    int iVer2 = _mesh->NNList[iVer][i];
+                    switch (state[cnt]){
+                    case -1:
+                        printf("DEBUG  Edge: %d %d is in state UNKNOWN\n", iVer, iVer2);
+                        break;
+                    case 0:
+                        printf("DEBUG  Edge: %d %d is in state NOT_IN\n", iVer, iVer2);
+                        break;
+                    case 1:
+                        printf("DEBUG  Edge: %d %d is in state IN\n", iVer, iVer2);
+                        break;
+                    }
+                    cnt++;
+                }
+            }            
         }
         
         
@@ -299,11 +384,11 @@ public:
             // loop over theese traingles and split them to compute quality
             typename std::set<index_t>::const_iterator tri_it;
             for(tri_it=intersection.begin(); tri_it!=intersection.end(); ++tri_it) {
-                int * v = _mesh->get_element(*tri_it);
-                double * x2, m2;
+                const int * v = _mesh->get_element(*tri_it);
+                const double * x2, * m2;
                 for (int i=0; i<3; ++i) {
                     if (v[i] != e1 && v[i] != e2)  {
-                        x2 = _mesh->get_coordinates(v[i]);
+                        x2 = _mesh->get_coords(v[i]);
                         m2 = _mesh->get_metric(v[i]);
                     }
                 }
