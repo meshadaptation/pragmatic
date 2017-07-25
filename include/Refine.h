@@ -169,8 +169,8 @@ public:
         
         //-- create array of edge states, initialized with UNKNOWN
         //    -1 is UNKNOWN, 0 is NOT_IN, 1 is in
-        std::vector<int> state(NEdges);
-        std::fill(state.begin(), state.end(), -1);
+        std::vector<int> state(NEdges, -1);
+        //std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
             if (qualities[iEdg]<0) {
                 state[iEdg] = 0;
@@ -180,9 +180,10 @@ public:
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- (a) Loop over the edges v
-        std::vector<int> state_new(NEdges);
-        std::fill(state_new.begin(), state_new.end(), -1);
+        std::vector<int> state_new(NEdges, -1);
+        //std::fill(state_new.begin(), state_new.end(), -1);
         int stop = 0;
+        
         while ( !stop ) {
             printf("DEBUG  New pass of edge selection\n");
             stop = 1;
@@ -223,7 +224,6 @@ public:
                             for (int k=headV2E[iVer1]; k<headV2E[iVer1+1]; ++k){
                                 if (ver2edg[k] == iVer2 && k!=iEdg) {
                                     edges_neighbor.insert(k);
-                                    printf("DEBUG  neighbor of edge %d (%d %d) is %d (%d %d)\n", iEdg, e1, e2, k, iVer1, iVer2);
                                 }
                             }
                         }
@@ -237,14 +237,14 @@ public:
                 for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
                     int iEdgNgb = *edge_it;
                     //-------- if state[u] = IN: new_state[v] = NOT_IN, goto (a)
-                    if (state[iEdgNgb == 1]) {
+                    if (state[iEdgNgb] == 1) {
                         cont = 1;
                         break;
                     }
                 }
                 if (cont==1) {
                     state_new[iEdg] = 0;
-                    printf("DEBUG  edge %d (%d %d) is set to NOT_IN there", iEdg, e1, e2);
+                    stop = 0;
                     continue;
                 }
                 
@@ -270,11 +270,9 @@ public:
                         cont = 1;
                         break;
                     }
-
                 }
                 if (cont==1) {
-                    state_new[iEdg] = 0;
-                    printf("DEBUG  edge %d (%d %d) is set to NOT_IN here", iEdg, e1, e2);
+//                    state_new[iEdg] = 0;
                     continue;
                 }
                 //------ new_state[v] = IN
@@ -283,28 +281,7 @@ public:
             }
             
             state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
-            cnt=0;
-            for (int iVer=0; iVer<NNodes; ++iVer) {
-                for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
-                    if (_mesh->NNList[iVer][i] > iVer) {
-                        int iVer2 = _mesh->NNList[iVer][i];
-                        switch (state[cnt]){
-                        case -1:
-                            printf("DEBUG  Edge: %d %d is in state UNKNOWN\n", iVer, iVer2);
-                            break;
-                        case 0:
-                            printf("DEBUG  Edge: %d %d is in state NOT_IN\n", iVer, iVer2);
-                            break;
-                        case 1:
-                            printf("DEBUG  Edge: %d %d is in state IN\n", iVer, iVer2);
-                            break;
-                        }
-                        cnt++;
-                    }
-                }            
-            }
         }
-        exit(12);
         cnt=0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
