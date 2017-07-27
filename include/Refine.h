@@ -137,12 +137,14 @@ public:
                     int iVer2 = _mesh->NNList[iVer][i];
                     ver2edg[cnt] = iVer2;
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
-                    double quality_old_cavity = compute_quality_cavity();
+                    double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
                     double length = _mesh->calc_edge_length(iVer, iVer2);
                     if (length>L_max) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double quality_new_cavity = simulate_edge_split(iVer, iVer2);
+                        printf("DEBUG  iEdg: %d (%d %d) old_qulity: %1.3f  new_quality: %1.3f\n", cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity);
+                        
 
                         //---- if quality is too bad, reject refinement
                         if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
@@ -169,9 +171,10 @@ public:
         
         //-- create array of edge states, initialized with UNKNOWN
         //    -1 is UNKNOWN, 0 is NOT_IN, 1 is in
-        std::vector<int> state(NEdges, -1);
-        //std::fill(state.begin(), state.end(), -1);
+        std::vector<int> state(NEdges);
+        std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
+            printf("DEBUG  quality[iEdg=%d] : %1.3f\n", iEdg, qualities[iEdg]);
             if (qualities[iEdg]<0) {
                 state[iEdg] = 0;
             }
@@ -180,8 +183,8 @@ public:
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- (a) Loop over the edges v
-        std::vector<int> state_new(NEdges, -1);
-        //std::fill(state_new.begin(), state_new.end(), -1);
+        std::vector<int> state_new(NEdges);
+        std::fill(state_new.begin(), state_new.end(), -1);
         int stop = 0;
         
         while ( !stop ) {
@@ -199,6 +202,7 @@ public:
                 //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
                 if (state[iEdg]>-1) {
                     state_new[iEdg] = state[iEdg];
+                    printf("DEBUG  here\n");
                     continue;
                 }
                 
@@ -245,6 +249,7 @@ public:
                 if (cont==1) {
                     state_new[iEdg] = 0;
                     stop = 0;
+                    printf("DEBUG  there\n");
                     continue;
                 }
                 
@@ -305,6 +310,9 @@ public:
         
         
         //-- III. Actually perform the splits
+        //let's cheat and use the actual refine function for  now
+        
+        refine(sqrt(2), &state[0]);
         
     }
     
@@ -370,8 +378,8 @@ public:
                     }
                 }
                 // Now I know new triangles are newVertex,e3,e1 and newVertex,e3,e1 - here we don't care about orientation
-                double qual1 = property->lipnikov(newCoords, x2, x0, newMetric, m2, m0);
-                double qual2 = property->lipnikov(newCoords, x2, x1, newMetric, m2, m1);
+                double qual1 = fabs(property->lipnikov(newCoords, x2, x0, newMetric, m2, m0));
+                double qual2 = fabs(property->lipnikov(newCoords, x2, x1, newMetric, m2, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
             }
             
@@ -388,10 +396,41 @@ public:
     }
     
     
-    double compute_quality_cavity() {
+    double compute_quality_cavity(int e1, int e2) {
         
-        double quality = 0;
-        // TODO write function compute_quality_cavity
+        double quality = 1;
+        // find the neighboring elements
+        std::set<index_t> intersection;
+        std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
+                              _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
+                              std::inserter(intersection, intersection.begin()));
+        
+        // loop over theese traingles and split them to compute quality
+        typename std::set<index_t>::const_iterator elm_it;
+        for(elm_it=intersection.begin(); elm_it!=intersection.end(); ++elm_it) {
+            int iElm = *elm_it;
+            const double *x0, *x1, *x2, *x3, *m0, *m1, *m2, *m3;
+            const int * elm = _mesh->get_element(iElm);
+            x0 = _mesh->get_coords(elm[0]);
+            m0 = _mesh->get_metric(elm[0]);
+            x1 = _mesh->get_coords(elm[1]);
+            m1 = _mesh->get_metric(elm[1]);
+            x2 = _mesh->get_coords(elm[2]);
+            m2 = _mesh->get_metric(elm[2]);
+            if (dim==3){
+                x3 = _mesh->get_coords(elm[3]);
+                m3 = _mesh->get_metric(elm[3]);
+            }
+            double qual;
+            if (dim==2) {
+                qual = property->lipnikov(x0, x1, x2, m0, m1, m2);
+            }
+            else {
+                qual = property->lipnikov(x0, x1, x2, x3, m0, m1, m2, m3);
+            }
+            quality = fmin(quality, qual);
+        }
+        
         return quality;
     }
     
@@ -404,7 +443,7 @@ public:
      * three-dimensional unstructured grids", Applied Numerical
      * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
      */
-    void refine(real_t L_max)
+    void refine(real_t L_max, int *state=NULL)
     {
         origNElements = _mesh->get_number_elements();
         size_t origNNodes = _mesh->get_number_nodes();
@@ -430,53 +469,70 @@ public:
         newMetric.clear();
         newMetric.reserve(msize*reserve_size);
 
-        /* Loop through all edges and select them for refinement if
-           its length is greater than L_max in transformed space. */
-        for(size_t i=0; i<origNNodes; ++i) {
-            
-            if (_mesh->is_halo_node(i))
-                continue;
-
-            for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
-
-                index_t otherVertex = _mesh->NNList[i][it];
-                assert(otherVertex>=0);
-
-                if (_mesh->is_halo_node(otherVertex))
+        if (!state){
+            /* Loop through all edges and select them for refinement if
+               its length is greater than L_max in transformed space. */
+            for(size_t i=0; i<origNNodes; ++i) {
+                
+                if (_mesh->is_halo_node(i))
                     continue;
-
-                // compute neighboring elements
-                std::set<index_t> intersection;
-                std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-                                      _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
-                                      std::inserter(intersection, intersection.begin()));
-
-                // if one element is tagged => don't refine
-                int skip = 0;
-                for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                    index_t eid = *element;
-                    if (element_tag[eid]) {
-                        skip = 1;
-                        break;
+            
+                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
+            
+                    index_t otherVertex = _mesh->NNList[i][it];
+                    assert(otherVertex>=0);
+            
+                    if (_mesh->is_halo_node(otherVertex))
+                        continue;
+            
+                    // compute neighboring elements
+                    std::set<index_t> intersection;
+                    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
+                                          _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
+                                          std::inserter(intersection, intersection.begin()));
+            
+                    // if one element is tagged => don't refine
+                    int skip = 0;
+                    for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                        index_t eid = *element;
+                        if (element_tag[eid]) {
+                            skip = 1;
+                            break;
+                        }
+                    }
+                    if (skip)
+                        continue;
+            
+            
+                    /* Conditional statement ensures that the edge length is only calculated once.
+                     * By ordering the vertices according to their gnn, we ensure that all processes
+                     * calculate the same edge length when they fall on the halo.
+                     */
+                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
+                        double length = _mesh->calc_edge_length(i, otherVertex);
+                        if(length>L_max) {
+                            ++splitCnt;
+                            refine_edge(i, otherVertex);
+                            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
+                                index_t eid = *element;
+                                element_tag[eid] = 1;
+                            }
+                        }
                     }
                 }
-                if (skip)
-                    continue;
-
-
-                /* Conditional statement ensures that the edge length is only calculated once.
-                 * By ordering the vertices according to their gnn, we ensure that all processes
-                 * calculate the same edge length when they fall on the halo.
-                 */
-                if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
-                    double length = _mesh->calc_edge_length(i, otherVertex);
-                    if(length>L_max) {
-                        ++splitCnt;
-                        refine_edge(i, otherVertex);
-                        for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                            index_t eid = *element;
-                            element_tag[eid] = 1;
+            }
+        }
+        else {
+            int cnt = 0;
+            for(size_t i=0; i<origNNodes; ++i) {
+                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
+                    index_t otherVertex = _mesh->NNList[i][it];
+                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
+                        if (state[cnt] > 0) {
+                            ++splitCnt;
+                            refine_edge(i, otherVertex);
                         }
+                        cnt++;
                     }
                 }
             }
