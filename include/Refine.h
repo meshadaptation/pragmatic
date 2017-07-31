@@ -144,7 +144,7 @@ public:
                     ver2edg[cnt] = iVer2;
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
-                    double length = _mesh->calc_edge_length(iVer, iVer2);
+                    double length = _mesh->calc_edge_length_log(iVer, iVer2);
                     if (tag) {
                         printf("DEBUG  iEdg: %d  old cavity quality: %f  length: %1.5f\n", cnt, quality_old_cavity, length);
                     }
