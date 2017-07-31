@@ -130,21 +130,32 @@ public:
         std::vector<int> ver2edg(NEdges); // this is the hashmap, corresponding to headV2E
         std::vector<double> qualities(NEdges);
         int cnt=0;
+        int tag = 0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
                 if (_mesh->NNList[iVer][i] > iVer) {
                     
                     int iVer2 = _mesh->NNList[iVer][i];
+                    tag = 0;
+                    if (cnt == 94 || cnt == 111) {
+                        printf("DEBUG  check, cnt: %d  edge: %d %d\n", cnt, iVer, iVer2);
+                        tag =1;
+                    }
                     ver2edg[cnt] = iVer2;
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
                     double length = _mesh->calc_edge_length(iVer, iVer2);
+                    if (tag) {
+                        printf("DEBUG  iEdg: %d  old cavity quality: %f  length: %1.5f\n", cnt, quality_old_cavity, length);
+                    }
                     if (length>L_max) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double quality_new_cavity = simulate_edge_split(iVer, iVer2);
-                        printf("DEBUG  iEdg: %d (%d %d) old_qulity: %1.3f  new_quality: %1.3f\n", cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity);
-                        
+//                        printf("DEBUG  iEdg: %d (%d %d) old_qulity: %1.3f  new_quality: %1.3f\n", cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity);
+                        if (tag) {
+                            printf("DEBUG  iEdg: %d new cavity quality: %f\n", cnt, quality_new_cavity);
+                        }
 
                         //---- if quality is too bad, reject refinement
                         if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
@@ -174,7 +185,9 @@ public:
         std::vector<int> state(NEdges);
         std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
-            printf("DEBUG  quality[iEdg=%d] : %1.3f\n", iEdg, qualities[iEdg]);
+            if (iEdg == 94 || iEdg == 111)
+                printf("DEBUG  iEdg: %d  quality: %1.3f\n", iEdg, qualities[iEdg]);
+//            printf("DEBUG  quality[iEdg=%d] : %1.3f\n", iEdg, qualities[iEdg]);
             if (qualities[iEdg]<0) {
                 state[iEdg] = 0;
             }
@@ -192,17 +205,20 @@ public:
             stop = 1;
             int e1, e2; // end vertices of current edge
             e1 = 0;
+            int print_tag = 0;
             for (int iEdg=0; iEdg<NEdges; ++iEdg) {
-                
+                print_tag = 0;
                 if (iEdg >= headV2E[e1+1]){
                     e1++;
                 }
                 e2 = ver2edg[iEdg];
+                if (e1 == 22 && e2 == 50) {print_tag = 1; printf("DEBUG edge %d %d has index %d\n", e1, e2, iEdg);}
+                if (e1 == 20 && e2 == 36) {print_tag = 2; printf("DE BUG edge %d %d has index %d\n", e1, e2, iEdg);}
                 
                 //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
                 if (state[iEdg]>-1) {
                     state_new[iEdg] = state[iEdg];
-                    printf("DEBUG  here\n");
+                    if (print_tag) printf("DEBUG  here %d\n", print_tag);
                     continue;
                 }
                 
@@ -249,7 +265,7 @@ public:
                 if (cont==1) {
                     state_new[iEdg] = 0;
                     stop = 0;
-                    printf("DEBUG  there\n");
+                    if (print_tag) printf("DEBUG  there %d\n", print_tag);
                     continue;
                 }
                 
@@ -281,13 +297,14 @@ public:
                     continue;
                 }
                 //------ new_state[v] = IN
+                if (print_tag) printf("DEBUG  IN %d\n", print_tag);
                 state_new[iEdg] = 1;
                 stop = 0;
             }
             
             state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
         }
-        cnt=0;
+/*        cnt=0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
                 if (_mesh->NNList[iVer][i] > iVer) {
@@ -307,6 +324,7 @@ public:
                 }
             }            
         }
+*/
         
         
         //-- III. Actually perform the splits

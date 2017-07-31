@@ -90,9 +90,13 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<1; i++)
+    for(int i=0; i<4; i++) {
+        printf("DEBUG  ===== refine %d\n", i);
         adapt.refine_new(sqrt(2.0));
-//        adapt.refine(sqrt(2.0));
+        char name[128];
+        sprintf(name, "../data/refine.%d", i);
+        VTKTools<double>::export_vtu(name, mesh);
+    }
     double toc = get_wtime();
 
 
