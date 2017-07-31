@@ -148,7 +148,7 @@ public:
                     if (tag) {
                         printf("DEBUG  iEdg: %d  old cavity quality: %f  length: %1.5f\n", cnt, quality_old_cavity, length);
                     }
-                    if (length>L_max) {
+                    if (length>L_max-1e-10) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double quality_new_cavity = simulate_edge_split(iVer, iVer2);
