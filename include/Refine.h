@@ -124,38 +124,24 @@ public:
             }
         }
         int NEdges = headV2E[NNodes];  
-        printf("DEBUG  NEdges: %d\n", NEdges);      
         
         //-- Loop over the edges
         std::vector<int> ver2edg(NEdges); // this is the hashmap, corresponding to headV2E
         std::vector<double> qualities(NEdges);
         int cnt=0;
-        int tag = 0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
                 if (_mesh->NNList[iVer][i] > iVer) {
                     
                     int iVer2 = _mesh->NNList[iVer][i];
-                    tag = 0;
-                    if (cnt == 94 || cnt == 111) {
-                        printf("DEBUG  check, cnt: %d  edge: %d %d\n", cnt, iVer, iVer2);
-                        tag =1;
-                    }
                     ver2edg[cnt] = iVer2;
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
                     double length = _mesh->calc_edge_length_log(iVer, iVer2);
-                    if (tag) {
-                        printf("DEBUG  iEdg: %d  old cavity quality: %f  length: %1.5f\n", cnt, quality_old_cavity, length);
-                    }
                     if (length>L_max-1e-10) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double quality_new_cavity = simulate_edge_split(iVer, iVer2);
-//                        printf("DEBUG  iEdg: %d (%d %d) old_qulity: %1.3f  new_quality: %1.3f\n", cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity);
-                        if (tag) {
-                            printf("DEBUG  iEdg: %d new cavity quality: %f\n", cnt, quality_new_cavity);
-                        }
 
                         //---- if quality is too bad, reject refinement
                         if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
@@ -185,9 +171,6 @@ public:
         std::vector<int> state(NEdges);
         std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
-            if (iEdg == 94 || iEdg == 111)
-                printf("DEBUG  iEdg: %d  quality: %1.3f\n", iEdg, qualities[iEdg]);
-//            printf("DEBUG  quality[iEdg=%d] : %1.3f\n", iEdg, qualities[iEdg]);
             if (qualities[iEdg]<0) {
                 state[iEdg] = 0;
             }
@@ -195,36 +178,30 @@ public:
         
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
-        //---- (a) Loop over the edges v
+        //---- Loop over the edges v
         std::vector<int> state_new(NEdges);
         std::fill(state_new.begin(), state_new.end(), -1);
         int stop = 0;
+        int cntSplit = 0;
         
         while ( !stop ) {
             printf("DEBUG  New pass of edge selection\n");
             stop = 1;
             int e1, e2; // end vertices of current edge
             e1 = 0;
-            int print_tag = 0;
             for (int iEdg=0; iEdg<NEdges; ++iEdg) {
-                print_tag = 0;
                 if (iEdg >= headV2E[e1+1]){
                     e1++;
                 }
                 e2 = ver2edg[iEdg];
-                if (e1 == 22 && e2 == 50) {print_tag = 1; printf("DEBUG edge %d %d has index %d\n", e1, e2, iEdg);}
-                if (e1 == 20 && e2 == 36) {print_tag = 2; printf("DE BUG edge %d %d has index %d\n", e1, e2, iEdg);}
                 
-                //------ if state[v] != UNKNOWN: new_state[v] = state[v], goto (a)
                 if (state[iEdg]>-1) {
                     state_new[iEdg] = state[iEdg];
-                    if (print_tag) printf("DEBUG  here %d\n", print_tag);
                     continue;
                 }
                 
                 // find neighboring cavities: edges on neighboring elements
                 std::set<int> edges_neighbor;
-                // fill this set
                 std::set<index_t> intersection; 
                 std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
                                       _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
@@ -256,7 +233,7 @@ public:
                 int cont = 0;
                 for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
                     int iEdgNgb = *edge_it;
-                    //-------- if state[u] = IN: new_state[v] = NOT_IN, goto (a)
+
                     if (state[iEdgNgb] == 1) {
                         cont = 1;
                         break;
@@ -265,7 +242,6 @@ public:
                 if (cont==1) {
                     state_new[iEdg] = 0;
                     stop = 0;
-                    if (print_tag) printf("DEBUG  there %d\n", print_tag);
                     continue;
                 }
                 
@@ -274,18 +250,15 @@ public:
                 for(edge_it=edges_neighbor.begin(); edge_it!=edges_neighbor.end(); ++edge_it) {
                     int iEdgNgb = *edge_it;
                 
-                    //-------- if state[u] = NOT_IN: continue
                     if (state[iEdgNgb] == 0) {
                         continue;
                     }
 
-                    //-------- if quality[u] > quality[v]: new_state[v] = NOT_IN, goto (a)
                     if (qualities[iEdg]<qualities[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
-                    //-------- if quality[u] == quality[v]: if gnn[u] > gnn[v]: new_state[v] = NOT_IN, goto (a)
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
                     if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
@@ -293,39 +266,18 @@ public:
                     }
                 }
                 if (cont==1) {
-//                    state_new[iEdg] = 0;
                     continue;
                 }
-                //------ new_state[v] = IN
-                if (print_tag) printf("DEBUG  IN %d\n", print_tag);
+                
                 state_new[iEdg] = 1;
+                cntSplit++;
                 stop = 0;
             }
             
             state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
         }
-/*        cnt=0;
-        for (int iVer=0; iVer<NNodes; ++iVer) {
-            for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
-                if (_mesh->NNList[iVer][i] > iVer) {
-                    int iVer2 = _mesh->NNList[iVer][i];
-                    switch (state[cnt]){
-                    case -1:
-                        printf("DEBUG  Edge: %d %d is in state UNKNOWN\n", iVer, iVer2);
-                        break;
-                    case 0:
-                        printf("DEBUG  Edge: %d %d is in state NOT_IN\n", iVer, iVer2);
-                        break;
-                    case 1:
-                        printf("DEBUG  Edge: %d %d is in state IN\n", iVer, iVer2);
-                        break;
-                    }
-                    cnt++;
-                }
-            }            
-        }
-*/
         
+        printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
         //-- III. Actually perform the splits
         //let's cheat and use the actual refine function for  now
@@ -374,17 +326,15 @@ public:
                                      <<"weight = "<<weight<<std::endl;
         }
         
+        // find the neighboring triangles
+        std::set<index_t> intersection;
+        std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
+                              _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
+                              std::inserter(intersection, intersection.begin()));
         
-        // TODO write function simulate_edge_split
         if (dim==2) {
             
-            // find the neighboring triangles
-            std::set<index_t> intersection;
-            std::set_intersection(_mesh->NEList[e1].begin(), _mesh->NEList[e1].end(),
-                                  _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
-                                  std::inserter(intersection, intersection.begin()));
-            
-            // loop over theese traingles and split them to compute quality
+            // loop over these triangles and split them to compute quality
             typename std::set<index_t>::const_iterator tri_it;
             for(tri_it=intersection.begin(); tri_it!=intersection.end(); ++tri_it) {
                 const int * v = _mesh->get_element(*tri_it);
@@ -395,7 +345,7 @@ public:
                         m2 = _mesh->get_metric(v[i]);
                     }
                 }
-                // Now I know new triangles are newVertex,e3,e1 and newVertex,e3,e1 - here we don't care about orientation
+                // Now I know new triangles are newVertex,x2,x0 and newVertex,x2,x1 - here we don't care about orientation
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x0, newMetric, m2, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x1, newMetric, m2, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
@@ -404,9 +354,31 @@ public:
             
         }
         else {
-            printf("ERROR 3d new refinement not yet implemented\n");
-            
-            // find neighboring facets then tets, or tets directly ?
+            // loop over these tets and split them to compute quality
+            typename std::set<index_t>::const_iterator tet_it;
+            for(tet_it=intersection.begin(); tet_it!=intersection.end(); ++tet_it) {
+                const int * v = _mesh->get_element(*tet_it);
+                const double * x2, * m2, * x3, * m3;
+                int i;
+                for (i=0; i<4; ++i) {
+                    if (v[i] != e1 && v[i] != e2)  {
+                        x2 = _mesh->get_coords(v[i]);
+                        m2 = _mesh->get_metric(v[i]);
+                        break;
+                    }
+                }
+                for (int j=i+1; j<4; ++j) {
+                    if (v[j] != e1 && v[j] != e2)  {
+                        x3 = _mesh->get_coords(v[j]);
+                        m3 = _mesh->get_metric(v[j]);
+                        break;
+                    }
+                }
+                // Now I know new tets are newVertex,x2,x3,x0 and newVertex,x2,x3,x1 - here we don't care about orientation
+                double qual1 = fabs(property->lipnikov(newCoords, x2, x3, x0, newMetric, m2, m3, m0));
+                double qual2 = fabs(property->lipnikov(newCoords, x2, x3, x1, newMetric, m2, m3, m1));
+                quality = fmin(quality, fmin(qual1, qual2));
+            }
         }
         
         
