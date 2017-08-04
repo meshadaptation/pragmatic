@@ -931,15 +931,24 @@ public:
     
     real_t calc_edge_length_log(index_t nid0, index_t nid1) const
     {
-        double l0 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
-        double l1 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        double l0, l1;
+        if (ndims == 2) {
+            l0 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
+        else {
+            l0 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
         
         if (fabs(l0-l1)<1e-10) {
+            assert(l0>1e-10);
             return l0;
         }
         else {
             double r = l0/l1;
             double length = l0 * (r-1)/(r*log(r));
+            assert(l0>1e-10);
             return length;
         }
         

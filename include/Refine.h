@@ -142,14 +142,16 @@ public:
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double quality_new_cavity = simulate_edge_split(iVer, iVer2);
+//                        printf("DEBUG  iEdg: %d (%d %d) qual_old: %1.4f qual_new: %1.4f  length: %1.3f\n", 
+//                                cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity, length);
 
                         //---- if quality is too bad, reject refinement
-                        if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
-                            qualities[cnt] = -quality_old_cavity;
-                        }
-                        else {
+                        //if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
+                        //    qualities[cnt] = -quality_old_cavity;
+                        //}
+                        //else {
                             qualities[cnt] = quality_new_cavity;
-                        }
+                        //}
                     }
                     else {
                         qualities[cnt] = -quality_old_cavity;
@@ -959,6 +961,9 @@ private:
             refine_cnt=splitEdges.size();
 
             if(refine_cnt > 0) {
+                if (refine_cnt != 1) printf("DEBUG  elm id: %lu  refine_cnt: %d\n", eid, refine_cnt);
+                if (refine_cnt != 1) printf("DEBUG  %d %d     %d %d\n", splitEdges[0].edge.first, splitEdges[0].edge.second, 
+                                            splitEdges[1].edge.first, splitEdges[1].edge.second);
                 assert (refine_cnt == 1);
                 refine3D_1(splitEdges, eid);
             }
