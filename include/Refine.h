@@ -164,8 +164,6 @@ public:
         }
         
         
-        
-        
         //-- II. Select edges to split with local optim procedure
         
         //-- create array of edge states, initialized with UNKNOWN
@@ -193,7 +191,8 @@ public:
             e1 = 0;
             for (int iEdg=0; iEdg<NEdges; ++iEdg) {
                 if (iEdg >= headV2E[e1+1]){
-                    e1++;
+                    while (iEdg >= headV2E[e1+1])
+                       e1++;
                 }
                 e2 = ver2edg[iEdg];
                 
