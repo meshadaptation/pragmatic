@@ -932,7 +932,7 @@ public:
     real_t calc_edge_length_log(index_t nid0, index_t nid1) const
     {
         double l0, l1;
-        if (ndims == 2) {
+        if (ndims==2) {
             l0 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
             l1 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
         }
@@ -1295,14 +1295,22 @@ public:
             } else {
                 for(size_t i=0; i<NNodes; i++) {
                     if(local_NEList[i].size()!=NEList[i].size()) {
-                        result = "fail (NEList[i].size()!=local_NEList[i].size())\n";
+                        result = "fail (NEList["+std::to_string(i)+"].size()!=local_NEList["+std::to_string(i)+"].size())\n";
                         state = false;
                         break;
                     }
                     if(local_NEList[i].size()==0)
                         continue;
                     if(local_NEList[i]!=NEList[i]) {
-                        result = "fail (local_NEList[i]!=NEList[i])\n";
+                        result = "fail (local_NEList["+std::to_string(i)+"]!=NEList["+std::to_string(i)+"])\n";
+                        printf("\nDEBUG  local_NEList: ");
+                        for (std::set<index_t>::const_iterator it=local_NEList[i].begin(); it!=local_NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
+                        printf("DEBUG  NEList: ");
+                        for (std::set<index_t>::const_iterator it=NEList[i].begin(); it!=NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
                         state = false;
                         break;
                     }
