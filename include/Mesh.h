@@ -484,6 +484,14 @@ public:
             return nid;
     }
 
+    // multiplies metric tensors by alpha
+    void scale_metric(double alpha)
+    {
+        for (int i=0; i<metric.size(); ++i) {
+            metric[i] *= alpha;
+        }
+    }
+
     /// Get the mean edge length metric space.
     double get_lmean()
     {
@@ -1503,6 +1511,52 @@ public:
         NElements = iElm_new;
         
     }
+
+    /// debug function to print mesh related structures
+    void print_mesh(char * text)
+    {
+
+        char filename[128];
+        sprintf(filename, "mesh_%s_%d", text, rank);
+        FILE * logfile = fopen(filename, "w");
+
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            const double * coords = get_coords(iVer);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2]);
+            else 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], coords[2], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2], metric[msize*iVer+3], metric[msize*iVer+4], metric[msize*iVer+5]);
+        }
+        for (int iElm=0; iElm<get_number_elements(); ++iElm){
+            const int * elm = get_element(iElm);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], 
+                    quality[iElm], boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2]);
+            else
+                fprintf(logfile, "DBG(%d)  tet[%d]  %d %d %d %d  (gnn: %d %d %d %d)  quality: %1.2f  boundary: %d %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], elm[3], 
+                    lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], lnn2gnn[elm[3]], quality[iElm], 
+                    boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2], boundary[nloc*iElm+3]);
+        }
+
+        fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            fprintf(logfile, "DBG(%d)  vertex[%d (%d)] ", rank, iVer, lnn2gnn[iVer]);
+            fprintf(logfile, "  Neighboring nodes: ");
+            for (int i=0; i<NNList[iVer].size(); ++i) 
+                fprintf(logfile, "%d (%d) ", NNList[iVer][i], lnn2gnn[NNList[iVer][i]]);
+            fprintf(logfile, "  Neighboring elements: ");
+            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it)
+                fprintf(logfile, " %d ", *it); 
+            fprintf(logfile, "\n");
+        }
+        fclose(logfile);
+}
 
 
 
