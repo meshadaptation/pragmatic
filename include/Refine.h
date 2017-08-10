@@ -41,6 +41,7 @@
 #include <algorithm>
 #include <set>
 #include <vector>
+#include <queue>
 
 #include <string.h>
 #include <inttypes.h>
@@ -103,7 +104,7 @@ public:
                + local optimization procedure to select edges to refine
           - introduction of the notion of cavity: here a cavity is an edge + neighboring tris/tets
      */
-    void refine_new(double L_max) 
+    double refine_new(double L_max) 
     {
         
         //-- I. Simulate the edge splits if edge length > sqrt(2)
@@ -127,7 +128,9 @@ public:
         
         //-- Loop over the edges
         std::vector<int> ver2edg(NEdges); // this is the hashmap, corresponding to headV2E
+        std::vector<int> ver2edg_first(NEdges); // store 1st id of edges until I find better solution TODO
         std::vector<double> qualities(NEdges);
+        std::vector<double> lengths(NEdges);
         int cnt=0;
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
@@ -138,20 +141,23 @@ public:
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
                     double length = _mesh->calc_edge_length_log(iVer, iVer2);
+                    lengths[cnt] = length;
                     if (length>L_max-1e-10) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
-                        double quality_new_cavity = simulate_edge_split(iVer, iVer2);
-//                        printf("DEBUG  iEdg: %d (%d %d) qual_old: %1.4f qual_new: %1.4f  length: %1.3f\n", 
-//                                cnt, iVer, iVer2, quality_old_cavity, quality_new_cavity, length);
+                        double worst_new_quality, worst_new_volume;
+                        simulate_edge_split(iVer, iVer2, &worst_new_quality, &worst_new_volume);
 
                         //---- if quality is too bad, reject refinement
-                        //if (quality_new_cavity < 0.1) {// TODO set this threshold + check for slivers&co + change criteria
-                        //    qualities[cnt] = -quality_old_cavity;
-                        //}
-                        //else {
-                            qualities[cnt] = quality_new_cavity;
-                        //}
+                        if (worst_new_quality < quality_old_cavity && worst_new_quality < 0.001) {// TODO set this threshold + check for slivers&co + change criteria
+                            qualities[cnt] = -quality_old_cavity;
+                        }
+                        if (worst_new_quality < 0.8*quality_old_cavity) {
+                            qualities[cnt] = -quality_old_cavity;
+                        }
+                        else {
+                            qualities[cnt] = worst_new_quality;
+                        }
                     }
                     else {
                         qualities[cnt] = -quality_old_cavity;
@@ -179,10 +185,10 @@ public:
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- Loop over the edges v
-        std::vector<int> state_new(NEdges);
-        std::fill(state_new.begin(), state_new.end(), -1);
-        int stop = 0;
+//        std::vector<int> state_new(NEdges);
+//        std::fill(state_new.begin(), state_new.end(), -1);
         int cntSplit = 0;
+        int stop = 0;
         
         while ( !stop ) {
             printf("DEBUG  New pass of edge selection\n");
@@ -197,7 +203,11 @@ public:
                 e2 = ver2edg[iEdg];
                 
                 if (state[iEdg]>-1) {
-                    state_new[iEdg] = state[iEdg];
+                    continue;
+                }
+                if (qualities[iEdg] < 0) {
+                    state[iEdg] = 0;
+                    stop = 0;
                     continue;
                 }
                 
@@ -208,6 +218,7 @@ public:
                                       _mesh->NEList[e2].begin(), _mesh->NEList[e2].end(),
                                       std::inserter(intersection, intersection.begin()));
                 typename std::set<index_t>::const_iterator elm_it;
+                double max_length_cavity = 0;
                 for(elm_it=intersection.begin(); elm_it!=intersection.end(); ++elm_it) {
                     int iElm = *elm_it;
                     for (int i=0; i<(dim==2?3:6); ++i) {
@@ -222,12 +233,17 @@ public:
                             for (int k=headV2E[iVer1]; k<headV2E[iVer1+1]; ++k){
                                 if (ver2edg[k] == iVer2 && k!=iEdg) {
                                     edges_neighbor.insert(k);
+                                    max_length_cavity = fmax(max_length_cavity, lengths[k]);
                                 }
                             }
                         }
                     }
+                }
+                if (lengths[iEdg] < 0.8*max_length_cavity) {
+                    state[iEdg] = 0;
+                    stop = 0;
+                    continue;
                 }                
-                                    
                 
                 //------ Loop over the neighboring cavities u
                 typename std::set<int>::const_iterator edge_it;
@@ -241,7 +257,7 @@ public:
                     }
                 }
                 if (cont==1) {
-                    state_new[iEdg] = 0;
+                    state[iEdg] = 0;
                     stop = 0;
                     continue;
                 }
@@ -255,13 +271,15 @@ public:
                         continue;
                     }
 
-                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+//                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+                    if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
-                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+//                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }
@@ -269,13 +287,11 @@ public:
                 if (cont==1) {
                     continue;
                 }
-                
-                state_new[iEdg] = 1;
+
+                state[iEdg] = 1;
                 cntSplit++;
                 stop = 0;
             }
-            
-            state.assign(state_new.begin(), state_new.end()); // TODO best way to copy vector ?
         }
         
         printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
@@ -283,17 +299,21 @@ public:
         //-- III. Actually perform the splits
         //let's cheat and use the actual refine function for  now
         
-        refine(sqrt(2), &state[0]);
+        if (cntSplit > 0) {
+            refine(sqrt(2), &state[0]);
+        }
+        return(cntSplit);
         
     }
     
     
     /*! Simulate splitting edge e1, e2, and remeshing its cavity in consequence
-        return the worst quality of the new cavity
+        give the worst quality and volume of the new cavity
      */
-    double simulate_edge_split(int e1, int e2) {
+    void simulate_edge_split(int e1, int e2, double * worst_quality, double * worst_volume) {
         
         double quality = 1;
+        double volume = 1e10;
         double newCoords[3], newMetric[6];
 
         // Calculate the position of the new point. From equation 16 in
@@ -350,6 +370,9 @@ public:
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x0, newMetric, m2, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x1, newMetric, m2, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
+                double vol1 = fabs(property->area(newCoords, x2, x0));
+                double vol2 = fabs(property->area(newCoords, x2, x1));
+                volume = fmin(volume, fmin(vol1, vol2));
             }
             
             
@@ -379,11 +402,14 @@ public:
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x3, x0, newMetric, m2, m3, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x3, x1, newMetric, m2, m3, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
+                double vol1 = fabs(property->volume(newCoords, x2, x3, x0));
+                double vol2 = fabs(property->volume(newCoords, x2, x3, x1));
+                volume = fmin(volume, fmin(vol1, vol2));
             }
         }
         
-        
-        return quality;
+        *worst_quality = quality;
+        *worst_volume = volume;
     }
     
     
