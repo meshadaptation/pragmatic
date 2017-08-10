@@ -78,7 +78,7 @@ int main(int argc, char **argv)
     
     double m[6] = {0};
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.1*0.1);
+        double lmax = 1/(0.03*0.03);
         m[0] = lmax;
         m[2] = lmax;
         metric_field.set_metric(m, i);
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<4; i++) {
+    for(int i=0; i<15; i++) {
         printf("DEBUG  ===== refine %d\n", i);
         adapt.refine_new(sqrt(2.0));
         char name[128];

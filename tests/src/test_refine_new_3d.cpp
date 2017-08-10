@@ -66,7 +66,8 @@ int main(int argc, char **argv)
     }
 
 #ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box5x5x5.vtu");
+//    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box5x5x5.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/cube.vtu");
     mesh->create_boundary();
 
     MetricField<double,3> metric_field(*mesh);
@@ -75,7 +76,7 @@ int main(int argc, char **argv)
 
     double m[6] = {0};
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.03*0.03);
+        double lmax = 1/(0.05*0.05);
         m[0] = lmax;
         m[3] = lmax;
         m[5] = lmax;
@@ -86,12 +87,13 @@ int main(int argc, char **argv)
     Refine<double,3> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<7; i++) {
+    for(int i=0; i<25; i++) {
         printf("DEBUG  ===== refine %d\n", i);
-        adapt.refine_new(sqrt(2.0));
+        double nsplits = adapt.refine_new(sqrt(2.0));
         char name[128];
         sprintf(name, "../data/refine.%d", i);
         VTKTools<double>::export_vtu(name, mesh);
+        if (nsplits==0) break;
     }
     double toc = get_wtime();
 
