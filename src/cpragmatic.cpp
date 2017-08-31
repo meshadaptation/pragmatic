@@ -301,12 +301,29 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
+            // TODO HACK CAD
+            mesh->set_isOnBoundarySize();
+            for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+            int * boundary = mesh->get_boundaryTags();
+            index_t * ENList = mesh->get_ENList();
+            for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+              if (boundary[j] == 5) {
+                int iElem = j/4;
+                int iEdg = j % 4;
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+              }
+            }
+
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
             for(size_t i=0; i<10; i++) {
+
+                printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
@@ -317,6 +334,25 @@ extern "C" {
 
                 if((L_max-L_up)<0.01)
                     break;
+
+                mesh->compute_print_quality();
+                mesh->compute_print_NNodes_global();
+                
+                // TODO HACK CAD
+                mesh->set_isOnBoundarySize();
+                for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+                int * boundary = mesh->get_boundaryTags();
+                index_t * ENList = mesh->get_ENList();
+                for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+                  if (boundary[j] == 5) {
+                    int iElem = j/4;
+                    int iEdg = j % 4;
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+                  }
+                }
+
             }
 
             mesh->defragment();

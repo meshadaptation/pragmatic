@@ -539,11 +539,26 @@ private:
         real_t weight = 1.0/(1.0 + sqrt(property->template length<dim>(x0, x1, m0)/
                                         property->template length<dim>(x0, x1, m1)));
 
-        // Calculate position of new vertex and append it to OMP thread's temp storage
+/*        // Calculate position of new vertex and append it to OMP thread's temp storage
         for(size_t i=0; i<dim; i++) {
             x = x0[i]+weight*(x1[i] - x0[i]);
             newCoords[tid].push_back(x);
         }
+*/
+        // TODO HACK CAD
+        double newCrd[3];
+        for(size_t i=0; i<dim; i++)
+            newCrd[i] = x0[i]+weight*(x1[i] - x0[i]);
+        if (_mesh->get_isOnBoundary(n0) == 1 && _mesh->get_isOnBoundary(n1) == 1){
+            double r = 0.5/sqrt(newCrd[0]*newCrd[0]+newCrd[1]*newCrd[1]);
+//            printf("DEBUG   n0, x0: %d %1.3f %1.3f %1.3f  n1, x1: %d %1.3f %1.3f %1.3f newCrd: %1.3f %1.3f %1.3f  r: %1.5f\n",
+//                n0, x0[0], x0[1], x0[2], n1, x1[0], x1[1], x1[2], newCrd[0], newCrd[1], newCrd[2], r);
+            newCrd[0] *= r;
+            newCrd[1] *= r;
+        }
+        for(size_t i=0; i<dim; i++)
+            newCoords[tid].push_back(newCrd[i]);
+
 
         // Interpolate new metric and append it to OMP thread's temp storage
         for(size_t i=0; i<msize; i++) {
