@@ -146,7 +146,7 @@ public:
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double worst_new_quality, worst_new_volume;
-                        simulate_edge_split(iVer, iVer2, &worst_new_quality, &worst_new_volume);
+                        double L1_new_quality = simulate_edge_split(iVer, iVer2, &worst_new_quality, &worst_new_volume);
 
                         //---- if quality is too bad, reject refinement
                         if (worst_new_quality < quality_old_cavity && worst_new_quality < 0.001) {// TODO set this threshold + check for slivers&co + change criteria
@@ -156,7 +156,7 @@ public:
                             qualities[cnt] = -quality_old_cavity;
                         }
                         else {
-                            qualities[cnt] = worst_new_quality;
+                            qualities[cnt] = L1_new_quality; //worst_new_quality;
                         }
                     }
                     else {
@@ -271,15 +271,15 @@ public:
                         continue;
                     }
 
-//                    if (qualities[iEdg]<qualities[iEdgNgb]) {
-                    if (lengths[iEdg]<lengths[iEdgNgb]) {
+                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+//                    if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
-//                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
-                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
+                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+//                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }
@@ -310,10 +310,9 @@ public:
     /*! Simulate splitting edge e1, e2, and remeshing its cavity in consequence
         give the worst quality and volume of the new cavity
      */
-    void simulate_edge_split(int e1, int e2, double * worst_quality, double * worst_volume) {
+    double simulate_edge_split(int e1, int e2, double * worst_quality, double * worst_volume) {
         
-        double quality = 1;
-        double volume = 1e10;
+        double qualityL1 = 0, quality = 1, volume = 1e10; // L1, Linf, volume
         double newCoords[3], newMetric[6];
 
         // Calculate the position of the new point. From equation 16 in
@@ -369,6 +368,7 @@ public:
                 // Now I know new triangles are newVertex,x2,x0 and newVertex,x2,x1 - here we don't care about orientation
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x0, newMetric, m2, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x1, newMetric, m2, m1));
+                qualityL1 += qual1 + qual2;
                 quality = fmin(quality, fmin(qual1, qual2));
                 double vol1 = fabs(property->area(newCoords, x2, x0));
                 double vol2 = fabs(property->area(newCoords, x2, x1));
@@ -402,14 +402,18 @@ public:
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x3, x0, newMetric, m2, m3, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x3, x1, newMetric, m2, m3, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
+                qualityL1 += qual1 + qual2;
                 double vol1 = fabs(property->volume(newCoords, x2, x3, x0));
                 double vol2 = fabs(property->volume(newCoords, x2, x3, x1));
                 volume = fmin(volume, fmin(vol1, vol2));
             }
         }
         
+        qualityL1 /= intersection.size();
         *worst_quality = quality;
         *worst_volume = volume;
+
+        return qualityL1;
     }
     
     

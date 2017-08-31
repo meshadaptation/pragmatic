@@ -264,8 +264,12 @@ int main(int argc, char **argv)
     }
 
     tic = get_wtime();
-//    smooth.smart_laplacian(10);
+    smooth.smart_laplacian(10);
+    if(verbose)
+        cout_quality(mesh, "Final smart laplacian");
     smooth.optimisation_linf(10);
+    if(verbose)
+        cout_quality(mesh, "Final Linf optim");
     time_smooth += get_wtime()-tic;
 
     if(verbose)
