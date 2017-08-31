@@ -139,7 +139,7 @@ int main(int argc, char **argv)
     int num_ite_adapt = 10;
     int test_case = 0; // 0- cube linear, 1- cube-cylinder linear, 2- cube-cyl polar 1, 3- cube-cyl polar 2
     
-    if (argc > 0) 
+    if (argc > 1) 
         test_case = atoi(argv[1]);
 
     switch (test_case){
