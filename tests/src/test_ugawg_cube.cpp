@@ -165,14 +165,12 @@ int main(int argc, char **argv)
     }
 
     int rank=0;
-#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
 
 #ifdef HAVE_LIBMESHB
     char filename_in[256];
@@ -232,9 +230,7 @@ int main(int argc, char **argv)
     std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
 #endif
 
-#ifdef HAVE_MPI
     MPI_Finalize();
-#endif
 
     return 0;
 }
