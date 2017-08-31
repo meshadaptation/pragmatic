@@ -846,18 +846,16 @@ public:
         return _mpi_comm;
     }
 
+#if 0
     int get_isOnBoundary(int nid) {
        return isOnBoundary[nid];
     }
 
     void set_isOnBoundary(int nid, int val) {
-        //if (nid > NNodes) {
-        //    printf("ERROR  %d > NNodes(%d)\n", nid, NNodes);
-        //    exit(1);
-        //}
        if (nid == -1) return;
        isOnBoundary[nid] = val;
     }
+
     void set_isOnBoundarySize() {
        isOnBoundary.resize(NNodes);
     }
@@ -865,6 +863,7 @@ public:
     index_t * get_ENList(){
         return &_ENList[0];
     }
+#endif
 
     /// Return the node id's connected to the specified node_id
     std::set<index_t> get_node_patch(index_t nid) const
@@ -2112,7 +2111,9 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+#if 0
 	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+#endif
 
     // Quality
     std::vector<double> quality;

@@ -301,6 +301,7 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
+#if 0
             // TODO HACK CAD
             mesh->set_isOnBoundarySize();
             for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
@@ -315,6 +316,7 @@ extern "C" {
                 mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
               }
             }
+#endif
 
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
@@ -337,7 +339,8 @@ extern "C" {
 
                 mesh->compute_print_quality();
                 mesh->compute_print_NNodes_global();
-                
+
+#if 0                
                 // TODO HACK CAD
                 mesh->set_isOnBoundarySize();
                 for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
@@ -352,6 +355,7 @@ extern "C" {
                     mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
                   }
                 }
+#endif
 
             }
 
