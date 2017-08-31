@@ -846,6 +846,25 @@ public:
         return _mpi_comm;
     }
 
+#if 0
+    int get_isOnBoundary(int nid) {
+       return isOnBoundary[nid];
+    }
+
+    void set_isOnBoundary(int nid, int val) {
+       if (nid == -1) return;
+       isOnBoundary[nid] = val;
+    }
+
+    void set_isOnBoundarySize() {
+       isOnBoundary.resize(NNodes);
+    }
+
+    index_t * get_ENList(){
+        return &_ENList[0];
+    }
+#endif
+
     /// Return the node id's connected to the specified node_id
     std::set<index_t> get_node_patch(index_t nid) const
     {
@@ -1512,6 +1531,32 @@ public:
     }
 
 
+    void compute_print_quality()
+    {   
+        double qmean = get_qmean();
+        double qmin = get_qmin();
+        if(rank==0) {
+            std::cout<<"INFO: mean quality............"<<qmean<<std::endl;
+            std::cout<<"INFO: min quality............."<<qmin<<std::endl;
+        }
+    }
+
+    void compute_print_NNodes_global()
+    {   
+        int NNodes_loc = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_owner[iVer] == rank)
+                NNodes_loc++;
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &NNodes_loc, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+
+        if(rank==0) {
+            std::cout<<"INFO: num nodes..............."<<NNodes_loc<<std::endl;
+        }
+    }
+
+
 private:
     template<typename _real_t, int _dim> friend class MetricField;
     template<typename _real_t, int _dim> friend class Smooth;
@@ -2066,6 +2111,9 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+#if 0
+	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+#endif
 
     // Quality
     std::vector<double> quality;

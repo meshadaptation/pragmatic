@@ -545,6 +545,20 @@ private:
             newCoords[tid].push_back(x);
         }
 
+#if 0
+        // TODO HACK CAD
+        double newCrd[3];
+        for(size_t i=0; i<dim; i++)
+            newCrd[i] = x0[i]+weight*(x1[i] - x0[i]);
+        if (_mesh->get_isOnBoundary(n0) == 1 && _mesh->get_isOnBoundary(n1) == 1){
+            double r = 0.5/sqrt(newCrd[0]*newCrd[0]+newCrd[1]*newCrd[1]);
+            newCrd[0] *= r;
+            newCrd[1] *= r;
+        }
+        for(size_t i=0; i<dim; i++)
+            newCoords[tid].push_back(newCrd[i]);
+#endif
+
         // Interpolate new metric and append it to OMP thread's temp storage
         for(size_t i=0; i<msize; i++) {
             m = m0[i]+weight*(m1[i] - m0[i]);
