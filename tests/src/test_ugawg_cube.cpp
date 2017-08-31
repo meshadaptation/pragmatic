@@ -60,11 +60,7 @@
 #include "ticker.h"
 #include "cpragmatic.h"
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
-
-
 
 
 void set_metric(Mesh<double> *mesh, MetricField<double,3> &metric, int metric_choice, double h0) {
@@ -133,10 +129,8 @@ void set_metric(Mesh<double> *mesh, MetricField<double,3> &metric, int metric_ch
 }
 
 
-
 int main(int argc, char **argv)
 {
-
     // Options:
     int mesh_choice = 0; // 0- cube, 1- cube-cylinder
     int metric_choice = 0;  // 0- linear, 1- polar-1, 2- polar-2
@@ -145,18 +139,17 @@ int main(int argc, char **argv)
     int num_ite_adapt = 10;
     int test_case = 0; // 0- cube linear, 1- cube-cylinder linear, 2- cube-cyl polar 1, 3- cube-cyl polar 2
     
-
     if (argc > 0) 
         test_case = atoi(argv[1]);
 
     switch (test_case){
     case 0:
         // options for test case cube linear:
-        mesh_choice=0; metric_choice=0; h0_ratio=0.33; h0_prog_ite_max=4; num_ite_adapt=10;
+        mesh_choice=0; metric_choice=0; h0_ratio=0.33; h0_prog_ite_max=4; num_ite_adapt=9;
         break;
     case 1:
         // options for test case cube-cylinder linear:
-        mesh_choice=1; metric_choice=0; h0_ratio=0.5; h0_prog_ite_max=7; num_ite_adapt=12;
+        mesh_choice=1; metric_choice=0; h0_ratio=0.5; h0_prog_ite_max=7; num_ite_adapt=11;
         break;
     case 2:
         // options for test case cube-cylinder polar1:
@@ -171,8 +164,6 @@ int main(int argc, char **argv)
         break;
     }
 
-
-
     int rank=0;
 #ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
@@ -182,7 +173,6 @@ int main(int argc, char **argv)
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
-
 
 #ifdef HAVE_LIBMESHB
     char filename_in[256];
@@ -196,15 +186,20 @@ int main(int argc, char **argv)
         break;
 
     default :
-        std::cerr<<"Error: wrong metric choice."<<std::endl;
+        std::cerr<<"Error: wrong mesh choice."<<std::endl;
         exit(1);
     }
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
 
     pragmatic_init_light((void*)mesh);
 
-    double h0 = 0.1;
+#ifdef HAVE_VTK
+    VTKTools<double>::export_vtu("./cube", mesh);
+#else
+    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
+#endif
 
+    double h0 = 0.1;
     for (int ite=0; ite<num_ite_adapt; ++ite) {
 
         h0 = (ite < h0_prog_ite_max) ? h0*h0_ratio : 0.001;
@@ -215,10 +210,16 @@ int main(int argc, char **argv)
 
         pragmatic_adapt(0);
 
-        char filename_out[256];
-        sprintf(filename_out, "../data/test_ugawg_cube.%d", ite);
-        GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+		mesh->compute_print_quality();
+		mesh->compute_print_NNodes_global();
+//        char filename_out[256];
+//        sprintf(filename_out, "../data/test_ugawg_cube.%d", ite);
+//        GMFTools<double>::export_gmf_mesh(filename_out, mesh);
     }
+
+	char filename_out[256];
+	sprintf(filename_out, "../data/test_ugawg_cube_%d", test_case);
+	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
 
 #ifdef HAVE_VTK
     VTKTools<double>::export_vtu("../data/test_ugawg_cube", mesh);
@@ -228,7 +229,7 @@ int main(int argc, char **argv)
 
 
 #else
-    std::cerr<<"Pragmatic was configured without libMeshb support"<<std::endl;
+    std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
 #endif
 
 #ifdef HAVE_MPI
