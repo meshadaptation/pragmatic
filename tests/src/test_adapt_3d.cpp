@@ -249,8 +249,8 @@ int main(int argc, char **argv)
                  <<std::setw(10)<<time_adapt<<" "
                  <<std::setw(10)<<time_other<<"\n";
 
-        std::cout<<"Expecting qmean>0.3, qmin>0.01: ";
-        if((qmean>0.3)&&(qmin>0.01))
+        std::cout<<"Expecting qmean>0.65, qmin>0.07: ";
+        if((qmean>0.6)&&(qmin>0.07))
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;

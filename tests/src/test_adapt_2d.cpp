@@ -202,7 +202,7 @@ int main(int argc, char **argv)
                  <<std::setw(10)<<time_adapt<<" "
                  <<std::setw(10)<<time_other<<"\n";
 
-        std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
+        std::cout<<"Expecting qmean>0.85, qmin>0.5: ";
         if((qmean>0.8)&&(qmin>0.1))
             std::cout<<"pass"<<std::endl;
         else
