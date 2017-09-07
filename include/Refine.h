@@ -272,15 +272,15 @@ public:
                         continue;
                     }
 
-                    if (qualities[iEdg]<qualities[iEdgNgb]) {
-//                    if (lengths[iEdg]<lengths[iEdgNgb]) {
+//                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+                    if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
-                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
-//                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
+//                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }
