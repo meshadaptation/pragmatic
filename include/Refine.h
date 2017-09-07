@@ -221,8 +221,8 @@ public:
                 double max_length_cavity = 0;
                 for(elm_it=intersection.begin(); elm_it!=intersection.end(); ++elm_it) {
                     int iElm = *elm_it;
-                    for (int i=0; i<(dim==2?3:6); ++i) {
-                        for (int j=i+1; j<(dim==2?3:6); ++j) {
+                    for (int i=0; i<(dim==2?3:4); ++i) {
+                        for (int j=i+1; j<(dim==2?3:4); ++j) {
                             int iVer1 = _mesh->_ENList[nloc*iElm+i];
                             int iVer2 = _mesh->_ENList[nloc*iElm+j];
                             if (iVer1 >= iVer2 ) {
@@ -230,6 +230,7 @@ public:
                                 iVer1 = iVer2;
                                 iVer2 = tmp;
                             }
+                            assert((iVer1+1)<headV2E.size());
                             for (int k=headV2E[iVer1]; k<headV2E[iVer1+1]; ++k){
                                 if (ver2edg[k] == iVer2 && k!=iEdg) {
                                     edges_neighbor.insert(k);
