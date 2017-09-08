@@ -335,7 +335,7 @@ public:
     /// Flip orientation of element.
     void invert_element(size_t eid)
     {
-        assert((eid+1) < NElements);
+        assert(eid < NElements);
         int tmp = _ENList[eid*nloc];
         _ENList[eid*nloc] = _ENList[eid*nloc+1];
         _ENList[eid*nloc+1] = tmp;
