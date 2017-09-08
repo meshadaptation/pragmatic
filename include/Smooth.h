@@ -850,7 +850,7 @@ private:
             for(const auto& it : _mesh->NEList[n0]) {
                 for (int i=0; i<3; ++i) {
                     int iVer = _mesh->_ENList[3*it+i];
-                    const double *x1 = _mesh->get_coords(it);
+                    const double *x1 = _mesh->get_coords(iVer);
 
                     bbox[0] = std::min(bbox[0], x1[0]);
                     bbox[1] = std::max(bbox[1], x1[0]);
