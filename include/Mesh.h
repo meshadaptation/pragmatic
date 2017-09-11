@@ -322,6 +322,8 @@ public:
     /// Erase an element
     void erase_element(const index_t eid)
     {
+
+        assert(eid < NElements);
         const index_t *n = get_element(eid);
 
         for(size_t i=0; i<nloc; ++i)
@@ -333,6 +335,7 @@ public:
     /// Flip orientation of element.
     void invert_element(size_t eid)
     {
+        assert(eid < NElements);
         int tmp = _ENList[eid*nloc];
         _ENList[eid*nloc] = _ENList[eid*nloc+1];
         _ENList[eid*nloc+1] = tmp;
@@ -341,12 +344,14 @@ public:
     /// Return a pointer to the element-node list.
     inline const index_t *get_element(size_t eid) const
     {
+        assert(eid < NElements);
         return &(_ENList[eid*nloc]);
     }
 
     /// Return copy of element-node list.
     inline void get_element(size_t eid, index_t *ele) const
     {
+        assert(eid < NElements);
         for(size_t i=0; i<nloc; i++)
             ele[i] = _ENList[eid*nloc+i];
     }
@@ -382,12 +387,14 @@ public:
     /// Return positions vector.
     inline const real_t *get_coords(index_t nid) const
     {
+        assert(nid < NNodes);
         return &(_coords[nid*ndims]);
     }
 
     /// Return copy of the coordinate.
     inline void get_coords(index_t nid, real_t *x) const
     {
+        assert(nid < NNodes);
         for(size_t i=0; i<ndims; i++)
             x[i] = _coords[nid*ndims+i];
         return;
@@ -397,6 +404,7 @@ public:
     inline const double *get_metric(index_t nid) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         return &(metric[nid*msize]);
     }
 
@@ -404,6 +412,7 @@ public:
     inline void get_metric(index_t nid, double *m) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         for(size_t i=0; i<msize; i++)
             m[i] = metric[nid*msize+i];
         return;
