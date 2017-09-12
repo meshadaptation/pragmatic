@@ -808,6 +808,52 @@ public:
         }
     }
 
+    void print_quality_histo() const
+    {
+        int histo[8] = {0};
+        int NElements_real = 0;
+        for(size_t i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0]<0)
+                continue;
+
+            NElements_real++;
+            double q;
+            if(ndims==2) {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+            } else {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+            }
+            if (q<0.01)
+                histo[7]++;
+            else if (q<0.1)
+                histo[6]++;
+            else if (q<0.3)
+                histo[5]++;
+            else if (q<0.5)
+                histo[4]++;
+            else if (q<0.7)
+                histo[3]++;
+            else if (q<0.8)
+                histo[2]++;
+            else if (q<0.9)
+                histo[1]++;
+            else
+                histo[0]++;
+        }
+        printf("   Quality histogram:\n");
+        printf("     1. < Q < 0.9 : %d (%1.2f%%) elements\n", histo[0], (float)histo[0]/NElements_real);
+        printf("    0.9 < Q < 0.8 : %d (%1.2f%%) elements\n", histo[1], (float)histo[1]/NElements_real);
+        printf("    0.8 < Q < 0.7 : %d (%1.2f%%) elements\n", histo[2], (float)histo[2]/NElements_real);
+        printf("    0.7 < Q < 0.5 : %d (%1.2f%%) elements\n", histo[3], (float)histo[3]/NElements_real);
+        printf("    0.5 < Q < 0.3 : %d (%1.2f%%) elements\n", histo[4], (float)histo[4]/NElements_real);
+        printf("    0.3 < Q < 0.1 : %d (%1.2f%%) elements\n", histo[5], (float)histo[5]/NElements_real);
+        printf("    0.1 < Q < 0.01: %d (%1.2f%%) elements\n", histo[6], (float)histo[6]/NElements_real);
+        printf("   0.01 < Q       : %d (%1.2f%%) elements\n", histo[7], (float)histo[7]/NElements_real);
+    }
+
     /// Get the element minimum quality in metric space.
     double get_qmin() const
     {
