@@ -19,6 +19,9 @@ int main(int argc, char **argv)
 #ifdef HAVE_EGADS
     int res = mesh.analyzeCAD("../data/cube-cylinder.step");
     if (!res) printf("pass\n");
+
+    mesh.associate_CAD_with_Mesh();
+    printf("pass\n");
 #endif
 
 #ifdef HAVE_MPI

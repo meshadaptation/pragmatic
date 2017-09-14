@@ -1465,6 +1465,43 @@ public:
     }
 
 
+    void associate_CAD_with_Mesh() {
+
+#ifdef HAVE_EGADS
+
+        node_topology.resize(NNodes);
+
+        for (int iElm=0; iElm<NElements; ++iElm) {
+
+            int *n = &_ENList[nloc*iElm];
+            double coords_bary[3] = {0.};
+            for (int i=0; i<nloc; ++i) {
+                double * coords = &_coords[ndims*n[i]];
+                for (int j=0; j<ndims; ++j)
+                    coords_bary[j] += coords[j];
+            }
+            for (int j=0; j<ndims; ++j)
+                coords_bary[j] /= nloc;
+
+            // loop over the faces
+            for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
+                double result[3], params[2];
+                EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
+                double nrm2 = (coords_bary[0]-result[0])*(coords_bary[0]-result[0])
+                            + (coords_bary[1]-result[1])*(coords_bary[1]-result[1])
+                            + (coords_bary[2]-result[2])*(coords_bary[2]-result[2]);
+                if (nrm2 < 1.e-8) {
+                    for (int i=0; i<nloc; ++i) {
+                        node_topology[n[i]].push_back(iEgo);
+                    }
+                }
+            }
+
+        }
+#else
+        printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
+#endif
+    }
 
 
 private:
