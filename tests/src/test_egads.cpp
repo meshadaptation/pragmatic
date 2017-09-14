@@ -17,8 +17,8 @@ int main(int argc, char **argv)
     double x[3] = {0, 0, 1}, y[3] = {0, 1, 0};
     Mesh<double> mesh = Mesh<double>(3, 1, tri, x, y);
 #ifdef HAVE_EGADS
-    mesh.analyzeCAD("../data/cube-cylinder.step");
-    printf("pass\n");
+    int res = mesh.analyzeCAD("../data/cube-cylinder.step");
+    if (!res) printf("pass\n");
 #endif
 
 #ifdef HAVE_MPI

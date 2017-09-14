@@ -1393,37 +1393,75 @@ public:
     }
 
 
+
+    /// Reads the provided EGADS file, and extracts the faces, edges and nodes
     int analyzeCAD(const char * filename) {
 
 
-        int         status;
-        int         i, j, oclass, mtype, nbody, *senses, nedges, nfaces, iFace;
+        int         i, j, status, oclass, mtype, *senses;
         const char  *OCCrev;
-        double      pos[3], result[3], parms[2], eval[18];
 #ifdef HAVE_EGADS
-        ego         context, model, geom, *bodies;
-        ego         *faces, *edges;
-    
-    
+        ego         context, model, geom;
+        ego         *bodies, *faces, *edges, *nodes;
+
+
         // look at EGADS revision
         EG_revision(&i, &j, &OCCrev);
         printf("\n Using EGADS %2d.%02d with %s\n\n", i, j, OCCrev);
-    
+
         // define a context 
         if ( (status = EG_open(&context)) != EGADS_SUCCESS ) {
-            fprintf(stderr, " ERROR EG_open -> status=%d\n", status);
+            fprintf(stderr, "ERROR  EG_open -> status=%d\n", status);
             return EXIT_FAILURE;
         }
-    
+
         if ( (status = EG_loadModel(context, 0,filename, &model)) != EGADS_SUCCESS) {
-            fprintf(stderr, " ERROR EG_loadModel -> status %d\n\n", status);
+            fprintf(stderr, "ERROR  EG_loadModel -> status %d\n\n", status);
             return EXIT_FAILURE;
         }
         printf("DEBUG  file %s successfully launched\n", filename);
-#endif    
-    
-        return 0;
 
+
+        // get all bodies
+        status = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbrEgBodies, &bodies, &senses);
+        if (status != EGADS_SUCCESS) {
+            printf("ERROR  EG_getTopology = %d\n\n", status);
+            return 1;
+        }
+        printf("DEBUG  Number of bodies: %d\n", nbrEgBodies);
+        if (nbrEgBodies != 1) {
+            printf("ERROR  unable to deal with more (or fewer) than 1 body for now\n");
+        }
+
+        status = EG_getBodyTopos(bodies[0], NULL, FACE, &nbrEgFaces, &faces);
+        if (status != EGADS_SUCCESS) {
+            printf(" EG_getBodyTopos Face = %d\n", status);
+            return 1;
+        }
+        status = EG_getBodyTopos(bodies[0], NULL, EG_EDGE, &nbrEgEdges, &edges);
+        if (status != EGADS_SUCCESS) {
+            printf(" EG_getBodyTopos Edge = %d\n", status);
+            return 1;
+        }
+        status = EG_getBodyTopos(bodies[0], NULL, NODE, &nbrEgNodes, &nodes);
+        if (status != EGADS_SUCCESS) {
+            printf(" EG_getBodyTopos Node = %d\n", status);
+            return 1;
+        }
+        printf("DEBUG bodies[0]:  Nbr of faces: %d, edges: %d, nodes: %d\n", nbrEgFaces, nbrEgEdges, nbrEgNodes);
+
+        for (int i=0; i<nbrEgFaces; ++i)
+            ego_list.push_back(faces[i]);
+        for (int i=0; i<nbrEgEdges; ++i)
+            ego_list.push_back(edges[i]);
+        for (int i=0; i<nbrEgNodes; ++i)
+            ego_list.push_back(nodes[i]);
+
+        return 0;
+#else
+        printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
+        return -1;
+#endif
     }
 
 
@@ -2022,6 +2060,13 @@ private:
     MPI_Datatype MPI_INDEX_T;
     MPI_Datatype MPI_REAL_T;
 #endif
+
+#ifdef HAVE_EGADS
+    int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
+    std::vector<ego> ego_list;
+    std::vector<std::vector<int>> node_topology;
+#endif
+
 };
 
 #endif
