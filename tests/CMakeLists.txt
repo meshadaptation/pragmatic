@@ -26,10 +26,6 @@ ENDFOREACH(item)
 MESSAGE(STATUS "str_cite ${src_lite}")
 
 # tests without VTK:
-ADD_EXECUTABLE(test_egads ${PRAGMATIC_TEST_SRC}/test_egads.cpp ${src_lite})
-TARGET_LINK_LIBRARIES(test_egads ${PRAGMATIC_LIBRARIES})
-
-
 ADD_EXECUTABLE(test_ElementProperty ${PRAGMATIC_TEST_SRC}/test_ElementProperty.cpp ${src_lite})
 TARGET_LINK_LIBRARIES(test_ElementProperty ${PRAGMATIC_LIBRARIES})
 
@@ -46,6 +42,12 @@ if (ENABLE_LIBMESHB)
 
   ADD_EXECUTABLE(test_ugawg_cube ${PRAGMATIC_TEST_SRC}/test_ugawg_cube.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_ugawg_cube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})  
+
+  if (ENABLE_EGADS)
+    ADD_EXECUTABLE(test_egads ${PRAGMATIC_TEST_SRC}/test_egads.cpp ${src_lite})
+    TARGET_LINK_LIBRARIES(test_egads ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+  endif()
+
 endif()
 
 # tests with VTK:

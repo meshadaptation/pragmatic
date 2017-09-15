@@ -102,8 +102,8 @@ if (ENABLE_EGADS)
     set (PRAGMATIC_LIBRARIES ${EGADS_LIBRARIES} ${PRAGMATIC_LIBRARIES})
 
     #TODO  This should probably not be done that way...
-	SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,${OC_LIBRARY_PATH}")
-  endif()
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,${OC_LIBRARY_PATH}")
+    endif()
 endif()
 if (NOT ENABLE_EGADS OR NOT EGADS_FOUND)
   message(STATUS "Configured without EGADS support.")
