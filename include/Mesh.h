@@ -318,7 +318,7 @@ public:
     {
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
-	boundary.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
                 boundary[i*nloc+j] = _boundary[i*nloc+j];
@@ -1707,7 +1707,7 @@ public:
         }
 
         for (int iVer=0; iVer<NNodes; ++iVer) {
-            if (node_topology[iVer].size() > 1) {
+            if (node_topology[iVer].size() > 0) {
                 printf("DEBUG  Vertex %d is on more than 1 face (%lu)\n", iVer, node_topology[iVer].size());
                 double * coords = &_coords[iVer*ndims];
                 // loop over the edges
@@ -1724,6 +1724,33 @@ public:
                 }
             }
         }
+
+        std::vector<double> corners_coords(nbrEgNodes*ndims);
+        for (int iNode=0; iNode<nbrEgNodes; ++iNode) {
+            ego geom, *pchldrn;
+            int oclass, mtype, nchild, *psens;
+            EG_getTopology(ego_list[iNode+nbrEgFaces+nbrEgEdges], &geom, &oclass, &mtype,
+                            &corners_coords[ndims*iNode], &nchild,&pchldrn, &psens);
+        }
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_topology[iVer].size() > 0) {
+                for (int iNode=0; iNode<nbrEgNodes; ++iNode) {
+                    if (std::isinf(_coords[iNode*ndims]))
+                        continue;
+                    double *crd1 = &_coords[iVer*ndims];
+                    double *crd2 = &corners_coords[iNode*ndims];
+                    double nrm = (crd1[0]-crd2[0])*(crd1[0]-crd2[0])
+                               + (crd1[1]-crd2[1])*(crd1[1]-crd2[1])
+                               + (crd1[2]-crd2[2])*(crd1[2]-crd2[2]);
+                    if (nrm < 1e-10) {
+                        corners[iVer] = iNode+nbrEgFaces+nbrEgEdges;
+                        printf("DEBUG  Vertex %d is a Node\n", iVer);
+                        corners_coords[iNode*ndims] = INFINITY; // TODO I am assuming that I don't have 2 vertices for a corner...
+                    }
+                }
+            }
+        }
+
 
 #else
         printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
@@ -1960,17 +1987,17 @@ private:
         }
 
         create_adjacency();
-	    
+
         create_global_node_numbering();
     }
 
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	    NNList.clear();
-	    NNList.resize(NNodes);
-	    NEList.clear();
-	    NEList.resize(NNodes);
+        NNList.clear();
+        NNList.resize(NNodes);
+        NEList.clear();
+        NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -1978,12 +2005,12 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-		        assert(nid_j<NNodes);
+                assert(nid_j<NNodes);
                 NEList[nid_j].insert(NEList[nid_j].end(), i);
                 for(size_t k=0; k<nloc; k++) {
                     if(j!=k) {
                         index_t nid_k = _ENList[i*nloc+k];
-	                    assert(nid_k<NNodes);
+                        assert(nid_k<NNodes);
                         NNList[nid_j].push_back(nid_k);
                     }
                 }
@@ -2288,7 +2315,7 @@ private:
     // Boundary Label
     std::vector<int> boundary;
 #if 0
-	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+    std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
 #endif
 
     // Quality
@@ -2326,6 +2353,7 @@ private:
     int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
     std::vector<ego> ego_list;
     std::vector<std::set<int>> node_topology;
+    std::map<int, int> corners; // node index -> ego_list index
 #endif
 
 };
