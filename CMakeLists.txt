@@ -23,6 +23,12 @@ set(INSTALL_INCLUDE_DIR "include/pragmatic" CACHE PATH
 
 include_directories(include)
 
+find_library(LIBRT_LIBRARIES rt)
+if (NOT LIBRT_LIBRARIES)
+  set (LIBRT_LIBRARIES "")
+endif()
+MESSAGE( STATUS "LIBRT_LIBRARIES: " ${LIBRT_LIBRARIES} )
+
 set (PRAGMATIC_LIBRARIES)
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_VTK) AND (NOT (x$ENV{ENABLE_VTK} STREQUAL x)))
@@ -56,36 +62,17 @@ endif()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix -Wno-deprecated")
 
-# Use env variable iff it exists and command line arg was not given:
-if (NOT (DEFINED ENABLE_MPI) AND (NOT (x$ENV{ENABLE_MPI} STREQUAL x)))
-  set(ENABLE_MPI $ENV{ENABLE_MPI})
-else()
-  option(ENABLE_MPI "Enable MPI support." ON)
-endif()
-if (ENABLE_MPI)
-  FIND_PACKAGE(MPI)
-  if(MPI_FOUND)
-    add_definitions(-DHAVE_MPI)
-    include_directories(${MPI_CXX_INCLUDE_PATH} ${MPI_C_INCLUDE_PATH})
+FIND_PACKAGE(MPI REQUIRED)
+include_directories(${MPI_CXX_INCLUDE_PATH} ${MPI_C_INCLUDE_PATH})
+set (CMAKE_CXX_FLAGS "${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS}")
+set (CMAKE_C_FLAGS "${MPI_C_COMPILE_FLAGS} ${CMAKE_C_FLAGS}")
+set (CMAKE_LINK_FLAGS "${MPI_C_LINK_FLAGS} ${CMAKE_LINK_FLAGS}")
+set (PRAGMATIC_LIBRARIES ${MPI_CXX_LIBRARIES} ${MPI_C_LIBRARIES} ${PRAGMATIC_LIBRARIES})
 
-    set (CMAKE_CXX_FLAGS "${MPI_CXX_COMPILE_FLAGS} ${CMAKE_CXX_FLAGS}")
-    set (CMAKE_C_FLAGS "${MPI_C_COMPILE_FLAGS} ${CMAKE_C_FLAGS}")
-    set (CMAKE_LINK_FLAGS "${MPI_C_LINK_FLAGS} ${CMAKE_LINK_FLAGS}")
-    set (PRAGMATIC_LIBRARIES ${MPI_CXX_LIBRARIES} ${MPI_C_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-  endif()
-endif()
-if (NOT ENABLE_MPI OR NOT MPI_FOUND)
-  message(STATUS "Configured without MPI support.")
-endif()
-
-if (MPI_FOUND)
-  FIND_PACKAGE(Metis REQUIRED)
-  if(METIS_FOUND)
-    add_definitions(-DHAVE_METIS)
-    include_directories(${METIS_INCLUDE_DIR})
-    set (PRAGMATIC_LIBRARIES ${METIS_LIBRARIES} ${PRAGMATIC_LIBRARIES})
-  endif()
-endif()
+FIND_PACKAGE(Metis REQUIRED)
+add_definitions(-DHAVE_METIS)
+include_directories(${METIS_INCLUDE_DIR})
+set (PRAGMATIC_LIBRARIES ${METIS_LIBRARIES} ${PRAGMATIC_LIBRARIES})
 
 find_package(PythonInterp 2.7)
 if(PYTHONINTERP_FOUND)
@@ -100,8 +87,6 @@ find_package(Eigen REQUIRED)
 include_directories(${EIGEN_INCLUDE_DIR})
 # Use Eigen in release mode. TODO add flag for vectorization support
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG")
-
-
 
 # Use env variable iff it exists and command line arg was not given:
 if (NOT (DEFINED ENABLE_EGADS) AND (NOT (x$ENV{ENABLE_EGADS} STREQUAL x)))
@@ -124,12 +109,29 @@ if (NOT ENABLE_EGADS OR NOT EGADS_FOUND)
   message(STATUS "Configured without EGADS support.")
 endif()
 
+# Use env variable iff it exists and command line arg was not given:
+if (NOT (DEFINED ENABLE_LIBMESHB) AND (NOT (x$ENV{ENABLE_LIBMESHB} STREQUAL x)))
+  set(ENABLE_LIBMESHB $ENV{ENABLE_LIBMESHB})
+else()
+  option(ENABLE_LIBMESHB "Enable libMeshb support." ON)
+endif()
+if (ENABLE_LIBMESHB)
+  FIND_PACKAGE(LibMeshb)
+  if(LIBMESHB_FOUND)
+    add_definitions(-DHAVE_LIBMESHB)
+    include_directories(${LIBMESHB_INCLUDE_DIR})
+    set (PRAGMATIC_LIBRARIES ${LIBMESHB_LIBRARIES} ${PRAGMATIC_LIBRARIES})
+#    set (CMAKE_EXE_LINKER_FLAGS ${LIBRT_LIBRARIES})
+#    set (CMAKE_SHARED_LINKER_FLAGS ${LIBRT_LIBRARIES})
+  endif()
+endif()
+if (NOT ENABLE_LIBMESHB OR NOT LIBMESHB_FOUND)
+  message(STATUS "Configured without libMeshb support.")
+endif()
 
-
-
-
-
-
+# Make sure libpragmatic.dylib works properly from the prefix location
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 # ADD_EXECUTABLE( ${PROJECT_NAME} main.cpp )
 # TARGET_LINK_LIBRARIES( ${PROJECT_NAME} ${PRAgMaTIc_LIBS} )
@@ -140,6 +142,7 @@ file(GLOB CXX_SOURCES src/*.cpp)
 # target_link_library
 add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
 target_link_libraries(pragmatic ${PRAGMATIC_LIBRARIES})
+set (PRAGMATIC_LIBRARIES pragmatic ${PRAGMATIC_LIBRARIES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
@@ -147,8 +150,13 @@ install(DIRECTORY include/ DESTINATION include/pragmatic FILES_MATCHING PATTERN 
 install(TARGETS pragmatic DESTINATION "${INSTALL_LIB_DIR}")
 
 ADD_EXECUTABLE(coarsen_mesh_3d ./tools/coarsen_mesh_3d.cpp ./src/generate_Steiner_ellipse_3d.cpp  ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
-TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES})
+TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
+ADD_EXECUTABLE(mesh2vtu ./tools/mesh2vtu)
+TARGET_LINK_LIBRARIES(mesh2vtu ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+
+ADD_EXECUTABLE(vtu2mesh ./tools/vtu2mesh)
+TARGET_LINK_LIBRARIES(vtu2mesh ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})

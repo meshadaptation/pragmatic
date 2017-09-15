@@ -88,13 +88,10 @@ public:
      */
     Mesh(int NNodes, int NElements, const index_t *ENList, const real_t *x, const real_t *y)
     {
-#ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
-#endif
-        _init(NNodes, NElements, ENList, x, y, NULL, NULL, NULL);
+        _init(NNodes, NElements, ENList, x, y, NULL, NULL, NNodes);
     }
 
-#ifdef HAVE_MPI
     /*! 2D triangular mesh constructor. This is used when parallelised with MPI.
      *
      * @param NNodes number of nodes in the local mesh.
@@ -103,17 +100,16 @@ public:
      * @param x is the X coordinate.
      * @param y is the Y coordinate.
      * @param lnn2gnn mapping of local node numbering to global node numbering.
-     * @param owner_range range of node id's owned by each partition.
+     * @param NPNodes number of nodes owned by the local processors.
      * @param mpi_comm the mpi communicator.
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const index_t *lnn2gnn,
-         const index_t *owner_range, MPI_Comm mpi_comm)
+         index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
-        _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, owner_range);
+        _init(NNodes, NElements, ENList, x, y, NULL, lnn2gnn, NPNodes);
     }
-#endif
 
     /*! 3D tetrahedra mesh constructor. This is for use when there is no MPI.
      *
@@ -127,13 +123,10 @@ public:
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const real_t *z)
     {
-#ifdef HAVE_MPI
         _mpi_comm = MPI_COMM_WORLD;
-#endif
-        _init(NNodes, NElements, ENList, x, y, z, NULL, NULL);
+        _init(NNodes, NElements, ENList, x, y, z, NULL, NNodes);
     }
 
-#ifdef HAVE_MPI
     /*! 3D tetrahedra mesh constructor. This is used when parallelised with MPI.
      *
      * @param NNodes number of nodes in the local mesh.
@@ -143,17 +136,16 @@ public:
      * @param y is the Y coordinate.
      * @param z is the Z coordinate.
      * @param lnn2gnn mapping of local node numbering to global node numbering.
-     * @param owner_range range of node id's owned by each partition.
+     * @param NPNodes number of owned nodes in the local mesh.
      * @param mpi_comm the mpi communicator.
      */
     Mesh(int NNodes, int NElements, const index_t *ENList,
          const real_t *x, const real_t *y, const real_t *z, const index_t *lnn2gnn,
-         const index_t *owner_range, MPI_Comm mpi_comm)
+         index_t NPNodes, MPI_Comm mpi_comm)
     {
         _mpi_comm = mpi_comm;
-        _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, owner_range);
+        _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
-#endif
 
     /// Default destructor.
     ~Mesh()
@@ -337,6 +329,8 @@ public:
     /// Erase an element
     void erase_element(const index_t eid)
     {
+
+        assert(eid < NElements);
         const index_t *n = get_element(eid);
 
         for(size_t i=0; i<nloc; ++i)
@@ -348,6 +342,7 @@ public:
     /// Flip orientation of element.
     void invert_element(size_t eid)
     {
+        assert(eid < NElements);
         int tmp = _ENList[eid*nloc];
         _ENList[eid*nloc] = _ENList[eid*nloc+1];
         _ENList[eid*nloc+1] = tmp;
@@ -356,12 +351,14 @@ public:
     /// Return a pointer to the element-node list.
     inline const index_t *get_element(size_t eid) const
     {
+        assert(eid < NElements);
         return &(_ENList[eid*nloc]);
     }
 
     /// Return copy of element-node list.
     inline void get_element(size_t eid, index_t *ele) const
     {
+        assert(eid < NElements);
         for(size_t i=0; i<nloc; i++)
             ele[i] = _ENList[eid*nloc+i];
     }
@@ -370,6 +367,16 @@ public:
     inline size_t get_number_nodes() const
     {
         return NNodes;
+    }
+    
+    size_t get_number_owned_nodes() const
+    {
+        int NNodes_owned = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_owner[iVer] == rank)
+                NNodes_owned++;
+        }
+        return NNodes_owned;
     }
 
     /// Return the number of elements in the mesh.
@@ -387,12 +394,14 @@ public:
     /// Return positions vector.
     inline const real_t *get_coords(index_t nid) const
     {
+        assert(nid < NNodes);
         return &(_coords[nid*ndims]);
     }
 
     /// Return copy of the coordinate.
     inline void get_coords(index_t nid, real_t *x) const
     {
+        assert(nid < NNodes);
         for(size_t i=0; i<ndims; i++)
             x[i] = _coords[nid*ndims+i];
         return;
@@ -402,6 +411,7 @@ public:
     inline const double *get_metric(index_t nid) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         return &(metric[nid*msize]);
     }
 
@@ -409,11 +419,51 @@ public:
     inline void get_metric(index_t nid, double *m) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         for(size_t i=0; i<msize; i++)
             m[i] = metric[nid*msize+i];
         return;
     }
-    
+
+    // Returns the list of facets and corresponding ids
+    void get_boundary(int* nfacets, const int** facets, const int** ids)
+    {
+        int      NFacets;
+        index_t  i_elm, i_loc, off;
+        int      *Facets, *Ids;
+
+        // compute number facets = number of ids > 0
+        NFacets = 0;
+        for (index_t i=0; i<NElements*(ndims+1); ++i) {
+            if (boundary[i] > 0)
+                NFacets++;
+        }
+
+        Facets = (int*)malloc(NFacets*ndims*sizeof(int));
+        Ids = (int*)malloc(NFacets*sizeof(int));
+
+        // loop over ids to build the vectors
+        int k = 0;
+        for (index_t i=0; i<NElements*(ndims+1); ++i) {
+            if (boundary[i] > 0) {
+                i_elm = i / (ndims+1); // index of the corresponding element
+                i_loc = i % (ndims+1); // local index of the node in its element
+                off = i_elm*(ndims+1);   // offset in the ElementNode list
+                for (int j=0; j<ndims+1; ++j) {
+                    if (j != i_loc){
+                        Facets[k] = _ENList[off+j];
+                        k++;
+                    }
+                }
+                Ids[k/ndims-1] = boundary[i];
+            }
+        }
+
+        *nfacets = NFacets;
+        *facets = Facets;
+        *ids = Ids;
+    }
+
     /// Return the array of boundary facets and associated tags
     inline  int * get_boundaryTags() 
     {
@@ -430,6 +480,24 @@ public:
     inline bool is_owned_node(index_t nid) const
     {
         return node_owner[nid] == rank;
+    }
+    
+    /// Returns global node numbering offset.
+    inline int get_gnn_offset()
+    {
+        if (num_processes > 1)
+            return gnn_offset;
+        else
+            return 0;
+    }
+    
+    /// Returns the global node numbering of a local node numbering number
+    inline int get_global_numbering(index_t nid)
+    {
+        if (num_processes > 1)
+            return lnn2gnn[nid];
+        else
+            return nid;
     }
 
     /// Get the mean edge length metric space.
@@ -451,12 +519,10 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
             MPI_Allreduce(MPI_IN_PLACE, &nedges, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
-#endif
 
         double mean = total_length/nedges;
 
@@ -487,10 +553,9 @@ public:
                 }
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
             return total_length;
         } else {
             std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
@@ -545,10 +610,9 @@ public:
                 total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
         } else { // 3D
             for(int i=0; i<NElements; i++) {
                 const index_t *n=get_element(i);
@@ -601,10 +665,9 @@ public:
                 }
             }
 
-#ifdef HAVE_MPI
             if(num_processes>1)
                 MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
         }
         return total_area;
     }
@@ -649,9 +712,8 @@ public:
                     total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
                 }
 
-#ifdef HAVE_MPI
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
-#endif
+
             } else {
                 #pragma omp parallel for reduction(+:total_volume)
                 for(int i=0; i<NElements; i++) {
@@ -708,12 +770,10 @@ public:
             nele++;
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &sum, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
             MPI_Allreduce(MPI_IN_PLACE, &nele, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
-#endif
 
         if(nele>0)
             return sum/nele;
@@ -770,10 +830,8 @@ public:
                             get_metric(n[0]), get_metric(n[1]), get_metric(n[2])));
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-#endif
 
         return qmin;
     }
@@ -792,19 +850,34 @@ public:
                             get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3])));
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &qmin, 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
-#endif
 
         return qmin;
     }
 
-#ifdef HAVE_MPI
     /// Return the MPI communicator.
     MPI_Comm get_mpi_comm() const
     {
         return _mpi_comm;
+    }
+
+#if 0
+    int get_isOnBoundary(int nid) {
+       return isOnBoundary[nid];
+    }
+
+    void set_isOnBoundary(int nid, int val) {
+       if (nid == -1) return;
+       isOnBoundary[nid] = val;
+    }
+
+    void set_isOnBoundarySize() {
+       isOnBoundary.resize(NNodes);
+    }
+
+    index_t * get_ENList(){
+        return &_ENList[0];
     }
 #endif
 
@@ -885,10 +958,8 @@ public:
             }
         }
 
-#ifdef HAVE_MPI
         if(num_processes>1)
             MPI_Allreduce(MPI_IN_PLACE, &L_max, 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
-#endif
 
         return L_max;
     }
@@ -1264,11 +1335,9 @@ public:
                 max_ele_area = std::max(max_ele_area, larea);
             }
 
-#ifdef HAVE_MPI
             MPI_Allreduce(MPI_IN_PLACE, &area, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &min_ele_area, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &max_ele_area, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
-#endif
 
             if(rank==0) {
                 std::cout<<"VERIFY: total area  ............"<<area<<std::endl;
@@ -1306,11 +1375,9 @@ public:
                 max_ele_vol = std::max(max_ele_vol, lvolume);
             }
 
-#ifdef HAVE_MPI
             MPI_Allreduce(MPI_IN_PLACE, &volume, 1, MPI_LONG_DOUBLE, MPI_SUM, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &min_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MIN, get_mpi_comm());
             MPI_Allreduce(MPI_IN_PLACE, &max_ele_vol, 1, MPI_LONG_DOUBLE, MPI_MAX, get_mpi_comm());
-#endif
 
             if(rank==0) {
                 std::cout<<"VERIFY: total volume.............."<<volume<<std::endl;
@@ -1327,9 +1394,7 @@ public:
             cachedq += quality[i];
         }
 
-#ifdef HAVE_MPI
         MPI_Allreduce(MPI_IN_PLACE, &cachedq, 1, MPI_DOUBLE, MPI_SUM, get_mpi_comm());
-#endif
 
         double qmean = get_qmean();
         double qmin = get_qmin();
@@ -1339,13 +1404,11 @@ public:
             std::cout<<"VERIFY: cached quality....."<<cachedq<<std::endl;
         }
 
-#ifdef HAVE_MPI
         int false_cnt = state?0:1;
         if(num_processes>1) {
             MPI_Allreduce(MPI_IN_PLACE, &false_cnt, 1, MPI_INT, MPI_SUM, _mpi_comm);
         }
         state = (false_cnt == 0);
-#endif
 
         return state;
     }
@@ -1353,7 +1416,6 @@ public:
     void send_all_to_all(std::vector< std::vector<index_t> > send_vec,
                          std::vector< std::vector<index_t> > *recv_vec)
     {
-#ifdef HAVE_MPI
         int ierr, recv_size, tag = 123456;
         std::vector<MPI_Status> status(num_processes);
         std::vector<MPI_Request> send_req(num_processes);
@@ -1389,8 +1451,127 @@ public:
 
         MPI_Waitall(num_processes, &(send_req[0]), &(status[0]));
         MPI_Waitall(num_processes, &(recv_req[0]), &(status[0]));
-#endif
     }
+    
+    
+    //// This function does a bit more than its name implies:
+    ////    it trims the elements list, converts it to global node numbering, and trims the boundary structure at the same time.
+    void remove_overlap_elements() {
+        
+        if (num_processes == 1)
+            return;
+
+        // -- Get rid of gappy global numbering and get contiguous global numbering
+        create_global_node_numbering();
+            
+        int NPNodes = NNodes - recv_halo.size();            
+        MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+        gnn_offset-=NPNodes;
+        
+        // -- Get rid of shared elements: ownership of an element is defined by min(owner(vertices))
+        int iElm_new = 0;
+        for (int iElm=0; iElm<NElements; ++iElm) {
+            int owner = node_owner[_ENList[iElm*nloc]];
+            for (int i=1; i<nloc; ++i)
+                if (node_owner[_ENList[iElm*nloc+i]] < owner)
+                    owner = node_owner[_ENList[iElm*nloc+i]];
+            if (owner == rank) {
+                for (int i=0; i<nloc; ++i) {
+                    _ENList[iElm_new*nloc+i] = lnn2gnn[_ENList[iElm*nloc+i]];
+                    boundary[iElm_new*nloc+i] = boundary[iElm*nloc+i];
+                }
+                iElm_new++;
+            }
+        }
+        NElements = iElm_new;
+        
+    }
+
+
+
+    /// debug function to print mesh and halo related structures
+    void print_halo(char * text)
+    {
+        printf("DBG(%d)  %s\n", rank, text);
+
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+          const double * coords = get_coords(iVer);
+          printf("DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f\n", rank, iVer, get_global_numbering(iVer), coords[0], coords[1]);
+        }
+        for (int iTri=0; iTri<get_number_elements(); ++iTri){
+            const int * tri = get_element(iTri);
+            printf("DBG(%d)  triangle[%d]  %d %d %d\n", rank, iTri, tri[0], tri[1], tri[2]);
+        }
+
+        printf("DBG(%d)  recv:\n", rank);
+        for (int i=0; i<recv.size(); ++i) {
+            printf("DBG(%d)       [%d]", rank, i);
+            for (int j=0; j<recv[i].size(); ++j) printf("  %d", recv[i][j]);
+            printf("\n");
+        }
+        printf("DBG(%d)  send:\n", rank);
+        for (int i=0; i<send.size(); ++i) {
+            printf("DBG(%d)       [%d]", rank, i);
+            for (int j=0; j<send[i].size(); ++j) printf("  %d", send[i][j]);
+            printf("\n");
+        }
+        printf("DBG(%d)  recv_map:\n", rank);
+        for (int i=0; i<recv_map.size(); ++i){
+            printf("DBG(%d)           [%d]", rank, i);
+            for (std::map<index_t,index_t>::const_iterator it=recv_map[i].begin(); it!=recv_map[i].end(); ++it)
+                printf("  %d->%d", it->first, it->second);
+            printf("\n");
+        }
+        printf("DBG(%d)  send_map:\n", rank);
+        for (int i=0; i<send_map.size(); ++i){
+            printf("DBG(%d)           [%d]", rank, i);
+            for (std::map<index_t,index_t>::const_iterator it=send_map[i].begin(); it!=send_map[i].end(); ++it)
+                printf("  %d->%d", it->first, it->second);
+            printf("\n");
+        }
+        printf("DBG(%d)  recv_halo:\n", rank);
+        printf("DBG(%d)            ", rank);
+        for (std::set<index_t>::const_iterator it=recv_halo.begin(); it!=recv_halo.end(); ++it)
+            printf("  %d", *it);
+        printf("\n");
+        printf("DBG(%d)  send_halo:\n", rank);
+        printf("DBG(%d)            ", rank);
+        for (std::set<index_t>::const_iterator it=send_halo.begin(); it!=send_halo.end(); ++it)
+            printf("  %d", *it);
+        printf("\n");
+        printf("DBG(%d)  node_owner:\n", rank);
+        printf("DBG(%d)             ", rank);
+        for (int i=0; i<node_owner.size();++i)
+            printf("  %d->%d", i, node_owner[i]);
+        printf("\n");
+    }
+
+
+    void compute_print_quality()
+    {   
+        double qmean = get_qmean();
+        double qmin = get_qmin();
+        if(rank==0) {
+            std::cout<<"INFO: mean quality............"<<qmean<<std::endl;
+            std::cout<<"INFO: min quality............."<<qmin<<std::endl;
+        }
+    }
+
+    void compute_print_NNodes_global()
+    {   
+        int NNodes_loc = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_owner[iVer] == rank)
+                NNodes_loc++;
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &NNodes_loc, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+
+        if(rank==0) {
+            std::cout<<"INFO: num nodes..............."<<NNodes_loc<<std::endl;
+        }
+    }
+
 
 
 
@@ -1513,9 +1694,9 @@ private:
     template<typename _real_t> friend class DeferredOperations;
     template<typename _real_t> friend class VTKTools;
 
-    void _init(int _NNodes, int _NElements, const index_t *globalENList,
+    void _init(int _NNodes, int _NElements, const index_t *ENList,
                const real_t *x, const real_t *y, const real_t *z,
-               const index_t *lnn2gnn, const index_t *owner_range)
+               const index_t *lnn2gnn, index_t NPNodes)
     {
         num_processes = 1;
         rank=0;
@@ -1523,7 +1704,6 @@ private:
         NElements = _NElements;
         NNodes = _NNodes;
 
-#ifdef HAVE_MPI
         MPI_Comm_size(_mpi_comm, &num_processes);
         MPI_Comm_rank(_mpi_comm, &rank);
 
@@ -1532,7 +1712,6 @@ private:
         MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
         mpi_type_wrapper<real_t> mpi_real_t_wrapper;
         MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
-#endif
 
         nthreads = pragmatic_nthreads();
 
@@ -1546,26 +1725,29 @@ private:
             msize = 6;
         }
 
-        // From the globalENList, create the halo and a local ENList if num_processes>1.
-        const index_t *ENList;
+        // From the (local) ENList, create the halo.
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
         boost::unordered_map<index_t, index_t> gnn2lnn;
 #else
         std::map<index_t, index_t> gnn2lnn;
 #endif
-        if(num_processes==1) {
-            ENList = globalENList;
-        } else {
-#ifdef HAVE_MPI
+        if(num_processes>1) {
             assert(lnn2gnn!=NULL);
             for(size_t i=0; i<(size_t)NNodes; i++) {
                 gnn2lnn[lnn2gnn[i]] = i;
             }
 
+            std::vector<index_t> owner_range(num_processes+1);
+            index_t bufIn = NPNodes;
+            MPI_Allgather(&bufIn, 1, MPI_INDEX_T, owner_range.data()+1, 1, MPI_INDEX_T, _mpi_comm);
+            for(int i=1;i<=num_processes;i++) {
+                owner_range[i]+=owner_range[i-1];
+            }
+
             std::vector< std::set<index_t> > recv_set(num_processes);
-            index_t *localENList = new index_t[NElements*nloc];
             for(size_t i=0; i<(size_t)NElements*nloc; i++) {
-                index_t gnn = globalENList[i];
+                index_t lnn = ENList[i];
+                index_t gnn = lnn2gnn[lnn];
                 for(int j=0; j<num_processes; j++) {
                     if(gnn<owner_range[j+1]) {
                         if(j!=rank)
@@ -1573,7 +1755,6 @@ private:
                         break;
                     }
                 }
-                localENList[i] = gnn2lnn[gnn];
             }
             std::vector<int> recv_size(num_processes);
             recv.resize(num_processes);
@@ -1630,8 +1811,6 @@ private:
                 }
             }
 
-            ENList = localENList;
-#endif
         }
 
         _ENList.resize(NElements*nloc);
@@ -1742,10 +1921,10 @@ private:
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	NNList.clear();
-	NNList.resize(NNodes);
-	NEList.clear();
-	NEList.resize(NNodes);
+	    NNList.clear();
+	    NNList.resize(NNodes);
+	    NEList.clear();
+	    NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -1903,8 +2082,8 @@ private:
 
     void create_global_node_numbering()
     {
+        
         if(num_processes>1) {
-#ifdef HAVE_MPI
             // Calculate the global numbering offset for this partition.
             int gnn_offset;
             int NPNodes = NNodes - recv_halo.size();
@@ -1914,7 +2093,7 @@ private:
             // Write global node numbering and ownership for nodes assigned to local process.
             for(index_t i=0; i < (index_t) NNodes; i++) {
                 if(recv_halo.count(i)) {
-                    lnn2gnn[i] = 0;
+                    lnn2gnn[i] = -2;
                 } else {
                     lnn2gnn[i] = gnn_offset++;
                     node_owner[i] = rank;
@@ -1923,15 +2102,15 @@ private:
 
             // Update GNN's for the halo nodes.
             halo_update<int, 1>(_mpi_comm, send, recv, lnn2gnn);
-
+            
             // Finish writing node ownerships.
             for(int i=0; i<num_processes; i++) {
                 for(std::vector<int>::const_iterator it=recv[i].begin(); it!=recv[i].end(); ++it) {
                     node_owner[*it] = i;
                 }
             }
-#endif
-        } else {
+        } 
+        else {
             memset(&node_owner[0], 0, NNodes*sizeof(int));
             for(index_t i=0; i < (index_t) NNodes; i++)
                 lnn2gnn[i] = i;
@@ -1940,7 +2119,6 @@ private:
 
     void create_gappy_global_numbering(size_t pNElements)
     {
-#ifdef HAVE_MPI
         // We expect to have NElements_predict/2 nodes in the partition,
         // so let's reserve 10 times more space for global node numbers.
         index_t gnn_reserve = 5*pNElements;
@@ -1969,12 +2147,10 @@ private:
                 recv_map[i][lnn2gnn[*it]] = *it;
             }
         }
-#endif
     }
 
     void update_gappy_global_numbering(std::vector<size_t>& recv_cnt, std::vector<size_t>& send_cnt)
     {
-#ifdef HAVE_MPI
         // MPI_Requests for all non-blocking communications.
         std::vector<MPI_Request> request(num_processes*2);
 
@@ -2011,8 +2187,9 @@ private:
             for(typename std::vector<index_t>::const_iterator it=recv[i].end()-recv_cnt[i]; it!=recv[i].end(); ++it, ++k)
                 lnn2gnn[*it] = recv_buff[i][k];
         }
-#endif
     }
+    
+    
 
     template<int dim>
     inline double calculate_quality(const index_t* n)
@@ -2064,6 +2241,9 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+#if 0
+	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+#endif
 
     // Quality
     std::vector<double> quality;
@@ -2090,13 +2270,11 @@ private:
     std::vector<index_t> lnn2gnn;
 
     index_t gnn_offset;
-#ifdef HAVE_MPI
     MPI_Comm _mpi_comm;
 
     // MPI data type for index_t and real_t
     MPI_Datatype MPI_INDEX_T;
     MPI_Datatype MPI_REAL_T;
-#endif
 
 #ifdef HAVE_EGADS
     int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 

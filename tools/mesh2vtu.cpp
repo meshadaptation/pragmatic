@@ -35,86 +35,72 @@
  *  SUCH DAMAGE.
  */
 
+#include <cmath>
 #include <iostream>
 #include <vector>
-#include <unistd.h>
-
-#include <errno.h>
-#include <stdlib.h>
 
 #ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
 
-#include <mpi.h>
-
 #include "Mesh.h"
 #ifdef HAVE_VTK
 #include "VTKTools.h"
 #endif
+#ifdef HAVE_LIBMESHB
+#include "GMFTools.h"
+#endif
+
 #include "MetricField.h"
 
+#include "Coarsen.h"
 #include "Refine.h"
+#include "Smooth.h"
+#include "Swapping.h"
 #include "ticker.h"
+#include "cpragmatic.h"
+
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
+
+
 
 int main(int argc, char **argv)
 {
+
+    int rank=0;
+#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
-    bool verbose = false;
-    if(argc>1) {
-        verbose = std::string(argv[1])=="-v";
-    }
-
-    int rank=0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-#ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
-    mesh->create_boundary();
-
-    MetricField<double,3> metric_field(*mesh);
-
-    size_t NNodes = mesh->get_number_nodes();
-
-    std::vector<double> psi(NNodes);
-    for(size_t i=0; i<NNodes; i++)
-        psi[i] =
-            pow(mesh->get_coords(i)[0], 4) +
-            pow(mesh->get_coords(i)[1], 4) +
-            pow(mesh->get_coords(i)[2], 4);
-
-    metric_field.add_field(&(psi[0]), 0.001);
-    metric_field.update_mesh();
-
-    Refine<double,3> adapt(*mesh);
-
-    double tic = get_wtime();
-    for(int i=0; i<2; i++)
-        adapt.refine(sqrt(2.0));
-    double toc = get_wtime();
-
-    if(verbose)
-        mesh->verify();
-
-    mesh->defragment();
-
-    VTKTools<double>::export_vtu("../data/test_mpi_refine_3d", mesh);
-
-    delete mesh;
-
-    if(rank==0) {
-        std::cout<<"Refine time = "<<toc-tic<<std::endl;
-        std::cout<<"pass"<<std::endl;
-    }
-#else
-    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
-    MPI_Finalize();
+	if (argc < 1) exit(1);
+
+#ifdef HAVE_LIBMESHB
+    char * filename_in = argv[1];
+    printf("DEBUG begin mesh import\n");
+    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
+
+    printf("DEBUG mesh imported\n");
+
+    pragmatic_init_light((void*)mesh);
+
+    printf("DEBUG begin mesh export\n");
+
+#ifdef HAVE_VTK
+    VTKTools<double>::export_vtu(filename_in, mesh);
+#else
+    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
+#endif
+
+#else
+    std::cerr<<"Warning: Pragmatic was configured without LIBMESHB support"<<std::endl;
+#endif
 
     return 0;
 }

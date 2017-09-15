@@ -64,6 +64,8 @@ __all__ = ["_libpragmatic",
            "NotImplementedException",
            "ParameterException",
            "adapt",
+           "adapt_boundary_regions",
+           "detect_colinearity",
            "edge_lengths",
            "mesh_metric",
            "refine_metric",
@@ -333,7 +335,66 @@ def detect_colinearity(mesh, tol = 30):
 
     return bfaces_func
 
+def adapt_boundary_regions(original_mesh, adapted_mesh, original_regions):
+    # boundary region IDs are currently `lost' (not computed)
+    # when a mesh is adapted by using pragmatic_adapt.
+    # This routine takes the orginal mesh and boundary IDs before adaptation and the
+    # output mesh adapted by pragmatic_adapt and computes consistent boundary region IDs
+    # for the adapted mesh.
+    #
+    # INPUT: original_mesh,    a dolfin mesh object containing the mesh before adaptation
+    #        adapted_mesh,     a dolfin mesh object containing the adapted mesh (output of adapt)
+    #        original_regions, a dolfin FacetFunction containing the boundary region IDs of 
+    #                          the original_mesh before adaptation.
+    #
+    # OUTPUT: adapted_regions, a dolfin FacetFunction containing the adapted boundary region IDs
+    #                          of the adapted mesh.
+    #
+    # We loop over all the adapted_mesh boundary facets and compute each facet midpoint.
+    # For each midpoint, we find the original_mesh boundary facet that includes (or is closest)
+    # to the midpoint and we assign the same region ID as the original_mesh facet to the adapted_mesh facet.
+    # NOTE: this function is deprecated and it will be removed soon.
 
+    # compute geometric dimension
+    dim = original_mesh.geometry().dim()
+
+    # extract boundary meshes for efficient looping over the facets
+    original_bmesh = BoundaryMesh(original_mesh, 'exterior')
+    adapted_bmesh = BoundaryMesh(adapted_mesh, 'exterior')
+
+    # use the original_regions FacetFunction to compute the boundary region IDs over the corresponding boundary mesh
+    original_boundary_regions = numpy.zeros((original_bmesh.num_cells(),), dtype='int32')
+    for facet in cells(original_bmesh):
+	original_boundary_regions[facet.index()] = original_regions[original_bmesh.entity_map(dim-1)[facet.index()]]
+
+    # initialise adapted_bmesh FacetFunction values
+    adapted_boundary_regions = numpy.zeros((adapted_bmesh.num_cells(),), dtype='int32')
+
+    # initialise bounding box tree for point search queries
+    tree = original_bmesh.bounding_box_tree()
+    # loop over the facets of the adapted mesh
+    for cell_facet in cells(adapted_bmesh):
+        # compute facet midpoint
+	p = cell_facet.midpoint()
+        # find in which original mesh facet the midpoint belongs to
+	original_facet_ID = tree.compute_first_entity_collision(p)
+        # NOTE: sometimes compute_first_entity_collision fails, we add a call to
+        # compute_closest_entity for robustness.
+	if original_facet_ID > original_bmesh.num_cells() or original_facet_ID < 0:
+	    original_facet_ID = tree.compute_closest_entity(p)[0]
+
+        # compute adapted mesh facet index
+	adapted_facet_ID = cell_facet.index()
+        # assign boundary region ID to the corresponding adapted mesh facet
+	adapted_boundary_regions[adapted_facet_ID] = original_boundary_regions[original_facet_ID]
+
+    # create an adapted mesh FacetFunction and assign the relative region ID values from adapted_boundary_regions
+    adapted_regions = FacetFunction('size_t', adapted_mesh)
+    adapted_regions.set_all(0)
+    for facet in cells(adapted_bmesh):
+	adapted_regions[adapted_bmesh.entity_map(dim-1)[facet.index()]] = adapted_boundary_regions[facet.index()]
+
+    return adapted_regions
 
 def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=True, eta=1e-2, grada=None, maxN=None, coarsen=False):
   #this is the actual adapt function. It currently works with vertex 
@@ -345,10 +406,11 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   # INPUT : bfaces.shape = (n,2) or bfaces.shape = (n,3) is a list of edges or
   #        faces for the mesh boundary. If not specified, it will be calculated. 
   # INPUT : bfaces_func is a FacetFunction that gives each edge and face and ID, so 
-  #         that corners implicitly specified in 2D and edges in 3D. 
+  #         that corners are implicitly specified in 2D and edges in 3D. 
   #         All corners can be specified this way in 3D, but it can require 
   #         definition of dummy IDs, if the corner is in the middle of face and
-  #         thus only related to two IDs.
+  #         thus only related to two IDs. The ID value 0 is reserved for the interior
+  #         of the domain.
   # INPUT : colinearity_tol is the angle tolerance for colinearity detection
   #         (see the function detect_colinearity).
   # INPUT : debugon=True (default) checks for conservation of area/volume
@@ -371,8 +433,6 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   if metric.function_space().ufl_element().degree() == 0 and metric.function_space().ufl_element().family()[0] == 'D':
       # patchwise projection to CG 1 for speed
       metric = patchwise_projection(metric, mesh)
-      #metric = project(metric,  TensorFunctionSpace(mesh, "CG", 1), solver_type='cg', preconditioner_type='petsc_amg') #metric = logproject(metric)
-  #metric = fix_CG1_metric(metric) #fixes negative eigenvalues
   if grada is not None:
       metric = gradate(metric,grada)
   if maxN is not None:
@@ -398,8 +458,10 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
         or not element.degree() == 1:
     raise InvalidArgumentException("Require 2D P1 function space for metric tensor field")
   
+  gdim = element.cell().geometric_dimension()
+
   nodes = array(range(0,mesh.num_vertices()),dtype=numpy.intc) 
-  cells = mesh.cells()
+  cells_array = mesh.cells().astype(numpy.intc)
   coords = mesh.coordinates()
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
@@ -413,14 +475,18 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
       # detect colinear facets
       info("Colinearity detection ...")  
       bfaces_func = detect_colinearity(mesh, tol = colinearity_tol)
+  else:
+      for f in facets(mesh):
+          if f.exterior():
+              if bfaces_func[f] == 0:
+                  raise ValueError("Zero value specified as a boundary tag in bfaces_func: the tag value 0 is reserved for interior facets.")
 
-  bfaces_IDs = numpy.array([bfaces_func[f.index()] for f in bfaces_list], dtype = numpy.int32)
+  bfaces_IDs = numpy.array([bfaces_func[f.index()] for f in bfaces_list], dtype = numpy.intc)
     
   x = coords[nodes,0]
   y = coords[nodes,1]
-  if element.cell().geometric_dimension() == 3:
+  if gdim == 3:
     z = coords[nodes,2]
-  cells = array(cells,dtype=numpy.intc)
   
   # Dolfin stores the tensor as:
   # |dxx dxy|
@@ -432,7 +498,7 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
       dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
   
   metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
     metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[arange(0,metric.vector().array().size,4)[dof2vtx]]
     metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
     metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
@@ -451,31 +517,31 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
   
-  NElements = ctypes.c_int(cells.shape[0])
+  NElements = ctypes.c_int(cells_array.shape[0])
   
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
       _libpragmatic.pragmatic_2d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
-                                  cells.ctypes.data, 
-                                  x.ctypes.data, 
-                                  y.ctypes.data)
+                                  cells_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)), 
+                                  x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
+                                  y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
   else:
       _libpragmatic.pragmatic_3d_init(ctypes.byref(NNodes), 
                                   ctypes.byref(NElements), 
-                                  cells.ctypes.data, 
-                                  x.ctypes.data, 
-                                  y.ctypes.data, 
-                                  z.ctypes.data)
+                                  cells_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
+                                  x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
+                                  y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), 
+                                  z.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
   info("Setting surface ...")
   nfacets = ctypes.c_int(len(bfaces))
   facets_array = array(bfaces.flatten(),dtype=numpy.intc)
   
   _libpragmatic.pragmatic_set_boundary(ctypes.byref(nfacets),
-                                       facets_array.ctypes.data,
-                                       bfaces_IDs.ctypes.data)
+                                       facets_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
+                                       bfaces_IDs.ctypes.data_as(ctypes.POINTER(ctypes.c_int)))
   
   info("Setting metric tensor field ...")
-  _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data)
+  _libpragmatic.pragmatic_set_metric(metric_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
   
   info("Entering adapt ...")
   startTime = time()
@@ -494,35 +560,82 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
                                    ctypes.byref(n_NElements),
                                    ctypes.byref(n_NSElements))
   
-  if element.cell().geometric_dimension() == 2:
-      n_enlist = numpy.empty(3 * n_NElements.value, numpy.intc)
-  else:
-      n_enlist = numpy.empty(4 * n_NElements.value, numpy.intc)
+  n_enlist = numpy.empty((gdim+1) * n_NElements.value, numpy.intc)
   
   info("Extracting output ...")
   n_x = numpy.empty(n_NNodes.value)
   n_y = numpy.empty(n_NNodes.value)
-  if element.cell().geometric_dimension() == 3:
+  if gdim == 3:
       n_z = numpy.empty(n_NNodes.value)    
-      _libpragmatic.pragmatic_get_coords_3d(n_x.ctypes.data,
-                                            n_y.ctypes.data,
-                                            n_z.ctypes.data)
+      _libpragmatic.pragmatic_get_coords_3d(n_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                            n_y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                            n_z.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
   else:
-      _libpragmatic.pragmatic_get_coords_2d(n_x.ctypes.data,
-                                        n_y.ctypes.data)
+      _libpragmatic.pragmatic_get_coords_2d(n_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                        n_y.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
                                         
-  _libpragmatic.pragmatic_get_elements(n_enlist.ctypes.data)
+  _libpragmatic.pragmatic_get_elements(n_enlist.ctypes.data_as(ctypes.POINTER(ctypes.c_int)))
 
-  info("Finalising PRAgMaTIc ...")
-  _libpragmatic.pragmatic_finalize()
-  info("PRAgMaTIc adapt complete")
-  
-  if element.cell().geometric_dimension() == 2:
+  if gdim == 2:
       n_mesh = set_mesh(array([n_x,n_y]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   else:
       n_mesh = set_mesh(array([n_x,n_y,n_z]),n_enlist,mesh=mesh,dx=dx,debugon=debugon)
   
-  return n_mesh
+  # extracting boundary tags: pragmatic_get_boundaryTags returns an
+  # array of the same size as n_enlist.
+  # For each vertex, boundary_tags contains the tag of the opposite facet in the element.
+  # boundary_tags[3*i+k] gives the tag of the facet opposite to the k-th vertex of the i-th triangle
+  
+  # extract boundary_tags from pragmatic
+  ptr = ctypes.POINTER(ctypes.c_int*(gdim + 1)*n_NElements.value)()
+  _libpragmatic.pragmatic_get_boundaryTags(ctypes.byref(ptr))
+  boundary_tags = numpy.frombuffer(ptr.contents, dtype = numpy.intc)
+
+  # define a FacetFunction with the boundary tags. We need to loop over all boundary cells
+  # and find which boundary facet is opposite to which vertex.
+  n_bfaces_func = FacetFunction("size_t", n_mesh, 0)
+  # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
+  # Keep track of lost boundary tags in wrong tags.
+  wrong_tags = []
+  for cell in cells(n_mesh):
+      for facet in facets(cell):
+          if facet.exterior():
+              # if the cell facet is a boundary facet, get the cell vertex indices from n_enlist
+              # and find the index of the vertex which is opposite to the boundary facet of the cell.
+              # this vertex will be the only vertex which is not a vertex of the boundary facet.
+              nodes_indices = n_enlist[(gdim+1)*cell.index():(gdim+1)*(cell.index()+1)].tolist()
+              opposite_vertex = (set(nodes_indices) - set(facet.entities(0))).pop()
+              # once we know the index of the vertex opposite to the boundary facet assign
+              # the correct tag to the correct facet.
+              pos = nodes_indices.index(opposite_vertex)
+              n_bfaces_func[facet.index()] = boundary_tags[(gdim+1)*cell.index() + pos]
+              if n_bfaces_func[facet.index()] == 0:
+                  wrong_tags.append(facet.index())
+
+  # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
+  #        the following is a temporary fix and it will be removed soon.
+  if len(wrong_tags) > 0:
+      n_mesh.init(gdim-2,gdim-1) # initialise connectivity
+      for wrong_tag in wrong_tags:
+          facet = Facet(n_mesh, wrong_tag)
+          # find tags of adjacent boundary facets. First get the vertices of the wrong tag facet, then the exterior facets
+          # these vertices belong to.
+          if gdim == 2:
+              adjacent_tags = numpy.array([n_bfaces_func[ff] for ff in [Facet(n_mesh, index) for index in                         \
+                              numpy.unique(numpy.concatenate([v.entities(gdim-1) for v in vertices(Facet(n_mesh, wrong_tag))]))]  \
+                              if ff.exterior() and ff.index() != wrong_tag])
+          else:
+              adjacent_tags = numpy.array([n_bfaces_func[ff] for ff in [Facet(n_mesh, index) for index in                         \
+                              numpy.unique(numpy.concatenate([e.entities(gdim-1) for e in    edges(Facet(n_mesh, wrong_tag))]))]  \
+                              if ff.exterior() and ff.index() != wrong_tag])
+          # replace the wrong tag with any of the adjacent correct tags.
+          n_bfaces_func[wrong_tag] = adjacent_tags[adjacent_tags != 0][0]
+
+  info("Finalising PRAgMaTIc ...")
+  _libpragmatic.pragmatic_finalize()
+  info("PRAgMaTIc adapt complete")
+
+  return n_mesh, n_bfaces_func
 
 def consistent_interpolation(mesh, fields=[]):
   if not isinstance(fields, list):
@@ -1014,61 +1127,61 @@ def logproject(Mp):
 def mesh_metric(mesh):
   # calculates a mesh metric (that is it has unit of squared inverse length,
   # use mesh_metric2 to get units of length)
-  # For each simplex, the function solves the linear problem
+  # On each element, the edge i is delimited by two points of coordinate vectors x_i and y_i.
+  # Define the edge vector Li to be given by Li = yi - xi and define the element mesh metric tensor M such that
+  #
+  # Li^T M Li = 1, for each i .
+  #
+  # The above equation defines a linear system that gives the entries of the metric tensor M.
+  # M is piecewise constant on each element and to compute its value a small linear system
+  # has to be solved for each element. For example, in 2D these linear systems are all in the form,
+  #
   #
   # |'L1x*L1x L1x*L1y L1y*L1y'| |'Mxy |   |'1'|
   # | L2x*L2x L2x*L2y L2y*L2y | | Mxy | = | 1_|
-  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|, where
+  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|,
   #
-  #L1x is p1x-p2x and p1x is the x-coordinate of the 1st vertex in the simplex.
-  #The problem is vectorised by construction of a block diagonal problem.
+  # where Lix, Liy are the x and y coordinates of Li respectively.
+  #
+  # The following code is assembling and solving these linear systems. 
+  # First, all the systems are assembled, then each system is solved one by one.
+  #
   #INPUT : DOLFIN MESH
   #OUTPUT: DOLFIN DG0 SPD TENSOR VARIABLE
   #
   #NOTE: For stabilising advective problems where the local velocity direction 
   #      is vdir (unit length), the local element size, Lh, can be taken as 
   #      htmp = dot(vdir,M); Lh = 1/sqrt(dot(htmp,htmp)), where M is the mesh metric
+
+  dim = mesh.geometry().dim()
   cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
-  cells = mesh.cells()
+  cells_array = mesh.cells()
   coords = mesh.coordinates()
-  p1 = coords[cells[:,0],:];
-  p2 = coords[cells[:,1],:];
-  p3 = coords[cells[:,2],:];
+  n_cells = mesh.num_cells()
+  p1 = coords[cells_array[:,0],:];
+  p2 = coords[cells_array[:,1],:];
+  p3 = coords[cells_array[:,2],:];
   r1 = p1-p2; r2 = p1-p3; r3 = p2-p3
   Nedg = 3
-  if mesh.geometry().dim() == 3:
+  if dim == 3:
       Nedg = 6
-      p4 = coords[cells[:,3],:];
+      p4 = coords[cells_array[:,3],:];
       r4 = p1-p4; r5 = p2-p4; r6 = p3-p4
-  rall = zeros([p1.shape[0],p1.shape[1],Nedg])
+  rall = zeros([n_cells,dim,Nedg])
   rall[:,:,0] = r1; rall[:,:,1] = r2; rall[:,:,2] = r3;
-  if mesh.geometry().dim() == 3:
+  if dim == 3:
       rall[:,:,3] = r4; rall[:,:,4] = r5; rall[:,:,5] = r6
-  All = zeros([p1.shape[0],Nedg**2])
+  All = zeros([n_cells,Nedg**2])
   inds = arange(Nedg**2).reshape([Nedg,Nedg])
   for i in range(Nedg):
     All[:,inds[i,0]] = rall[:,0,i]**2; All[:,inds[i,1]] = 2.*rall[:,0,i]*rall[:,1,i]; All[:,inds[i,2]] = rall[:,1,i]**2
-    if mesh.geometry().dim() == 3:
+    if dim == 3:
       All[:,inds[i,3]] = 2.*rall[:,0,i]*rall[:,2,i]; All[:,inds[i,4]] = 2.*rall[:,1,i]*rall[:,2,i]; All[:,inds[i,5]] = rall[:,2,i]**2
-  Ain = zeros([Nedg*2-1,Nedg*p1.shape[0]])
-  ndia = zeros(Nedg*2-1)
-  for i in range(Nedg):
-      for j in range(i,Nedg):
-          iks1 = arange(j,Ain.shape[1],Nedg)
-          if i==0:
-              Ain[i,iks1] = All[:,inds[j,j]]
-          else:
-              iks2 = arange(j-i,Ain.shape[1],Nedg)
-              Ain[2*i-1,iks1] = All[:,inds[j-i,j]]
-              Ain[2*i,iks2]   = All[:,inds[j,j-i]]
-              ndia[2*i-1] = i
-              ndia[2*i]   = -i
-    
-  A = scipy.sparse.spdiags(Ain, ndia, Ain.shape[1], Ain.shape[1]).tocsr()
-  b = ones(Ain.shape[1])
-  X = scipy.sparse.linalg.spsolve(A,b)
+
+  X = numpy.concatenate([numpy.linalg.solve(item.reshape((Nedg,Nedg)),ones(Nedg)) for item in All])
+  
   #set solution
-  XX = sym2asym(X.reshape([mesh.num_cells(),Nedg]).transpose())
+  XX = sym2asym(X.reshape([n_cells,Nedg]).transpose())
   M = Function(TensorFunctionSpace(mesh,"DG", 0))
   M.vector().set_local(XX.transpose().flatten()[cell2dof])
   return M

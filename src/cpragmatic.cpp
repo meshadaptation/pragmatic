@@ -48,6 +48,7 @@
 #include "VTKTools.h"
 #endif
 
+
 static void *_pragmatic_mesh=NULL;
 static void *_pragmatic_metric_field=NULL;
 
@@ -89,6 +90,31 @@ extern "C" {
       be called before this can be called again, i.e. cannot adapt
       multiple meshes at the same time.
 
+      @param [in] NNodes Number of nodes.
+      @param [in] NElements Number of elements.
+      @param [in] enlist Element-node list.
+      @param [in] x x coordinate array.
+      @param [in] y y coordinate array.
+      @param [in] lnn2gnn local-to-global numbering.
+      @param [in] NPNodes Number of owned nodes on the local processor.
+      @param [in] mpi_comm is the mpi comm.
+      */
+    void pragmatic_2d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y,
+                               const int *lnn2gnn, const int NPNodes, MPI_Comm mpi_comm)
+    {
+        if(_pragmatic_mesh!=NULL) {
+            throw new std::string("PRAgMaTIc: only one mesh can be adapted at a time");
+        }
+
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, lnn2gnn, NPNodes, mpi_comm);
+
+        _pragmatic_mesh = mesh;
+    }
+
+    /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
       @param [in] NNodes Number of nodes
       @param [in] NElements Number of elements
       @param [in] enlist Element-node list
@@ -102,6 +128,32 @@ extern "C" {
         assert(_pragmatic_metric_field==NULL);
 
         Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z);
+
+        _pragmatic_mesh = mesh;
+    }
+
+    /** Initialise pragmatic with mesh to be adapted. pragmatic_finalize must
+      be called before this can be called again, i.e. cannot adapt
+      multiple meshes at the same time.
+
+      @param [in] NNodes Number of nodes
+      @param [in] NElements Number of elements
+      @param [in] enlist Element-node list
+      @param [in] x x coordinate array
+      @param [in] y y coordinate array
+      @param [in] z z coordinate array
+      @param [in] lnn2gnn local-to-global numbering.
+      @param [in] NPNodes Number of nodes owned by local processor.
+      @param [in] mpi_comm is the mpi comm.
+
+      */
+    void pragmatic_3d_mpi_init(const int *NNodes, const int *NElements, const int *enlist, const double *x, const double *y, const double *z,
+                           const int *lnn2gnn, const int NPNodes, MPI_Comm mpi_comm)
+    {
+        assert(_pragmatic_mesh==NULL);
+        assert(_pragmatic_metric_field==NULL);
+
+        Mesh<double> *mesh = new Mesh<double>(*NNodes, *NElements, enlist, x, y, z, lnn2gnn, NPNodes, mpi_comm);
 
         _pragmatic_mesh = mesh;
     }
@@ -120,6 +172,10 @@ extern "C" {
         _pragmatic_mesh = mesh;
     }
 #endif
+
+    void pragmatic_init_light(void * mesh){
+        _pragmatic_mesh = mesh;
+    }
 
     /** Add field which should be adapted to.
 
@@ -165,6 +221,8 @@ extern "C" {
         assert(_pragmatic_metric_field==NULL);
 
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+
+        mesh->defragment();
 
         if(_pragmatic_metric_field==NULL) {
             if(((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions()==2) {
@@ -243,12 +301,31 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
+#if 0
+            // TODO HACK CAD
+            mesh->set_isOnBoundarySize();
+            for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+            int * boundary = mesh->get_boundaryTags();
+            index_t * ENList = mesh->get_ENList();
+            for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+              if (boundary[j] == 5) {
+                int iElem = j/4;
+                int iEdg = j % 4;
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+              }
+            }
+#endif
+
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
             for(size_t i=0; i<10; i++) {
+
+                printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
@@ -259,6 +336,27 @@ extern "C" {
 
                 if((L_max-L_up)<0.01)
                     break;
+
+                mesh->compute_print_quality();
+                mesh->compute_print_NNodes_global();
+
+#if 0                
+                // TODO HACK CAD
+                mesh->set_isOnBoundarySize();
+                for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+                int * boundary = mesh->get_boundaryTags();
+                index_t * ENList = mesh->get_ENList();
+                for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+                  if (boundary[j] == 5) {
+                    int iElem = j/4;
+                    int iEdg = j % 4;
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+                  }
+                }
+#endif
+
             }
 
             mesh->defragment();
@@ -266,6 +364,8 @@ extern "C" {
             smooth.smart_laplacian(10);
             smooth.optimisation_linf(10);
         }
+
+        mesh->remove_overlap_elements();
     }
 
     /** Coarsen the mesh.
@@ -301,8 +401,8 @@ extern "C" {
 
     /** Get size of mesh.
 
-      @param [out] NNodes
-      @param [out] NElements
+      @param [out] Number of nodes of the proc  (owned and not owned)
+      @param [out] NElements of this proc (with or without halo depending on previous actions)
       */
     void pragmatic_get_info(int *NNodes, int *NElements)
     {
@@ -311,6 +411,21 @@ extern "C" {
         *NNodes = mesh->get_number_nodes();
         *NElements = mesh->get_number_elements();
     }
+    
+    /** Get size of mesh.
+
+      @param [out] Number of nodes owned by current proc
+      @param [out] NElements of this proc (with or without halo depending on previous actions)
+      */
+    void pragmatic_get_info_mpi(int *NNodes, int *NElements)
+    {
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+
+        *NNodes = mesh->get_number_owned_nodes();
+        *NElements = mesh->get_number_elements();
+    }
+    
+    
 
     void pragmatic_get_coords_2d(double *x, double *y)
     {
@@ -330,7 +445,49 @@ extern "C" {
             z[i] = ((Mesh<double> *)_pragmatic_mesh)->get_coords(i)[2];
         }
     }
+    
+    /** Fills x,y arrays with coordinates of owned nodes in global numbering (minus the offset)
+      */
+    void pragmatic_get_coords_2d_mpi(double *x, double *y)
+    {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        
+        size_t NNodes = mesh->get_number_nodes();
+        int offset = mesh->get_gnn_offset();
+        
+        for(size_t i=0; i<NNodes; i++) {
+            if (mesh->is_owned_node(i)) {
+                int gnn = mesh->get_global_numbering(i) - offset;
+                x[gnn] = mesh->get_coords(i)[0];
+                y[gnn] = mesh->get_coords(i)[1];
+            }
+        }
+    }
 
+    /** Fills x,y,z arrays with coordinates of owned nodes in global numbering (minus the offset)
+      */
+    void pragmatic_get_coords_3d_mpi(double *x, double *y, double *z)
+    {
+        
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        
+        size_t NNodes = mesh->get_number_nodes();
+        int offset = mesh->get_gnn_offset();
+        for(size_t i=0; i<NNodes; i++) {
+            if (mesh->is_owned_node(i)) {
+                int gnn = mesh->get_global_numbering(i) - offset;
+                x[gnn] = mesh->get_coords(i)[0];
+                y[gnn] = mesh->get_coords(i)[1];
+                z[gnn] = mesh->get_coords(i)[2];
+            }
+        }
+    }
+
+    /** Fills elements array with vertices indices of the elements (local or global numbering depending on what was done before)
+      */
     void pragmatic_get_elements(int *elements)
     {
         const size_t ndims = ((Mesh<double> *)_pragmatic_mesh)->get_number_dimensions();

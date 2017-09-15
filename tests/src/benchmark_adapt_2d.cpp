@@ -56,21 +56,17 @@
 #include "Swapping.h"
 #include "ticker.h"
 
-#ifdef HAVE_MPI
 #include <mpi.h>
-#endif
 
 int main(int argc, char **argv)
 {
     int rank=0;
-#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
 
     bool verbose = false;
     if(argc>1) {
@@ -289,9 +285,7 @@ int main(int argc, char **argv)
     std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
-#ifdef HAVE_MPI
     MPI_Finalize();
-#endif
 
     return 0;
 }

@@ -80,15 +80,10 @@ public:
             break;
         }
 
-#ifdef HAVE_MPI
         MPI_Comm comm = _mesh->get_mpi_comm();
 
         nprocs = pragmatic_nprocesses(comm);
         rank = pragmatic_process_id(comm);
-#else
-        nprocs = 1;
-        rank = 0;
-#endif
 
         nthreads = pragmatic_nthreads();
 
@@ -380,7 +375,6 @@ public:
             }
 
             // Update halo.
-#ifdef HAVE_MPI
             if(nprocs>1) {
                 #pragma omp single
                 {
@@ -487,7 +481,6 @@ public:
                     _mesh->trim_halo();
                 }
             }
-#endif
 
 #if !defined NDEBUG
             if(dim==2) {
@@ -551,6 +544,20 @@ private:
             x = x0[i]+weight*(x1[i] - x0[i]);
             newCoords[tid].push_back(x);
         }
+
+#if 0
+        // TODO HACK CAD
+        double newCrd[3];
+        for(size_t i=0; i<dim; i++)
+            newCrd[i] = x0[i]+weight*(x1[i] - x0[i]);
+        if (_mesh->get_isOnBoundary(n0) == 1 && _mesh->get_isOnBoundary(n1) == 1){
+            double r = 0.5/sqrt(newCrd[0]*newCrd[0]+newCrd[1]*newCrd[1]);
+            newCrd[0] *= r;
+            newCrd[1] *= r;
+        }
+        for(size_t i=0; i<dim; i++)
+            newCoords[tid].push_back(newCrd[i]);
+#endif
 
         // Interpolate new metric and append it to OMP thread's temp storage
         for(size_t i=0; i<msize; i++) {
@@ -2748,7 +2755,6 @@ private:
                 _mesh->node_owner[cid] = 0;
                 _mesh->lnn2gnn[cid] = cid;
             }
-#ifdef HAVE_MPI
             else {
                 int owner = nprocs;
                 for(int j=0; j<nloc; ++j)
@@ -2783,7 +2789,6 @@ private:
                     _mesh->lnn2gnn[cid] = _mesh->gnn_offset+cid;
                 }
             }
-#endif
         }
     }
 

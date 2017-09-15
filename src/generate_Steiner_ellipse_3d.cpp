@@ -12,13 +12,7 @@
 
 void pragmatic::generate_Steiner_ellipse(const double *x1, const double *x2, const double *x3, const double *x4, double *sm)
 {
-    // # From http://en.wikipedia.org/wiki/Steiner_ellipse
-
-#ifdef EIGEN_NO_DEBUG
-    printf("DEBUG mode release\n");
-#else
-    printf("DEBUG mode debug\n"); 
-#endif   
+    // # From http://en.wikipedia.org/wiki/Steiner_ellipse 
 
     Eigen::Matrix<double, 6, 6> M;
 

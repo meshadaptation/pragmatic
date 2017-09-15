@@ -4,16 +4,28 @@ before_install:
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo apt-get update -qq
 install:
+  - CMAKE_URL="http://www.cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.tar.gz"
+  - mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
   - sudo apt-get install -y libvtk5-dev libvtk5.8
-  - sudo apt-get install -qq gcc-4.9 g++-4.9
-  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 90
+  - sudo apt-get install -qq gcc-5 g++-5
+  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 90
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
   - sudo apt-get install -y libparmetis-dev
   - hg clone https://bitbucket.org/eigen/eigen/ hg.eigen
   - pushd hg.eigen/
   - mkdir build
   - pushd build
-  - cmake ../
+  - ${TRAVIS_BUILD_DIR}/cmake/bin/cmake ../
+  - sudo make install
+  - popd
+  - popd
+  - git clone https://github.com/LoicMarechal/libMeshb.git git.libmeshb
+  - pushd git.libmeshb
+  - git reset --hard 86789547c052aeaa3ea012dec1af0924e7006a96
+  - mkdir build
+  - pushd build
+  - ${TRAVIS_BUILD_DIR}/cmake/bin/cmake ../
+  - make
   - sudo make install
   - popd
   - popd
@@ -21,13 +33,13 @@ compiler:
   - gcc
 # Change this to your needs
 env:
-  - ENABLE_VTK=FALSE ENABLE_EGADS=FALSE
-  - ENABLE_MPI=FALSE ENABLE_EGADS=FALSE
-  - ENABLE_MPI=TRUE  ENABLE_EGADS=FALSE
+  - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release
+  - CMAKE_BUILD_TYPE=Release
 script:
   - mkdir build
   - cd build
   - cmake ..
+  - g++ -v
   - make
   - cd tests/
   - make

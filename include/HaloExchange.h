@@ -37,8 +37,6 @@
 #ifndef HALOEXCHANGE_H
 #define HALOEXCHANGE_H
 
-#ifdef HAVE_MPI
-
 #include <vector>
 #include <cassert>
 
@@ -175,7 +173,5 @@ void halo_update(MPI_Comm comm,
 
     return;
 }
-
-#endif
 
 #endif

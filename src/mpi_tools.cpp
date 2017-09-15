@@ -34,7 +34,7 @@
  */
 
 #include "mpi_tools.h"
-#ifdef HAVE_MPI
+
 // Explicit instantiation for `char'
 template <> mpi_type_wrapper<char>::mpi_type_wrapper() : mpi_type(MPI_CHAR) {}
 // Explicit instantiation for `float'
@@ -51,5 +51,4 @@ template <> mpi_type_wrapper<long>::mpi_type_wrapper() : mpi_type(MPI_LONG) {}
 template <> mpi_type_wrapper<unsigned long>::mpi_type_wrapper() : mpi_type(MPI_UNSIGNED_LONG) {}
 // Explicit instantiation for `long long'
 template <> mpi_type_wrapper<long long>::mpi_type_wrapper() : mpi_type(MPI_LONG_LONG) {}
-#endif
 
