@@ -1646,6 +1646,7 @@ public:
     }
 
 
+    // TODO: ONLY FOR 3D
     void associate_CAD_with_Mesh() {
 
 #ifdef HAVE_EGADS
@@ -1653,32 +1654,77 @@ public:
         node_topology.resize(NNodes);
 
         for (int iElm=0; iElm<NElements; ++iElm) {
-
             int *n = &_ENList[nloc*iElm];
-            double coords_bary[3] = {0.};
-            for (int i=0; i<nloc; ++i) {
-                double * coords = &_coords[ndims*n[i]];
-                for (int j=0; j<ndims; ++j)
-                    coords_bary[j] += coords[j];
-            }
-            for (int j=0; j<ndims; ++j)
-                coords_bary[j] /= nloc;
-
-            // loop over the faces
-            for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
-                double result[3], params[2];
-                EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
-                double nrm2 = (coords_bary[0]-result[0])*(coords_bary[0]-result[0])
-                            + (coords_bary[1]-result[1])*(coords_bary[1]-result[1])
-                            + (coords_bary[2]-result[2])*(coords_bary[2]-result[2]);
-                if (nrm2 < 1.e-8) {
+//            printf("DEBUG  iElm: %d (%d %d %d %d)\n", iElm, n[0], n[1], n[2], n[3]);
+            for (int iFac=0; iFac<nloc; ++iFac) {
+                if (boundary[iElm*nloc+iFac] > 0) {
+                    int ntri[3] = {-1};
+                    int pos=0;
+                    int tag=0;
                     for (int i=0; i<nloc; ++i) {
-                        node_topology[n[i]].push_back(iEgo);
+                        if (i != iFac) {
+                            ntri[pos] = n[i];
+                            pos++;
+//                            if (n[i]==7) tag=1;
+                        }
+                    }
+                    if (tag) printf("DEBUG  iElm: %d (%d %d %d %d)  iFac: %d, ntri: %d %d %d\n", 
+                                iElm, n[0], n[1], n[2], n[3], iFac, ntri[0], ntri[1], ntri[2]);
+                    double coords_bary[3] = {0.};
+                    for (int i=0; i<nloc-1; ++i) {
+                        double * coords = &_coords[ndims*ntri[i]];
+                        for (int j=0; j<ndims; ++j)
+                            coords_bary[j] += coords[j];
+                    }
+                    for (int j=0; j<ndims; ++j)
+                        coords_bary[j] /= (nloc-1);
+                    // loop over the faces
+                    int min_nrm_ego = ego_list.size()+1;
+                    double min_nrm = DBL_MAX;
+                    for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
+                        double result[3], params[2];
+                        EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
+                        double nrm2 = (coords_bary[0]-result[0])*(coords_bary[0]-result[0])
+                                    + (coords_bary[1]-result[1])*(coords_bary[1]-result[1])
+                                    + (coords_bary[2]-result[2])*(coords_bary[2]-result[2]);
+                        if (nrm2<min_nrm) {
+                            min_nrm = nrm2;
+                            min_nrm_ego = iEgo;
+                        }
+                        if (tag) printf("DEBUG  iElm %d, facet %d (%d %d %d) on Face %d. Barycenter: %1.2f %1.2f %1.2f, result: %1.2f %1.2f %1.2f, nrm2: %1.3e\n",
+                                    iElm, iFac, ntri[0], ntri[1], ntri[2], iEgo, coords_bary[0], coords_bary[1], coords_bary[2],
+                                    result[0], result[1],result[2], nrm2);
+                    }
+                    for (int i=0; i<nloc-1; ++i) {
+                        node_topology[ntri[i]].insert(min_nrm_ego);
+                    }
+                    if (min_nrm > 0.01) {
+                        printf("WARNING   facet %d %d %d  located on FACE %d with nrm = %1.2e\n",
+                                ntri[0], ntri[1], ntri[2], min_nrm_ego, min_nrm);
                     }
                 }
             }
-
         }
+
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_topology[iVer].size() > 1) {
+                printf("DEBUG  Vertex %d is on more than 1 face (%lu)\n", iVer, node_topology[iVer].size());
+                double * coords = &_coords[iVer*ndims];
+                // loop over the edges
+                for (int iEgo=nbrEgFaces; iEgo<nbrEgFaces+nbrEgEdges; ++iEgo) {
+                    double result[3], params[2];
+                    EG_invEvaluate(ego_list[iEgo], coords, params, result);
+                    double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
+                                + (coords[1]-result[1])*(coords[1]-result[1])
+                                + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
+                    if (nrm2 < 1.e-10) {
+                        printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
+                        node_topology[iVer].insert(iEgo);
+                    }
+                }
+            }
+        }
+
 #else
         printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
 #endif
@@ -2279,7 +2325,7 @@ private:
 #ifdef HAVE_EGADS
     int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
     std::vector<ego> ego_list;
-    std::vector<std::vector<int>> node_topology;
+    std::vector<std::set<int>> node_topology;
 #endif
 
 };
