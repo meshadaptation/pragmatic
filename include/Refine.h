@@ -38,6 +38,12 @@
 #ifndef REFINE_H
 #define REFINE_H
 
+#ifdef HAVE_EGADS
+extern "C"{
+#include <egads.h>
+}
+#endif
+
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -93,6 +99,9 @@ public:
         newQualities.resize(nthreads);
         newCoords.resize(nthreads);
         newMetric.resize(nthreads);
+#ifdef HAVE_EGADS
+        newNode_topology.resize(nthreads);
+#endif
 
         // Pre-allocate the maximum size that might be required
         allNewVertices.resize(_mesh->_ENList.size());
@@ -162,6 +171,10 @@ public:
             newCoords[tid].reserve(dim*reserve_size);
             newMetric[tid].clear();
             newMetric[tid].reserve(msize*reserve_size);
+#ifdef HAVE_EGADS
+            newNode_topology[tid].clear();
+//            newNode_topology[tid].reserve(2*reserve_size);  TODO for now this is useless as a set is not contiguous
+#endif
 
             /* Loop through all edges and select them for refinement if
                its length is greater than L_max in transformed space. */
@@ -200,6 +213,9 @@ public:
                     _mesh->NEList.resize(reserve);
                     _mesh->node_owner.resize(reserve);
                     _mesh->lnn2gnn.resize(reserve);
+#ifdef HAVE_EGADS
+                    _mesh->node_topology.resize(reserve);
+#endif
                 }
                 edgeSplitCnt = _mesh->NNodes - origNNodes;
             }
@@ -207,6 +223,11 @@ public:
             // Append new coords and metric to the mesh.
             memcpy(&_mesh->_coords[dim*threadIdx[tid]], &newCoords[tid][0], dim*splitCnt[tid]*sizeof(real_t));
             memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
+#ifdef HAVE_EGADS
+            for (int i=0; i<newNode_topology[tid].size(); ++i) {
+                _mesh->node_topology[threadIdx[tid]+i] = newNode_topology[tid][i] ;  // TODO this has to go when I don't have sets anymore
+            }
+#endif
 
             // Fix IDs of new vertices
             assert(newVertices[tid].size()==splitCnt[tid]);
@@ -540,10 +561,62 @@ private:
                                         property->template length<dim>(x0, x1, m1)));
 
         // Calculate position of new vertex and append it to OMP thread's temp storage
+        double newCrd[dim];
         for(size_t i=0; i<dim; i++) {
-            x = x0[i]+weight*(x1[i] - x0[i]);
-            newCoords[tid].push_back(x);
+            newCrd[i] = x0[i]+weight*(x1[i] - x0[i]);
         }
+
+#ifdef HAVE_EGADS
+        double newCrdFixed[dim];
+        std::set<int> edge_egos;
+        set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
+                         _mesh->node_topology[n1].begin(), _mesh->node_topology[n1].end(),
+                         inserter(edge_egos, edge_egos.begin()));
+        if (edge_egos.size()>0) {
+            int nbrEdg=0, nbrFac=0;
+            typename std::set<index_t>::const_iterator iEgo;
+            for(iEgo=edge_egos.begin(); iEgo!=edge_egos.end(); ++iEgo) {
+                if (*iEgo >= _mesh->nbrEgFaces)
+                    nbrEdg++;
+                else
+                    nbrFac++;
+            }
+            if (nbrEdg > 1) {
+                printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on %d different EGADS edge\n", n0, n1, nbrEdg);
+                exit(1);
+            } 
+            else if (nbrEdg > 0 && nbrFac != 2) {
+                printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on 1 EGADS edge but %d faces\n", n0, n1, nbrFac);
+                exit(1);
+            }
+            else if (nbrEdg == 0 && nbrFac > 1) {
+                printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on 0 EGADS edge but %d faces\n", n0, n1, nbrFac);
+                exit(1);
+            }
+            else if (nbrEdg > 0) {
+                double params[4];
+                EG_invEvaluate(_mesh->ego_list[*edge_egos.rbegin()], newCrd, params, newCrdFixed);
+            }
+            else if (nbrFac > 0) {
+                double params[4];
+                EG_invEvaluate(_mesh->ego_list[*edge_egos.begin()], newCrd, params, newCrdFixed);
+            }
+
+            for (int i=0; i<dim; ++i)
+                newCrd[i] = newCrdFixed[i];
+        }
+
+#endif
+
+        for(size_t i=0; i<dim; i++) {
+            newCoords[tid].push_back(newCrd[i]);
+#ifdef HAVE_EGADS
+        newNode_topology[tid].push_back(edge_egos);
+#endif
+
+        }
+
+
 
 #if 0
         // TODO HACK CAD
@@ -2961,6 +3034,9 @@ private:
     std::vector< std::vector<int> > newBoundaries;
     std::vector< std::vector<double> > newQualities;
     std::vector<index_t> new_vertices_per_element;
+#ifdef HAVE_EGADS
+    std::vector< std::vector<std::set<int>>> newNode_topology;
+#endif
 
     std::vector<size_t> threadIdx, splitCnt;
     std::vector< DirectedEdge<index_t> > allNewVertices;
