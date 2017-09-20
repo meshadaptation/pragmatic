@@ -567,12 +567,29 @@ private:
         }
 
 #ifdef HAVE_EGADS
-        double newCrdFixed[dim];
+        int tag_surface = 0;
+        if (n0<n1) {
+            for (int k=0; k<_mesh->NNList_surface[n0].size(); ++k) {
+                if (_mesh->NNList_surface[n0][k] == n1)
+                    tag_surface = 1;
+            }
+        }
+        else {
+            for (int k=0; k<_mesh->NNList_surface[n1].size(); ++k) {
+                if (_mesh->NNList_surface[n1][k] == n0)
+                    tag_surface = 1;
+            }
+        }
         std::set<int> edge_egos;
-        set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
-                         _mesh->node_topology[n1].begin(), _mesh->node_topology[n1].end(),
-                         inserter(edge_egos, edge_egos.begin()));
-        if (edge_egos.size()>0) {
+        if (tag_surface) {
+            double newCrdFixed[dim];
+            set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
+                             _mesh->node_topology[n1].begin(), _mesh->node_topology[n1].end(),
+                             inserter(edge_egos, edge_egos.begin()));
+            if (edge_egos.size()==0) {
+                printf("ERROR  surface edge (%d %d) belongs to no egads object\n", n0, n1);
+                exit(1);
+            }
             int nbrEdg=0, nbrFac=0;
             typename std::set<index_t>::const_iterator iEgo;
             for(iEgo=edge_egos.begin(); iEgo!=edge_egos.end(); ++iEgo) {
@@ -601,11 +618,9 @@ private:
                 double params[4];
                 EG_invEvaluate(_mesh->ego_list[*edge_egos.begin()], newCrd, params, newCrdFixed);
             }
-
             for (int i=0; i<dim; ++i)
                 newCrd[i] = newCrdFixed[i];
         }
-
 #endif
 
         for(size_t i=0; i<dim; i++) {

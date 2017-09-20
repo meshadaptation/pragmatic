@@ -1652,24 +1652,28 @@ public:
 #ifdef HAVE_EGADS
 
         node_topology.resize(NNodes);
+        NNList_surface.resize(NNodes);
 
         for (int iElm=0; iElm<NElements; ++iElm) {
             int *n = &_ENList[nloc*iElm];
-//            printf("DEBUG  iElm: %d (%d %d %d %d)\n", iElm, n[0], n[1], n[2], n[3]);
             for (int iFac=0; iFac<nloc; ++iFac) {
                 if (boundary[iElm*nloc+iFac] > 0) {
                     int ntri[3] = {-1};
                     int pos=0;
-                    int tag=0;
                     for (int i=0; i<nloc; ++i) {
                         if (i != iFac) {
                             ntri[pos] = n[i];
                             pos++;
-//                            if (n[i]==7) tag=1;
                         }
                     }
-                    if (tag) printf("DEBUG  iElm: %d (%d %d %d %d)  iFac: %d, ntri: %d %d %d\n", 
-                                iElm, n[0], n[1], n[2], n[3], iFac, ntri[0], ntri[1], ntri[2]);
+                    for (int i=0; i<nloc-1; ++i) {
+                        int n0loc = ntri[i];
+                        int n1loc = ntri[(i+1)%(nloc-1)];
+                        if (n0loc<n1loc)
+                            NNList_surface[n0loc].push_back(n1loc);
+                        else
+                            NNList_surface[n1loc].push_back(n0loc);
+                    }
                     double coords_bary[3] = {0.};
                     for (int i=0; i<nloc-1; ++i) {
                         double * coords = &_coords[ndims*ntri[i]];
@@ -1691,10 +1695,7 @@ public:
                             min_nrm = nrm2;
                             min_nrm_ego = iEgo;
                         }
-                        if (tag) printf("DEBUG  iElm %d, facet %d (%d %d %d) on Face %d. Barycenter: %1.2f %1.2f %1.2f, result: %1.2f %1.2f %1.2f, nrm2: %1.3e\n",
-                                    iElm, iFac, ntri[0], ntri[1], ntri[2], iEgo, coords_bary[0], coords_bary[1], coords_bary[2],
-                                    result[0], result[1],result[2], nrm2);
-                    }
+                   }
                     for (int i=0; i<nloc-1; ++i) {
                         node_topology[ntri[i]].insert(min_nrm_ego);
                     }
@@ -2354,6 +2355,7 @@ private:
     std::vector<ego> ego_list;
     std::vector<std::set<int>> node_topology;
     std::map<int, int> corners; // node index -> ego_list index
+    std::vector< std::vector<index_t> > NNList_surface; // only store surface edges in this, only store n1->n2 if n1<n2
 #endif
 
 };
