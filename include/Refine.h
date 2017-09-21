@@ -209,6 +209,8 @@ public:
             #pragma omp single
             {
                 size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
+                printf("DEBUG  node_topology.size before: %d  _coords.size: %d reserve: %d\n", 
+                        _mesh->node_topology.size(), _mesh->_coords.size(), reserve);
                 if(_mesh->_coords.size()<reserve*dim) {
                     _mesh->_coords.resize(reserve*dim);
                     _mesh->metric.resize(reserve*msize);
@@ -228,7 +230,13 @@ public:
             memcpy(&_mesh->metric[msize*threadIdx[tid]], &newMetric[tid][0], msize*splitCnt[tid]*sizeof(double));
 #ifdef HAVE_EGADS
             for (int i=0; i<newNode_topology[tid].size(); ++i) {
-                _mesh->node_topology[threadIdx[tid]+i] = newNode_topology[tid][i] ;  // TODO this has to go when I don't have sets anymore
+                //_mesh->node_topology[threadIdx[tid]+i] = std::set<int>(newNode_topology[tid][i]) ;  // TODO this has to go when I don't have sets anymore
+                typename std::set<index_t>::const_iterator iEgo;
+                for(iEgo=newNode_topology[tid][i].begin(); iEgo!=newNode_topology[tid][i].end(); ++iEgo) {
+                    printf("DEBUG tid: %d  threadIdx[tid]: %d  i: %d  iEgo: %d, node_topology.size: %d\n", 
+                        tid, threadIdx[tid], i, *iEgo, _mesh->node_topology.size());
+                    _mesh->node_topology[threadIdx[tid]+i].insert(*iEgo);
+                }
             }
             memcpy(&_mesh->_coords[2*threadIdx[tid]], &new_uv[tid][0], 2*splitCnt[tid]*sizeof(real_t));
 #endif
