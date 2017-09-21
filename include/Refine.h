@@ -101,6 +101,7 @@ public:
         newMetric.resize(nthreads);
 #ifdef HAVE_EGADS
         newNode_topology.resize(nthreads);
+        new_uv.resize(nthreads);
 #endif
 
         // Pre-allocate the maximum size that might be required
@@ -174,6 +175,8 @@ public:
 #ifdef HAVE_EGADS
             newNode_topology[tid].clear();
 //            newNode_topology[tid].reserve(2*reserve_size);  TODO for now this is useless as a set is not contiguous
+            new_uv[tid].clear();
+            new_uv[tid].reserve(2*reserve_size);
 #endif
 
             /* Loop through all edges and select them for refinement if
@@ -227,6 +230,7 @@ public:
             for (int i=0; i<newNode_topology[tid].size(); ++i) {
                 _mesh->node_topology[threadIdx[tid]+i] = newNode_topology[tid][i] ;  // TODO this has to go when I don't have sets anymore
             }
+            memcpy(&_mesh->_coords[2*threadIdx[tid]], &new_uv[tid][0], 2*splitCnt[tid]*sizeof(real_t));
 #endif
 
             // Fix IDs of new vertices
@@ -581,6 +585,7 @@ private:
             }
         }
         std::set<int> edge_egos;
+        double uv[2] = {0.};
         if (tag_surface) {
             double newCrdFixed[dim];
             set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
@@ -611,12 +616,37 @@ private:
                 exit(1);
             }
             else if (nbrEdg > 0) {
-                double params[4];
-                EG_invEvaluate(_mesh->ego_list[*edge_egos.rbegin()], newCrd, params, newCrdFixed);
+                double uv0[2], uv1[0];
+                int iEgoEdge = *edge_egos.rbegin();
+                // if n0 or n1 is a corner ?
+                uv[0] = _mesh->_uv[2*n0];
+                if (_mesh->node_topology[n0].size() > 2)  {
+                    EG_invEvaluate(_mesh->ego_list[iEgoEdge], &_mesh->_coords[dim*n0], uv, newCrdFixed);
+                }
+                uv0[0] = uv[0];
+                if (_mesh->node_topology[n1].size() > 2)  {
+                    EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], &_mesh->_coords[dim*n1], uv, newCrdFixed);
+                }
+                uv1[0] = uv[0];
+                uv[0] = 0.5*(uv0[0] + uv1[0]);
+                EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], newCrd, uv, newCrdFixed);
             }
             else if (nbrFac > 0) {
-                double params[4];
-                EG_invEvaluate(_mesh->ego_list[*edge_egos.begin()], newCrd, params, newCrdFixed);
+                double uv0[2], uv1[0];
+                int iEgoEdge = *edge_egos.begin();
+                // if n0 or n1 is a corner or on an edge ?
+                uv[0] = _mesh->_uv[2*n0]; uv[1] = _mesh->_uv[2*n0+1];
+                if (_mesh->node_topology[n0].size() > 1)  {
+                    EG_invEvaluate(_mesh->ego_list[iEgoEdge], &_mesh->_coords[dim*n0], uv, newCrdFixed);
+                }
+                uv0[0] = uv[0]; uv0[1] = uv[1];
+                if (_mesh->node_topology[n1].size() > 1)  {
+                    EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], &_mesh->_coords[dim*n1], uv, newCrdFixed);
+                }
+                uv1[0] = uv[0]; uv1[1] = uv[1];
+                uv[0] = 0.5*(uv0[0] + uv1[0]); 
+                uv[1] = 0.5*(uv0[1] + uv1[1]);
+                EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], newCrd, uv, newCrdFixed);
             }
             for (int i=0; i<dim; ++i)
                 newCrd[i] = newCrdFixed[i];
@@ -627,6 +657,7 @@ private:
             newCoords[tid].push_back(newCrd[i]);
 #ifdef HAVE_EGADS
         newNode_topology[tid].push_back(edge_egos);
+        new_uv[tid].push_back(uv[0]); new_uv[tid].push_back(uv[1]);
 #endif
 
         }
@@ -3051,6 +3082,7 @@ private:
     std::vector<index_t> new_vertices_per_element;
 #ifdef HAVE_EGADS
     std::vector< std::vector<std::set<int>>> newNode_topology;
+    std::vector< std::vector<real_t> > new_uv;
 #endif
 
     std::vector<size_t> threadIdx, splitCnt;

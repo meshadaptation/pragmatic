@@ -1652,6 +1652,7 @@ public:
 #ifdef HAVE_EGADS
 
         node_topology.resize(NNodes);
+        _uv.resize(2*NNodes);
         NNList_surface.resize(NNodes);
 
         for (int iElm=0; iElm<NElements; ++iElm) {
@@ -1685,6 +1686,7 @@ public:
                     // loop over the faces
                     int min_nrm_ego = ego_list.size()+1;
                     double min_nrm = DBL_MAX;
+                    double min_uv[2];
                     for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
                         double result[3], params[2];
                         EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
@@ -1694,10 +1696,18 @@ public:
                         if (nrm2<min_nrm) {
                             min_nrm = nrm2;
                             min_nrm_ego = iEgo;
+                            min_uv[0] = params[0]; min_uv[1] = params[1];
                         }
-                   }
+                    }
                     for (int i=0; i<nloc-1; ++i) {
                         node_topology[ntri[i]].insert(min_nrm_ego);
+                        double result[3], params[2];
+                        params[0] = min_uv[0]; params[1] = min_uv[1];
+                        EG_invEvaluateGuess(ego_list[min_nrm_ego], &_coords[ntri[i]*ndims], params, result);
+                        assert((_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
+                               (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
+                               (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]) < 1.e-10);
+                        _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
                     }
                     if (min_nrm > 0.01) {
                         printf("WARNING   facet %d %d %d  located on FACE %d with nrm = %1.2e\n",
@@ -1706,6 +1716,8 @@ public:
                 }
             }
         }
+
+        // TODO I could maybe loop on surface edges instead, and evaluate the midpoint
 
         for (int iVer=0; iVer<NNodes; ++iVer) {
             if (node_topology[iVer].size() > 0) {
@@ -1721,6 +1733,7 @@ public:
                     if (nrm2 < 1.e-10) {
                         printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
                         node_topology[iVer].insert(iEgo);
+                        _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
                     }
                 }
             }
@@ -2355,7 +2368,11 @@ private:
     std::vector<ego> ego_list;
     std::vector<std::set<int>> node_topology;
     std::map<int, int> corners; // node index -> ego_list index
-    std::vector< std::vector<index_t> > NNList_surface; // only store surface edges in this, only store n1->n2 if n1<n2
+    std::vector< std::vector<index_t> > NNList_surface; // store surface edges, only n1->n2 if n1<n2
+    // store u,v coordinates for surface nodes: 
+    // if 1 surface, u, v of that surface, if 2 surfaces=edge, u of that edge, 
+    // if > 1 edge, random and reccompute on the fly
+    std::vector< real_t> _uv;
 #endif
 
 };
