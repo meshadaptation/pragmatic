@@ -542,6 +542,11 @@ public:
         _mesh->NEList.resize(pNNodes);
         _mesh->node_owner.resize(pNNodes, -1);
         _mesh->lnn2gnn.resize(pNNodes, -1);
+#ifdef HAVE_EGADS
+        _mesh->node_topology.resize(pNNodes);
+        _mesh->_uv.resize(pNNodes*2);
+        _mesh->NNList_surface.resize(pNNodes);
+#endif
 
         // At this point we can establish a new, gappy global numbering system
         if(nprocs>1)
@@ -600,6 +605,11 @@ public:
         _mesh->NEList.resize(pNNodes);
         _mesh->node_owner.resize(pNNodes, -1);
         _mesh->lnn2gnn.resize(pNNodes, -1);
+#ifdef HAVE_EGADS
+        _mesh->node_topology.resize(pNNodes);
+        _mesh->_uv.resize(pNNodes*2);
+        _mesh->NNList_surface.resize(pNNodes);
+#endif
 
         // At this point we can establish a new, gappy global numbering system
         if(nprocs>1)

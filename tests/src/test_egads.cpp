@@ -62,6 +62,10 @@ int main(int argc, char **argv)
         adapt.refine(sqrt(2.0));
     printf("pass\n");
 
+    char filename_out[256];
+    sprintf(filename_out, "../data/test_egads_refine");
+    GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+
     MPI_Finalize();
     return 0;
 }

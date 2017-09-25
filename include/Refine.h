@@ -220,6 +220,8 @@ public:
                     _mesh->lnn2gnn.resize(reserve);
 #ifdef HAVE_EGADS
                     _mesh->node_topology.resize(reserve);
+                    _mesh->_uv.resize(reserve*2);
+                    _mesh->NNList_surface.resize(reserve);
 #endif
                 }
                 edgeSplitCnt = _mesh->NNodes - origNNodes;
@@ -233,12 +235,10 @@ public:
                 //_mesh->node_topology[threadIdx[tid]+i] = std::set<int>(newNode_topology[tid][i]) ;  // TODO this has to go when I don't have sets anymore
                 typename std::set<index_t>::const_iterator iEgo;
                 for(iEgo=newNode_topology[tid][i].begin(); iEgo!=newNode_topology[tid][i].end(); ++iEgo) {
-                    printf("DEBUG tid: %d  threadIdx[tid]: %d  i: %d  iEgo: %d, node_topology.size: %d\n", 
-                        tid, threadIdx[tid], i, *iEgo, _mesh->node_topology.size());
                     _mesh->node_topology[threadIdx[tid]+i].insert(*iEgo);
                 }
             }
-            memcpy(&_mesh->_coords[2*threadIdx[tid]], &new_uv[tid][0], 2*splitCnt[tid]*sizeof(real_t));
+            memcpy(&_mesh->_uv[2*threadIdx[tid]], &new_uv[tid][0], 2*splitCnt[tid]*sizeof(real_t));
 #endif
 
             // Fix IDs of new vertices
@@ -283,6 +283,22 @@ public:
                 def_ops->addNN(firstid, vid, tid);
                 def_ops->remNN(secondid, firstid, tid);
                 def_ops->addNN(secondid, vid, tid);
+
+#ifdef HAVE_EGADS
+                typename std::vector<index_t>::iterator position;
+                if (firstid < secondid) {
+                    position = std::find(_mesh->NNList_surface[firstid].begin(), _mesh->NNList_surface[firstid].end(), secondid);
+                    if (position != _mesh->NNList_surface[firstid].end()) {
+                        _mesh->NNList_surface[firstid].erase(position);
+                    }
+                }
+                else {
+                    position = std::find(_mesh->NNList_surface[secondid].begin(), _mesh->NNList_surface[secondid].end(), firstid);
+                    if (position != _mesh->NNList_surface[secondid].end()) {
+                        _mesh->NNList_surface[secondid].erase(position);
+                    }
+                }
+#endif
 
                 // This branch is always taken or always not taken for every vertex,
                 // so the branch predictor should have no problem handling it.
