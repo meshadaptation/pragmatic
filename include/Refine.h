@@ -321,7 +321,12 @@ public:
                         {n[1], n[2], n[3]}
                     };
 
-                    for(int j=0; j<4; ++j) {
+                    for(int j=0; j<4; ++j) {\
+                        int surface_tag = 0;
+                        if (_mesh->boundary[nloc*eid+nloc-j] > 0 ) {
+                            surface_tag = 1;
+                        }
+
                         // Find which elements share this facet j
                         const index_t *facet = facets[j];
                         std::set<index_t> intersection01, EE;
@@ -340,7 +345,7 @@ public:
                         if(eid == *EE.rbegin())
                             for(size_t k=0; k<3; ++k)
                                 if(new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[k], facet[(k+1)%3])] != -1) {
-                                    refine_facet(eid, facet, tid);
+                                    refine_facet(eid, facet, tid, surface_tag);
                                     break;
                                 }
                     }
@@ -700,7 +705,7 @@ private:
         }
     }
 
-    inline void refine_facet(index_t eid, const index_t *facet, int tid)
+    inline void refine_facet(index_t eid, const index_t *facet, int tid, int surface_tag)
     {
         const index_t *n=_mesh->get_element(eid);
 
@@ -724,6 +729,13 @@ private:
                 if(newVertex[j] >= 0) {
                     def_ops->addNN(newVertex[j], facet[j], tid);
                     def_ops->addNN(facet[j], newVertex[j], tid);
+#ifdef HAVE_EGADS
+                    if (surface_tag) {
+                        for (int k=0; k<3; ++k) {
+                            _mesh->NNList_surface[facet[k]].push_back(newVertex[j]);
+                        }
+                    }
+#endif
                     break;
                 }
             break;
@@ -733,14 +745,34 @@ private:
                 if(newVertex[j] < 0) {
                     def_ops->addNN(newVertex[(j+1)%3], newVertex[(j+2)%3], tid);
                     def_ops->addNN(newVertex[(j+2)%3], newVertex[(j+1)%3], tid);
+#ifdef HAVE_EGADS
+                    if (surface_tag) {
+                        if (newVertex[(j+1)%3] < newVertex[(j+2)%3])
+                            _mesh->NNList_surface[newVertex[(j+1)%3]].push_back(newVertex[(j+2)%3]);
+                        else
+                            _mesh->NNList_surface[newVertex[(j+2)%3]].push_back(newVertex[(j+1)%3]);
+                    }
+#endif
 
                     real_t ldiag1 = _mesh->calc_edge_length(newVertex[(j+1)%3], facet[(j+1)%3]);
                     real_t ldiag2 = _mesh->calc_edge_length(newVertex[(j+2)%3], facet[(j+2)%3]);
-                    const int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
+                    int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
 
                     def_ops->addNN(newVertex[offset], facet[offset], tid);
                     def_ops->addNN(facet[offset], newVertex[offset], tid);
-
+#ifdef HAVE_EGADS
+                    if (surface_tag) {
+                        for (int k=0; k<3; ++k) {
+                            _mesh->NNList_surface[facet[k]].push_back(newVertex[offset]);
+                        }
+                        if (offset == (j+1)%3)
+                            offset = (j+2)%3;
+                        else
+                            offset = (j+1)%3;
+                        _mesh->NNList_surface[facet[(offset+1)%3]].push_back(newVertex[offset]);
+                        _mesh->NNList_surface[facet[(offset+2)%3]].push_back(newVertex[offset]);
+                    }
+#endif
                     break;
                 }
             }
@@ -750,6 +782,16 @@ private:
             for(int j=0; j<3; j++) {
                 def_ops->addNN(newVertex[j], newVertex[(j+1)%3], tid);
                 def_ops->addNN(newVertex[(j+1)%3], newVertex[j], tid);
+#ifdef HAVE_EGADS
+                if (surface_tag) {
+                    if (newVertex[j] < newVertex[(j+1)%3])
+                        _mesh->NNList_surface[newVertex[j]].push_back(newVertex[(j+1)%3]);
+                    else 
+                        _mesh->NNList_surface[newVertex[(j+1)%3]].push_back(newVertex[j]);
+                    _mesh->NNList_surface[facet[(j+1)%3]].push_back(newVertex[j]);
+                    _mesh->NNList_surface[facet[(j+2)%3]].push_back(newVertex[j]);
+                }
+#endif
             }
             break;
         default:
