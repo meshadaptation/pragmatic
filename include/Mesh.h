@@ -1749,7 +1749,7 @@ public:
         for (int iVer=0; iVer<NNodes; ++iVer) {
             if (node_topology[iVer].size() > 0) {
                 for (int iNode=0; iNode<nbrEgNodes; ++iNode) {
-                    if (std::isinf(corner_coords[iNode*ndims]))
+                    if (std::isinf(corners_coords[iNode*ndims]))
                         continue;
                     double *crd1 = &_coords[iVer*ndims];
                     double *crd2 = &corners_coords[iNode*ndims];
