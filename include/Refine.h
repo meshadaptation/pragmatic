@@ -209,8 +209,6 @@ public:
             #pragma omp single
             {
                 size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
-                printf("DEBUG  node_topology.size before: %d  _coords.size: %d reserve: %d\n", 
-                        _mesh->node_topology.size(), _mesh->_coords.size(), reserve);
                 if(_mesh->_coords.size()<reserve*dim) {
                     _mesh->_coords.resize(reserve*dim);
                     _mesh->metric.resize(reserve*msize);
