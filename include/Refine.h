@@ -337,7 +337,7 @@ public:
 
                     for(int j=0; j<4; ++j) {\
                         int surface_tag = 0;
-                        if (_mesh->boundary[nloc*eid+nloc-j] > 0 ) {
+                        if (_mesh->boundary[nloc*eid+nloc-j-1] > 0 ) {
                             surface_tag = 1;
                         }
 
