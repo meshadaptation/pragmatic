@@ -201,12 +201,15 @@ int main(int argc, char **argv)
     for (int ite=0; ite<num_ite_adapt; ++ite) {
 
         h0 = (ite < h0_prog_ite_max) ? h0*h0_ratio : 0.001;
-        printf("DEBUG  ite: %d   h0: %1.4f\n", ite, h0);
+        printf("\n\nDEBUG  ite: %d   h0: %1.4f\n", ite, h0);
 
         MetricField<double,3> metric_field(*mesh);
         set_metric(mesh, metric_field, metric_choice, h0);
 
         pragmatic_adapt(0);
+//        char nam[256];
+//        sprintf(nam, "mesh_after_adapt.%d", ite);
+//        mesh->print_mesh(nam);
 
 		mesh->compute_print_quality();
 		mesh->compute_print_NNodes_global();

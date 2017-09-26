@@ -191,7 +191,7 @@ public:
         int stop = 0;
         
         while ( !stop ) {
-            printf("DEBUG  New pass of edge selection\n");
+//            printf("DEBUG  New pass of edge selection\n");
             stop = 1;
             int e1, e2; // end vertices of current edge
             e1 = 0;
