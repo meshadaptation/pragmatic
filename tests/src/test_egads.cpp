@@ -58,8 +58,13 @@ int main(int argc, char **argv)
 
     Refine<double,3> adapt(*mesh);
 
-    for(int i=0; i<1; i++)
+    for(int i=0; i<2; i++) {
+        printf("DEBUG  refine pass %d\n", i);
         adapt.refine(sqrt(2.0));
+        char filename_out[256];
+        sprintf(filename_out, "../data/test_egads_refine.%d", i);
+        GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+    }
     printf("pass\n");
 
     char filename_out[256];
