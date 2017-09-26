@@ -100,10 +100,10 @@ public:
     /*! Perform coarsening.
      * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
      */
-    void coarsen(real_t L_low, real_t L_max,
+    double coarsen(real_t L_low, real_t L_max,
                  bool enable_surface_coarsening=false,
                  bool enable_delete_slivers=false,
-                 bool enable_quality_constrained=false)
+                 bool enable_quality_constrained=true)
     {
 
         surface_coarsening = enable_surface_coarsening;
@@ -123,6 +123,8 @@ public:
 
             vLocks.resize(NNodes);
         }
+
+        int ncoarsen = 0;
 
         #pragma omp parallel
         {
@@ -159,6 +161,7 @@ public:
                         index_t target = coarsen_identify_kernel(node, L_low, L_max);
                         if(target>=0) {
                             coarsen_kernel(node, target);
+                            ncoarsen++;
                             ccount[citerations]++;
                         }
                     } else {
@@ -195,6 +198,7 @@ public:
                             index_t target = coarsen_identify_kernel(node, L_low, L_max);
                             if(target>=0) {
                                 coarsen_kernel(node, target);
+                                ncoarsen++;
                                 ccount[citerations]++;
                             }
                         } else {
@@ -218,6 +222,9 @@ public:
                 }
             }
         }
+
+        printf("DEBUG  number of coarsens: %d\n", ncoarsen);
+        return ncoarsen;
     }
 
 private:
@@ -443,8 +450,9 @@ private:
                                                    _mesh->get_metric(n[1]),
                                                    _mesh->get_metric(n[2]),
                                                    _mesh->get_metric(n[3]));
-                    if(new_q<q_linf)
-                        better=false;
+                    if(new_q<0.2)//0.2*q_linf)
+                        reject_collapse=true;
+                        //better=false;
                 }
             }
             if(reject_collapse)
