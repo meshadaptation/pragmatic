@@ -620,6 +620,15 @@ private:
                              inserter(edge_egos, edge_egos.begin()));
             if (edge_egos.size()==0) {
                 printf("ERROR  surface edge (%d %d) belongs to no egads object\n", n0, n1);
+                printf("       %d is on egos: ", n0);
+                typename std::set<index_t>::const_iterator e;
+                for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
+                printf("       %d is on egos: ", n1);
+                for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
                 exit(1);
             }
             int nbrEdg=0, nbrFac=0;
@@ -682,12 +691,11 @@ private:
 
         for(size_t i=0; i<dim; i++) {
             newCoords[tid].push_back(newCrd[i]);
+        }
 #ifdef HAVE_EGADS
         newNode_topology[tid].push_back(edge_egos);
         new_uv[tid].push_back(uv[0]); new_uv[tid].push_back(uv[1]);
 #endif
-
-        }
 
 
 

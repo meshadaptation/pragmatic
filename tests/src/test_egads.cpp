@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 
     size_t NNodes = mesh->get_number_nodes();
     for(size_t i=0; i<NNodes; i++) {
-        double h0 = 0.05;    
+        double h0 = 0.01;    
         double m[6] = {0};
 
         double x = mesh->get_coords(i)[0];
@@ -58,15 +58,17 @@ int main(int argc, char **argv)
 
     Refine<double,3> adapt(*mesh);
 
-    for(int i=0; i<2; i++) {
+    for(int i=0; i<5; i++) {
         printf("DEBUG  refine pass %d\n", i);
         adapt.refine(sqrt(2.0));
+//        mesh->defragment();
         char filename_out[256];
         sprintf(filename_out, "../data/test_egads_refine.%d", i);
         GMFTools<double>::export_gmf_mesh(filename_out, mesh);
     }
     printf("pass\n");
 
+    mesh->defragment();
     char filename_out[256];
     sprintf(filename_out, "../data/test_egads_refine");
     GMFTools<double>::export_gmf_mesh(filename_out, mesh);

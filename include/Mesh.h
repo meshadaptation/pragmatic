@@ -1764,8 +1764,6 @@ public:
                 }
             }
         }
-
-
 #else
         printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
 #endif
