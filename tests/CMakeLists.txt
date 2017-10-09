@@ -46,6 +46,9 @@ if (ENABLE_LIBMESHB)
   if (ENABLE_EGADS)
     ADD_EXECUTABLE(test_egads ${PRAGMATIC_TEST_SRC}/test_egads.cpp ${src_lite})
     TARGET_LINK_LIBRARIES(test_egads ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+    
+    ADD_EXECUTABLE(test_ugawg2 ${PRAGMATIC_TEST_SRC}/test_ugawg2.cpp ${src_lite})
+    TARGET_LINK_LIBRARIES(test_ugawg2 ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
   endif()
 
 endif()

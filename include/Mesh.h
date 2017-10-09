@@ -1703,10 +1703,12 @@ public:
                         node_topology[ntri[i]].insert(min_nrm_ego);
                         double result[3], params[2];
                         params[0] = min_uv[0]; params[1] = min_uv[1];
-                        EG_invEvaluateGuess(ego_list[min_nrm_ego], &_coords[ntri[i]*ndims], params, result);
-                        assert((_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
+                        EG_invEvaluate(ego_list[min_nrm_ego], &_coords[ntri[i]*ndims], params, result);
+                        double dst = (_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
                                (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
-                               (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]) < 1.e-10);
+                               (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]);
+                           if (dst > 1.e-10) printf("DEBUG  dst: %1.4e\n", dst);
+                        assert(dst < 1.e-10);
                         _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
                     }
                     if (min_nrm > 0.01) {

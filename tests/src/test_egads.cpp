@@ -44,8 +44,8 @@ int main(int argc, char **argv)
         double t = atan2(y,x);
         double h_r = h0 + 2*(0.1-h0)*fabs(r-0.5);
         double d = (0.6 - r) * 10;
-        double h_t = (d < 0) ? 0.1 : (d * (0.025) + (1 - d) * 0.1);
-        double h_z = 0.1;
+        double h_t = (d < 0) ? 0.01 : (d * (0.025) + (1 - d) * 0.1);
+        double h_z = 0.01;
         double lr = 1./(h_r*h_r); double lt = 1./(h_t*h_t); double lz = 1./(h_z*h_z);
         double ct = cos(t); double st = sin(t);
         m[0] = lr*ct*ct+lt*st*st;
