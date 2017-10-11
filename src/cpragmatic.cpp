@@ -257,6 +257,18 @@ extern "C" {
         mesh->set_boundary(*nfacets, facets, ids);
     }
 
+    void cout_quality(const Mesh<double> *mesh, std::string operation)
+    {
+        double qmean = mesh->get_qmean();
+        double qmin = mesh->get_qmin();
+
+        int rank=0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        if(rank==0)
+            std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
+    }
+
     /** Adapt the mesh.
     */
     void pragmatic_adapt(int coarsen_surface)
@@ -329,8 +341,21 @@ extern "C" {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 refine.refine(L_ref);
+                cout_quality(mesh, "Refine");
+//                printf("DEBUG  : nvertices: %d   size of corods: %d\n", mesh->NNodes, mesh->_coords.size());
+//                char nam[256];
+//                sprintf(nam, "mesh_refine");
+//                mesh->print_mesh(nam);
+
                 coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                cout_quality(mesh, "Coarsen");
+//                sprintf(nam, "mesh_coarsen");
+//                mesh->print_mesh(nam);
+
                 swapping.swap(0.95);
+                cout_quality(mesh, "Swapping");
+//                sprintf(nam, "mesh_swap");
+//                mesh->print_mesh(nam);
 
                 L_max = mesh->maximal_edge_length();
 
@@ -362,7 +387,9 @@ extern "C" {
             mesh->defragment();
 
             smooth.smart_laplacian(10);
-            smooth.optimisation_linf(10);
+            cout_quality(mesh, "Laplacian smoothing");
+//            smooth.optimisation_linf(10);
+//            cout_quality(mesh, "Linf smoothing");
         }
 
         mesh->remove_overlap_elements();

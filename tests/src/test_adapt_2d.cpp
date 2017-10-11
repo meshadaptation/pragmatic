@@ -132,8 +132,10 @@ int main(int argc, char **argv)
             mesh->verify();
         }
 
+        mesh->print_mesh("before_ref");
+
         tic = get_wtime();
-        refine.refine(L_ref);
+        refine.refine_new(L_ref);
         time_refine += get_wtime() - tic;
         if(verbose) {
             std::cout<<"INFO: Verify quality after refinement.\n";

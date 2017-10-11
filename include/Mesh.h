@@ -500,6 +500,14 @@ public:
             return nid;
     }
 
+    // multiplies metric tensors by alpha
+    void scale_metric(double alpha)
+    {
+        for (int i=0; i<metric.size(); ++i) {
+            metric[i] *= alpha;
+        }
+    }
+
     /// Get the mean edge length metric space.
     double get_lmean()
     {
@@ -807,6 +815,52 @@ public:
         }
     }
 
+    void print_quality_histo() const
+    {
+        int histo[8] = {0};
+        int NElements_real = 0;
+        for(size_t i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0]<0)
+                continue;
+
+            NElements_real++;
+            double q;
+            if(ndims==2) {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+            } else {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+            }
+            if (q<0.01)
+                histo[7]++;
+            else if (q<0.1)
+                histo[6]++;
+            else if (q<0.3)
+                histo[5]++;
+            else if (q<0.5)
+                histo[4]++;
+            else if (q<0.7)
+                histo[3]++;
+            else if (q<0.8)
+                histo[2]++;
+            else if (q<0.9)
+                histo[1]++;
+            else
+                histo[0]++;
+        }
+        printf("   Quality histogram:\n");
+        printf("     1. < Q < 0.9 : %d (%1.2f%%) elements\n", histo[0], (float)histo[0]/NElements_real);
+        printf("    0.9 < Q < 0.8 : %d (%1.2f%%) elements\n", histo[1], (float)histo[1]/NElements_real);
+        printf("    0.8 < Q < 0.7 : %d (%1.2f%%) elements\n", histo[2], (float)histo[2]/NElements_real);
+        printf("    0.7 < Q < 0.5 : %d (%1.2f%%) elements\n", histo[3], (float)histo[3]/NElements_real);
+        printf("    0.5 < Q < 0.3 : %d (%1.2f%%) elements\n", histo[4], (float)histo[4]/NElements_real);
+        printf("    0.3 < Q < 0.1 : %d (%1.2f%%) elements\n", histo[5], (float)histo[5]/NElements_real);
+        printf("    0.1 < Q < 0.01: %d (%1.2f%%) elements\n", histo[6], (float)histo[6]/NElements_real);
+        printf("   0.01 < Q       : %d (%1.2f%%) elements\n", histo[7], (float)histo[7]/NElements_real);
+    }
+
     /// Get the element minimum quality in metric space.
     double get_qmin() const
     {
@@ -943,6 +997,31 @@ public:
             length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
         }
         return length;
+    }
+    
+    real_t calc_edge_length_log(index_t nid0, index_t nid1) const
+    {
+        double l0, l1;
+        if (ndims==2) {
+            l0 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
+        else {
+            l0 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
+        
+        if (fabs(l0-l1)<1e-10) {
+            assert(l0>1e-10);
+            return l0;
+        }
+        else {
+            double r = l0/l1;
+            double length = l0 * (r-1)/(r*log(r));
+            assert(l0>1e-10);
+            return length;
+        }
+        
     }
 
     real_t maximal_edge_length() const
@@ -1286,14 +1365,22 @@ public:
             } else {
                 for(size_t i=0; i<NNodes; i++) {
                     if(local_NEList[i].size()!=NEList[i].size()) {
-                        result = "fail (NEList[i].size()!=local_NEList[i].size())\n";
+                        result = "fail (NEList["+std::to_string(i)+"].size()!=local_NEList["+std::to_string(i)+"].size())\n";
                         state = false;
                         break;
                     }
                     if(local_NEList[i].size()==0)
                         continue;
                     if(local_NEList[i]!=NEList[i]) {
-                        result = "fail (local_NEList[i]!=NEList[i])\n";
+                        result = "fail (local_NEList["+std::to_string(i)+"]!=NEList["+std::to_string(i)+"])\n";
+                        printf("\nDEBUG  local_NEList: ");
+                        for (std::set<index_t>::const_iterator it=local_NEList[i].begin(); it!=local_NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
+                        printf("DEBUG  NEList: ");
+                        for (std::set<index_t>::const_iterator it=NEList[i].begin(); it!=NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
                         state = false;
                         break;
                     }
@@ -1486,6 +1573,52 @@ public:
         NElements = iElm_new;
         
     }
+
+    /// debug function to print mesh related structures
+    void print_mesh(char * text)
+    {
+
+        char filename[128];
+        sprintf(filename, "mesh_%s_%d", text, rank);
+        FILE * logfile = fopen(filename, "w");
+
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            const double * coords = get_coords(iVer);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2]);
+            else 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], coords[2], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2], metric[msize*iVer+3], metric[msize*iVer+4], metric[msize*iVer+5]);
+        }
+        for (int iElm=0; iElm<get_number_elements(); ++iElm){
+            const int * elm = get_element(iElm);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], 
+                    quality[iElm], boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2]);
+            else
+                fprintf(logfile, "DBG(%d)  tet[%d]  %d %d %d %d  (gnn: %d %d %d %d)  quality: %1.2f  boundary: %d %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], elm[3], 
+                    lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], lnn2gnn[elm[3]], quality[iElm], 
+                    boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2], boundary[nloc*iElm+3]);
+        }
+
+        fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            fprintf(logfile, "DBG(%d)  vertex[%d (%d)] ", rank, iVer, lnn2gnn[iVer]);
+            fprintf(logfile, "  Neighboring nodes: ");
+            for (int i=0; i<NNList[iVer].size(); ++i) 
+                fprintf(logfile, "%d (%d) ", NNList[iVer][i], lnn2gnn[NNList[iVer][i]]);
+            fprintf(logfile, "  Neighboring elements: ");
+            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it)
+                fprintf(logfile, " %d ", *it); 
+            fprintf(logfile, "\n");
+        }
+        fclose(logfile);
+}
 
 
 

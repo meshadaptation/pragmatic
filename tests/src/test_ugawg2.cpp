@@ -160,11 +160,12 @@ int main(int argc, char **argv)
         L_max = mesh->maximal_edge_length();
         L_ref = std::max(alpha*L_max, L_up);
 
+
 //        if (cntSplit==0 && cntCoarsen == 0)
 //            break;
 
-        if(L_max>1.0 and (L_max-L_up)<0.01)
-            break;
+//        if(L_max>1.0 and (L_max-L_up)<0.01)
+//            break;
     }
 
     mesh->defragment();
@@ -175,7 +176,6 @@ int main(int argc, char **argv)
 #else
     pragmatic_adapt(0);
 #endif
-
 
 	char filename_out[256];
 	sprintf(filename_out, "../data/test_ugawg2");
