@@ -79,9 +79,9 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char filename_meshin[256];
-    sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-result/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
+    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10");
     char filename_metin[256];
-    sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-result/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
+    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10-metric");
     
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
     metric->update_mesh();
     
 #ifdef HAVE_EGADS
-    int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
+    int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
     if (!res) printf("pass\n");
 
     mesh->associate_CAD_with_Mesh();
@@ -98,6 +98,7 @@ int main(int argc, char **argv)
         printf("ERROR  test configured without EGADS\n");
 #endif
 
+#if 0
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
@@ -111,34 +112,49 @@ int main(int argc, char **argv)
     double alpha = sqrt(2.0)/2;
     double L_ref = std::max(alpha*L_max, L_up);
 
-    for(size_t i=0; i<4; i++) {
+    printf("DEBUG  === PHASE I: coarsen\n");
+    for(int i=0; i<4; i++) {
+        printf("DEBUG  ---- coarsen %d\n", i);
         coarsen.coarsen(L_low, L_ref, false, false, false);
+        printf("DEBUG  ---- swap %d\n", i);
         swapping.swap(0.1);
-        if (i==3)
+        if (i==3){
+            printf("DEBUG  ---- smooth %d\n", i);
             smooth.optimisation_linf(3);
+        }
     }
 
-//    mesh->scale_metric(1.3333333333); 
-    for(size_t i=0; i<5; i++)
+    printf("DEBUG  === PHASE II: refine\n");
+    //mesh->scale_metric(1.3333333333); 
+    for(int i=0; i<5; i++) {
+        printf("DEBUG  ---- refine %d\n", i);
         refine.refine(L_ref);
-//        refine.refine_new(L_ref);
-//    mesh->scale_metric(0.75);
+        //refine.refine_new(L_ref);
+    }
+    //mesh->scale_metric(0.75);
 
-    for(size_t i=0; i<50; i++) {
+    printf("DEBUG  === PHASE III: all\n");
+    for(int i=0; i<8; i++) {
 
-//        if (i<5)
-//            mesh->scale_metric(1.3333333333);
-//        refine.refine_new(L_ref);
-//        int cntSplit = refine.refine_new(L_ref);
-//        if (i<5)
-//            mesh->scale_metric(0.75);
-//        int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
+        //if (i<5)
+        //    mesh->scale_metric(1.3333333333);
+        //refine.refine_new(L_ref);
+        //int cntSplit = refine.refine_new(L_ref);
+        //if (i<5)
+        //    mesh->scale_metric(0.75);
+        //int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
+        printf("DEBUG  ---- refine %d\n", i);
         refine.refine(L_ref);
+        printf("DEBUG  ---- coarsen %d\n", i);
         coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
+        printf("DEBUG  ---- swap %d\n", i);
         swapping.swap(0.1);
+        printf("DEBUG  ---- smooth sl %d\n", i);
         smooth.smart_laplacian(1);
-        if (!(i%5))
+        if (!(i%5)) {
+            printf("DEBUG  ---- smooth ol %d\n", i);
             smooth.optimisation_linf(5, 0.15);
+        }
 
         alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
         L_max = mesh->maximal_edge_length();
@@ -153,8 +169,13 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
+    printf("DEBUG  === FINAL SMOOTHING\n");
     smooth.smart_laplacian(10);
     smooth.optimisation_linf(10, 0.2);
+#else
+    pragmatic_adapt(0);
+#endif
+
 
 	char filename_out[256];
 	sprintf(filename_out, "../data/test_ugawg2");
