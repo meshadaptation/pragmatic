@@ -452,8 +452,10 @@ private:
             for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufFlt);
 //                for (int j=0; j<6; ++j) buf[j] = (real_t)bufFlt[j];
-                  buf[0] = (real_t)bufFlt[0]; buf[1] = (real_t)bufFlt[1]; buf[2] = (real_t)bufFlt[3];
-                  buf[3] = (real_t)bufFlt[2]; buf[4] = (real_t)bufFlt[4]; buf[5] = (real_t)bufFlt[5];
+                // .solb files follow the convention on page 8 of the Metrix User Guide (https://hal.inria.fr/inria-00363007/)
+                // which is row-wise for lower triangle matrix.
+                buf[0] = (real_t)bufFlt[0]; buf[1] = (real_t)bufFlt[1]; buf[2] = (real_t)bufFlt[3];
+                buf[3] = (real_t)bufFlt[2]; buf[4] = (real_t)bufFlt[4]; buf[5] = (real_t)bufFlt[5];
                 metric->set_metric(buf, i);
             }
         }
@@ -461,8 +463,8 @@ private:
             for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(solIndex, GmfSolAtVertices, bufDbl);
 //                for (int j=0; j<6; ++j) buf[j] = (real_t)bufDbl[j];
-                  buf[0] = (real_t)bufDbl[0]; buf[1] = (real_t)bufDbl[1]; buf[2] = (real_t)bufDbl[3];
-                  buf[3] = (real_t)bufDbl[2]; buf[4] = (real_t)bufDbl[4]; buf[5] = (real_t)bufDbl[5];
+                buf[0] = (real_t)bufDbl[0]; buf[1] = (real_t)bufDbl[1]; buf[2] = (real_t)bufDbl[3];
+                buf[3] = (real_t)bufDbl[2]; buf[4] = (real_t)bufDbl[4]; buf[5] = (real_t)bufDbl[5];
                 metric->set_metric(buf, i);
             }
         }

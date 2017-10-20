@@ -562,6 +562,8 @@ public:
                 for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
                     index_t otherVertex = _mesh->NNList[i][it];
                     if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
+                        if (i==16518 && otherVertex==53072) 
+                            printf("DEBUG   ON A UN BIG PROBLEME\n");
                         if (state[cnt] > 0) {
                             ++splitCnt;
                             refine_edge(i, otherVertex);
@@ -924,12 +926,12 @@ private:
                              inserter(edge_egos, edge_egos.begin()));
             if (edge_egos.size()==0) {
                 printf("ERROR  surface edge (%d %d) belongs to no egads object\n", n0, n1);
-                printf("       %d is on egos: ", n0);
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, _mesh->_coords[3*n0], _mesh->_coords[3*n0+1], _mesh->_coords[3*n0+2]);
                 typename std::set<index_t>::const_iterator e;
                 for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
                     printf(" %d ", *e);
                 printf("\n");
-                printf("       %d is on egos: ", n1);
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, _mesh->_coords[3*n1], _mesh->_coords[3*n1+1], _mesh->_coords[3*n1+2]);
                 for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
                     printf(" %d ", *e);
                 printf("\n");

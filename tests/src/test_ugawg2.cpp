@@ -79,9 +79,9 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char filename_meshin[256];
-    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10");
+    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
     char filename_metin[256];
-    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10-metric");
+    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
     
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
         printf("ERROR  test configured without EGADS\n");
 #endif
 
-#if 0
+#if 1
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
     double L_up = sqrt(2.0);
     double L_low = L_up/2;
@@ -125,28 +125,32 @@ int main(int argc, char **argv)
     }
 
     printf("DEBUG  === PHASE II: refine\n");
-    //mesh->scale_metric(1.3333333333); 
+    mesh->scale_metric(1.3333333333); 
     for(int i=0; i<5; i++) {
         printf("DEBUG  ---- refine %d\n", i);
-        refine.refine(L_ref);
-        //refine.refine_new(L_ref);
+        refine.refine_new(L_ref);
     }
-    //mesh->scale_metric(0.75);
+    mesh->scale_metric(0.75);
 
     printf("DEBUG  === PHASE III: all\n");
-    for(int i=0; i<8; i++) {
+    for(int i=0; i<10; i++) {
 
-        //if (i<5)
-        //    mesh->scale_metric(1.3333333333);
-        //refine.refine_new(L_ref);
-        //int cntSplit = refine.refine_new(L_ref);
-        //if (i<5)
-        //    mesh->scale_metric(0.75);
-        //int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
         printf("DEBUG  ---- refine %d\n", i);
-        refine.refine(L_ref);
+        if (i<5)
+            mesh->scale_metric(1.3333333333);
+        refine.refine_new(L_ref);
+        if (i==3) {
+            mesh->print_mesh("refine3");
+            printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
+            mesh->defragment();
+            GMFTools<double>::export_gmf_mesh("error", mesh);
+            exit(25);
+        }
+        int cntSplit = refine.refine_new(L_ref);
+        if (i<5)
+            mesh->scale_metric(0.75);
         printf("DEBUG  ---- coarsen %d\n", i);
-        coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
+        int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
         printf("DEBUG  ---- swap %d\n", i);
         swapping.swap(0.1);
         printf("DEBUG  ---- smooth sl %d\n", i);
