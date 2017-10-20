@@ -562,8 +562,6 @@ public:
                 for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
                     index_t otherVertex = _mesh->NNList[i][it];
                     if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
-                        if (i==16518 && otherVertex==53072) 
-                            printf("DEBUG   ON A UN BIG PROBLEME\n");
                         if (state[cnt] > 0) {
                             ++splitCnt;
                             refine_edge(i, otherVertex);
@@ -877,6 +875,7 @@ private:
 
     inline void refine_edge(index_t n0, index_t n1)
     {
+
         if(_mesh->lnn2gnn[n0] > _mesh->lnn2gnn[n1]) {
             // Needs to be swapped because we want the lesser gnn first.
             index_t tmp_n0=n0;
@@ -884,6 +883,9 @@ private:
             n1=tmp_n0;
         }
         newVertices.push_back(DirectedEdge<index_t>(n0, n1));
+
+        int tag = 0;
+        if (n0==20369 && n1==46828) tag =1;
 
         // Calculate the position of the new point. From equation 16 in
         // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
@@ -906,7 +908,7 @@ private:
 #ifdef HAVE_EGADS
         int tag_surface = 0;
         if (n0<n1) {
-            for (int k=0; k<_mesh->NNList_surface[n0].size(); ++k) {
+            for (int k=0; k<_mesh->NNList_surface[n0].size(); ++k) {   // TODO Use std::find instead
                 if (_mesh->NNList_surface[n0][k] == n1)
                     tag_surface = 1;
             }
@@ -920,6 +922,7 @@ private:
         std::set<int> edge_egos;
         double uv[2] = {0.};
         if (tag_surface) {
+            if (tag) printf("DEBUG   I am well on the surface\n");
             double newCrdFixed[dim];
             set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
                              _mesh->node_topology[n1].begin(), _mesh->node_topology[n1].end(),
@@ -993,6 +996,9 @@ private:
             for (int i=0; i<dim; ++i)
                 newCrd[i] = newCrdFixed[i];
         }
+        else {
+            if (tag) printf("DEBUG   I am not on the surface and I am very unhappy\n");
+        }
 #endif
 
         for(size_t i=0; i<dim; i++) {
@@ -1052,6 +1058,7 @@ private:
                 }
             break;
         case 2:
+        printf("DEBUG   MAYDAY\n");
             // 1:3 refinement with trapezoid split
             for(int j=0; j<3; j++) {
                 if(newVertex[j] < 0) {
@@ -1090,6 +1097,7 @@ private:
             }
             break;
         case 3:
+            printf("DEBUG   MAYDAY\n");
             // 1:4 regular refinement
             for(int j=0; j<3; j++) {
                 addNN(newVertex[j], newVertex[(j+1)%3]);

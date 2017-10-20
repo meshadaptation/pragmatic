@@ -133,20 +133,36 @@ int main(int argc, char **argv)
     mesh->scale_metric(0.75);
 
     printf("DEBUG  === PHASE III: all\n");
+    
     for(int i=0; i<10; i++) {
 
         printf("DEBUG  ---- refine %d\n", i);
         if (i<5)
             mesh->scale_metric(1.3333333333);
+        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
         refine.refine_new(L_ref);
+        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
         if (i==3) {
-            mesh->print_mesh("refine3");
+//            mesh->print_mesh("refine3");
             printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-            mesh->defragment();
-            GMFTools<double>::export_gmf_mesh("error", mesh);
-            exit(25);
+            int n0 = 20369, n1 = 46828;
+            const double * coords = mesh->get_coords(n0);
+            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, coords[0], coords[1], coords[2]);
+            typename std::set<index_t>::const_iterator e;
+            for(e=mesh->node_topology[n0].begin(); e!=mesh->node_topology[n0].end(); ++e)
+                printf(" %d ", *e);
+            printf("\n");
+            coords = mesh->get_coords(n1);
+            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, coords[0], coords[1], coords[2]);
+            for(e=mesh->node_topology[n1].begin(); e!=mesh->node_topology[n1].end(); ++e)
+                printf(" %d ", *e);
+            printf("\n");
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error", mesh);
+//            exit(25);
         }
         int cntSplit = refine.refine_new(L_ref);
+        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
         if (i<5)
             mesh->scale_metric(0.75);
         printf("DEBUG  ---- coarsen %d\n", i);

@@ -1904,6 +1904,18 @@ public:
 #endif
     }
 
+#ifdef HAVE_EGADS  // TODO FOR DEBUG ONLY, MOVE BACK TO PRIVATE
+    int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
+    std::vector<ego> ego_list;
+    std::vector<std::set<int>> node_topology;
+    std::map<int, int> corners; // node index -> ego_list index
+    std::vector< std::vector<index_t> > NNList_surface; // store surface edges, only n1->n2 if n1<n2
+    // store u,v coordinates for surface nodes: 
+    // if 1 surface, u, v of that surface, if 2 surfaces=edge, u of that edge, 
+    // if > 1 edge, random and reccompute on the fly
+    std::vector< real_t> _uv;
+#endif
+
 
 private:
     template<typename _real_t, int _dim> friend class MetricField;
@@ -2496,17 +2508,7 @@ private:
     MPI_Datatype MPI_INDEX_T;
     MPI_Datatype MPI_REAL_T;
 
-#ifdef HAVE_EGADS
-    int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
-    std::vector<ego> ego_list;
-    std::vector<std::set<int>> node_topology;
-    std::map<int, int> corners; // node index -> ego_list index
-    std::vector< std::vector<index_t> > NNList_surface; // store surface edges, only n1->n2 if n1<n2
-    // store u,v coordinates for surface nodes: 
-    // if 1 surface, u, v of that surface, if 2 surfaces=edge, u of that edge, 
-    // if > 1 edge, random and reccompute on the fly
-    std::vector< real_t> _uv;
-#endif
+
 
 };
 
