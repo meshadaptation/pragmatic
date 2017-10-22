@@ -647,17 +647,24 @@ public:
 
 #ifdef HAVE_EGADS
             typename std::vector<index_t>::iterator position;
+            int tag = 0;
             if (firstid < secondid) {
                 position = std::find(_mesh->NNList_surface[firstid].begin(), _mesh->NNList_surface[firstid].end(), secondid);
                 if (position != _mesh->NNList_surface[firstid].end()) {
                     _mesh->NNList_surface[firstid].erase(position);
+                    tag = 1;
                 }
             }
             else {
                 position = std::find(_mesh->NNList_surface[secondid].begin(), _mesh->NNList_surface[secondid].end(), firstid);
                 if (position != _mesh->NNList_surface[secondid].end()) {
                     _mesh->NNList_surface[secondid].erase(position);
+                    tag = 1;
                 }
+            }
+            if (tag) {
+                _mesh->NNList_surface[firstid].push_back(vid);
+                _mesh->NNList_surface[secondid].push_back(vid);
             }
 #endif
 
@@ -885,7 +892,7 @@ private:
         newVertices.push_back(DirectedEdge<index_t>(n0, n1));
 
         int tag = 0;
-        if (n0==20369 && n1==46828) tag =1;
+        if (n0==20369 && n1==46967) tag =1;
 
         // Calculate the position of the new point. From equation 16 in
         // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
@@ -998,6 +1005,7 @@ private:
         }
         else {
             if (tag) printf("DEBUG   I am not on the surface and I am very unhappy\n");
+            if (tag) printf("DEBUG   juste pour verifier, le nouveau vertex est: %1.3f %1.3f %1.3f\n", newCrd[0], newCrd[1], newCrd[2]);
         }
 #endif
 

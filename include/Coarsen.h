@@ -235,6 +235,12 @@ private:
      */
     inline int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const
     {
+        int tag = 0;
+        if (rm_vertex == 21323) {
+            printf("DEBUG   trying to collapse vertex %d (%1.3f %1.3f %1.3f), with surface_coarsening: %d\n", 
+                    rm_vertex, _mesh->_coords[3*rm_vertex], _mesh->_coords[3*rm_vertex+1], _mesh->_coords[3*rm_vertex+2], surface_coarsening);
+            tag = 1;
+        }
         // Cannot delete if already deleted.
         if(_mesh->NNList[rm_vertex].empty())
             return -1;
@@ -496,6 +502,9 @@ private:
         if(reject_collapse)
             return -2;
 
+        if (tag) printf("DEBUG  collapse accepted onto vertex: %d (%1.3f %1.3f %1.3f)\n", target_vertex, _mesh->_coords[3*target_vertex],
+                        _mesh->_coords[3*target_vertex+1], _mesh->_coords[3*target_vertex+2]);
+
         return target_vertex;
     }
 
@@ -504,6 +513,8 @@ private:
      */
     inline void coarsen_kernel(index_t rm_vertex, index_t target_vertex)
     {
+
+        if (rm_vertex == 21323) printf("DEBUG   MAYDAY IT IS HAPPENING HERE\n");
         std::set<index_t> deleted_elements;
         std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                               _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
@@ -587,6 +598,7 @@ private:
         }
 
         // Update surrounding NNList.
+        // TODO HERE, we do not erase NNList[rm_vertex] and NEList[rm_vertex]: should we ?
         for(const auto& nid : _mesh->NNList[rm_vertex]) {
             auto it = std::find(_mesh->NNList[nid].begin(), _mesh->NNList[nid].end(), rm_vertex);
             _mesh->NNList[nid].erase(it);
@@ -598,6 +610,31 @@ private:
             if(std::find(_mesh->NNList[target_vertex].begin(), _mesh->NNList[target_vertex].end(), nid)==_mesh->NNList[target_vertex].end())
                 _mesh->NNList[target_vertex].push_back(nid);
         }
+
+        if (_mesh->node_topology[rm_vertex].size()>0 && _mesh->node_topology[target_vertex].size()>0) {
+            for(const auto& nid : _mesh->NNList_surface[rm_vertex]) {
+                if (nid < rm_vertex) {
+                    auto it = std::find(_mesh->NNList_surface[nid].begin(), _mesh->NNList_surface[nid].end(), rm_vertex);
+                    assert(it != _mesh->NNList_surface[nid].end());
+                    _mesh->NNList_surface[nid].erase(it);
+                }
+            }
+            for(const auto &nid : new_edges) {
+                if (_mesh->node_topology[nid].size()>0){
+                    if (nid < target_vertex) {
+                        auto it = std::find(_mesh->NNList_surface[nid].begin(), _mesh->NNList_surface[nid].end(), target_vertex);
+                        if (it == _mesh->NNList_surface[nid].end())
+                            _mesh->NNList_surface[nid].push_back(target_vertex);
+                    }
+                    else {
+                        auto it = std::find(_mesh->NNList_surface[target_vertex].begin(), _mesh->NNList_surface[target_vertex].end(), nid);
+                        if (it == _mesh->NNList_surface[target_vertex].end())
+                            _mesh->NNList_surface[target_vertex].push_back(nid);
+                    }        
+                }            
+            }
+        }
+
         _mesh->erase_vertex(rm_vertex);
     }
 

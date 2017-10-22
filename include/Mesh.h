@@ -174,6 +174,8 @@ public:
         NEList[nid].clear();
         node_owner[nid] = rank;
         lnn2gnn[nid] = -1;
+        NNList_surface[nid].clear();
+        node_topology[nid].clear();
     }
 
     /// Add a new element

@@ -79,9 +79,9 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char filename_meshin[256];
-    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
+    sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
     char filename_metin[256];
-    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
+    sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
     
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
     metric->update_mesh();
     
 #ifdef HAVE_EGADS
-    int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
+    int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
     if (!res) printf("pass\n");
 
     mesh->associate_CAD_with_Mesh();
@@ -142,10 +142,10 @@ int main(int argc, char **argv)
         printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
         refine.refine_new(L_ref);
         printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-        if (i==3) {
-//            mesh->print_mesh("refine3");
+/*        if (i==3) {
+            mesh->print_mesh("refine3");
             printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-            int n0 = 20369, n1 = 46828;
+            int n0 = 20369, n1 = 46967;
             const double * coords = mesh->get_coords(n0);
             printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, coords[0], coords[1], coords[2]);
             typename std::set<index_t>::const_iterator e;
@@ -157,20 +157,51 @@ int main(int argc, char **argv)
             for(e=mesh->node_topology[n1].begin(); e!=mesh->node_topology[n1].end(); ++e)
                 printf(" %d ", *e);
             printf("\n");
+
+            coords = mesh->get_coords(17204);
+            printf("DEBUG  coords 17204: %1.5f %1.5f %1.5f\n", coords[0], coords[1], coords[2]);
+            coords = mesh->get_coords(46967);
+            printf("DEBUG  coords 46967: %1.5f %1.5f %1.5f\n", coords[0], coords[1], coords[2]);
+
 //            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error", mesh);
+//            GMFTools<double>::export_gmf_mesh("error_i2", mesh);
 //            exit(25);
-        }
+        } */
+//        if (i==2) {
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error.2.1", mesh);
+//            exit(25);            
+//        }
         int cntSplit = refine.refine_new(L_ref);
         printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
+//        if (i==2) {
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error.2.2", mesh);
+//            exit(25);            
+//        }
         if (i<5)
             mesh->scale_metric(0.75);
         printf("DEBUG  ---- coarsen %d\n", i);
         int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
+//        if (i==2) {
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error.2.3", mesh);
+//            exit(25);            
+//        }
         printf("DEBUG  ---- swap %d\n", i);
         swapping.swap(0.1);
+//        if (i==2) {
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error.2.4", mesh);
+//            exit(25);            
+//        }
         printf("DEBUG  ---- smooth sl %d\n", i);
         smooth.smart_laplacian(1);
+//        if (i==2) {
+//            mesh->defragment();
+//            GMFTools<double>::export_gmf_mesh("error.2.5", mesh);
+//            exit(25);            
+//        }
         if (!(i%5)) {
             printf("DEBUG  ---- smooth ol %d\n", i);
             smooth.optimisation_linf(5, 0.15);
