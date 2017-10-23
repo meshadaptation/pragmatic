@@ -79,9 +79,15 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char filename_meshin[256];
-    sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
+    //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
+    //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10");
+    sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03");
+    //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10");
     char filename_metin[256];
-    sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
+    //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
+    //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10-metric");
+    sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03-metric");
+    //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10-metric");
     
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
@@ -89,7 +95,8 @@ int main(int argc, char **argv)
     metric->update_mesh();
     
 #ifdef HAVE_EGADS
-    int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
+    //int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
+    int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/onera-m6/geometry/onera-m6-sharp-te.egads");
     if (!res) printf("pass\n");
 
     mesh->associate_CAD_with_Mesh();
@@ -134,7 +141,7 @@ int main(int argc, char **argv)
 
     printf("DEBUG  === PHASE III: all\n");
     
-    for(int i=0; i<4; i++) {
+    for(int i=0; i<20; i++) {
 
         printf("DEBUG  ---- refine %d\n", i);
         if (i<5)
@@ -175,7 +182,7 @@ int main(int argc, char **argv)
 #endif
 
 	char filename_out[256];
-	sprintf(filename_out, "../data/test_ugawg2");
+	sprintf(filename_out, "../data/test_ugawg2_03");
 	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
     MetricField<double, 3> metric_final(*mesh);
     const double *met = mesh->get_metric(0);
