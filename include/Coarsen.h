@@ -249,6 +249,10 @@ private:
         if(_mesh->is_halo_node(rm_vertex))
             return -1;
 
+        // If surface vertex: do not delete a corner
+        if (_mesh->corners.count(rm_vertex))
+            return -1;
+
         //
         bool delete_with_extreme_prejudice = false;
         if(delete_slivers && dim==3) {
@@ -281,7 +285,18 @@ private:
             short_edges.erase(short_edges.begin());
 
             // Assume the best.
-            reject_collapse=false;
+            reject_collapse = false;
+
+            // if topology information: make sure I'm not losing topo information
+            if (_mesh->node_topology[rm_vertex].size()>0) {
+                for (auto egoit = _mesh->node_topology[rm_vertex].begin(); egoit != _mesh->node_topology[rm_vertex].end(); ++egoit) {
+                    auto it = std::find(_mesh->node_topology[target_vertex].begin(), _mesh->node_topology[target_vertex].end(), *egoit);
+                                        //_mesh->node_topology[rm_vertex][iEgo]);
+                    if (it == _mesh->node_topology[target_vertex].end()) {
+                        reject_collapse = true;
+                    }
+                }
+            }
 
             if(surface_coarsening) {
                 std::set<index_t> compromised_boundary;
