@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
     printf("DEBUG  === PHASE III: all\n");
     
-    for(int i=0; i<20; i++) {
+    for(int i=0; i<4; i++) {
 
         printf("DEBUG  ---- refine %d\n", i);
         if (i<5)
@@ -177,6 +177,10 @@ int main(int argc, char **argv)
 	char filename_out[256];
 	sprintf(filename_out, "../data/test_ugawg2");
 	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+    MetricField<double, 3> metric_final(*mesh);
+    const double *met = mesh->get_metric(0);
+    metric_final.set_metric(met);
+    GMFTools<double>::export_gmf_metric3d(filename_out, &metric_final, mesh);
 
 #ifdef HAVE_VTK
     VTKTools<double>::export_vtu("../data/test_ugawg_cube2", mesh);

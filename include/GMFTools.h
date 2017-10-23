@@ -581,13 +581,17 @@ private:
     {
         index_t         NNodes;
         int             solTypes = 3;
-        const real_t    *met;
+        const real_t   *met;
+        real_t          met_reordered[6];
 
         NNodes = mesh->get_number_nodes();
         GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, 1, &solTypes);
         for (index_t i=0; i<NNodes; i++) {
             met = metric->get_metric(i);
-            GmfSetLin(solIndex, GmfSolAtVertices, met);
+            met_reordered[0] = met[0]; met_reordered[1] = met[1]; met_reordered[2] = met[3];
+                                       met_reordered[3] = met[2]; met_reordered[4] = met[4];
+                                                                  met_reordered[5] = met[5];
+            GmfSetLin(solIndex, GmfSolAtVertices, met_reordered);
         }
         GmfCloseMesh(solIndex);
     }
