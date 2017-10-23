@@ -1014,6 +1014,9 @@ public:
         }
         
         if (fabs(l0-l1)<1e-10) {
+            if (l0<1e-10) printf("DEBUG PROBLEM WHEN COMPUTING LENGTH OF EDGE: %d (%1.2f %1.2f %1.2f) - %d (%1.2f %1.2f %1.2f)\n",
+                                nid0, _coords[3*nid0], _coords[3*nid0+1], _coords[3*nid0+2], 
+                                nid1, _coords[3*nid1], _coords[3*nid1+1], _coords[3*nid1+2]);  // TODO NE PAS LAISSER LA!
             assert(l0>1e-10);
             return l0;
         }
@@ -1759,6 +1762,7 @@ public:
             printf(" EG_getBodyTopos Edge = %d\n", status);
             return 1;
         }
+        
         status = EG_getBodyTopos(bodies[0], NULL, NODE, &nbrEgNodes, &nodes);
         if (status != EGADS_SUCCESS) {
             printf(" EG_getBodyTopos Node = %d\n", status);
@@ -1768,8 +1772,20 @@ public:
 
         for (int i=0; i<nbrEgFaces; ++i)
             ego_list.push_back(faces[i]);
-        for (int i=0; i<nbrEgEdges; ++i)
-            ego_list.push_back(edges[i]);
+         // I need to remove degenerate edges (when edge == 1 node)
+        int nbrEgEdges_new = nbrEgEdges;
+        for (int i=0; i<nbrEgEdges; ++i) {
+            ego topRef, prev, next;
+            EG_getInfo(edges[i], &oclass, &mtype, &topRef, &prev, &next);
+            if (mtype == DEGENERATE) {
+                nbrEgEdges_new--;
+            }
+            else {
+                ego_list.push_back(edges[i]);
+            }
+        }
+        printf("DEBUG  there were %d DEGENERATE edges, new nbr or edges: %d\n", (int)(nbrEgEdges-nbrEgEdges_new), nbrEgEdges_new);
+        nbrEgEdges = nbrEgEdges_new;
         for (int i=0; i<nbrEgNodes; ++i)
             ego_list.push_back(nodes[i]);
 
