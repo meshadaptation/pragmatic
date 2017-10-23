@@ -965,10 +965,28 @@ private:
             } 
             else if (nbrEdg > 0 && nbrFac != 2) {
                 printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on 1 EGADS edge but %d faces\n", n0, n1, nbrFac);
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, _mesh->_coords[3*n0], _mesh->_coords[3*n0+1], _mesh->_coords[3*n0+2]);
+                typename std::set<index_t>::const_iterator e;
+                for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, _mesh->_coords[3*n1], _mesh->_coords[3*n1+1], _mesh->_coords[3*n1+2]);
+                for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
                 exit(1);
             }
             else if (nbrEdg == 0 && nbrFac > 1) {
                 printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on 0 EGADS edge but %d faces\n", n0, n1, nbrFac);
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, _mesh->_coords[3*n0], _mesh->_coords[3*n0+1], _mesh->_coords[3*n0+2]);
+                typename std::set<index_t>::const_iterator e;
+                for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, _mesh->_coords[3*n1], _mesh->_coords[3*n1+1], _mesh->_coords[3*n1+2]);
+                for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
                 exit(1);
             }
             else if (nbrEdg > 0) {
