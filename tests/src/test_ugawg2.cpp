@@ -134,74 +134,21 @@ int main(int argc, char **argv)
 
     printf("DEBUG  === PHASE III: all\n");
     
-    for(int i=0; i<10; i++) {
+    for(int i=0; i<20; i++) {
 
         printf("DEBUG  ---- refine %d\n", i);
         if (i<5)
             mesh->scale_metric(1.3333333333);
-        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
         refine.refine_new(L_ref);
-        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-/*        if (i==3) {
-            mesh->print_mesh("refine3");
-            printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-            int n0 = 20369, n1 = 46967;
-            const double * coords = mesh->get_coords(n0);
-            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, coords[0], coords[1], coords[2]);
-            typename std::set<index_t>::const_iterator e;
-            for(e=mesh->node_topology[n0].begin(); e!=mesh->node_topology[n0].end(); ++e)
-                printf(" %d ", *e);
-            printf("\n");
-            coords = mesh->get_coords(n1);
-            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, coords[0], coords[1], coords[2]);
-            for(e=mesh->node_topology[n1].begin(); e!=mesh->node_topology[n1].end(); ++e)
-                printf(" %d ", *e);
-            printf("\n");
-
-            coords = mesh->get_coords(17204);
-            printf("DEBUG  coords 17204: %1.5f %1.5f %1.5f\n", coords[0], coords[1], coords[2]);
-            coords = mesh->get_coords(46967);
-            printf("DEBUG  coords 46967: %1.5f %1.5f %1.5f\n", coords[0], coords[1], coords[2]);
-
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error_i2", mesh);
-//            exit(25);
-        } */
-//        if (i==2) {
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error.2.1", mesh);
-//            exit(25);            
-//        }
         int cntSplit = refine.refine_new(L_ref);
-        printf("DEBUG  NNodes: %d\n", mesh->get_number_nodes());
-//        if (i==2) {
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error.2.2", mesh);
-//            exit(25);            
-//        }
         if (i<5)
             mesh->scale_metric(0.75);
         printf("DEBUG  ---- coarsen %d\n", i);
         int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
-//        if (i==2) {
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error.2.3", mesh);
-//            exit(25);            
-//        }
         printf("DEBUG  ---- swap %d\n", i);
         swapping.swap(0.1);
-//        if (i==2) {
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error.2.4", mesh);
-//            exit(25);            
-//        }
         printf("DEBUG  ---- smooth sl %d\n", i);
         smooth.smart_laplacian(1);
-//        if (i==2) {
-//            mesh->defragment();
-//            GMFTools<double>::export_gmf_mesh("error.2.5", mesh);
-//            exit(25);            
-//        }
         if (!(i%5)) {
             printf("DEBUG  ---- smooth ol %d\n", i);
             smooth.optimisation_linf(5, 0.15);
@@ -211,9 +158,8 @@ int main(int argc, char **argv)
         L_max = mesh->maximal_edge_length();
         L_ref = std::max(alpha*L_max, L_up);
 
-
-//        if (cntSplit==0 && cntCoarsen == 0)
-//            break;
+        if (cntSplit==0 && cntCoarsen == 0)
+            break;
 
 //        if(L_max>1.0 and (L_max-L_up)<0.01)
 //            break;

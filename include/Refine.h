@@ -197,7 +197,6 @@ public:
         int stop = 0;
         
         while ( !stop ) {
-//            printf("DEBUG  New pass of edge selection\n");
             stop = 1;
             int e1, e2; // end vertices of current edge
             e1 = 0;
@@ -891,9 +890,6 @@ private:
         }
         newVertices.push_back(DirectedEdge<index_t>(n0, n1));
 
-        int tag = 0;
-        if (n0==20369 && n1==46967) tag =1;
-
         // Calculate the position of the new point. From equation 16 in
         // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
         real_t x, m;
@@ -911,7 +907,7 @@ private:
         for(size_t i=0; i<dim; i++) {
             newCrd[i] = x0[i]+weight*(x1[i] - x0[i]);
         }
-
+ 
 #ifdef HAVE_EGADS
         int tag_surface = 0;
         if (n0<n1) {
@@ -929,7 +925,6 @@ private:
         std::set<int> edge_egos;
         double uv[2] = {0.};
         if (tag_surface) {
-            if (tag) printf("DEBUG   I am well on the surface\n");
             double newCrdFixed[dim];
             set_intersection(_mesh->node_topology[n0].begin(), _mesh->node_topology[n0].end(),
                              _mesh->node_topology[n1].begin(), _mesh->node_topology[n1].end(),
@@ -957,6 +952,15 @@ private:
             }
             if (nbrEdg > 1) {
                 printf("ERROR  MAYDAY we have a problem: mesh edge %d %d on %d different EGADS edge\n", n0, n1, nbrEdg);
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, _mesh->_coords[3*n0], _mesh->_coords[3*n0+1], _mesh->_coords[3*n0+2]);
+                typename std::set<index_t>::const_iterator e;
+                for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
+                printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, _mesh->_coords[3*n1], _mesh->_coords[3*n1+1], _mesh->_coords[3*n1+2]);
+                for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
+                    printf(" %d ", *e);
+                printf("\n");
                 exit(1);
             } 
             else if (nbrEdg > 0 && nbrFac != 2) {
@@ -968,7 +972,7 @@ private:
                 exit(1);
             }
             else if (nbrEdg > 0) {
-                double uv0[2], uv1[0];
+                double uv0[2], uv1[2];
                 int iEgoEdge = *edge_egos.rbegin();
                 // if n0 or n1 is a corner ?
                 uv[0] = _mesh->_uv[2*n0];
@@ -984,7 +988,7 @@ private:
                 EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], newCrd, uv, newCrdFixed);
             }
             else if (nbrFac > 0) {
-                double uv0[2], uv1[0];
+                double uv0[2], uv1[2];
                 int iEgoEdge = *edge_egos.begin();
                 // if n0 or n1 is a corner or on an edge ?
                 uv[0] = _mesh->_uv[2*n0]; uv[1] = _mesh->_uv[2*n0+1];
@@ -994,18 +998,17 @@ private:
                 uv0[0] = uv[0]; uv0[1] = uv[1];
                 if (_mesh->node_topology[n1].size() > 1)  {
                     EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], &_mesh->_coords[dim*n1], uv, newCrdFixed);
+                    uv1[0] = uv[0]; uv1[1] = uv[1];
                 }
-                uv1[0] = uv[0]; uv1[1] = uv[1];
+                else {
+                    uv1[0] = _mesh->_uv[2*n1]; uv1[1] = _mesh->_uv[2*n1+1];
+                }
                 uv[0] = 0.5*(uv0[0] + uv1[0]); 
                 uv[1] = 0.5*(uv0[1] + uv1[1]);
                 EG_invEvaluateGuess(_mesh->ego_list[iEgoEdge], newCrd, uv, newCrdFixed);
             }
             for (int i=0; i<dim; ++i)
                 newCrd[i] = newCrdFixed[i];
-        }
-        else {
-            if (tag) printf("DEBUG   I am not on the surface and I am very unhappy\n");
-            if (tag) printf("DEBUG   juste pour verifier, le nouveau vertex est: %1.3f %1.3f %1.3f\n", newCrd[0], newCrd[1], newCrd[2]);
         }
 #endif
 
@@ -1066,7 +1069,6 @@ private:
                 }
             break;
         case 2:
-        printf("DEBUG   MAYDAY\n");
             // 1:3 refinement with trapezoid split
             for(int j=0; j<3; j++) {
                 if(newVertex[j] < 0) {
@@ -1074,7 +1076,7 @@ private:
                     addNN(newVertex[(j+2)%3], newVertex[(j+1)%3]);
 #ifdef HAVE_EGADS
                     if (surface_tag) {
-                        if (newVertex[(j+1)%3] < newVertex[(j+2)%3])
+                        if (newVertex[(j+1)%3] < newVertex[(j+2)%3]) 
                             _mesh->NNList_surface[newVertex[(j+1)%3]].push_back(newVertex[(j+2)%3]);
                         else
                             _mesh->NNList_surface[newVertex[(j+2)%3]].push_back(newVertex[(j+1)%3]);
@@ -1105,7 +1107,6 @@ private:
             }
             break;
         case 3:
-            printf("DEBUG   MAYDAY\n");
             // 1:4 regular refinement
             for(int j=0; j<3; j++) {
                 addNN(newVertex[j], newVertex[(j+1)%3]);

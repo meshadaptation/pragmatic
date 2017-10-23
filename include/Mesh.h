@@ -1014,9 +1014,6 @@ public:
         }
         
         if (fabs(l0-l1)<1e-10) {
-            if (l0<1e-10) printf("DEBUG PROBLEM WHEN COMPUTING LENGTH OF EDGE: %d (%1.2f %1.2f %1.2f) - %d (%1.2f %1.2f %1.2f)\n",
-                                nid0, _coords[3*nid0], _coords[3*nid0+1], _coords[3*nid0+2], 
-                                nid1, _coords[3*nid1], _coords[3*nid1+1], _coords[3*nid1+2]);  // TODO NE PAS LAISSER LA!
             assert(l0>1e-10);
             return l0;
         }
@@ -1858,7 +1855,7 @@ public:
                         double dst = (_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
                                (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
                                (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]);
-                           if (dst > 1.e-10) printf("DEBUG  dst: %1.4e\n", dst);
+//                           if (dst > 1.e-10) printf("DEBUG  dst: %1.4e\n", dst);
                         assert(dst < 1.e-10);
                         _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
                     }
