@@ -81,14 +81,16 @@ int main(int argc, char **argv)
     char filename_meshin[256];
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10");
-    sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03");
+    //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03");
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10");
+    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06-rev-faceid");
     char filename_metin[256];
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10-metric");
-    sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03-metric");
+    //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03-metric");
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10-metric");
-    
+    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06.metnode");
+
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
     MetricField<double,3> *metric = GMFTools<double>::import_gmf_metric3d(filename_metin, *mesh);
@@ -96,7 +98,8 @@ int main(int argc, char **argv)
     
 #ifdef HAVE_EGADS
     //int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
-    int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/onera-m6/geometry/onera-m6-sharp-te.egads");
+    //int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/onera-m6/geometry/onera-m6-sharp-te.egads");
+    int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_with_sharp_TE_boxff_cf.egads");
     if (!res) printf("pass\n");
 
     mesh->associate_CAD_with_Mesh();
@@ -182,7 +185,7 @@ int main(int argc, char **argv)
 #endif
 
 	char filename_out[256];
-	sprintf(filename_out, "../data/test_ugawg2_03");
+	sprintf(filename_out, "../data/test_ugawg2_boeing");
 	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
     MetricField<double, 3> metric_final(*mesh);
     const double *met = mesh->get_metric(0);

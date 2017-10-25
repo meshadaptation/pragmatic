@@ -1786,6 +1786,50 @@ public:
         for (int i=0; i<nbrEgNodes; ++i)
             ego_list.push_back(nodes[i]);
 
+
+        for (int iFac = 0; iFac < nbrEgFaces; ++iFac) {
+            int nchild;
+            ego * fchldrn;
+            int * psens;
+            status = EG_getTopology(faces[iFac], &geom, &oclass, &mtype, NULL, &nchild, &fchldrn, &psens);
+            printf("DEBUG  Face %d has %d children\n", iFac, nchild);
+            for (int iChild=0; iChild < nchild; ++iChild) {
+                int nchild2;
+                ego * lchldrn;
+                int * psens2;
+                status = EG_getTopology(fchldrn[iChild], &geom, &oclass, &mtype, NULL, &nchild2, &lchldrn, &psens2);
+//                printf("DEBUG    Child %d is of type %d has %d children\n", iChild, oclass, nchild2);
+                if (oclass != 22 ) {
+                    printf("ERROR  MAYDAY A SURFACE HAS CHILDREN THAT ARE NOT LOOPS\n");
+                    exit(1);
+                }
+                for (int iChild2=0; iChild2<nchild2; ++iChild2) {
+                    int nchild3;
+                    ego * echldrn;
+                    int * psens3;
+                    status = EG_getTopology(lchldrn[iChild2], &geom, &oclass, &mtype, NULL, &nchild3, &echldrn, &psens3);
+//                    printf("DEBUG      Child %d is of type %d\n", iChild, oclass);
+                    ego edge = lchldrn[iChild2];
+                    int found = 0;
+                    for (i=0; i<nbrEgEdges; ++i) {
+                        if (edges[i] == edge) {
+//                            printf("DEBUG      this edge is ego #%d\n", nbrEgFaces+i);
+                            face_to_edges[iFac].insert(nbrEgFaces+i);
+                            found = 1;
+                        }
+                    }
+                    if (!found) {
+                       printf("ERROR  MAYDAY AN EDGE COULD NOT BE IDENTIFIED\n");
+                        exit(1); 
+                    }
+                    if (oclass != 21 ) {
+                       printf("ERROR  MAYDAY A LOOP HAS CHILDREN THAT ARE NOT EDGES\n");
+                        exit(1);
+                    }
+                }
+            }
+        }
+
         return 0;
 #else
         printf("WARNING  Pragmatic was compiled without EGADS: CAD support not activated\n");
@@ -1803,10 +1847,69 @@ public:
         _uv.resize(2*NNodes);
         NNList_surface.resize(NNodes);
 
+#if 0
+        std::vector<int> bdryFacesMinEgo(nloc*NElements, -1);
+        std::vector<double> bdryFacesMinNorm(nloc*NElements, DBL_MAX);
+        std::vector<double> bdryFacesMinuv(nloc*NElements*2, DBL_MAX);
+
+        for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
+            double prev_coords_bary[3];
+            double prev_uv[2];
+            for (int iElm=0; iElm<NElements; ++iElm) {
+                int *n = &_ENList[nloc*iElm];
+                for (int iFac=0; iFac<nloc; ++iFac) {
+                    if (boundary[iElm*nloc+iFac] > 0) {
+                        printf("DEBUG  iEgo %d, iElm %d, iFac %d\n", iEgo, iElm, iFac);
+                        int ntri[3] = {-1};
+                        int pos=0;
+                        for (int i=0; i<nloc; ++i) {
+                            if (i != iFac) {
+                                ntri[pos] = n[i];
+                                pos++;
+                            }
+                        }
+                        double coords_bary[3] = {0.};
+                        for (int i=0; i<nloc-1; ++i) {
+                            double * coords = &_coords[ndims*ntri[i]];
+                            for (int j=0; j<ndims; ++j)
+                                coords_bary[j] += coords[j];
+                        }
+                        for (int j=0; j<ndims; ++j)
+                            coords_bary[j] /= (nloc-1);
+                        double result[3], params[2];
+                        double dst_to_prev = 0;
+                        for (int j=0; j<ndims; ++j)
+                            dst_to_prev += (coords_bary[j]-prev_coords_bary[j])*(coords_bary[j]-prev_coords_bary[j]);
+                        if (dst_to_prev > 15000) {
+                            EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
+                        }
+                        else {
+                            params[0] = prev_uv[0]; params[1] = prev_uv[1];
+                            EG_invEvaluateGuess(ego_list[iEgo], coords_bary, params, result);
+                            printf("DEBUG  win\n");   
+                        }
+
+                        double nrm2 = (coords_bary[0]-result[0])*(coords_bary[0]-result[0])
+                                    + (coords_bary[1]-result[1])*(coords_bary[1]-result[1])
+                                    + (coords_bary[2]-result[2])*(coords_bary[2]-result[2]);
+                        if (nrm2 < bdryFacesMinNorm[nloc*NElements+iFac]) {
+                            bdryFacesMinNorm[nloc*NElements+iFac] = nrm2;
+                            bdryFacesMinEgo[nloc*NElements+iFac] = iEgo;
+                            bdryFacesMinuv[2*nloc*NElements+iFac] = params[0];
+                            bdryFacesMinuv[2*nloc*NElements+iFac+1] = params[1];
+                        }
+                        for (int j=0; j<ndims; ++j)
+                            prev_coords_bary[j] = coords_bary[j];
+                        prev_uv[0] = params[0]; prev_uv[1] = params[1];
+                    }
+                }
+            }
+        }
         for (int iElm=0; iElm<NElements; ++iElm) {
             int *n = &_ENList[nloc*iElm];
             for (int iFac=0; iFac<nloc; ++iFac) {
                 if (boundary[iElm*nloc+iFac] > 0) {
+                    printf("DEBUG  iElm %d, iFac %d\n", iElm, iFac);
                     int ntri[3] = {-1};
                     int pos=0;
                     for (int i=0; i<nloc; ++i) {
@@ -1823,6 +1926,51 @@ public:
                         else
                             NNList_surface[n1loc].push_back(n0loc);
                     }
+                    printf("DEBUG  COUCOU\n");
+                    int tri_ego = bdryFacesMinEgo[nloc*NElements+iFac];
+                    assert(tri_ego<nbrEgFaces);
+                    for (int i=0; i<nloc-1; ++i) {
+                        node_topology[ntri[i]].insert(tri_ego);
+                        double result[3], params[2];
+                        params[0] = bdryFacesMinuv[2*nloc*NElements+iFac]; 
+                        params[1] = bdryFacesMinuv[2*nloc*NElements+iFac+1];
+                        EG_invEvaluateGuess(ego_list[tri_ego], &_coords[ntri[i]*ndims], params, result);
+                        double dst = (_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
+                               (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
+                               (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]);
+                        assert(dst < 1.e-10); // TODO SHOULD PROB BE NORMALIZED BY BBOX
+                        _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
+                    }
+                    if (bdryFacesMinNorm[nloc*NElements+iFac] > 0.01) {  // TODO SHOULD PROB BE NORMALIZED BY BBOX
+                        printf("WARNING   facet %d %d %d  located on FACE %d with nrm = %1.2e\n",
+                                ntri[0], ntri[1], ntri[2], tri_ego, bdryFacesMinNorm[nloc*NElements+iFac]);
+                    }
+                }
+            }
+        }
+
+#else
+        for (int iElm=0; iElm<NElements; ++iElm) {
+            int *n = &_ENList[nloc*iElm];
+            for (int iFac=0; iFac<nloc; ++iFac) {
+                if (boundary[iElm*nloc+iFac] > 0) {
+                    int ntri[3] = {-1};
+                    int pos=0;
+                    for (int i=0; i<nloc; ++i) {
+                        if (i != iFac) {
+                            ntri[pos] = n[i];
+                            pos++;
+                        }
+                    }
+
+                    for (int i=0; i<nloc-1; ++i) {
+                        int n0loc = ntri[i];
+                        int n1loc = ntri[(i+1)%(nloc-1)];
+                        if (n0loc<n1loc)
+                            NNList_surface[n0loc].push_back(n1loc);
+                        else
+                            NNList_surface[n1loc].push_back(n0loc);
+                    }
                     double coords_bary[3] = {0.};
                     for (int i=0; i<nloc-1; ++i) {
                         double * coords = &_coords[ndims*ntri[i]];
@@ -1831,12 +1979,13 @@ public:
                     }
                     for (int j=0; j<ndims; ++j)
                         coords_bary[j] /= (nloc-1);
-                    // loop over the faces
+/*                    // loop over the faces
                     int min_nrm_ego = ego_list.size()+1;
                     double min_nrm = DBL_MAX;
                     double min_uv[2];
                     for (int iEgo=0; iEgo<nbrEgFaces; ++iEgo) {
-                        double result[3], params[2];
+                        printf("DEBUG  iElm %d, iFac %d, iEgo %d\n", iElm, iFac, iEgo);
+                        double result[3], params[2] = {0.};
                         EG_invEvaluate(ego_list[iEgo], coords_bary, params, result);
                         double nrm2 = (coords_bary[0]-result[0])*(coords_bary[0]-result[0])
                                     + (coords_bary[1]-result[1])*(coords_bary[1]-result[1])
@@ -1851,11 +2000,10 @@ public:
                         node_topology[ntri[i]].insert(min_nrm_ego);
                         double result[3], params[2];
                         params[0] = min_uv[0]; params[1] = min_uv[1];
-                        EG_invEvaluate(ego_list[min_nrm_ego], &_coords[ntri[i]*ndims], params, result);
+                        EG_invEvaluateGuess(ego_list[min_nrm_ego], &_coords[ntri[i]*ndims], params, result);
                         double dst = (_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
                                (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
                                (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]);
-//                           if (dst > 1.e-10) printf("DEBUG  dst: %1.4e\n", dst);
                         assert(dst < 1.e-10);
                         _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
                     }
@@ -1863,29 +2011,62 @@ public:
                         printf("WARNING   facet %d %d %d  located on FACE %d with nrm = %1.2e\n",
                                 ntri[0], ntri[1], ntri[2], min_nrm_ego, min_nrm);
                     }
+*/
+                    int tri_ego = boundary[iElm*nloc+iFac]-1;
+                    double uv[2];
+                    int guess = 0; // if I have already inverse-evaluated one vertex of the triangle, I can guess the others 
+                    for (int i=0; i<nloc-1; ++i) {
+                        std::pair<std::set<int>::iterator,bool> ins;
+                        ins = node_topology[ntri[i]].insert(tri_ego);
+                        if (ins.second) {
+                            double result[3], params[2];
+                            if (guess == 0) {
+                                EG_invEvaluate(ego_list[tri_ego], &_coords[ntri[i]*ndims], params, result);
+                                uv[0] = params[0]; uv[1] = params[1];
+                                guess = 1;
+                            }
+                            else {
+                                params[0] = uv[0]; params[1] = uv[1];
+                                EG_invEvaluateGuess(ego_list[tri_ego], &_coords[ntri[i]*ndims], params, result);
+                            }
+
+                            double dst = (_coords[ntri[i]*ndims]-result[0])*(_coords[ntri[i]*ndims]-result[0])+
+                                   (_coords[ntri[i]*ndims+1]-result[1])*(_coords[ntri[i]*ndims+1]-result[1])+
+                                   (_coords[ntri[i]*ndims+2]-result[2])*(_coords[ntri[i]*ndims+2]-result[2]);
+                            assert(dst < 1.e-10);
+                            _uv[2*ntri[i]] = params[0]; _uv[2*ntri[i]+1] = params[1];
+                        }
+                    }
                 }
             }
         }
-
+#endif
         // TODO I could maybe loop on surface edges instead, and evaluate the midpoint
-
         for (int iVer=0; iVer<NNodes; ++iVer) {
-            if (node_topology[iVer].size() > 0) {
-                printf("DEBUG  Vertex %d is on more than 1 face (%lu)\n", iVer, node_topology[iVer].size());
+            if (node_topology[iVer].size() > 1) {
+                //printf("DEBUG  Vertex %d is on more than 1 face (%lu)\n", iVer, node_topology[iVer].size());
                 double * coords = &_coords[iVer*ndims];
                 // loop over the edges
-                for (int iEgo=nbrEgFaces; iEgo<nbrEgFaces+nbrEgEdges; ++iEgo) {
-                    double result[3], params[2];
-                    EG_invEvaluate(ego_list[iEgo], coords, params, result);
-                    double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
-                                + (coords[1]-result[1])*(coords[1]-result[1])
-                                + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
-                    if (nrm2 < 1.e-10) {
-                        printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
-                        node_topology[iVer].insert(iEgo);
-                        _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
+                std::set<int> egEdges_tmp;
+                for (const auto iEgo : node_topology[iVer]) { //int iEgo=nbrEgFaces; iEgo<nbrEgFaces+nbrEgEdges; ++iEgo) {
+                    for (const auto iEdge : face_to_edges[iEgo]) {
+                        double result[3], params[2];
+                        EG_invEvaluate(ego_list[iEdge], coords, params, result);
+                        double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
+                                    + (coords[1]-result[1])*(coords[1]-result[1])
+                                    + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
+                    
+                        if (iVer == 1024) printf("DEBUG  iVer: %d  distance to edge %d: %1.2e\n", iVer, iEdge, nrm2);
+                        if (nrm2 < 1.e-1) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
+                            if (iVer == 1024) printf("DEBUG  Adding edge iego %d  to vertex %d\n", iEdge, iVer);
+                            //printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
+                            egEdges_tmp.insert(iEdge);
+                            _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
+                        }
                     }
                 }
+                for (const auto iEdge : egEdges_tmp)
+                    node_topology[iVer].insert(iEdge);
             }
         }
 
@@ -2514,6 +2695,7 @@ private:
 #ifdef HAVE_EGADS  // TODO FOR DEBUG ONLY, MOVE BACK TO PRIVATE
     int nbrEgBodies, nbrEgNodes, nbrEgEdges, nbrEgFaces; 
     std::vector<ego> ego_list;
+    std::map<int,std::set<int>> face_to_edges;
     std::vector<std::set<int>> node_topology;
     std::map<int, int> corners; // node index -> ego_list index
     std::vector< std::vector<index_t> > NNList_surface; // store surface edges, only n1->n2 if n1<n2
