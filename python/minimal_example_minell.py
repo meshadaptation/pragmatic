@@ -22,7 +22,7 @@ def check_metric_ellipse(width=2e-2, eta = 0.02, Nadapt=6):
     meshsz = 40
     hd = Constant(width)
     ### SETUP MESH
-    mesh = RectangleMesh(-0.5,-0.5,0.5,0.5,1*meshsz,1*meshsz,"left/right")
+    mesh = RectangleMesh(Point(-0.5,-0.5),Point(0.5,0.5),1*meshsz,1*meshsz,"left/right")
     ### SETUP SOLUTION
     angle = pi/8#rand()*pi/2 
     #testsol = 'tanh(x[0]/' + str(float(hd)) + ')' #tanh(x[0]/hd)
