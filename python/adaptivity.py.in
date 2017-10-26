@@ -614,10 +614,10 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
 
   # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
   #        the following is a temporary fix and it will be removed soon.
-  if len(wrong_tags) > 0:
+  while len(wrong_tags) > 0:
+      still_wrong = []
       n_mesh.init(gdim-2,gdim-1) # initialise connectivity
       for wrong_tag in wrong_tags:
-          facet = Facet(n_mesh, wrong_tag)
           # find tags of adjacent boundary facets. First get the vertices of the wrong tag facet, then the exterior facets
           # these vertices belong to.
           if gdim == 2:
@@ -629,7 +629,12 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
                               numpy.unique(numpy.concatenate([e.entities(gdim-1) for e in    edges(Facet(n_mesh, wrong_tag))]))]  \
                               if ff.exterior() and ff.index() != wrong_tag])
           # replace the wrong tag with any of the adjacent correct tags.
-          n_bfaces_func[wrong_tag] = adjacent_tags[adjacent_tags != 0][0]
+          if (adjacent_tags != 0).max() == True:
+              n_bfaces_func[wrong_tag] = adjacent_tags[adjacent_tags != 0][0]
+          else:
+              still_wrong.append(wrong_tag)
+
+      wrong_tags = numpy.array(still_wrong)
 
   info("Finalising PRAgMaTIc ...")
   _libpragmatic.pragmatic_finalize()
