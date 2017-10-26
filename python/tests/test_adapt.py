@@ -42,3 +42,23 @@ if len(unique(tags.array())) != 7:
 if abs(new_mesh.num_vertices() - 833) > 80:
     raise RuntimeError('Test failed: number of vertices of generated mesh is different from what expected')
 
+#############################################################################################################
+### Test 3: Unit Circle
+#############################################################################################################
+
+mesh = UnitDiscMesh(mpi_comm_world(), 10, 1, 2)
+
+V = TensorFunctionSpace(mesh, 'CG', 1)
+
+M_expr = Constant((('20.0','0.0'), ('0.0', '20.0')))
+M = interpolate(M_expr, V)
+
+new_mesh,tags = adapt(M, coarsen = True)
+
+area     = assemble(Constant(1.0)*dx(domain=mesh))
+new_area = assemble(Constant(1.0)*dx(domain=new_mesh))
+
+relative_change = abs(area - new_area)/area
+
+if relative_change > 0.012:
+    raise RuntimeError('Test failed: mesh volume not preserved in the right way')
