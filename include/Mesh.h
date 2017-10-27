@@ -878,6 +878,10 @@ public:
     void print_edge_length_histo() const
     {
 
+        if (NNodes > 137988) 
+            printf("DEBUG  node_topology[137988 (%1.2f %1.2f %1.2f)]: %d\n", 
+                   _coords[3*137988], _coords[3*137988+1], _coords[3*137988+2], *node_topology[137988].begin());
+
         int histo[16] = {0};
         int NEdges = 0;
         for (int iVer0 = 0; iVer0 < NNodes; ++iVer0) {
@@ -1855,7 +1859,7 @@ public:
             ego * fchldrn;
             int * psens;
             status = EG_getTopology(faces[iFac], &geom, &oclass, &mtype, NULL, &nchild, &fchldrn, &psens);
-            printf("DEBUG  Face %d has %d children\n", iFac, nchild);
+//            printf("DEBUG  Face %d has %d children\n", iFac, nchild);
             for (int iChild=0; iChild < nchild; ++iChild) {
                 int nchild2;
                 ego * lchldrn;
@@ -1869,7 +1873,7 @@ public:
                     int nchild3;
                     ego * echldrn;
                     int * psens3;
-                    printf("DEBUG    analyzing child %d of loop %d\n", iChild, iChild2);
+//                    printf("DEBUG    analyzing child %d of loop %d\n", iChild, iChild2);
                     status = EG_getTopology(lchldrn[iChild2], &geom, &oclass, &mtype, NULL, &nchild3, &echldrn, &psens3);
                     if (oclass != 21 ) {
                         printf("ERROR  MAYDAY A LOOP HAS CHILDREN THAT ARE NOT EDGES\n");
@@ -1878,14 +1882,14 @@ public:
                     ego topRef, prev, next;
                     EG_getInfo(lchldrn[iChild2], &oclass, &mtype, &topRef, &prev, &next);
                     if (mtype == DEGENERATE) {
-                        printf("DEBUG      it is a degenerate edge\n");
+//                        printf("DEBUG      it is a degenerate edge\n");
                         continue;
                     }
                     ego edge = lchldrn[iChild2];
                     int found = 0;
                     for (i=0; i<nbrEgEdges; ++i) {
                         if (ego_list[nbrEgFaces+i] == edge) {
-                            printf("DEBUG      it is edge %d\n", i);
+//                            printf("DEBUG      it is edge %d\n", i);
                             face_to_edges[iFac].insert(nbrEgFaces+i);
                             found = 1;
                         }
@@ -1896,14 +1900,6 @@ public:
                     }
                 }
             }
-        }
-
-        for (int iFac = 0; iFac < nbrEgFaces; ++iFac) {
-            printf("DEBUG  face_to_edges[%d] = {", iFac);
-            for (auto it : face_to_edges[iFac]) {
-                printf("%d, ", it);
-            }
-            printf("}\n");
         }
 
         return 0;
@@ -2131,11 +2127,7 @@ public:
                         double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
                                     + (coords[1]-result[1])*(coords[1]-result[1])
                                     + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
-                    
-                        if (iVer == 94 || iVer == 24222) printf("DEBUG  iVer: %d  distance to edge %d: %1.2e\n", iVer, iEdge, nrm2);
                         if (nrm2 < 1.e-6) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
-                            if (iVer == 94 || iVer == 24222) printf("DEBUG  Adding edge iego %d  to vertex %d\n", iEdge, iVer);
-                            //printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
                             egEdges_tmp.insert(iEdge);
                             _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
                         }

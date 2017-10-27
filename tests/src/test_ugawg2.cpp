@@ -160,10 +160,13 @@ int main(int argc, char **argv)
     
     for(int i=0; i<20; i++) {
 
+        printf("=== i: %d ===\n", i);
+
         printf("---- refine %d ----\n", i);
         if (i<5)
             mesh->scale_metric(1.3333333333);
         refine.refine_new(L_ref);
+    mesh->print_edge_length_histo();
         int cntSplit = refine.refine_new(L_ref);
         if (i<5)
             mesh->scale_metric(0.75);
