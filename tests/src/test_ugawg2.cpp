@@ -147,9 +147,9 @@ int main(int argc, char **argv)
     printf("========================\n");
     for(int i=0; i<5; i++) {
         printf("---- refine %d ----\n", i);
-        mesh->scale_metric(1.3333333333); 
-        refine.refine_new(L_ref);
-        mesh->scale_metric(0.75);
+        mesh->scale_metric(1.5); 
+        refine.refine_new(2., 0);
+        mesh->scale_metric(0.66666666);
         mesh->print_quality_histo();
         mesh->print_edge_length_histo();
     }
@@ -212,6 +212,7 @@ int main(int argc, char **argv)
     smooth.optimisation_linf(10, 0.2);
     mesh->print_quality_histo();
     mesh->print_edge_length_histo();
+    mesh->cout_quality("FINAL: ");
 #else
     pragmatic_adapt(0);
 #endif
