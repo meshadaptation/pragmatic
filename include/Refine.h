@@ -110,7 +110,7 @@ public:
                + local optimization procedure to select edges to refine
           - introduction of the notion of cavity: here a cavity is an edge + neighboring tris/tets
      */
-    double refine_new(double L_max) 
+    double refine_new(double L_max, int preserve_quality=1) 
     {
         
         //-- I. Simulate the edge splits if edge length > sqrt(2)
@@ -148,7 +148,7 @@ public:
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
                     double length = _mesh->calc_edge_length_log(iVer, iVer2);
                     lengths[cnt] = length;
-                    if (length>L_max-1e-10) {
+                    if (length>(L_max-1e-10)) {
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double worst_new_quality, worst_new_volume;
@@ -156,9 +156,11 @@ public:
 
                         //---- if quality is too bad, reject refinement
                         if (worst_new_quality < quality_old_cavity && worst_new_quality < 0.001) {// TODO set this threshold + check for slivers&co + change criteria
+                            //if (length>2) printf("DEBUG  CAS 1\n");
                             qualities[cnt] = -quality_old_cavity;
                         }
-                        if (worst_new_quality < 0.8*quality_old_cavity) {
+                        if (preserve_quality && worst_new_quality < 0.8*quality_old_cavity) {
+                            //if (length>2) printf("DEBUG  CAS 2:  worst_new_quality: %1.2e  quality_old_cavity: %1.2e\n", worst_new_quality, quality_old_cavity);
                             qualities[cnt] = -quality_old_cavity;
                         }
                         else {
@@ -174,7 +176,6 @@ public:
             }
             
         }
-        
         
         //-- II. Select edges to split with local optim procedure
         
