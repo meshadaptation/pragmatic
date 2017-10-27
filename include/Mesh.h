@@ -1798,7 +1798,6 @@ public:
                 ego * lchldrn;
                 int * psens2;
                 status = EG_getTopology(fchldrn[iChild], &geom, &oclass, &mtype, NULL, &nchild2, &lchldrn, &psens2);
-//                printf("DEBUG    Child %d is of type %d has %d children\n", iChild, oclass, nchild2);
                 if (oclass != 22 ) {
                     printf("ERROR  MAYDAY A SURFACE HAS CHILDREN THAT ARE NOT LOOPS\n");
                     exit(1);
@@ -1807,27 +1806,41 @@ public:
                     int nchild3;
                     ego * echldrn;
                     int * psens3;
+                    printf("DEBUG    analyzing child %d of loop %d\n", iChild, iChild2);
                     status = EG_getTopology(lchldrn[iChild2], &geom, &oclass, &mtype, NULL, &nchild3, &echldrn, &psens3);
-//                    printf("DEBUG      Child %d is of type %d\n", iChild, oclass);
+                    if (oclass != 21 ) {
+                        printf("ERROR  MAYDAY A LOOP HAS CHILDREN THAT ARE NOT EDGES\n");
+                        exit(1);
+                    }
+                    ego topRef, prev, next;
+                    EG_getInfo(lchldrn[iChild2], &oclass, &mtype, &topRef, &prev, &next);
+                    if (mtype == DEGENERATE) {
+                        printf("DEBUG      it is a degenerate edge\n");
+                        continue;
+                    }
                     ego edge = lchldrn[iChild2];
                     int found = 0;
                     for (i=0; i<nbrEgEdges; ++i) {
-                        if (edges[i] == edge) {
-//                            printf("DEBUG      this edge is ego #%d\n", nbrEgFaces+i);
+                        if (ego_list[nbrEgFaces+i] == edge) {
+                            printf("DEBUG      it is edge %d\n", i);
                             face_to_edges[iFac].insert(nbrEgFaces+i);
                             found = 1;
                         }
                     }
                     if (!found) {
-                       printf("ERROR  MAYDAY AN EDGE COULD NOT BE IDENTIFIED\n");
+                        printf("ERROR  MAYDAY AN EDGE COULD NOT BE IDENTIFIED\n");
                         exit(1); 
-                    }
-                    if (oclass != 21 ) {
-                       printf("ERROR  MAYDAY A LOOP HAS CHILDREN THAT ARE NOT EDGES\n");
-                        exit(1);
                     }
                 }
             }
+        }
+
+        for (int iFac = 0; iFac < nbrEgFaces; ++iFac) {
+            printf("DEBUG  face_to_edges[%d] = {", iFac);
+            for (auto it : face_to_edges[iFac]) {
+                printf("%d, ", it);
+            }
+            printf("}\n");
         }
 
         return 0;
@@ -2056,9 +2069,9 @@ public:
                                     + (coords[1]-result[1])*(coords[1]-result[1])
                                     + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
                     
-                        if (iVer == 1024) printf("DEBUG  iVer: %d  distance to edge %d: %1.2e\n", iVer, iEdge, nrm2);
-                        if (nrm2 < 1.e-1) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
-                            if (iVer == 1024) printf("DEBUG  Adding edge iego %d  to vertex %d\n", iEdge, iVer);
+                        if (iVer == 94 || iVer == 24222) printf("DEBUG  iVer: %d  distance to edge %d: %1.2e\n", iVer, iEdge, nrm2);
+                        if (nrm2 < 1.e-6) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
+                            if (iVer == 94 || iVer == 24222) printf("DEBUG  Adding edge iego %d  to vertex %d\n", iEdge, iVer);
                             //printf("DEBUG  Vertex %d is also on an Edge\n", iVer);
                             egEdges_tmp.insert(iEdge);
                             _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
