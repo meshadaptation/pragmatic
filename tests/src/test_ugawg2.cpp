@@ -79,17 +79,17 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char filename_meshin[256];
-    //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
+    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03");
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10");
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03");
     //sprintf(filename_meshin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10");
-    sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06-rev-faceid");
+    //sprintf(filename_meshin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06-rev-faceid");
     char filename_metin[256];
-    //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
+    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc03-metric");
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/hemisphere-cylinder/sa-m06-a00-fun3d/hsc10-metric");
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera03-metric");
     //sprintf(filename_metin, "/Users/barral/calcul/UGAWG/solution-adapt-results/onera-m6/sa-m084-a306-fun3d/onera10-metric");
-    sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06.metnode");
+    //sprintf(filename_metin, "/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_a3p06.metnode");
 
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
@@ -97,9 +97,9 @@ int main(int argc, char **argv)
     metric->update_mesh();
     
 #ifdef HAVE_EGADS
-    //int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
+    int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
     //int res = mesh->analyzeCAD("/Users/barral/calcul/UGAWG/solution-adapt-cases/onera-m6/geometry/onera-m6-sharp-te.egads");
-    int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_with_sharp_TE_boxff_cf.egads");
+    //int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-results/onera-m6/viscous-m084-a306-ggns/oneram6_with_sharp_TE_boxff_cf.egads");
     if (!res) printf("pass\n");
 
     mesh->associate_CAD_with_Mesh();
@@ -122,46 +122,70 @@ int main(int argc, char **argv)
     double alpha = sqrt(2.0)/2;
     double L_ref = std::max(alpha*L_max, L_up);
 
-    printf("DEBUG  === PHASE I: coarsen\n");
+    printf("========================\n");
+    printf("=== PHASE I: coarsen ===\n");
+    printf("========================\n");
     for(int i=0; i<4; i++) {
-        printf("DEBUG  ---- coarsen %d\n", i);
+        printf("---- coarsen %d ----\n", i);
         coarsen.coarsen(L_low, L_ref, false, false, false);
-        printf("DEBUG  ---- swap %d\n", i);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
+        printf("---- swap %d ----\n", i);
         swapping.swap(0.1);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
         if (i==3){
-            printf("DEBUG  ---- smooth %d\n", i);
+            printf("---- smooth %d ----\n", i);
             smooth.optimisation_linf(3);
+            mesh->print_quality_histo();
+            mesh->print_edge_length_histo();
         }
     }
 
-    printf("DEBUG  === PHASE II: refine\n");
-    mesh->scale_metric(1.3333333333); 
+    printf("========================\n");
+    printf("=== PHASE II: refine ===\n");
+    printf("========================\n");
     for(int i=0; i<5; i++) {
-        printf("DEBUG  ---- refine %d\n", i);
+        printf("---- refine %d ----\n", i);
+        mesh->scale_metric(1.3333333333); 
         refine.refine_new(L_ref);
+        mesh->scale_metric(0.75);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
     }
-    mesh->scale_metric(0.75);
 
-    printf("DEBUG  === PHASE III: all\n");
+    printf("======================\n");
+    printf("=== PHASE III: all ===\n");
+    printf("======================\n");
     
     for(int i=0; i<20; i++) {
 
-        printf("DEBUG  ---- refine %d\n", i);
+        printf("---- refine %d ----\n", i);
         if (i<5)
             mesh->scale_metric(1.3333333333);
         refine.refine_new(L_ref);
         int cntSplit = refine.refine_new(L_ref);
         if (i<5)
             mesh->scale_metric(0.75);
-        printf("DEBUG  ---- coarsen %d\n", i);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
+        printf("---- coarsen %d ----\n", i);
         int cntCoarsen = coarsen.coarsen(L_low, L_ref,false,false,i>5?true:false);
-        printf("DEBUG  ---- swap %d\n", i);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
+        printf("---- swap %d ----\n", i);
         swapping.swap(0.1);
-        printf("DEBUG  ---- smooth sl %d\n", i);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
+        printf("---- smooth sl %d ----\n", i);
         smooth.smart_laplacian(1);
+        mesh->print_quality_histo();
+        mesh->print_edge_length_histo();
         if (!(i%5)) {
-            printf("DEBUG  ---- smooth ol %d\n", i);
+            printf("---- smooth ol %d ----\n", i);
             smooth.optimisation_linf(5, 0.15);
+            mesh->print_quality_histo();
+            mesh->print_edge_length_histo();
         }
 
         alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
@@ -177,15 +201,23 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
-    printf("DEBUG  === FINAL SMOOTHING\n");
+    printf("=================================\n");
+    printf("=== PHASE IV: FINAL SMOOTHING ===\n");
+    printf("=================================\n");
+    printf("---- smooth sl ----\n");
     smooth.smart_laplacian(10);
+    mesh->print_quality_histo();
+    mesh->print_edge_length_histo();
+    printf("---- smooth ol ----\n");
     smooth.optimisation_linf(10, 0.2);
+    mesh->print_quality_histo();
+    mesh->print_edge_length_histo();
 #else
     pragmatic_adapt(0);
 #endif
 
 	char filename_out[256];
-	sprintf(filename_out, "../data/test_ugawg2_boeing");
+	sprintf(filename_out, "../data/test_ugawg2_hsc03_new");
 	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
     MetricField<double, 3> metric_final(*mesh);
     const double *met = mesh->get_metric(0);

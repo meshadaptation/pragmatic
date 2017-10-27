@@ -817,6 +817,18 @@ public:
         }
     }
 
+    void cout_quality(std::string operation)
+    {
+        double qmean = get_qmean();
+        double qmin = get_qmin();
+
+        int rank=0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        if(rank==0)
+            std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
+    }
+
     void print_quality_histo() const
     {
         int histo[8] = {0};
@@ -853,15 +865,66 @@ public:
                 histo[0]++;
         }
         printf("   Quality histogram:\n");
-        printf("     1. < Q < 0.9 : %d (%1.2f%%) elements\n", histo[0], (float)histo[0]/NElements_real);
-        printf("    0.9 < Q < 0.8 : %d (%1.2f%%) elements\n", histo[1], (float)histo[1]/NElements_real);
-        printf("    0.8 < Q < 0.7 : %d (%1.2f%%) elements\n", histo[2], (float)histo[2]/NElements_real);
-        printf("    0.7 < Q < 0.5 : %d (%1.2f%%) elements\n", histo[3], (float)histo[3]/NElements_real);
-        printf("    0.5 < Q < 0.3 : %d (%1.2f%%) elements\n", histo[4], (float)histo[4]/NElements_real);
-        printf("    0.3 < Q < 0.1 : %d (%1.2f%%) elements\n", histo[5], (float)histo[5]/NElements_real);
-        printf("    0.1 < Q < 0.01: %d (%1.2f%%) elements\n", histo[6], (float)histo[6]/NElements_real);
-        printf("   0.01 < Q       : %d (%1.2f%%) elements\n", histo[7], (float)histo[7]/NElements_real);
+        printf("     1. < Q < 0.9 : %d (%1.2f%%) elements\n", histo[0], 100*(float)histo[0]/NElements_real);
+        printf("    0.9 < Q < 0.8 : %d (%1.2f%%) elements\n", histo[1], 100*(float)histo[1]/NElements_real);
+        printf("    0.8 < Q < 0.7 : %d (%1.2f%%) elements\n", histo[2], 100*(float)histo[2]/NElements_real);
+        printf("    0.7 < Q < 0.5 : %d (%1.2f%%) elements\n", histo[3], 100*(float)histo[3]/NElements_real);
+        printf("    0.5 < Q < 0.3 : %d (%1.2f%%) elements\n", histo[4], 100*(float)histo[4]/NElements_real);
+        printf("    0.3 < Q < 0.1 : %d (%1.2f%%) elements\n", histo[5], 100*(float)histo[5]/NElements_real);
+        printf("    0.1 < Q < 0.01: %d (%1.2f%%) elements\n", histo[6], 100*(float)histo[6]/NElements_real);
+        printf("   0.01 < Q       : %d (%1.2f%%) elements\n", histo[7], 100*(float)histo[7]/NElements_real);
     }
+
+    void print_edge_length_histo() const
+    {
+
+        int histo[16] = {0};
+        int NEdges = 0;
+        for (int iVer0 = 0; iVer0 < NNodes; ++iVer0) {
+            for (int i = 0; i < NNList[iVer0].size(); ++i) {
+                int iVer1 = NNList[iVer0][i];
+                if (iVer0<iVer1) {
+                    double length = calc_edge_length_log(iVer0, iVer1);
+                    NEdges++;
+                    if      (length < 0.001) histo[0]++;
+                    else if (length < 0.01)  histo[1]++;
+                    else if (length < 0.1)   histo[2]++;
+                    else if (length < 0.2)   histo[3]++;
+                    else if (length < 0.5)   histo[4]++;
+                    else if (length < 0.75)  histo[5]++;
+                    else if (length < 0.9)   histo[6]++;
+                    else if (length < 1.1)   histo[7]++;
+                    else if (length < 1.25)  histo[8]++;
+                    else if (length < 1.5)   histo[9]++;
+                    else if (length < 2.)    histo[10]++;
+                    else if (length < 5.)    histo[11]++;
+                    else if (length < 10)    histo[12]++;
+                    else if (length < 100)   histo[13]++;
+                    else if (length < 1000)  histo[14]++;
+                    else                     histo[15]++;
+                }
+            }
+        }
+        printf("   Edge length histogram:\n");
+        printf("            l < 10^-3 : %d (%1.2f%%) edges\n", histo[0],  100*(float)histo[0]/NEdges);
+        printf("    10^-3 < l < 10^-2 : %d (%1.2f%%) edges\n", histo[1],  100*(float)histo[1]/NEdges);
+        printf("    10^-2 < l < 0.1   : %d (%1.2f%%) edges\n", histo[2],  100*(float)histo[2]/NEdges);
+        printf("      0.1 < l < 0.2   : %d (%1.2f%%) edges\n", histo[3],  100*(float)histo[3]/NEdges);
+        printf("      0.2 < l < 0.5   : %d (%1.2f%%) edges\n", histo[4],  100*(float)histo[4]/NEdges);
+        printf("      0.5 < l < 0.75  : %d (%1.2f%%) edges\n", histo[5],  100*(float)histo[5]/NEdges);
+        printf("     0.75 < l < 0.9   : %d (%1.2f%%) edges\n", histo[6],  100*(float)histo[6]/NEdges);
+        printf("      0.9 < l < 1.1   : %d (%1.2f%%) edges\n", histo[7],  100*(float)histo[7]/NEdges);
+        printf("      1.1 < l < 1.25  : %d (%1.2f%%) edges\n", histo[8],  100*(float)histo[8]/NEdges);
+        printf("     1.25 < l < 1.5   : %d (%1.2f%%) edges\n", histo[9],  100*(float)histo[9]/NEdges);
+        printf("      1.5 < l < 2     : %d (%1.2f%%) edges\n", histo[10], 100*(float)histo[10]/NEdges);
+        printf("        2 < l < 5     : %d (%1.2f%%) edges\n", histo[11], 100*(float)histo[11]/NEdges);
+        printf("        5 < l < 10    : %d (%1.2f%%) edges\n", histo[12], 100*(float)histo[12]/NEdges);
+        printf("       10 < l < 100   : %d (%1.2f%%) edges\n", histo[13], 100*(float)histo[13]/NEdges);
+        printf("      100 < l < 10^3  : %d (%1.2f%%) edges\n", histo[14], 100*(float)histo[14]/NEdges);
+        printf("     10^3 < l         : %d (%1.2f%%) edges\n", histo[15], 100*(float)histo[15]/NEdges);
+    }
+
+
 
     /// Get the element minimum quality in metric space.
     double get_qmin() const
