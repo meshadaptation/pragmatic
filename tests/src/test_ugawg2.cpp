@@ -94,7 +94,7 @@ int main(int argc, char **argv)
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_meshin);
     pragmatic_init_light((void*)mesh);
     MetricField<double,3> *metric = GMFTools<double>::import_gmf_metric3d(filename_metin, *mesh);
-    metric->update_mesh();
+//    metric->update_mesh();
     
 #ifdef HAVE_EGADS
     int res = mesh->analyzeCAD("/home/nbarral/calcul/UGAWG/solution-adapt-cases/hemisphere-cylinder/geometry/hemisph-cyl.egads");
@@ -107,6 +107,7 @@ int main(int argc, char **argv)
 #else
         printf("ERROR  test configured without EGADS\n");
 #endif
+    metric->update_mesh();
 
 #if 1
     // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -159,14 +160,11 @@ int main(int argc, char **argv)
     printf("======================\n");
     
     for(int i=0; i<20; i++) {
-
         printf("=== i: %d ===\n", i);
-
         printf("---- refine %d ----\n", i);
         if (i<5)
             mesh->scale_metric(1.3333333333);
         refine.refine_new(L_ref);
-    mesh->print_edge_length_histo();
         int cntSplit = refine.refine_new(L_ref);
         if (i<5)
             mesh->scale_metric(0.75);

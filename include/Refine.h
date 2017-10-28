@@ -502,7 +502,6 @@ public:
         new_uv.clear();
         new_uv.reserve(2*reserve_size);
 #endif
-
         if (!state){
             /* Loop through all edges and select them for refinement if
                its length is greater than L_max in transformed space. */
@@ -571,10 +570,6 @@ public:
                 }
             }
         }
-        if (_mesh->NNodes > 137988 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   HERE!!!!!!!!!!!!!\n");
-            exit(45); 
-        }
 
         _mesh->NNodes += splitCnt;
         assert(newVertices.size()==splitCnt);
@@ -598,11 +593,6 @@ public:
         }
         edgeSplitCnt = _mesh->NNodes - origNNodes;
 
-        if (_mesh->NNodes > 155000 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   THERE0! size before: %d, reserve: %lu, size after: %lu\n", size_before, reserve, _mesh->node_topology.size());
-            exit(45); 
-        }
-        
         // Append new coords and metric to the mesh.
         memcpy(&_mesh->_coords[dim*origNNodes], &newCoords[0], dim*splitCnt*sizeof(real_t));
         memcpy(&_mesh->metric[msize*origNNodes], &newMetric[0], msize*splitCnt*sizeof(double));
@@ -618,10 +608,6 @@ public:
         memcpy(&_mesh->_uv[2*origNNodes], &new_uv[0], 2*splitCnt*sizeof(real_t));
 #endif
 
-        if (_mesh->NNodes > 137988 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   THERE! reserve: %lu\n", reserve);
-            exit(45); 
-        }
         // Fix IDs of new vertices
         assert(newVertices.size()==splitCnt);
         for(size_t i=0; i<splitCnt; i++) {
@@ -705,11 +691,6 @@ public:
             }
         }
 
-        if (_mesh->NNodes > 137988 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   NO HERE!!!!!!!!!!!!!\n");
-            exit(45); 
-        }
-
         if(dim==3) {
             // If in 3D, we need to refine facets first.
             #pragma omp for schedule(guided)
@@ -756,11 +737,6 @@ public:
             }
         }
 
-        if (_mesh->NNodes > 137988 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   NO THERE!!!!!!!!!!!!!\n");
-            exit(45); 
-        }
-
         // Start element refinement.
         splitCnt = 0;
         newElements.clear();
@@ -796,11 +772,6 @@ public:
         memcpy(&_mesh->_ENList[nloc*origNElements], &newElements[0], nloc*splitCnt*sizeof(index_t));
         memcpy(&_mesh->boundary[nloc*origNElements], &newBoundaries[0], nloc*splitCnt*sizeof(int));
         memcpy(&_mesh->quality[origNElements], &newQualities[0], splitCnt*sizeof(double));
-
-        if (_mesh->NNodes > 137988 && _mesh->node_topology[137988].size() < 1) {
-            printf("DEBUG   ICI!!!!!!!!!!!!!\n");
-            exit(45); 
-        }
 
         // Update halo.
         if(nprocs>1) {
@@ -1066,18 +1037,6 @@ private:
         }
 
         int tag = 0;
-        if ((newCrd[0]-10)*(newCrd[0]-10)+(newCrd[1]-0.7959)*(newCrd[1]-0.7959)+(newCrd[2]+0.631)*(newCrd[2]+0.631) < 0.00001) {
-            printf("DEBUG faulty vertex was created here on edge %d %d, edge_egos: %d\n", n0, n1, *edge_egos.begin());
-            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n0, _mesh->_coords[3*n0], _mesh->_coords[3*n0+1], _mesh->_coords[3*n0+2]);
-            typename std::set<index_t>::const_iterator e;
-            for(e=_mesh->node_topology[n0].begin(); e!=_mesh->node_topology[n0].end(); ++e)
-                printf(" %d ", *e);
-            printf("\n");
-            printf("       %d (%1.3e, %1.3e, %1.3e) is on egos: ", n1, _mesh->_coords[3*n1], _mesh->_coords[3*n1+1], _mesh->_coords[3*n1+2]);
-            for(e=_mesh->node_topology[n1].begin(); e!=_mesh->node_topology[n1].end(); ++e)
-                printf(" %d ", *e);
-            printf("\n");
-        }
 #ifdef HAVE_EGADS
         newNode_topology.push_back(edge_egos);
         new_uv.push_back(uv[0]); new_uv.push_back(uv[1]);
@@ -1246,8 +1205,8 @@ private:
             refine_cnt=splitEdges.size();
 
             if(refine_cnt > 0) {
-                if (refine_cnt != 1) printf("DEBUG  elm id: %lu  refine_cnt: %d\n", eid, refine_cnt);
-                if (refine_cnt != 1) printf("DEBUG  %d %d     %d %d\n", splitEdges[0].edge.first, splitEdges[0].edge.second, 
+                if (refine_cnt != 1) printf("ERROR  elm id: %lu  refine_cnt: %d\n", eid, refine_cnt);
+                if (refine_cnt != 1) printf("ERROR  %d %d     %d %d\n", splitEdges[0].edge.first, splitEdges[0].edge.second,
                                             splitEdges[1].edge.first, splitEdges[1].edge.second);
                 assert (refine_cnt == 1);
                 refine3D_1(splitEdges, eid);
