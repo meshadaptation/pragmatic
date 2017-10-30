@@ -313,24 +313,10 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
-#if 0
-            // TODO HACK CAD
-            mesh->set_isOnBoundarySize();
-            for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
-            int * boundary = mesh->get_boundaryTags();
-            index_t * ENList = mesh->get_ENList();
-            for (int j=0; j<mesh->get_number_elements()*4; ++j) {
-              if (boundary[j] == 5) {
-                int iElem = j/4;
-                int iEdg = j % 4;
-                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
-                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
-                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
-              }
-            }
-#endif
-
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
+            cout_quality(mesh, "Coarsen");
+            mesh->print_quality_histo();
+            mesh->print_edge_length_histo();
 
             double L_max = mesh->maximal_edge_length();
 
@@ -342,20 +328,18 @@ extern "C" {
 
                 refine.refine_new(L_ref);
                 cout_quality(mesh, "Refine");
-//                printf("DEBUG  : nvertices: %d   size of corods: %d\n", mesh->NNodes, mesh->_coords.size());
-//                char nam[256];
-//                sprintf(nam, "mesh_refine");
-//                mesh->print_mesh(nam);
+                mesh->print_quality_histo();
+                mesh->print_edge_length_histo();
 
                 coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 cout_quality(mesh, "Coarsen");
-//                sprintf(nam, "mesh_coarsen");
-//                mesh->print_mesh(nam);
+                mesh->print_quality_histo();
+                mesh->print_edge_length_histo();
 
                 swapping.swap(0.95);
                 cout_quality(mesh, "Swapping");
-//                sprintf(nam, "mesh_swap");
-//                mesh->print_mesh(nam);
+                mesh->print_quality_histo();
+                mesh->print_edge_length_histo();
 
                 L_max = mesh->maximal_edge_length();
 
@@ -365,31 +349,14 @@ extern "C" {
                 mesh->compute_print_quality();
                 mesh->compute_print_NNodes_global();
 
-#if 0                
-                // TODO HACK CAD
-                mesh->set_isOnBoundarySize();
-                for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
-                int * boundary = mesh->get_boundaryTags();
-                index_t * ENList = mesh->get_ENList();
-                for (int j=0; j<mesh->get_number_elements()*4; ++j) {
-                  if (boundary[j] == 5) {
-                    int iElem = j/4;
-                    int iEdg = j % 4;
-                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
-                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
-                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
-                  }
-                }
-#endif
-
             }
 
             mesh->defragment();
 
             smooth.smart_laplacian(10);
             cout_quality(mesh, "Laplacian smoothing");
-//            smooth.optimisation_linf(10);
-//            cout_quality(mesh, "Linf smoothing");
+            mesh->print_quality_histo();
+            mesh->print_edge_length_histo();
         }
 
         mesh->remove_overlap_elements();
