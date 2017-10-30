@@ -2118,23 +2118,31 @@ public:
             if (node_topology[iVer].size() > 1) {
                 //printf("DEBUG  Vertex %d is on more than 1 face (%lu)\n", iVer, node_topology[iVer].size());
                 double * coords = &_coords[iVer*ndims];
-                // loop over the edges
-                std::set<int> egEdges_tmp;
-                for (const auto iEgo : node_topology[iVer]) { //int iEgo=nbrEgFaces; iEgo<nbrEgFaces+nbrEgEdges; ++iEgo) {
+                // build a set of possible edges (shared by all surfaces)
+                std::set<int> admissible_edges;
+                // count the edges, if an esge appears more than once, it is shared by two surfaces thus admissible
+                std::map<int,int> all_faces_edges;
+                for (const auto iEgo : node_topology[iVer]) {
                     for (const auto iEdge : face_to_edges[iEgo]) {
-                        double result[3], params[2];
-                        EG_invEvaluate(ego_list[iEdge], coords, params, result);
-                        double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
-                                    + (coords[1]-result[1])*(coords[1]-result[1])
-                                    + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
-                        if (nrm2 < 1.e-6) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
-                            egEdges_tmp.insert(iEdge);
-                            _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
-                        }
+                        all_faces_edges[iEdge]++;  // should be 1 if didn't exist bedore. TODO: make sure this is true
                     }
                 }
-                for (const auto iEdge : egEdges_tmp)
-                    node_topology[iVer].insert(iEdge);
+                for (const auto edge : all_faces_edges) {
+                    if (edge.second > 1)
+                        admissible_edges.insert(edge.first);
+                }
+                // loop over the edges
+                for (const auto iEdge : admissible_edges) {
+                    double result[3], params[2];
+                    EG_invEvaluate(ego_list[iEdge], coords, params, result);
+                    double nrm2 = (coords[0]-result[0])*(coords[0]-result[0])
+                                + (coords[1]-result[1])*(coords[1]-result[1])
+                                + (coords[2]-result[2])*(coords[2]-result[2]); // TODO ONLY FOR 3D
+                    if (nrm2 < 1.e-6) {  // TODO THIS ACTUALLY HAS TO DEPEND ON BBOX
+                        node_topology[iVer].insert(iEdge);
+                        _uv[2*iVer] = params[0]; _uv[2*iVer+1] = params[1];
+                    }
+                }
             }
         }
 
@@ -2146,7 +2154,7 @@ public:
                             &corners_coords[ndims*iNode], &nchild,&pchldrn, &psens);
         }
         for (int iVer=0; iVer<NNodes; ++iVer) {
-            if (node_topology[iVer].size() > 0) {
+            if (node_topology[iVer].size() > 3) {
                 for (int iNode=0; iNode<nbrEgNodes; ++iNode) {
                     if (std::isinf(corners_coords[iNode*ndims]))
                         continue;
