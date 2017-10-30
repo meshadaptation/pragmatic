@@ -806,7 +806,7 @@ public:
                 double q;
                 if(ndims==2) {
                     q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+                                           get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
                 } else {
                     q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
                                            get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
@@ -815,6 +815,28 @@ public:
                 std::cout<<"Quality[ele="<<i<<"] = "<<q<<std::endl;
             }
         }
+    }
+
+    /// Write the qualities to a file. Useful if you want to plot a histogram of element qualities.
+    void write_quality(const char * filename)
+    {
+        FILE * qualfile = fopen(filename, "w");
+        for(size_t i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0]<0)
+                continue;
+
+            double q;
+            if(ndims==2) {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+            } else {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
+            }
+            fprintf(qualfile, "%lu %1.5e\n", i, q);
+        }
+        fclose(qualfile);
     }
 
     void cout_quality(std::string operation)
@@ -873,6 +895,23 @@ public:
         printf("    0.3 < Q < 0.1 : %d (%1.2f%%) elements\n", histo[5], 100*(float)histo[5]/NElements_real);
         printf("    0.1 < Q < 0.01: %d (%1.2f%%) elements\n", histo[6], 100*(float)histo[6]/NElements_real);
         printf("   0.01 < Q       : %d (%1.2f%%) elements\n", histo[7], 100*(float)histo[7]/NElements_real);
+    }
+
+
+    /// Write the edge lengths to a file. Useful if you want to plot a histogram.
+    void write_edge_length(const char * filename)
+    {
+        FILE * elenfile = fopen(filename, "w");
+        for (int iVer0 = 0; iVer0 < NNodes; ++iVer0) {
+            for (int i = 0; i < NNList[iVer0].size(); ++i) {
+                int iVer1 = NNList[iVer0][i];
+                if (iVer0<iVer1) {
+                    double length = calc_edge_length_log(iVer0, iVer1);
+                    fprintf(elenfile, "%d %d  %1.6e\n", iVer0, iVer1, length);
+                }
+            }
+        }
+        fclose(elenfile);
     }
 
     void print_edge_length_histo() const
