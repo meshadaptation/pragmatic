@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath('..'))
 from dolfin import *
 from adaptivity import *
 from numpy import unique
@@ -62,3 +65,5 @@ relative_change = abs(area - new_area)/area
 
 if relative_change > 0.012:
     raise RuntimeError('Test failed: mesh volume not preserved in the right way')
+
+print("TEST PASSED!")
