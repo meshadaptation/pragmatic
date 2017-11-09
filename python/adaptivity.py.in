@@ -56,6 +56,7 @@ anisotropically.
 import ctypes, ctypes.util, numpy, scipy.sparse, scipy.sparse.linalg, collections
 from numpy import array, zeros, ones, any, arange, isnan
 from numpy.linalg import eigh as pyeig
+from itertools import combinations
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -1130,66 +1131,82 @@ def logproject(Mp):
     return logexpmetric(logMp,logexp='exp')
 
 def mesh_metric(mesh):
-  # calculates a mesh metric (that is it has unit of squared inverse length,
-  # use mesh_metric2 to get units of length)
-  # On each element, the edge i is delimited by two points of coordinate vectors x_i and y_i.
-  # Define the edge vector Li to be given by Li = yi - xi and define the element mesh metric tensor M such that
-  #
-  # Li^T M Li = 1, for each i .
-  #
-  # The above equation defines a linear system that gives the entries of the metric tensor M.
-  # M is piecewise constant on each element and to compute its value a small linear system
-  # has to be solved for each element. For example, in 2D these linear systems are all in the form,
-  #
-  #
-  # |'L1x*L1x L1x*L1y L1y*L1y'| |'Mxy |   |'1'|
-  # | L2x*L2x L2x*L2y L2y*L2y | | Mxy | = | 1_|
-  # |_L3x*L3x L3x*L3y L3y*L3y_| |_Myy_|   |_1_|,
-  #
-  # where Lix, Liy are the x and y coordinates of Li respectively.
-  #
-  # The following code is assembling and solving these linear systems. 
-  # First, all the systems are assembled, then each system is solved one by one.
-  #
-  #INPUT : DOLFIN MESH
-  #OUTPUT: DOLFIN DG0 SPD TENSOR VARIABLE
-  #
-  #NOTE: For stabilising advective problems where the local velocity direction 
-  #      is vdir (unit length), the local element size, Lh, can be taken as 
-  #      htmp = dot(vdir,M); Lh = 1/sqrt(dot(htmp,htmp)), where M is the mesh metric
+    # calculates a mesh metric (that is it has unit of squared inverse length,
+    # use mesh_metric2 to get units of length)
+    # On each element, the edge i is delimited by two points of coordinate vectors x_i and y_i.
+    # Define the edge vector Li to be given by ri = yi - xi and define the element mesh metric tensor M such that
+    #
+    # ri^T M ri = 1, for each i .
+    #
+    # To compute M, we use the exact formula given in https://doi.org/10.1016/j.crma.2016.11.007
+    # 
+    # M = (gdim + 1)/2*(\sum_{i<j}ri*ri^T)^{-1} 
+    #
+    # The matrix inverse in the formula is computed using the exact formula for a symmetric matrix inverse in 2D and 3D,
+    # the implementation is done so that the code is vectorised.
+    #
+    # INPUT : DOLFIN MESH
+    # OUTPUT: DOLFIN DG0 SPD TENSOR VARIABLE
 
-  dim = mesh.geometry().dim()
-  cell2dof = c_cell_dofs(mesh,TensorFunctionSpace(mesh, "DG", 0))
-  cells_array = mesh.cells()
-  coords = mesh.coordinates()
-  n_cells = mesh.num_cells()
-  p1 = coords[cells_array[:,0],:];
-  p2 = coords[cells_array[:,1],:];
-  p3 = coords[cells_array[:,2],:];
-  r1 = p1-p2; r2 = p1-p3; r3 = p2-p3
-  Nedg = 3
-  if dim == 3:
-      Nedg = 6
-      p4 = coords[cells_array[:,3],:];
-      r4 = p1-p4; r5 = p2-p4; r6 = p3-p4
-  rall = zeros([n_cells,dim,Nedg])
-  rall[:,:,0] = r1; rall[:,:,1] = r2; rall[:,:,2] = r3;
-  if dim == 3:
-      rall[:,:,3] = r4; rall[:,:,4] = r5; rall[:,:,5] = r6
-  All = zeros([n_cells,Nedg**2])
-  inds = arange(Nedg**2).reshape([Nedg,Nedg])
-  for i in range(Nedg):
-    All[:,inds[i,0]] = rall[:,0,i]**2; All[:,inds[i,1]] = 2.*rall[:,0,i]*rall[:,1,i]; All[:,inds[i,2]] = rall[:,1,i]**2
-    if dim == 3:
-      All[:,inds[i,3]] = 2.*rall[:,0,i]*rall[:,2,i]; All[:,inds[i,4]] = 2.*rall[:,1,i]*rall[:,2,i]; All[:,inds[i,5]] = rall[:,2,i]**2
+    # geometric dimension and its square
+    gdim = mesh.geometry().dim()
+    sqdim = gdim**2
 
-  X = numpy.concatenate([numpy.linalg.solve(item.reshape((Nedg,Nedg)),ones(Nedg)) for item in All])
-  
-  #set solution
-  XX = sym2asym(X.reshape([n_cells,Nedg]).transpose())
-  M = Function(TensorFunctionSpace(mesh,"DG", 0))
-  M.vector().set_local(XX.transpose().flatten()[cell2dof])
-  return M
+    # extract cells and mesh coordinates
+    cells_array = mesh.cells()
+    coords = mesh.coordinates()
+
+    # the following routine computes the outer product between the ri of every cell in a vectorised way
+    # we flatten the output tensor
+    def row_wise_outer_product(r):
+        return numpy.einsum('ij,ik->ijk',r,r).flatten()
+
+    # get all edge vectors
+    p = [coords[cells_array[:,i],:] for i in range(gdim+1)]
+    # compute the inverse of M on each cell
+    invM = 2.0/(gdim + 1)*sum([row_wise_outer_product(p[i]-p[j]) for i,j in combinations(range(gdim+1), 2)])
+
+    M_val = invM.copy()
+
+    # in the following we compute a vectorised exact inverse of invM for each cell so as to obtain M
+    if gdim == 2:
+        # determinants
+        determinants = (invM[::sqdim]*invM[3::sqdim] - invM[1::sqdim]**2).repeat(sqdim)
+        # invert the order and divide by the determinants
+        M_val = M_val[::-1]/determinants
+        # change the sign of selected entries to complete the inversion
+        M_val[1::sqdim] *= -1
+        M_val[2::sqdim] *= -1
+    else:
+        # exact formula in 3D, not that nice
+
+        # determinants
+        determinants = (invM[8::sqdim]*invM[1::sqdim]**2 + invM[4::sqdim]*invM[2::sqdim]**2 + invM[::sqdim]*invM[5::sqdim]**2 \
+                  - 2.0*invM[1::sqdim]*invM[2::sqdim]*invM[5::sqdim] - invM[::sqdim]*invM[4::sqdim]*invM[8::sqdim]).repeat(sqdim)
+
+        # diagonal entries
+        M_val[::sqdim]  = invM[5::sqdim]**2 - invM[4::sqdim]*invM[8::sqdim]
+        M_val[4::sqdim] = invM[2::sqdim]**2 - invM[::sqdim]*invM[8::sqdim]
+        M_val[8::sqdim] = invM[1::sqdim]**2 - invM[::sqdim]*invM[4::sqdim]
+
+        # off-diagonal entries
+        M_val[1::sqdim] = invM[1::sqdim]*invM[8::sqdim] - invM[2::sqdim]*invM[5::sqdim]
+        M_val[2::sqdim] = invM[2::sqdim]*invM[4::sqdim] - invM[1::sqdim]*invM[5::sqdim]
+        M_val[5::sqdim] = invM[::sqdim]*invM[5::sqdim] - invM[1::sqdim]*invM[2::sqdim]
+
+        # impose symmetry
+        M_val[3::sqdim] = M_val[1::sqdim]
+        M_val[6::sqdim] = M_val[2::sqdim]
+        M_val[7::sqdim] = M_val[5::sqdim]
+
+        # divide by determinants
+        M_val /= determinants
+
+    # define dolfin metric tensor and assign the computed values
+    M = Function(TensorFunctionSpace(mesh, "DG", 0))
+    M.vector().set_local(M_val)
+
+    return M
 
 def mesh_metric1(mesh):
   #this is just the inverse of mesh_metric2
@@ -1245,9 +1262,9 @@ def c_cell_dofs(mesh,V):
   # The DOLFIN storage CONVENTION was greatly simplified at 1.3.0 :
   if dolfin.__version__ >= '1.3.0':
    if V.ufl_element().is_cellwise_constant():
-    return arange(mesh.num_cells()*mesh.coordinates().shape[1]**2)
+    return arange(mesh.num_cells()*mesh.geometry().dim()**2)
    else:
-    return arange(mesh.num_vertices()*mesh.coordinates().shape[1]**2)
+    return arange(mesh.num_vertices()*mesh.geometry().dim()**2)
   else:
       #returns the degrees of freedom numbers in a cell
       code = """
