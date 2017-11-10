@@ -1170,13 +1170,22 @@ def mesh_metric(mesh):
 
     # in the following we compute a vectorised exact inverse of invM for each cell so as to obtain M
     if gdim == 2:
+        # exact formula in 2D
+
         # determinants
         determinants = (invM[::sqdim]*invM[3::sqdim] - invM[1::sqdim]**2).repeat(sqdim)
-        # invert the order and divide by the determinants
-        M_val = M_val[::-1]/determinants
+
+        # swap the matrix diagonal entries
+        temp = M_val[::sqdim].copy()
+        M_val[::sqdim]  = M_val[3::sqdim].copy()
+        M_val[3::sqdim] = temp
+
         # change the sign of selected entries to complete the inversion
         M_val[1::sqdim] *= -1
         M_val[2::sqdim] *= -1
+
+        # divide by determinants
+        M_val /= determinants
     else:
         # exact formula in 3D, not that nice
 
