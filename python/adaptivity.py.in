@@ -41,6 +41,7 @@
 # James Maddinson    for the original version of Dolfin interface.
 # Davide Longoni     for p-norm function.
 # Kristian E. Jensen for ellipse function, test cases, vectorization opt., 3D glue
+# Matteo Croci       for updating/rewriting/optimising the interface
 
 """@package PRAgMaTIc
 
@@ -1156,8 +1157,10 @@ def mesh_metric(mesh):
     cells_array = mesh.cells()
     coords = mesh.coordinates()
 
-    # the following routine computes the outer product between the ri of every cell in a vectorised way
-    # we flatten the output tensor
+    # the following routine takes an m-by-n matrix r and computes the outer product of each row vector s[i,:,:] = outer(r[i,:], r[i,:])
+    # in a vectorised way, where s[i,:,:] is a n-by-n rank 1 matrix. Once all of the outer products have been computed,
+    # the tensor s is flattened into a 1D array, which is made of the flattened s[i,:,:] stacked one after the other.
+    # We use this routine to compute the outer products between the edge vectors efficiently.
     def row_wise_outer_product(r):
         return numpy.einsum('ij,ik->ijk',r,r).flatten()
 
