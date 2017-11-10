@@ -1179,11 +1179,10 @@ def mesh_metric(mesh):
         determinants = (invM[::sqdim]*invM[3::sqdim] - invM[1::sqdim]**2).repeat(sqdim)
 
         # swap the matrix diagonal entries
-        temp = M_val[::sqdim].copy()
-        M_val[::sqdim]  = M_val[3::sqdim].copy()
-        M_val[3::sqdim] = temp
+        M_val[::sqdim]  = invM[3::sqdim].copy()
+        M_val[3::sqdim] = invM[ ::sqdim].copy()
 
-        # change the sign of selected entries to complete the inversion
+        # change the sign of off-diagonal entries
         M_val[1::sqdim] *= -1
         M_val[2::sqdim] *= -1
 

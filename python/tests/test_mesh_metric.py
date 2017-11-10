@@ -4,12 +4,12 @@ sys.path.append(os.path.abspath('..'))
 from dolfin import *
 from adaptivity import *
 from numpy import array, sort
+import numpy as np
 
 #############################################################################################################
 ### Test 1: Unit Square
 #############################################################################################################
 
-check = []
 test_metric = array([[1.0, -0.5], [-0.5, 1.0]])
 
 for n in range(2, 20):
@@ -28,18 +28,15 @@ for n in range(2, 20):
     if abs(a-test_metric).max() > 1.0e-14:
         raise RuntimeError('Test failed: the metric is not correct')
 
-    check.append(a.max())
-
-# the metric should scale like O(1/h^2). This test is redundant because we are checking whether the metric is exact.
-if max(check) - min(check) > 1.0e-14:
-    raise RuntimeError('Test failed: the metric does not scale like O(1/h^2)')
-
 #############################################################################################################
 ### Test 2: Unit Cube
 #############################################################################################################
 
-check = []
-test_metric = array([-0.5, -0.5, -0.5, -0.5, -0. , -0. ,  1. ,  1. ,  1. ])
+# in 3D a cube can be divided into 6 different tetrahedra. Given the structure of UnitCubeMesh
+# there are only 3 types of tetrahedra in this case
+exact_metrics = array([[[ 1. , -0.5,  0. ], [-0.5,  1. , -0.5], [ 0. , -0.5,  1. ]],\
+                       [[ 1. ,  0., -0.5 ], [ 0. ,  1. , -0.5], [-0.5, -0.5,  1. ]],\
+                       [[ 1. ,-0.5, -0.5 ], [-0.5,  1. ,  0. ], [-0.5,  0. ,  1. ]]])
 
 for n in range(2, 10):
     mesh = UnitCubeMesh(mpi_comm_world(), n, n, n)
@@ -48,20 +45,14 @@ for n in range(2, 10):
 
     A = M.vector().array().reshape((mesh.num_cells(),3,3))
 
-    # the metric should be constant on each element. Currently the metric depends on the mesh ordering
-    # so we sort the entries
+    # the following checks that all the sorted entries of all the metrics are correct
     if abs(sort(A.flatten()) - sort(A[0,:,:].flatten().repeat(mesh.num_cells()))).max()/A.max() > 1.0e-14:
-        raise RuntimeError('Test failed: the metric is not constant on each element')
-
-    a = sort(A[0,:,:].flatten()*mesh.hmax()**2/3.)
-
-    if abs(a-test_metric).max() > 1.0e-14:
         raise RuntimeError('Test failed: the metric is not correct')
 
-    check.append(a.max())
+    a = A*mesh.hmax()**2/3.
 
-# the metric should scale like O(1/h^2). This test is redundant because we are checking whether the metric is exact.
-if max(check) - min(check) > 1.0e-14:
-    raise RuntimeError('Test failed: the metric does not scale like O(1/h^2)')
+    # the following checks that each computed metric is one of the three possible exact metrics
+    if np.prod(array([np.max(abs(a - exact_metrics[i,:,:]) > 1.0e-14, (1,2)) for i in range(3)]), 1).max() != 0:
+        raise RuntimeError('Test failed: the metric is not correct')
 
 print("TEST PASSED!")
