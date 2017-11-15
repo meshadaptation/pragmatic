@@ -195,7 +195,8 @@ def patchwise_projection(dg_metric, mesh):
       {
         const std::size_t dim = mesh.geometry().dim();
         const std::vector<int> vertex_map = vertex_to_dof_map(space);
-        double init_vals[4] = {0.0};
+        double init_vals[dim*dim];
+        memset( init_vals, 0, dim*dim*sizeof(double) );
         Array<double> vals(dim*dim, init_vals);
         double denom = 0.0;
         double volume = 0.0;
