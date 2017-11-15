@@ -131,20 +131,20 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   if len(n_xy) == 1:
    for i in range(nvtx):
     ed.add_vertex(i, n_xy[0,i])
-   ed.init_cells(len(n_enlist)/2)
-   for i in range(len(n_enlist)/2): #n_NElements.value
+   ed.init_cells(int(len(n_enlist)/2))
+   for i in range(int(len(n_enlist)/2)): #n_NElements.value
     ed.add_cell(i, n_enlist[i * 2], n_enlist[i * 2 + 1])
   elif len(n_xy) == 2:
    for i in range(nvtx): #n_NNodes.value
      ed.add_vertex(i, n_xy[0,i], n_xy[1,i])
-   ed.init_cells(len(n_enlist)/3) #n_NElements.value
-   for i in range(len(n_enlist)/3): #n_NElements.value
+   ed.init_cells(int(len(n_enlist)/3)) #n_NElements.value
+   for i in range(int(len(n_enlist)/3)): #n_NElements.value
      ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
   else: #3D
    for i in range(nvtx): #n_NNodes.value
      ed.add_vertex(i, n_xy[0,i], n_xy[1,i], n_xy[2,i])
-   ed.init_cells(len(n_enlist)/4) #n_NElements.value
-   for i in range(len(n_enlist)/4): #n_NElements.value
+   ed.init_cells(int(len(n_enlist)/4)) #n_NElements.value
+   for i in range(int(len(n_enlist)/4)): #n_NElements.value
      ed.add_cell(i, n_enlist[i * 4], n_enlist[i * 4 + 1], n_enlist[i * 4 + 2], n_enlist[i * 4 + 3])
   ed.close()
   info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
@@ -193,7 +193,7 @@ def patchwise_projection(dg_metric, mesh):
     {
       void project(const Function M, GenericVector& u, const Mesh mesh, const FunctionSpace space)
       {
-        std::size_t dim = mesh.geometry().dim();
+        const std::size_t dim = mesh.geometry().dim();
         const std::vector<int> vertex_map = vertex_to_dof_map(space);
         double init_vals[4] = {0.0};
         Array<double> vals(dim*dim, init_vals);
@@ -463,9 +463,10 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   # create boundary mesh and associated list of co-linear edges
   if bfaces is None:
       mesh.init(1,2)
-      bfaces = set([])
-      [bfaces.add(f) for f in facets(mesh) if f.exterior()]
-      bfaces_list = list(bfaces)
+      bfaces_list = []
+      # set((bfaces.add(f) for f in facets(mesh) if f.exterior()))
+      [bfaces_list.append(f) for f in facets(mesh) if f.exterior()]
+#      bfaces = set(bfaces_list)
       bfaces = numpy.array([tuple(f.entities(0)) for f in bfaces_list])
 
   if bfaces_func is None:
