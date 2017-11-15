@@ -465,9 +465,7 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   if bfaces is None:
       mesh.init(1,2)
       bfaces_list = []
-      # set((bfaces.add(f) for f in facets(mesh) if f.exterior()))
       [bfaces_list.append(f) for f in facets(mesh) if f.exterior()]
-#      bfaces = set(bfaces_list)
       bfaces = numpy.array([tuple(f.entities(0)) for f in bfaces_list])
 
   if bfaces_func is None:
