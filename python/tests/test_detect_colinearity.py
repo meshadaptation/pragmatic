@@ -33,7 +33,7 @@ for N in range(4,21):
 
     # number of tags should be equal to the number of sides of the polygon divided by 2 plus the interior tag
     # this is because colinearity is checked with respect to the first untagged facet found
-    if len(unique(markers2.array())) != N/2+1:
+    if len(unique(markers2.array())) != int(N/2)+1:
         raise RuntimeError('Test failed: number of tags assigned by colinearity_detection is wrong')
 
 #############################################################################################################
