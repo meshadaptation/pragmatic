@@ -41,7 +41,11 @@ if (ENABLE_LIBMESHB)
   TARGET_LINK_LIBRARIES(test_gmf ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
   ADD_EXECUTABLE(test_ugawg_cube ${PRAGMATIC_TEST_SRC}/test_ugawg_cube.cpp ${src_lite})
-  TARGET_LINK_LIBRARIES(test_ugawg_cube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})  
+  TARGET_LINK_LIBRARIES(test_ugawg_cube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+
+  ADD_EXECUTABLE(test_bug_smoothing ${PRAGMATIC_TEST_SRC}/test_bug_smoothing.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_bug_smoothing ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+
 endif()
 
 # tests with VTK:
