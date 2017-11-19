@@ -835,7 +835,14 @@ private:
             property->lipnikov_grad(loc, x0, x1, x2, m0, grad_w);
 
             double mag = sqrt(grad_w[0]*grad_w[0]+grad_w[1]*grad_w[1]);
-            assert(mag!=0);
+            // if the gradient is null, the vertex is already in its optimal location
+            if(!std::isnormal(mag)) {
+                std::cout<<"WARNING  mag issues in Linf smoothing"<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<std::endl;
+                std::cout<<"This usually means that the metric field is rubbish\n";
+            }
+            if (mag < DBL_EPSILON)
+                return false;
+            assert(std::isnormal(mag));
 
             for(int i=0; i<2; i++)
                 search[i] = grad_w[i]/mag;
@@ -1023,9 +1030,11 @@ private:
 
             double mag = sqrt(grad_w[0]*grad_w[0] + grad_w[1]*grad_w[1] + grad_w[2]*grad_w[2]);
             if(!std::isnormal(mag)) {
-                std::cout<<"mag issues "<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
+                std::cout<<"WARNING  mag issues in Linf smoothing"<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
                 std::cout<<"This usually means that the metric field is rubbish\n";
             }
+            if (mag < DBL_EPSILON)
+                return false;
             assert(std::isnormal(mag));
 
             for(int i=0; i<3; i++)
