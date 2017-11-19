@@ -251,7 +251,7 @@ private:
                 y.push_back((real_t)bufFlt[1]);
             }
         }
-        else if (gmfVersion == GmfFloat) {
+        else if (gmfVersion == GmfDouble) {
             for (index_t i=0; i<NNodes; i++) {
                 GmfGetLin(meshIndex, GmfVertices, &bufDbl[0], &bufDbl[1], &tag);
                 x.push_back((real_t)bufDbl[0]);
@@ -503,6 +503,7 @@ private:
         for (index_t i=0; i<NFacets; i++) {
             fac = &facets[2*i];
             tag = ids[i];
+            GmfSetLin(meshIndex, GmfEdges, fac[0]+1, fac[1]+1, tag);
         }
 
         GmfCloseMesh(meshIndex);
