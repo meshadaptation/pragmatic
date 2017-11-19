@@ -117,6 +117,7 @@ int main(int argc, char **argv)
     std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
 #endif
 
+    printf("pass\n");
 
 #else
     std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
