@@ -43,8 +43,8 @@ if (ENABLE_LIBMESHB)
   ADD_EXECUTABLE(test_ugawg_cube ${PRAGMATIC_TEST_SRC}/test_ugawg_cube.cpp ${src_lite})
   TARGET_LINK_LIBRARIES(test_ugawg_cube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
-  ADD_EXECUTABLE(test_bug_smoothing ${PRAGMATIC_TEST_SRC}/test_bug_smoothing.cpp ${src_lite})
-  TARGET_LINK_LIBRARIES(test_bug_smoothing ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+  ADD_EXECUTABLE(test_uniform_adapt_2d ${PRAGMATIC_TEST_SRC}/test_uniform_adapt_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_uniform_adapt_2d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
 endif()
 

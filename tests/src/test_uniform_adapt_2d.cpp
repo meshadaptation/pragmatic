@@ -63,21 +63,18 @@
 #include <mpi.h>
 
 
-void set_metric(Mesh<double> *mesh, MetricField<double,2> &metric) {
-    
+void set_metric(Mesh<double> *mesh, MetricField<double,2> &metric) 
+{    
     double m[3] = {0};
 
     size_t NNodes = mesh->get_number_nodes();
-
     for(size_t i=0; i<NNodes; i++) {
-  
         m[0] = 400;
         m[1] = -200;
         m[2] = 400;
         
         metric.set_metric(m, i);
     }
-
     metric.update_mesh();
 }
 
@@ -96,28 +93,23 @@ int main(int argc, char **argv)
     char filename_in[256];
     sprintf(filename_in, "../data/square5x5");
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
-
     pragmatic_init_light((void*)mesh);
 
     MetricField<double,2> metric_field(*mesh);
     set_metric(mesh, metric_field);
-
     pragmatic_adapt(0);
-
-	mesh->compute_print_quality();
-	mesh->compute_print_NNodes_global();
-
-	char filename_out[256];
-	sprintf(filename_out, "bug");
-	GMFTools<double>::export_gmf_mesh(filename_out, mesh);
-
-#ifdef HAVE_VTK
-    VTKTools<double>::export_vtu("bug", mesh);
-#else
-    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
-#endif
-
     printf("pass\n");
+
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+    if (qmean > 0.99999999 && qmin > 0.99999999) 
+        printf("pass");
+    else
+        fprintf(stderr, "ERROR qmean: %1.15e  qmin: %1.15e\n", qmean, qmin);
+
+    char filename_out[256];
+    sprintf(filename_out, "../data/test_uniform_adapt_2d");
+    GMFTools<double>::export_gmf_mesh(filename_out, mesh);
 
 #else
     std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
