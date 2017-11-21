@@ -601,26 +601,26 @@ private:
                     associated_elements_rm.swap(associated_elements3_rm);
                 }
                 // find element on the other end of the edge
-                assert(associated_elements_rm.size()==2);
-                int associated_element_rm = *associated_elements_rm.begin();
-                if (associated_element_rm == eid) {
-                    associated_element_rm = *associated_elements_rm.rbegin();
+                if (associated_elements_rm.size()==2) {
+                    int associated_element_rm = *associated_elements_rm.begin();
+                    if (associated_element_rm == eid) {
+                        associated_element_rm = *associated_elements_rm.rbegin();
+                    }
+                    // find facet in the element
+                    const index_t *m = _mesh->get_element(associated_element_rm);
+                    int ifacet = 0;
+                    for (ifacet=0; ifacet<nloc; ifacet++) {
+                        if (m[ifacet]==facet_rm[0])
+                            continue;
+                        if (m[ifacet]==facet_rm[1])
+                            continue;
+                        if (ndims==3 && m[ifacet]==facet_rm[2])
+                            continue;
+                        break;
+                    }
+                    // Finally...update boundary.
+                    _mesh->boundary[associated_element_rm*nloc+ifacet] = inherit_boundary_id;
                 }
-                // find facet in the element
-                const index_t *m = _mesh->get_element(associated_element_rm);
-                int ifacet = 0;
-                for (ifacet=0; ifacet<nloc; ifacet++) {
-                    if (m[ifacet]==facet_rm[0])
-                        continue;
-                    if (m[ifacet]==facet_rm[1])
-                        continue;
-                    if (ndims==3 && m[ifacet]==facet_rm[2])
-                        continue;
-                    break;
-                }
-                // Finally...update boundary.
-                _mesh->boundary[associated_element_rm*nloc+ifacet] = inherit_boundary_id;
-
 //                printf("DEBUG   I am in this case, target_vertex and position: %d %d, rm_vertex and position: %d %d, inherit_boundary_id: %d\n",
 //                        target_vertex, target_position, rm_vertex, rm_position, inherit_boundary_id);
 
