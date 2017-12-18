@@ -63,7 +63,7 @@
 #include <mpi.h>
 
 
-void set_metric(Mesh<double> *mesh, MetricField<double,3> &metric) {
+void set_metric(Mesh<double> *mesh, MetricField<double,2> &metric) {
     
     double m[3] = {0};
 
@@ -76,15 +76,14 @@ void set_metric(Mesh<double> *mesh, MetricField<double,3> &metric) {
         double x = mesh->get_coords(i)[0];
 
         if (x > 8.e5) {
-            const double * m0 = mesh->get_metric(i);
-            double cof = (1 - (x - 8e5) *2.5e-6 ) * 0.13333;
+            const double * m0 = metric.get_metric(i);
+            double cof = (1 - 2.4e-6*(x - 8e5)) * 0.13333;
             m[0] = m0[0] * cof;
             m[1] = m0[1] * cof;
             m[2] = m0[2] * cof;
             metric.set_metric(m, i);
         }
     }
-
     metric.update_mesh();
 }
 
@@ -106,7 +105,7 @@ int main(int argc, char **argv)
 
     pragmatic_init_light((void*)mesh);
 
-    MetricField<double,3> metric_field(*mesh);
+    MetricField<double,2> metric_field(*mesh);
     set_metric(mesh, metric_field);
 
     pragmatic_adapt(0);
