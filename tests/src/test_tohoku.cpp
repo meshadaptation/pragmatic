@@ -116,6 +116,7 @@ int main(int argc, char **argv)
     char filename_out[256];
     sprintf(filename_out, "../data/test_tohoku");
     GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+    printf("pass");
 
 #else
     std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
