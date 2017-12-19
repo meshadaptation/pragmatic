@@ -455,7 +455,7 @@ private:
                 // Check we are not removing surface features.
                 double av_var = std::abs(total_new_av-total_old_av);
                 av_var /= std::max(total_new_av, total_old_av);
-                if (av_var > _mesh->get_ref_length()*DBL_EPSILON) {
+                if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                     reject_collapse=true;
                     continue;
                 }

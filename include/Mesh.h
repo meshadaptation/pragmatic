@@ -2094,8 +2094,8 @@ private:
             bbox_loc[3] = std::max(bbox_loc[3], x[1]);
 
             if (ndims == 3) {
-                bbox_loc[2] = std::min(bbox_loc[2], x[2]);
-                bbox_loc[3] = std::max(bbox_loc[3], x[2]);
+                bbox_loc[4] = std::min(bbox_loc[4], x[2]);
+                bbox_loc[5] = std::max(bbox_loc[5], x[2]);
             }
         }
 
@@ -2119,6 +2119,7 @@ private:
                              + (bbox[2]-bbox[3])*(bbox[2]-bbox[3])
                              + (bbox[4]-bbox[5])*(bbox[4]-bbox[5]));
         }
+        assert(std::isnormal(Lref));
     }
 
 
