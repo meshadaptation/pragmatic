@@ -453,7 +453,9 @@ private:
 
             if(!surface_coarsening) {
                 // Check we are not removing surface features.
-                if(std::abs(total_new_av-total_old_av)/std::max(total_new_av, total_old_av)>DBL_EPSILON) {
+                double av_var = std::abs(total_new_av-total_old_av);
+                av_var /= std::max(total_new_av, total_old_av);
+                if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                     reject_collapse=true;
                     continue;
                 }
