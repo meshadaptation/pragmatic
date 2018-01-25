@@ -133,6 +133,7 @@ public:
             }
 
             for(int citerations=0; citerations<100; citerations++) {
+//                printf("DEBUG  citerations: %d\n", citerations);
                 // Vector "retry" is used to store aborted vertices.
                 // Vector "round" is used to store propagated vertices.
                 std::vector<index_t> retry, next_retry;
@@ -452,7 +453,9 @@ private:
 
             if(!surface_coarsening) {
                 // Check we are not removing surface features.
-                if(std::abs(total_new_av-total_old_av)/std::max(total_new_av, total_old_av)>DBL_EPSILON) {
+                double av_var = std::abs(total_new_av-total_old_av);
+                av_var /= std::max(total_new_av, total_old_av);
+                if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                     reject_collapse=true;
                     continue;
                 }
@@ -506,11 +509,11 @@ private:
             const index_t *n = _mesh->get_element(eid);
 
             // Find falling facet.
-            int facet[ndims], pos=0;
+            int falling_facet[ndims], pos=0;
             int inherit_boundary_id=0;
             for (int i=0; i<nloc; i++) {
                 if (n[i]!=target_vertex) {
-                    facet[pos++] = n[i];
+                    falling_facet[pos++] = n[i];
                 }
                 if (n[i]==rm_vertex) {
                     inherit_boundary_id = _mesh->boundary[eid*nloc+i];
@@ -519,16 +522,17 @@ private:
 
             // Find associated element.
             std::set<index_t> associated_elements;
-            std::set_intersection(_mesh->NEList[facet[0]].begin(), _mesh->NEList[facet[0]].end(),
-                                  _mesh->NEList[facet[1]].begin(), _mesh->NEList[facet[1]].end(),
+            std::set_intersection(_mesh->NEList[falling_facet[0]].begin(), _mesh->NEList[falling_facet[0]].end(),
+                                  _mesh->NEList[falling_facet[1]].begin(), _mesh->NEList[falling_facet[1]].end(),
                                   std::inserter(associated_elements, associated_elements.begin()));
             if (ndims==3) {
                 std::set<index_t> associated_elements3;
-                std::set_intersection(_mesh->NEList[facet[2]].begin(), _mesh->NEList[facet[2]].end(),
+                std::set_intersection(_mesh->NEList[falling_facet[2]].begin(), _mesh->NEList[falling_facet[2]].end(),
                                       associated_elements.begin(), associated_elements.end(),
                                       std::inserter(associated_elements3, associated_elements3.begin()));
                 associated_elements.swap(associated_elements3);
             }
+            
             if (associated_elements.size()==2) {
                 int associated_element = *associated_elements.begin();
                 if (associated_element==eid) {
@@ -536,20 +540,72 @@ private:
                 }
 
                 // Locate falling facet on this element.
-                int ifacet=0;
+                int iFacet=0;
                 const index_t *m = _mesh->get_element(associated_element);
-                for (; ifacet<nloc; ifacet++) {
-                    if (m[ifacet]==facet[0])
+                for (; iFacet<nloc; iFacet++) {
+                    if (m[iFacet]==falling_facet[0])
                         continue;
-                    if (m[ifacet]==facet[1])
+                    if (m[iFacet]==falling_facet[1])
                         continue;
-                    if (ndims==3 && m[ifacet]==facet[2])
+                    if (ndims==3 && m[iFacet]==falling_facet[2])
                         continue;
                     break;
                 }
 
                 // Finally...update boundary.
-                _mesh->boundary[associated_element*nloc+ifacet] = inherit_boundary_id;
+                _mesh->boundary[associated_element*nloc+iFacet] = inherit_boundary_id;
+            }
+            else if (associated_elements.size()==1) {
+                // my falling facet is a boundary facet, 
+                // in which case the facet onto which it is falling should inherit the falling facet tag 
+                // if it is an internal facet
+                int falled_faced[ndims]; // facet opposite to rm_vertex, ie the one onto which the falling facet falls
+                int pos = 0;
+                for (int i=0; i<nloc; i++) {
+                    if (n[i]!=rm_vertex) {
+                        falled_faced[pos++] = n[i];
+                    }
+                    if (n[i]==target_vertex) {
+                        inherit_boundary_id = _mesh->boundary[eid*nloc+i]; // id of the falling facet
+                    }
+                }
+                // If rm_facet has only one neighbour: it is a boundary facet, it seems to be covered by code above
+                // If rm_facet should has 2 neighbors, one of which is the deleted tet, 
+                //    another one in which I must find the facet and update it boundary id
+                // Find associated elements.
+                std::set<index_t> associated_elements_falled_facet;
+                std::set_intersection(_mesh->NEList[falled_faced[0]].begin(), _mesh->NEList[falled_faced[0]].end(),
+                                      _mesh->NEList[falled_faced[1]].begin(), _mesh->NEList[falled_faced[1]].end(),
+                                      std::inserter(associated_elements_falled_facet, 
+                                      associated_elements_falled_facet.begin()));
+                if (ndims==3) {
+                    std::set<index_t> associated_elements3_falled_facet;
+                    std::set_intersection(_mesh->NEList[falled_faced[2]].begin(), _mesh->NEList[falled_faced[2]].end(),
+                                          associated_elements_falled_facet.begin(), associated_elements_falled_facet.end(),
+                                          std::inserter(associated_elements3_falled_facet, associated_elements3_falled_facet.begin()));
+                    associated_elements_falled_facet.swap(associated_elements3_falled_facet);
+                }
+                // find element on the other side of the facet
+                if (associated_elements_falled_facet.size()==2) {
+                    int associated_element_falled_facet = *associated_elements_falled_facet.begin();
+                    if (associated_element_falled_facet == eid) {
+                        associated_element_falled_facet = *associated_elements_falled_facet.rbegin();
+                    }
+                    // find facet in the element
+                    const index_t *m = _mesh->get_element(associated_element_falled_facet);
+                    int iFacet = 0;
+                    for (iFacet=0; iFacet<nloc; iFacet++) {
+                        if (m[iFacet]==falled_faced[0])
+                            continue;
+                        if (m[iFacet]==falled_faced[1])
+                            continue;
+                        if (ndims==3 && m[iFacet]==falled_faced[2])
+                            continue;
+                        break;
+                    }
+                    // Finally...update boundary.
+                    _mesh->boundary[associated_element_falled_facet*nloc+iFacet] = inherit_boundary_id;
+                }
             }
             for(size_t i=0; i<nloc; ++i) {
                 _mesh->NEList[n[i]].erase(eid);

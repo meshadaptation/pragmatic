@@ -857,6 +857,12 @@ public:
         return qmin;
     }
 
+    /// Return the reference length
+    double get_ref_length()
+    {
+        return Lref;
+    }
+
     /// Return the MPI communicator.
     MPI_Comm get_mpi_comm() const
     {
@@ -1884,6 +1890,8 @@ private:
         create_adjacency();
 	    
         create_global_node_numbering();
+
+        compute_ref_length();
     }
 
     /// Create required adjacency lists.
@@ -2158,6 +2166,49 @@ private:
     }
     
     
+    /// Calculate a domain reference length (1/2 of the diagonal of the bounding box)
+    void compute_ref_length()
+    {
+        // Compute bounding box locally
+        double bbox_loc[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            const double *x = &_coords[iVer];
+
+            bbox_loc[0] = std::min(bbox_loc[0], x[0]);
+            bbox_loc[1] = std::max(bbox_loc[1], x[0]);
+
+            bbox_loc[2] = std::min(bbox_loc[2], x[1]);
+            bbox_loc[3] = std::max(bbox_loc[3], x[1]);
+
+            if (ndims == 3) {
+                bbox_loc[4] = std::min(bbox_loc[4], x[2]);
+                bbox_loc[5] = std::max(bbox_loc[5], x[2]);
+            }
+        }
+
+        // compute global bbopx
+        double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
+        MPI_Allreduce(&bbox_loc[0], &bbox[0], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[1], &bbox[1], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[2], &bbox[2], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[3], &bbox[3], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        if (ndims == 3) {
+            MPI_Allreduce(&bbox_loc[4], &bbox[4], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+            MPI_Allreduce(&bbox_loc[5], &bbox[5], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        }
+
+        if (ndims == 2) {
+            Lref = 0.5 * sqrt( (bbox[0]-bbox[1])*(bbox[0]-bbox[1])
+                             + (bbox[2]-bbox[3])*(bbox[2]-bbox[3]));
+        }
+        else {
+            Lref = 0.5 * sqrt( (bbox[0]-bbox[1])*(bbox[0]-bbox[1])
+                             + (bbox[2]-bbox[3])*(bbox[2]-bbox[3])
+                             + (bbox[4]-bbox[5])*(bbox[4]-bbox[5]));
+        }
+        assert(std::isnormal(Lref));
+    }
+
 
     template<int dim>
     inline double calculate_quality(const index_t* n)
@@ -2222,6 +2273,9 @@ private:
 
     // Metric tensor field.
     std::vector<double> metric;
+
+    // Reference length of the domain
+    double Lref;
 
     // Parallel support.
     int rank, num_processes, nthreads;
