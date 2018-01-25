@@ -129,129 +129,68 @@ int main(int argc, char **argv)
 
     time_adapt = get_wtime();
 
-    double L_max = mesh->maximal_edge_length();
-    double alpha = sqrt(2.0)/2;
-    double L_ref = std::max(alpha*L_max, L_up);
-
     if(verbose)
         std::cout<<"Phase I\n";
 
-//    mesh->scale_metric(0.75);
-    for(size_t i=0; i<5; i++) {
-        // Coarsen
+    coarsen.coarsen(L_low, L_up);
+    for(size_t i=0; i<3; i++) {
         tic = get_wtime();
-        coarsen.coarsen(L_low, L_ref);
-        time_coarsen += get_wtime() - tic;
-
+        coarsen.coarsen(L_low, L_up);
+        time_coarsen += get_wtime()-tic;
         if(verbose)
             cout_quality(mesh, "Coarsen");
 
-        // Swap
         tic = get_wtime();
         swapping.swap(0.1);
-        time_swap += get_wtime() - tic;
-
+        time_swap += get_wtime()-tic;
         if(verbose)
-            cout_quality(mesh, "Swap");
+            cout_quality(mesh, "Swapping");
 
-        // Smooth
         tic = get_wtime();
         smooth.smart_laplacian(1);
         time_smooth += get_wtime()-tic;
-
         if(verbose)
-            cout_quality(mesh, "Smooth");
-    }
-//    mesh->scale_metric(1.33333333);
+            cout_quality(mesh, "Smart Laplacian");
 
-//    mesh->scale_metric(1.3333333333); 
-//    for(size_t i=0; i<5; i++) {
-//
-//        // Refine
-//        tic = get_wtime();
-//        refine.refine_new(L_ref);
-//        refine.refine_new(L_ref);
-//        time_refine += get_wtime() - tic;
-//    }
-//    mesh->scale_metric(0.75);
-
-
-
-    for(size_t i=0; i<15; i++) {
-
-        // Refine
-        tic = get_wtime();
-        mesh->scale_metric(1.3333333333);
-        refine.refine_new(L_ref);
-//        refine.refine_new(L_ref);
-        mesh->scale_metric(0.75);
-        time_refine += get_wtime() - tic;
-
-        if(verbose)
-            cout_quality(mesh, "refine");
-
-        // Coarsen
-        tic = get_wtime();
-        coarsen.coarsen(L_low, L_ref);
-        time_coarsen += get_wtime() - tic;
-
-        if(verbose)
-            cout_quality(mesh, "Coarsen");
-
-        // Swap
-        tic = get_wtime();
-        swapping.swap(0.1);
-        time_swap += get_wtime() - tic;
-
-        if(verbose)
-            cout_quality(mesh, "Swap");
-
-        // Smooth
-        tic = get_wtime();
-        smooth.smart_laplacian(1);
-        time_smooth += get_wtime()-tic;
-
-        if(verbose)
-            cout_quality(mesh, "Smooth");
-
-        alpha = (1.0-1e-2*i*i)*sqrt(2.0)/2;
-        L_max = mesh->maximal_edge_length();
-        L_ref = std::max(alpha*L_max, L_up);
-
-
-        if(L_max>1.0 and (L_max-L_up)<0.01)
-            break;
     }
 
     if(verbose)
         std::cout<<"Phase II\n";
 
-//    for(size_t i=0; i<5; i++) {
-//        tic = get_wtime();
-//        coarsen.coarsen(L_up, L_up);
-//        time_coarsen += get_wtime() - tic;
-//        if(verbose)
-//            cout_quality(mesh, "coarsen");
+    double L_max = mesh->maximal_edge_length();
 
-//        tic = get_wtime();
-//        swapping.swap(0.1);
-//        if(verbose)
-//            cout_quality(mesh, "Swap");
-//        time_swap += get_wtime() - tic;
-//
-//        tic = get_wtime();
-//        smooth.smart_laplacian(1);
-//        if(verbose)
-//            cout_quality(mesh, "Smooth");
-//        time_smooth += get_wtime()-tic;
-//    }
+    double alpha = sqrt(2.0)/2.0;
+    for(size_t i=0; i<10; i++) {
 
-//    tic = get_wtime();
-//    smooth.smart_laplacian(10);
-//    smooth.optimisation_linf(10);
-//    if(verbose)
-//        cout_quality(mesh, "Smooth");
-//    time_smooth += get_wtime()-tic;
+        printf("DEBUG      ite adapt: %lu\n", i);
+        double L_ref = std::max(alpha*L_max, L_up);
+
+        tic = get_wtime();
+        refine.refine_new(L_ref);
+        time_refine += get_wtime()-tic;
+        if(verbose)
+            cout_quality(mesh, "Refine");
+
+        tic = get_wtime();
+        coarsen.coarsen(L_low, L_ref);
+        time_coarsen += get_wtime()-tic;
+        if(verbose)
+            cout_quality(mesh, "Coarsen");
+
+        tic = get_wtime();
+        swapping.swap(0.95);
+        time_swap += get_wtime()-tic;
+        if(verbose)
+            cout_quality(mesh, "Swapping");
+
+        L_max = mesh->maximal_edge_length();
+
+        if((L_max-L_up)<0.01)
+            break;
+
+        mesh->compute_print_quality();
+        mesh->compute_print_NNodes_global();
+    }
 
     double time_defrag = get_wtime();
     mesh->defragment();
@@ -266,10 +205,10 @@ int main(int argc, char **argv)
     tic = get_wtime();
     smooth.smart_laplacian(10);
     if(verbose)
-        cout_quality(mesh, "Final smart laplacian");
-    smooth.optimisation_linf(10);
+        cout_quality(mesh, "Smart Laplacian");
+    smooth.optimisation_linf(20, 0.1);
     if(verbose)
-        cout_quality(mesh, "Final Linf optim");
+        cout_quality(mesh, "Optimisation Linf");
     time_smooth += get_wtime()-tic;
 
     if(verbose)
@@ -305,8 +244,8 @@ int main(int argc, char **argv)
                  <<std::setw(10)<<time_adapt<<" "
                  <<std::setw(10)<<time_other<<"\n";
 
-        std::cout<<"Expecting qmean>0.65, qmin>0.07: ";
-        if((qmean>0.6)&&(qmin>0.07))
+        std::cout<<"Expecting qmean>0.65, qmin>0.1: ";
+        if((qmean>0.65)&&(qmin>0.1))
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;

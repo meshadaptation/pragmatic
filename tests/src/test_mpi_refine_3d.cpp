@@ -94,7 +94,7 @@ int main(int argc, char **argv)
 
     double tic = get_wtime();
     for(int i=0; i<2; i++)
-        adapt.refine(sqrt(2.0));
+        adapt.refine_new(sqrt(2.0));
     double toc = get_wtime();
 
     if(verbose)

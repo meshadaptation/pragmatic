@@ -152,7 +152,7 @@ public:
                         if (worst_new_quality < quality_old_cavity && worst_new_quality < 0.001) {// TODO set this threshold + check for slivers&co + change criteria
                             qualities[cnt] = -quality_old_cavity;
                         }
-                        if (worst_new_quality < 0.8*quality_old_cavity) {
+                        if (worst_new_quality < 0.1*quality_old_cavity) {
                             qualities[cnt] = -quality_old_cavity;
                         }
                         else {
@@ -272,15 +272,15 @@ public:
                         continue;
                     }
 
-//                    if (qualities[iEdg]<qualities[iEdgNgb]) {
-                    if (lengths[iEdg]<lengths[iEdgNgb]) {
+                    if (qualities[iEdg]<qualities[iEdgNgb]) {
+//                    if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
-//                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
-                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
+                    if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
+//                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }

@@ -283,7 +283,7 @@ extern "C" {
 
                 coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
-                refine.refine(L_ref);
+                refine.refine_new(L_ref);
 
                 L_max = mesh->maximal_edge_length();
 
@@ -328,7 +328,7 @@ extern "C" {
                 printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                refine.refine(L_ref);
+                refine.refine_new(L_ref);
                 coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
 

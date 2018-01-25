@@ -444,7 +444,7 @@ private:
                                                    _mesh->get_metric(n[1]),
                                                    _mesh->get_metric(n[2]),
                                                    _mesh->get_metric(n[3]));
-                    if(new_q<q_linf)
+                    if(new_q<0.1*q_linf)
                         better=false;
                 }
             }
