@@ -125,7 +125,7 @@ public:
             }
         }
         int NEdges = headV2E[NNodes];  
-        
+
         //-- Loop over the edges
         std::vector<int> ver2edg(NEdges); // this is the hashmap, corresponding to headV2E
         std::vector<int> ver2edg_first(NEdges); // store 1st id of edges until I find better solution TODO
@@ -156,7 +156,7 @@ public:
                             qualities[cnt] = -quality_old_cavity;
                         }
                         else {
-                            qualities[cnt] = L1_new_quality; //worst_new_quality;
+                            qualities[cnt] = worst_new_quality;
                         }
                     }
                     else {
@@ -169,11 +169,10 @@ public:
             
         }
         
-        
         //-- II. Select edges to split with local optim procedure
         
         //-- create array of edge states, initialized with UNKNOWN
-        //    -1 is UNKNOWN, 0 is NOT_IN, 1 is in
+        //    -1 is UNKNOWN, 0 is NOT_IN, 1 is IN
         std::vector<int> state(NEdges);
         std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
@@ -185,13 +184,10 @@ public:
         //-- repeat following procedure until the state of all edges is not UNKNOWN
         
         //---- Loop over the edges v
-//        std::vector<int> state_new(NEdges);
-//        std::fill(state_new.begin(), state_new.end(), -1);
         int cntSplit = 0;
         int stop = 0;
         
         while ( !stop ) {
-            printf("DEBUG  New pass of edge selection\n");
             stop = 1;
             int e1, e2; // end vertices of current edge
             e1 = 0;
@@ -240,7 +236,7 @@ public:
                         }
                     }
                 }
-                if (lengths[iEdg] < 0.8*max_length_cavity) {
+                if (lengths[iEdg] < 0.5*max_length_cavity) {
                     state[iEdg] = 0;
                     stop = 0;
                     continue;
@@ -273,14 +269,14 @@ public:
                     }
 
                     if (qualities[iEdg]<qualities[iEdgNgb]) {
-//                    if (lengths[iEdg]<lengths[iEdgNgb]) {
+                    // if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
                     if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
-//                    if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
+                    // if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }
@@ -289,12 +285,12 @@ public:
                     continue;
                 }
 
-                state[iEdg] = 1;
+                assert(state[iEdg] != 0);
+                state[iEdg] = iEdg+1;
                 cntSplit++;
                 stop = 0;
             }
         }
-        
         printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
         //-- III. Actually perform the splits
@@ -574,7 +570,6 @@ public:
         }
         edgeSplitCnt = _mesh->NNodes - origNNodes;
         
-
         // Append new coords and metric to the mesh.
         memcpy(&_mesh->_coords[dim*origNNodes], &newCoords[0], dim*splitCnt*sizeof(real_t));
         memcpy(&_mesh->metric[msize*origNNodes], &newMetric[0], msize*splitCnt*sizeof(double));
