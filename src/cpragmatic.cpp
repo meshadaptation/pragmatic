@@ -278,17 +278,27 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
+            int stop = 0;
             for(size_t i=0; i<20; i++) {
+
+                printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
-                refine.refine_new(L_ref);
+                int cnt_split = refine.refine_new(L_ref);
+
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
+                    break;
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = 1;
+                else
+                    stop = 0;
 
                 L_max = mesh->maximal_edge_length();
 
-                if(L_max>1.0 && (L_max-L_up)<0.01)
-                    break;
+//                if(L_max>1.0 && (L_max-L_up)<0.01)
+//                    break;
             }
 
             mesh->defragment();
@@ -323,14 +333,23 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
+            int stop = 0;
             for(size_t i=0; i<10; i++) {
 
                 printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                refine.refine_new(L_ref);
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_split = refine.refine_new(L_ref);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
+
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
+                    break;
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = 1;
+                else
+                    stop = 0;
+
 
                 L_max = mesh->maximal_edge_length();
 
