@@ -135,11 +135,18 @@ public:
         for (int iVer=0; iVer<NNodes; ++iVer) {
             for (int i=0; i<_mesh->NNList[iVer].size(); ++i) {
                 if (_mesh->NNList[iVer][i] > iVer) {
-                    
+
                     int iVer2 = _mesh->NNList[iVer][i];
                     ver2edg[cnt] = iVer2;
                     assert(cnt>=headV2E[iVer] && cnt<headV2E[iVer+1]);
                     double quality_old_cavity = compute_quality_cavity(iVer, iVer2);
+
+                    if (_mesh->is_halo_node(iVer) || _mesh->is_halo_node(iVer2)) {
+                        qualities[cnt] = -quality_old_cavity;
+                        cnt++;
+                        continue;
+                    }
+
                     double length = _mesh->calc_edge_length_log(iVer, iVer2);
                     lengths[cnt] = length;
                     if (length>L_max-1e-10) {
@@ -197,7 +204,7 @@ public:
                        e1++;
                 }
                 e2 = ver2edg[iEdg];
-                
+
                 if (state[iEdg]>-1) {
                     continue;
                 }
@@ -545,7 +552,7 @@ public:
             for(size_t i=0; i<origNNodes; ++i) {
                 for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
                     index_t otherVertex = _mesh->NNList[i][it];
-                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
+                    if (i < otherVertex) {
                         if (state[cnt] > 0) {
                             ++splitCnt;
                             refine_edge(i, otherVertex);
@@ -703,7 +710,6 @@ public:
             _mesh->boundary.resize(_mesh->NElements*nloc);
             _mesh->quality.resize(_mesh->NElements);
         }
-        
 
         // Append new elements to the mesh and commit deferred operations
         memcpy(&_mesh->_ENList[nloc*origNElements], &newElements[0], nloc*splitCnt*sizeof(index_t));
