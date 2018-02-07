@@ -89,8 +89,11 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<3; i++)
-        adapt.refine_new(sqrt(2.0));
+    for(int i=0; i<30; i++) {
+        int cnt = adapt.refine_new(sqrt(2.0));
+        if (cnt < 1)
+            break;
+    }
     double toc = get_wtime();
 
 
