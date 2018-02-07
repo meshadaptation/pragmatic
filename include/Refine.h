@@ -643,40 +643,29 @@ public:
 
         if(dim==3) {
             // If in 3D, we need to refine facets first.
-            for(index_t eid=0; eid<origNElements; ++eid) {
-                // Find the 4 facets comprising the element
-                const index_t *n = _mesh->get_element(eid);
-                if(n[0] < 0)
-                    continue;
+            for(size_t i=0; i<edgeSplitCnt; ++i) {
+                index_t vid = newVertices[i].id;
+                index_t firstid = newVertices[i].edge.first;
+                index_t secondid = newVertices[i].edge.second;
 
-                const index_t facets[4][3] = {{n[0], n[1], n[2]},
-                    {n[0], n[1], n[3]},
-                    {n[0], n[2], n[3]},
-                    {n[1], n[2], n[3]}
-                };
+                // Find which elements share this edge and mark them with their new vertices.
+                std:: set<index_t> neig_first(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end());
+                std:: set<index_t> neig_second(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end());
+                std::set<index_t> intersection;
+                std::set_intersection(neig_first.begin(), neig_first.end(),
+                                      neig_second.begin(), neig_second.end(),
+                                      std::inserter(intersection, intersection.begin()));
 
-                for(int j=0; j<4; ++j) {
-                    // Find which elements share this facet j
-                    const index_t *facet = facets[j];
-                    std::set<index_t> intersection01, EE;
-                    std::set_intersection(_mesh->NEList[facet[0]].begin(), _mesh->NEList[facet[0]].end(),
-                                          _mesh->NEList[facet[1]].begin(), _mesh->NEList[facet[1]].end(),
-                                          std::inserter(intersection01, intersection01.begin()));
-                    std::set_intersection(_mesh->NEList[facet[2]].begin(), _mesh->NEList[facet[2]].end(),
-                                          intersection01.begin(), intersection01.end(),
-                                          std::inserter(EE, EE.begin()));
+                for(typename std::set<index_t>::const_iterator ver=intersection.begin(); ver!=intersection.end(); ++ver) {
+                    index_t ngb_vid = *ver;
 
-                    assert(EE.size() <= 2 );
-                    assert(EE.count(eid) == 1);
+                    if (ngb_vid == vid) {
+                        continue;
+                    }
 
-                    // Prevent facet from being refined twice:
-                    // Only refine it if this is the element with the highest ID.
-                    if(eid == *EE.rbegin())
-                        for(size_t k=0; k<3; ++k)
-                            if(new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[k], facet[(k+1)%3])] != -1) {
-                                refine_facet(eid, facet);
-                                break;
-                            }
+                    // Update NNList with split facet edge
+                    addNN(vid, ngb_vid);
+                    addNN(ngb_vid, vid);
                 }
             }
         }
@@ -880,62 +869,6 @@ private:
         }
     }
 
-    inline void refine_facet(index_t eid, const index_t *facet)
-    {
-        const index_t *n=_mesh->get_element(eid);
-
-        index_t newVertex[3] = {-1, -1, -1};
-        newVertex[0] = new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[1], facet[2])];
-        newVertex[1] = new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[0], facet[2])];
-        newVertex[2] = new_vertices_per_element[nedge*eid+edgeNumber(eid, facet[0], facet[1])];
-
-        int refine_cnt=0;
-        for(size_t i=0; i<3; ++i)
-            if(newVertex[i]!=-1)
-                ++refine_cnt;
-
-        switch(refine_cnt) {
-        case 0:
-            // Do nothing
-            break;
-        case 1:
-            // 1:2 facet bisection
-            for(int j=0; j<3; j++)
-                if(newVertex[j] >= 0) {
-                    addNN(newVertex[j], facet[j]);
-                    addNN(facet[j], newVertex[j]);
-                    break;
-                }
-            break;
-        case 2:
-            // 1:3 refinement with trapezoid split
-            for(int j=0; j<3; j++) {
-                if(newVertex[j] < 0) {
-                    addNN(newVertex[(j+1)%3], newVertex[(j+2)%3]);
-                    addNN(newVertex[(j+2)%3], newVertex[(j+1)%3]);
-
-                    real_t ldiag1 = _mesh->calc_edge_length(newVertex[(j+1)%3], facet[(j+1)%3]);
-                    real_t ldiag2 = _mesh->calc_edge_length(newVertex[(j+2)%3], facet[(j+2)%3]);
-                    const int offset = ldiag1 < ldiag2 ? (j+1)%3 : (j+2)%3;
-
-                    addNN(newVertex[offset], facet[offset]);
-                    addNN(facet[offset], newVertex[offset]);
-
-                    break;
-                }
-            }
-            break;
-        case 3:
-            // 1:4 regular refinement
-            for(int j=0; j<3; j++) {
-                addNN(newVertex[j], newVertex[(j+1)%3]);
-                addNN(newVertex[(j+1)%3], newVertex[j]);
-            }
-            break;
-        default:
-            break;
-        }
-    }
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     typedef boost::unordered_map<index_t, int> boundary_t;
