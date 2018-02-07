@@ -75,15 +75,11 @@ int main(int argc, char **argv)
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    double eta=0.0001;
-
-    std::vector<double> psi(NNodes);
-    for(size_t i=0; i<NNodes; i++) {
-        double x = 2*mesh->get_coords(i)[0]-1;
-        double y = 2*mesh->get_coords(i)[1]-1;
-
-        psi[i] = 0.100000000000000*sin(50*x) + atan2(-0.100000000000000, (double)(2*x - sin(5*y)));
-    }
+    eta = 0.001;
+    for(size_t i=0; i<NNodes; i++)
+        psi[i] =
+            pow(mesh->get_coords(i)[0], 2) +
+            pow(mesh->get_coords(i)[1], 2);
 
     metric_field.add_field(&(psi[0]), eta, 1);
     metric_field.update_mesh();

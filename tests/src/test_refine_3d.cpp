@@ -76,11 +76,11 @@ int main(int argc, char **argv)
     std::vector<double> psi(NNodes);
     for(size_t i=0; i<NNodes; i++)
         psi[i] =
-            pow(mesh->get_coords(i)[0], 4) +
-            pow(mesh->get_coords(i)[1], 4) +
-            pow(mesh->get_coords(i)[2], 4);
+            pow(mesh->get_coords(i)[0], 2) +
+            pow(mesh->get_coords(i)[1], 2) +
+            pow(mesh->get_coords(i)[2], 2);
 
-    metric_field.add_field(&(psi[0]), 0.001);
+    metric_field.add_field(&(psi[0]), 0.01);
     metric_field.update_mesh();
 
     Refine<double,3> adapt(*mesh);
