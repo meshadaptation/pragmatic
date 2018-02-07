@@ -160,7 +160,7 @@ int main(int argc, char **argv)
     double L_max = mesh->maximal_edge_length();
 
     double alpha = sqrt(2.0)/2.0;
-    for(size_t i=0; i<10; i++) {
+    for(size_t i=0; i<15; i++) {
 
         printf("DEBUG      ite adapt: %lu\n", i);
         double L_ref = std::max(alpha*L_max, L_up);
@@ -244,8 +244,8 @@ int main(int argc, char **argv)
                  <<std::setw(10)<<time_adapt<<" "
                  <<std::setw(10)<<time_other<<"\n";
 
-        std::cout<<"Expecting qmean>0.65, qmin>0.1: ";
-        if((qmean>0.65)&&(qmin>0.1))
+        std::cout<<"Expecting qmean>0.65, qmin>0.07: ";
+        if((qmean>0.65)&&(qmin>0.07))
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;
