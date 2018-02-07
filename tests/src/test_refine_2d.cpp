@@ -75,7 +75,9 @@ int main(int argc, char **argv)
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    eta = 0.001;
+    double eta = 0.001;
+    std::vector<double> psi(NNodes);
+
     for(size_t i=0; i<NNodes; i++)
         psi[i] =
             pow(mesh->get_coords(i)[0], 2) +
