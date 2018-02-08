@@ -296,13 +296,13 @@ public:
                 stop = 0;
             }
         }
-        //printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
+        printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
         //-- III. Actually perform the splits
         //let's cheat and use the actual refine function for  now
         
         if (cntSplit > 0) {
-            refine(sqrt(2), &state[0]);
+            refine(sqrt(2), cntSplit, &state[0]);
         }
         return(cntSplit);
         
@@ -462,31 +462,23 @@ public:
      *  The whole process is driven by the fact that we only refine 1 edge per 
      *  cavity, so the new connectivity within a cavity is not dependant on the others.
      */
-    void refine(real_t L_max, int *state=NULL)
+    void refine(real_t L_max, size_t edgeSplitCnt, int *state)
     {
         origNElements = _mesh->get_number_elements();
         size_t origNNodes = _mesh->get_number_nodes();
-        size_t edgeSplitCnt = 0;
 
-        std::vector<int> element_tag(origNElements,0);        
-        
-        new_vertices_per_element.resize(nedge*origNElements);
-        std::fill(new_vertices_per_element.begin(), new_vertices_per_element.end(), -1);
-        
         splitCnt = 0;
 
-        /*
-         * Average vertex degree in 2D is ~6, so there
-         * are approx. (6/2)*NNodes edges in the mesh.
-         * In 3D, average vertex degree is ~12.
-         */
-        size_t reserve_size = nedge*origNNodes;
-        newVertices.clear();
-        newVertices.reserve(reserve_size);
-        newCoords.clear();
-        newCoords.reserve(dim*reserve_size);
-        newMetric.clear();
-        newMetric.reserve(msize*reserve_size);
+        newVertices.resize(edgeSplitCnt);
+        size_t newNNodes = _mesh->NNodes+edgeSplitCnt;
+        if(_mesh->_coords.size()<newNNodes*dim) {
+            _mesh->_coords.resize(newNNodes*dim);
+            _mesh->metric.resize(newNNodes*msize);
+            _mesh->NNList.resize(newNNodes);
+            _mesh->NEList.resize(newNNodes);
+            _mesh->node_owner.resize(newNNodes);
+            _mesh->lnn2gnn.resize(newNNodes);
+        }
 
         int cnt = 0;
         for(size_t i=0; i<origNNodes; ++i) {
@@ -494,8 +486,8 @@ public:
                 index_t otherVertex = _mesh->NNList[i][it];
                 if (i < otherVertex) {
                     if (state[cnt] > 0) {
-                        ++splitCnt;
                         refine_edge(i, otherVertex);
+                        splitCnt++;
                     }
                     cnt++;
                 }
@@ -503,22 +495,7 @@ public:
         }
 
         _mesh->NNodes += splitCnt;
-        assert(newVertices.size()==splitCnt);
-        
-        size_t reserve = 1.1*_mesh->NNodes; // extra space is required for centroidals
-        if(_mesh->_coords.size()<reserve*dim) {
-            _mesh->_coords.resize(reserve*dim);
-            _mesh->metric.resize(reserve*msize);
-            _mesh->NNList.resize(reserve);
-            _mesh->NEList.resize(reserve);
-            _mesh->node_owner.resize(reserve);
-            _mesh->lnn2gnn.resize(reserve);
-        }
-        edgeSplitCnt = _mesh->NNodes - origNNodes;
-        
-        // Append new coords and metric to the mesh.
-        memcpy(&_mesh->_coords[dim*origNNodes], &newCoords[0], dim*splitCnt*sizeof(real_t));
-        memcpy(&_mesh->metric[msize*origNNodes], &newMetric[0], msize*splitCnt*sizeof(double));
+        assert(splitCnt==edgeSplitCnt);
 
         // Fix IDs of new vertices
         assert(newVertices.size()==splitCnt);
@@ -528,6 +505,9 @@ public:
 
         /*
          *   Element refinement: add new connectivity + elements
+         *   The number of elements affected by the splits cannot be guessed a priori
+         *   so we choose to add them to a temporary buffer.
+         *   Another option would be to count them first to avoid moving memory...
          */
 
         splitCnt = 0;
@@ -746,7 +726,7 @@ private:
             n0=n1;
             n1=tmp_n0;
         }
-        newVertices.push_back(DirectedEdge<index_t>(n0, n1));
+        newVertices[splitCnt] = DirectedEdge<index_t>(n0, n1);
 
         // Calculate the position of the new point. From equation 16 in
         // Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950.
@@ -763,7 +743,7 @@ private:
         // Calculate position of new vertex and append it to OMP thread's temp storage
         for(size_t i=0; i<dim; i++) {
             x = x0[i]+weight*(x1[i] - x0[i]);
-            newCoords.push_back(x);
+            _mesh->_coords[(_mesh->NNodes+splitCnt)*dim+i] = x;
         }
 
 #if 0
@@ -783,7 +763,7 @@ private:
         // Interpolate new metric and append it to OMP thread's temp storage
         for(size_t i=0; i<msize; i++) {
             m = m0[i]+weight*(m1[i] - m0[i]);
-            newMetric.push_back(m);
+            _mesh->metric[(_mesh->NNodes+splitCnt)*msize+i] = m;
             if(pragmatic_isnan(m))
                 std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                          <<"m0[i] = "<<m0[i]<<std::endl
@@ -1063,7 +1043,6 @@ private:
     std::vector<index_t>                 newElements;
     std::vector<int>                     newBoundaries;
     std::vector<double>                  newQualities;
-    std::vector<index_t>                 new_vertices_per_element;
 
     size_t origNElements;
     size_t splitCnt;
