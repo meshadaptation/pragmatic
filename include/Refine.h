@@ -276,14 +276,12 @@ public:
                     }
 
                     if (qualities[iEdg]<qualities[iEdgNgb]) {
-                    // if (lengths[iEdg]<lengths[iEdgNgb]) {
                         cont = 1;
                         break;
                     }
 
                     // again we could consider gnn1 < gnn2 for halo consistency, but not sure it's useful
                     if (qualities[iEdg]==qualities[iEdgNgb] && iEdgNgb>iEdg) {
-                    // if (lengths[iEdg]==lengths[iEdgNgb] && iEdgNgb>iEdg) {
                         cont = 1;
                         break;
                     }
@@ -298,7 +296,7 @@ public:
                 stop = 0;
             }
         }
-        printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
+        //printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
         //-- III. Actually perform the splits
         //let's cheat and use the actual refine function for  now
@@ -459,14 +457,10 @@ public:
         return quality;
     }
     
-    
 
-    /*! Perform one level of refinement See Figure 25; X Li et al, Comp
-     * Methods Appl Mech Engrg 194 (2005) 4915-4950. The actual
-     * templates used for 3D refinement follows Rupak Biswas, Roger
-     * C. Strawn, "A new procedure for dynamic adaption of
-     * three-dimensional unstructured grids", Applied Numerical
-     * Mathematics, Volume 13, Issue 6, February 1994, Pages 437-452.
+    /*! Perform one level of refinement.
+     *  The whole process is driven by the fact that we only refine 1 edge per 
+     *  cavity, so the new connectivity within a cavity is not dependant on the others.
      */
     void refine(real_t L_max, int *state=NULL)
     {
@@ -494,71 +488,16 @@ public:
         newMetric.clear();
         newMetric.reserve(msize*reserve_size);
 
-        if (!state){
-            /* Loop through all edges and select them for refinement if
-               its length is greater than L_max in transformed space. */
-            for(size_t i=0; i<origNNodes; ++i) {
-                
-                if (_mesh->is_halo_node(i))
-                    continue;
-            
-                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
-            
-                    index_t otherVertex = _mesh->NNList[i][it];
-                    assert(otherVertex>=0);
-            
-                    if (_mesh->is_halo_node(otherVertex))
-                        continue;
-            
-                    // compute neighboring elements
-                    std::set<index_t> intersection;
-                    std::set_intersection(_mesh->NEList[i].begin(), _mesh->NEList[i].end(),
-                                          _mesh->NEList[otherVertex].begin(), _mesh->NEList[otherVertex].end(),
-                                          std::inserter(intersection, intersection.begin()));
-            
-                    // if one element is tagged => don't refine
-                    int skip = 0;
-                    for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                        index_t eid = *element;
-                        if (element_tag[eid]) {
-                            skip = 1;
-                            break;
-                        }
+        int cnt = 0;
+        for(size_t i=0; i<origNNodes; ++i) {
+            for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
+                index_t otherVertex = _mesh->NNList[i][it];
+                if (i < otherVertex) {
+                    if (state[cnt] > 0) {
+                        ++splitCnt;
+                        refine_edge(i, otherVertex);
                     }
-                    if (skip)
-                        continue;
-            
-            
-                    /* Conditional statement ensures that the edge length is only calculated once.
-                     * By ordering the vertices according to their gnn, we ensure that all processes
-                     * calculate the same edge length when they fall on the halo.
-                     */
-                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
-                        double length = _mesh->calc_edge_length(i, otherVertex);
-                        if(length>L_max) {
-                            ++splitCnt;
-                            refine_edge(i, otherVertex);
-                            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                                index_t eid = *element;
-                                element_tag[eid] = 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            int cnt = 0;
-            for(size_t i=0; i<origNNodes; ++i) {
-                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
-                    index_t otherVertex = _mesh->NNList[i][it];
-                    if (i < otherVertex) {
-                        if (state[cnt] > 0) {
-                            ++splitCnt;
-                            refine_edge(i, otherVertex);
-                        }
-                        cnt++;
-                    }
+                    cnt++;
                 }
             }
         }
@@ -587,24 +526,22 @@ public:
             newVertices[i].id = origNNodes+i;
         }
 
-        // Mark each element with its new vertices,
-        // update NNList for all split edges.
+        /*
+         *   Element refinement: add new connectivity + elements
+         */
+
+        splitCnt = 0;
+        newElements.clear();
+        newBoundaries.clear();
+        newQualities.clear();
+        newElements.reserve(dim*dim*origNElements);
+        newBoundaries.reserve(dim*dim*origNElements);
+        newQualities.reserve(origNElements);
+
         for(size_t i=0; i<edgeSplitCnt; ++i) {
             index_t vid = newVertices[i].id;
             index_t firstid = newVertices[i].edge.first;
             index_t secondid = newVertices[i].edge.second;
-
-            // Find which elements share this edge and mark them with their new vertices.
-            std::set<index_t> intersection;
-            std::set_intersection(_mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
-                                  _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
-                                  std::inserter(intersection, intersection.begin()));
-
-            for(typename std::set<index_t>::const_iterator element=intersection.begin(); element!=intersection.end(); ++element) {
-                index_t eid = *element;
-                size_t edgeOffset = edgeNumber(eid, firstid, secondid);
-                new_vertices_per_element[nedge*eid+edgeOffset] = vid;
-            }
 
             /*
              * Update NNList for newly created vertices. This has to be done here, it cannot be
@@ -619,36 +556,12 @@ public:
             remNN(secondid, firstid);
             addNN(secondid, vid);
 
-            // This branch is always taken or always not taken for every vertex,
-            // so the branch predictor should have no problem handling it.
-            if(nprocs==1) {
-                _mesh->node_owner[vid] = 0;
-                _mesh->lnn2gnn[vid] = vid;
-            } else {
-                /*
-                 * Perhaps we should introduce a system of alternating min/max assignments,
-                 * i.e. one time the node is assigned to the min rank, one time to the max
-                 * rank and so on, so as to avoid having the min rank accumulate the majority
-                 * of newly created vertices and disturbing load balance among MPI processes.
-                 */
-                int owner0 = _mesh->node_owner[firstid];
-                int owner1 = _mesh->node_owner[secondid];
-                int owner = std::min(owner0, owner1);
-                _mesh->node_owner[vid] = owner;
-
-                if(_mesh->node_owner[vid] == rank)
-                    _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
-            }
-        }
-
-        if(dim==3) {
-            // If in 3D, we need to refine facets first.
-            for(size_t i=0; i<edgeSplitCnt; ++i) {
-                index_t vid = newVertices[i].id;
-                index_t firstid = newVertices[i].edge.first;
-                index_t secondid = newVertices[i].edge.second;
-
-                // Find which elements share this edge and mark them with their new vertices.
+            /*
+             * In 3D, refine facets around the edge. Again, this cannot be done during 
+             * element refinement because facets are shared by elements.
+             */
+            if (dim==3){
+                // Find which vertices share this edge.
                 std:: set<index_t> neig_first(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end());
                 std:: set<index_t> neig_second(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end());
                 std::set<index_t> intersection;
@@ -658,38 +571,50 @@ public:
 
                 for(typename std::set<index_t>::const_iterator ver=intersection.begin(); ver!=intersection.end(); ++ver) {
                     index_t ngb_vid = *ver;
-
-                    if (ngb_vid == vid) {
+                    if (ngb_vid == vid)
                         continue;
-                    }
 
                     // Update NNList with split facet edge
                     addNN(vid, ngb_vid);
                     addNN(ngb_vid, vid);
                 }
             }
-        }
 
-        // Start element refinement.
-        splitCnt = 0;
-        newElements.clear();
-        newBoundaries.clear();
-        newQualities.clear();
-        newElements.reserve(dim*dim*origNElements);
-        newBoundaries.reserve(dim*dim*origNElements);
-        newQualities.reserve(origNElements);
 
-        for(size_t eid=0; eid<origNElements; ++eid) {
-            //If the element has been deleted, continue.
-            const index_t *n = _mesh->get_element(eid);
-            if(n[0] < 0)
-                continue;
+            /*
+             * Actual element refinement
+             */
 
-            for(size_t j=0; j<nedge; ++j)
-                if(new_vertices_per_element[nedge*eid+j] != -1) {
-                    refine_element(eid);
-                    break;
-                }
+            // Find which elements share this edge and split them
+            std::set<index_t> elm_around_split_edge;
+            std::set_intersection(_mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
+                                  _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
+                                  std::inserter(elm_around_split_edge, elm_around_split_edge.begin()));
+
+            typename std::set<index_t>::const_iterator element;
+            for(element=elm_around_split_edge.begin(); element!=elm_around_split_edge.end(); ++element) {
+                index_t eid = *element;
+
+                refine_element(eid, i);
+            }
+
+            /*
+             *  Fix new vertex ownership
+             */
+
+            if(nprocs==1) {
+                _mesh->node_owner[vid] = 0;
+                _mesh->lnn2gnn[vid] = vid;
+            } else {
+                int owner0 = _mesh->node_owner[firstid];
+                int owner1 = _mesh->node_owner[secondid];
+                assert(owner0 == ownwer1);
+                int owner = std::min(owner0, owner1);
+                _mesh->node_owner[vid] = owner;
+
+                if(_mesh->node_owner[vid] == rank)
+                    _mesh->lnn2gnn[vid] = _mesh->gnn_offset+vid;
+            }
         }
 
         _mesh->NElements += splitCnt;
@@ -876,78 +801,31 @@ private:
     typedef std::map<index_t, int> boundary_t;
 #endif
 
-    inline void refine_element(size_t eid)
+    inline void refine_element(size_t eid, int i)
     {
-        if(dim==2) {
-            /*
-             *************************
-             * 2D Element Refinement *
-             *************************
-             */
-
-            const int *n=_mesh->get_element(eid);
-
-            // Note the order of the edges - the i'th edge is opposite the i'th node in the element.
-            index_t newVertex[3] = {-1, -1, -1};
-            newVertex[0] = new_vertices_per_element[nedge*eid];
-            newVertex[1] = new_vertices_per_element[nedge*eid+1];
-            newVertex[2] = new_vertices_per_element[nedge*eid+2];
-
-            int refine_cnt=0;
-            for(size_t i=0; i<3; ++i)
-                if(newVertex[i]!=-1)
-                    ++refine_cnt;
-
-            if(refine_cnt > 0) {
-                assert (refine_cnt == 1);
-                refine2D_1(newVertex, eid);
-            }
-
-        } else {
-            /*
-             *************************
-             * 3D Element Refinement *
-             *************************
-             */
-
-            const int *n=_mesh->get_element(eid);
-
-            int refine_cnt;
-            std::vector< DirectedEdge<index_t> > splitEdges;
-            for(int j=0, pos=0; j<4; j++)
-                for(int k=j+1; k<4; k++) {
-                    index_t vertexID = new_vertices_per_element[nedge*eid+pos];
-                    if(vertexID >= 0) {
-                        splitEdges.push_back(DirectedEdge<index_t>(n[j], n[k], vertexID));
-                    }
-                    ++pos;
-                }
-            refine_cnt=splitEdges.size();
-
-            if(refine_cnt > 0) {
-                if (refine_cnt != 1) printf("DEBUG  elm id: %lu  refine_cnt: %d\n", eid, refine_cnt);
-                if (refine_cnt != 1) printf("DEBUG  %d %d     %d %d\n", splitEdges[0].edge.first, splitEdges[0].edge.second, 
-                                            splitEdges[1].edge.first, splitEdges[1].edge.second);
-                assert (refine_cnt == 1);
-                refine3D_1(splitEdges, eid);
-            }
-        }
+        if (dim==2)
+            refine2D_1(eid, i);
+        else
+            refine3D_1(eid, i);
     }
 
-    inline void refine2D_1(const index_t *newVertex, int eid)
+    inline void refine2D_1(int eid, int iEdgeSplit)
     {
         // Single edge split.
 
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
 
+        // Edge that is being split
+        index_t vid = newVertices[iEdgeSplit].id;
+        index_t firstid = newVertices[iEdgeSplit].edge.first;
+        index_t secondid = newVertices[iEdgeSplit].edge.second;
+
         int rotated_ele[3];
         int rotated_boundary[3];
-        index_t vertexID = -1;
-        for(int j=0; j<3; j++)
-            if(newVertex[j] >= 0) {
-                vertexID = newVertex[j];
-
+        index_t vertexID = vid;
+        for (int j=0; j<3; j++)
+            if (n[j] != firstid && n[j] != secondid) {
                 rotated_ele[0] = n[j];
                 rotated_ele[1] = n[(j+1)%3];
                 rotated_ele[2] = n[(j+2)%3];
@@ -974,9 +852,6 @@ private:
         // Add vertexID to rotated_ele[0]'s NNList
         addNN(rotated_ele[0], vertexID);
 
-        // ele1ID is a new ID which isn't correct yet, it has to be
-        // updated once each thread has calculated how many new elements
-        // it created, so put ele1ID into addNE_fix instead of addNE.
         // Put ele1 in rotated_ele[0]'s NEList
         addNE(rotated_ele[0], ele1ID+origNElements);
 
@@ -996,45 +871,46 @@ private:
         splitCnt += 1;
     }
 
-    inline void refine3D_1(std::vector< DirectedEdge<index_t> >& splitEdges, int eid)
+    inline void refine3D_1(int eid, int iEdgeSplit)
     {
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
 
+        // Edge that is being split
+        index_t vid = newVertices[iEdgeSplit].id;
+        index_t firstid = newVertices[iEdgeSplit].edge.first;
+        index_t secondid = newVertices[iEdgeSplit].edge.second;
+
         boundary_t b;
-        for(int j=0; j<nloc; ++j)
+        for (int j=0; j<nloc; ++j)
             b[n[j]] = boundary[j];
 
         // Find the opposite edge
         index_t oe[2];
-        for(int j=0, pos=0; j<4; j++)
-            if(!splitEdges[0].contains(n[j]))
+        for (int j=0, pos=0; j<4; j++)
+            if (n[j] != firstid && n[j] != secondid)
                 oe[pos++] = n[j];
 
         // Form and add two new edges.
-        const int ele0[] = {splitEdges[0].edge.first, splitEdges[0].id, oe[0], oe[1]};
-        const int ele1[] = {splitEdges[0].edge.second, splitEdges[0].id, oe[0], oe[1]};
+        const int ele0[] = {firstid, vid, oe[0], oe[1]};
+        const int ele1[] = {secondid, vid, oe[0], oe[1]};
 
-        const int ele0_boundary[] = {0, b[splitEdges[0].edge.second], b[oe[0]], b[oe[1]]};
-        const int ele1_boundary[] = {0, b[splitEdges[0].edge.first], b[oe[0]], b[oe[1]]};
+        const int ele0_boundary[] = {0, b[secondid], b[oe[0]], b[oe[1]]};
+        const int ele1_boundary[] = {0, b[firstid], b[oe[0]], b[oe[1]]};
 
-        index_t ele1ID;
-        ele1ID = splitCnt;
+        index_t ele1ID = splitCnt;
 
-        // ele1ID is a new ID which isn't correct yet, it has to be
-        // updated once each thread has calculated how many new elements
-        // it created, so put ele1ID into addNE_fix instead of addNE.
         // Put ele1 in oe[0] and oe[1]'s NEList
         addNE(oe[0], ele1ID+origNElements);
         addNE(oe[1], ele1ID+origNElements);
 
         // Put eid and ele1 in newVertex[0]'s NEList
-        addNE(splitEdges[0].id, eid);
-        addNE(splitEdges[0].id, ele1ID+origNElements);
+        addNE(vid, eid);
+        addNE(vid, ele1ID+origNElements);
 
         // Replace eid with ele1 in splitEdges[0].edge.second's NEList
-        remNE(splitEdges[0].edge.second, eid);
-        addNE(splitEdges[0].edge.second, ele1ID+origNElements);
+        remNE(secondid, eid);
+        addNE(secondid, ele1ID+origNElements);
 
         replace_element(eid, ele0, ele0_boundary);
         append_element(ele1, ele1_boundary);
