@@ -608,7 +608,7 @@ public:
             } else {
                 int owner0 = _mesh->node_owner[firstid];
                 int owner1 = _mesh->node_owner[secondid];
-                assert(owner0 == ownwer1);
+                assert(owner0 == owner1);
                 int owner = std::min(owner0, owner1);
                 _mesh->node_owner[vid] = owner;
 
