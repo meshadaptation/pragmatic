@@ -104,7 +104,22 @@ public:
                + local optimization procedure to select edges to refine
           - introduction of the notion of cavity: here a cavity is an edge + neighboring tris/tets
      */
+
+
     double refine_new(double L_max) 
+    {
+        size_t nbrSplits = 0;
+        std::vector<int> state;
+
+        nbrSplits = select_edges(L_max, state);
+        if (nbrSplits > 0)
+            perform_refinement(nbrSplits, &state[0]);
+
+        return nbrSplits;
+    }
+
+
+    double select_edges(double L_max, std::vector<int> &state)
     {
         
         //-- I. Simulate the edge splits if edge length > sqrt(2)
@@ -153,7 +168,7 @@ public:
                         //---- simulate edge split
                         //---- compute and save quality of the resulting cavity
                         double worst_new_quality, worst_new_volume;
-                        double L1_new_quality = simulate_edge_split(iVer, iVer2, &worst_new_quality, &worst_new_volume);
+                        simulate_edge_split(iVer, iVer2, &worst_new_quality, &worst_new_volume);
 
                         //---- if quality is too bad, reject refinement
                         if (worst_new_quality < quality_old_cavity && worst_new_quality < 0.001) {// TODO set this threshold + check for slivers&co + change criteria
@@ -178,9 +193,9 @@ public:
         
         //-- II. Select edges to split with local optim procedure
         
-        //-- create array of edge states, initialized with UNKNOWN
+        //-- initialize state vector with UNKNOWN
         //    -1 is UNKNOWN, 0 is NOT_IN, 1 is IN
-        std::vector<int> state(NEdges);
+        state.resize(NEdges);
         std::fill(state.begin(), state.end(), -1);
         for (int iEdg=0; iEdg<NEdges; ++iEdg) {
             if (qualities[iEdg]<0) {
@@ -243,7 +258,7 @@ public:
                         }
                     }
                 }
-                if (lengths[iEdg] < 0.1*max_length_cavity) {
+                if (lengths[iEdg] < 0.9*max_length_cavity) {
                     state[iEdg] = 0;
                     stop = 0;
                     continue;
@@ -298,23 +313,16 @@ public:
         }
         printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
-        //-- III. Actually perform the splits
-        //let's cheat and use the actual refine function for  now
-        
-        if (cntSplit > 0) {
-            refine(sqrt(2), cntSplit, &state[0]);
-        }
         return(cntSplit);
-        
     }
     
     
     /*! Simulate splitting edge e1, e2, and remeshing its cavity in consequence
         give the worst quality and volume of the new cavity
      */
-    double simulate_edge_split(int e1, int e2, double * worst_quality, double * worst_volume) {
+    void simulate_edge_split(int e1, int e2, double * worst_quality, double * worst_volume) {
         
-        double qualityL1 = 0, quality = 1, volume = 1e10; // L1, Linf, volume
+        double quality = 1, volume = 1e10; // L1, Linf, volume
         double newCoords[3], newMetric[6];
 
         // Calculate the position of the new point. From equation 16 in
@@ -370,7 +378,6 @@ public:
                 // Now I know new triangles are newVertex,x2,x0 and newVertex,x2,x1 - here we don't care about orientation
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x0, newMetric, m2, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x1, newMetric, m2, m1));
-                qualityL1 += qual1 + qual2;
                 quality = fmin(quality, fmin(qual1, qual2));
                 double vol1 = fabs(property->area(newCoords, x2, x0));
                 double vol2 = fabs(property->area(newCoords, x2, x1));
@@ -404,18 +411,14 @@ public:
                 double qual1 = fabs(property->lipnikov(newCoords, x2, x3, x0, newMetric, m2, m3, m0));
                 double qual2 = fabs(property->lipnikov(newCoords, x2, x3, x1, newMetric, m2, m3, m1));
                 quality = fmin(quality, fmin(qual1, qual2));
-                qualityL1 += qual1 + qual2;
                 double vol1 = fabs(property->volume(newCoords, x2, x3, x0));
                 double vol2 = fabs(property->volume(newCoords, x2, x3, x1));
                 volume = fmin(volume, fmin(vol1, vol2));
             }
         }
         
-        qualityL1 /= intersection.size();
         *worst_quality = quality;
         *worst_volume = volume;
-
-        return qualityL1;
     }
     
     
@@ -462,7 +465,7 @@ public:
      *  The whole process is driven by the fact that we only refine 1 edge per 
      *  cavity, so the new connectivity within a cavity is not dependant on the others.
      */
-    void refine(real_t L_max, size_t edgeSplitCnt, int *state)
+    void perform_refinement(size_t edgeSplitCnt, int *state)
     {
         origNElements = _mesh->get_number_elements();
         size_t origNNodes = _mesh->get_number_nodes();
@@ -523,8 +526,6 @@ public:
             index_t firstid = newVertices[i].edge.first;
             index_t secondid = newVertices[i].edge.second;
 
-//            printf("DEBUG  Edge: %d %d -> %d\n", firstid, secondid, vid);
-
             /*
              * Update NNList for newly created vertices. This has to be done here, it cannot be
              * done during element refinement, because a split edge is shared between two elements
@@ -537,9 +538,6 @@ public:
             addNN(firstid, vid);
             remNN(secondid, firstid);
             addNN(secondid, vid);
-
-//            printf("DEBUG  added NN: %d %d ; %d %d ; %d %d ; %d %d  - removed NN: %d %d ; %d %d\n",
-//                vid, firstid, vid, secondid, firstid, vid, secondid, vid, firstid, secondid, secondid, firstid);
 
             /*
              * Actual element refinement
@@ -836,8 +834,6 @@ private:
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
 
-//        printf("DEBUG  refining element: %d %d %d %d\n", n[0], n[1], n[2], n[3]);
-
         // Edge that is being split
         index_t vid = newVertices[iEdgeSplit].id;
         index_t firstid = newVertices[iEdgeSplit].edge.first;
@@ -885,7 +881,6 @@ private:
             if (flag) {
                 addNN(vid, oe[i]);
                 addNN(oe[i], vid);
-//                printf("DEBUG  added NN: %d %d ; %d %d\n", vid, oe[i], oe[i], vid);
             }
         }
 
