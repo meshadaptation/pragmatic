@@ -163,26 +163,143 @@ public:
             newMetric[tid].clear();
             newMetric[tid].reserve(msize*reserve_size);
 
-            /* Loop through all edges and select them for refinement if
-               its length is greater than L_max in transformed space. */
-            #pragma omp for schedule(guided) nowait
-            for(size_t i=0; i<origNNodes; ++i) {
-                for(size_t it=0; it<_mesh->NNList[i].size(); ++it) {
-                    index_t otherVertex = _mesh->NNList[i][it];
-                    assert(otherVertex>=0);
-
-                    /* Conditional statement ensures that the edge length is only calculated once.
-                     * By ordering the vertices according to their gnn, we ensure that all processes
-                     * calculate the same edge length when they fall on the halo.
-                     */
-                    if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]) {
-                        double length = _mesh->calc_edge_length(i, otherVertex);
-                        if(length>L_max) {
-                            ++splitCnt[tid];
-                            refine_edge(i, otherVertex, tid);
-                        }
-                    }
+            #pragma omp single
+            if(dim==3 && nprocs==1 && nthreads){
+            //construct inverse element table (dense flat version)
+            //NNi[jj] is the number of elements containing node jj
+            //inv_elementN[jj] is the cumulative sum of NNi
+            //inv_element[kk] is the kk element containing node 0, provided kk<NNi[0]
+            //inv_element[inv_elementN[nn-1]+kk] is the kk element containing node nn
+            inv_elementN.clear();
+            inv_elementN.resize(origNNodes,0);
+            for(size_t eid=0; eid<origNElements; ++eid){
+             const index_t *n = _mesh->get_element(eid);
+             if(n[0] < 0){
+                 continue;}
+             for(size_t j=0; j<dim+1; ++j){
+              ++inv_elementN[n[j]];
+             }
+            }
+            for(size_t i=1; i<origNNodes; ++i){
+             inv_elementN[i] += inv_elementN[i-1]; //cumsum
+            }
+            inv_element.clear();
+            inv_element.resize(inv_elementN.back(),-1);
+            NNi.clear();
+            NNi.resize(origNNodes,0);
+            for(size_t eid=0; eid<origNElements; ++eid){
+             const index_t *n = _mesh->get_element(eid);
+             if(n[0] < 0){
+                 continue;}
+             for(size_t j=0; j<dim+1; ++j){
+              inv_element[(n[j] == 0) ? NNi[n[j]] : inv_elementN[n[j]-1] + NNi[n[j]]] = eid;
+              ++NNi[n[j]];
+             }
+            }
+            //initialize NNsize and NNList2
+            //NNsize[i] is the cumulative sum of _mesh->NNList[i].size()
+            //NNList2[i == 0 ? it : NNsize[i-1] + it] relates to the edge
+            //consiting of vertices i and _mesh->NNList[i][it]. If it is true,
+            //another edge in one of the elements containing said edge is already
+            //marked for refinement. NNList2 is thus a flat dense boolean vector.
+            //furthermore, since NNList contains the edge information "twice", we
+            //make the convention of only maintaining NNList2 for directed edges,
+            //i.e. the vertices have to be sorted, before NNList2 is called.
+            NNsize.clear();
+            NNsize.resize(origNNodes,0);
+            NNsize[0] = _mesh->NNList[0].size();
+            for(size_t i=1; i<origNNodes; ++i){
+             NNsize[i] = NNsize[i-1] + (_mesh->NNList[i].size()); //cumsum
+            }
+            NNList2.clear();
+            NNList2.resize(NNsize.back(),false);
+            bool banned_split;
+            //find edges for refinement by looping NNList
+            for(size_t i=0;i<origNNodes;++i){
+             for(size_t it=0;it<_mesh->NNList[i].size();++it){
+              index_t otherVertex = _mesh->NNList[i][it];
+              //only check each edge once:
+              if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]){
+               banned_split = false;
+               if(i < otherVertex){ //directed edge convention for NNList2
+                if(NNList2[i == 0 ? it : NNsize[i-1] + it]){
+                 banned_split = true;
                 }
+               }
+               if(i > otherVertex){ //directed edge convention for NNList2
+                for(size_t it_=0;it_<_mesh->NNList[otherVertex].size();++it_){
+                 if((i == _mesh->NNList[otherVertex][it_]) & NNList2[otherVertex == 0 ? it_ : NNsize[otherVertex-1] + it_]){
+                  banned_split = true;
+                  break;
+                 }
+                }
+               }
+               if(banned_split){
+                //edge refinement prohibited by other refinements
+                continue;
+               }
+               double length = _mesh->calc_edge_length(i, otherVertex);
+               if(length>L_max){
+                 ++splitCnt[tid];
+                 refine_edge(i, otherVertex, tid);
+                 //now we need to
+                 //#1 find all elements containing Vertex and otherVertex (using inverse element table)
+                 //#2 set all their edges in NNList2 to true
+                 for(size_t it_=0;it_<NNi[i];++it_){
+                  const size_t eid = inv_element[i == 0 ? it_ : inv_elementN[i-1] + it_];
+                  const index_t *n = _mesh->get_element(eid);
+                  int bad_vtx = 0;
+                  for(size_t k=0; k < dim+1; ++k){
+                   if(n[k] == i || n[k] == otherVertex){
+                    ++bad_vtx;
+                   }
+                  }
+                  if(bad_vtx == 2){//we found an element
+                   for(size_t m=0; m < nedge; m++){
+                    size_t n0_, n1_;
+                    index_t n0, n1, tmp;
+                    inv_edgeNumber(m,n0_,n1_);
+                    n0 = n[n0_];
+                    n1 = n[n1_];
+                    if(n1 < n0){ //swap related to directed edge convention for NNList2
+                     tmp = n1; n1 = n0; n0 = tmp;
+                    }
+                    for(size_t jt=0;jt<_mesh->NNList[n0].size();++jt){
+                     if(n1 == _mesh->NNList[n0][jt]){
+                      NNList2[n0 == 0 ? jt : NNsize[n0-1] + jt] = true;
+                      break;
+                     }
+                    }
+                   }//edge number
+                  }//bad vtx == 2
+                 }
+               }//if(length>L_max)
+              }//if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex])
+             }//for(size_t it=0;it<_mesh->NNList[i].size();++it){
+            }//for(size_t i=0;i<origNNodes;++i)
+            //std::cout << splitCnt[tid] << " edges marked for refinement, mesh has " << origNElements << " elements" << std::endl;
+            }else{
+            /* Loop through all edges and select them for refinement if
+            its length is greater than L_max in transformed space. */
+            #pragma omp for schedule(guided) nowait
+              for(size_t i=0;i<origNNodes;++i){
+                for(size_t it=0;it<_mesh->NNList[i].size();++it){
+                  index_t otherVertex = _mesh->NNList[i][it];
+                  assert(otherVertex>=0);
+
+                  /* Conditional statement ensures that the edge length is only calculated once.
+                   * By ordering the vertices according to their gnn, we ensure that all processes
+                   * calculate the same edge length when they fall on the halo.
+                   */
+                  if(_mesh->lnn2gnn[i] < _mesh->lnn2gnn[otherVertex]){
+                    double length = _mesh->calc_edge_length(i, otherVertex);
+                    if(length>L_max){
+                      ++splitCnt[tid];
+                      refine_edge(i, otherVertex, tid);
+                    }
+                  }
+                }
+              }
             }
 
             threadIdx[tid] = pragmatic_omp_atomic_capture(&_mesh->NNodes, splitCnt[tid]);
@@ -2863,6 +2980,66 @@ private:
         _mesh->template update_quality<dim>(eid);
     }
 
+    inline void inv_edgeNumber(size_t j, index_t v1, index_t v2) const{
+     if(dim==2){
+           /* In 2D:
+           * Edge 0 is the edge (n[1],n[2]).
+           * Edge 1 is the edge (n[0],n[2]).
+           * Edge 2 is the edge (n[0],n[1]).
+           */
+      switch(j){
+       case 0:
+       v1 = 1;
+       v2 = 2;
+       break;
+       case 1:
+       v1 = 0;
+       v2 = 2;
+       break;
+       case 2:
+       v1 = 0;
+       v2 = 1;
+       break;
+      }
+     }else{
+           /*
+           * In 3D:
+           * Edge 0 is the edge (n[0],n[1]).
+           * Edge 1 is the edge (n[0],n[2]).
+           * Edge 2 is the edge (n[0],n[3]).
+           * Edge 3 is the edge (n[1],n[2]).
+           * Edge 4 is the edge (n[1],n[3]).
+           * Edge 5 is the edge (n[2],n[3]).
+           */
+      switch(j){
+       case 0:
+       v1 = 0;
+       v2 = 1;
+       break;
+       case 1:
+       v1 = 0;
+       v2 = 2;
+       break;
+       case 2:
+       v1 = 0;
+       v2 = 3;
+       break;
+       case 3:
+       v1 = 1;
+       v2 = 2;
+       break;
+       case 4:
+       v1 = 1;
+       v2 = 3;
+       break;
+       case 5:
+       v1 = 2;
+       v2 = 3;
+       break;
+      }
+     }
+    }
+
     inline size_t edgeNumber(index_t eid, index_t v1, index_t v2) const
     {
         const int *n=_mesh->get_element(eid);
@@ -2953,6 +3130,9 @@ private:
             return coords < in.coords;
         }
     };
+
+    std::vector<index_t> inv_element, inv_elementN, NNi, NNsize;
+    std::vector<bool> NNList2;
 
     std::vector< std::vector< DirectedEdge<index_t> > > newVertices;
     std::vector< std::vector<real_t> > newCoords;
