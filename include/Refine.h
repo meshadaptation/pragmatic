@@ -243,7 +243,7 @@ public:
                         }
                     }
                 }
-                if (lengths[iEdg] < 0.5*max_length_cavity) {
+                if (lengths[iEdg] < 0.1*max_length_cavity) {
                     state[iEdg] = 0;
                     stop = 0;
                     continue;
@@ -523,43 +523,23 @@ public:
             index_t firstid = newVertices[i].edge.first;
             index_t secondid = newVertices[i].edge.second;
 
+//            printf("DEBUG  Edge: %d %d -> %d\n", firstid, secondid, vid);
+
             /*
              * Update NNList for newly created vertices. This has to be done here, it cannot be
              * done during element refinement, because a split edge is shared between two elements
              * and we run the risk that these updates will happen twice, once for each element.
              */
-            _mesh->NNList[vid].push_back(firstid);
-            _mesh->NNList[vid].push_back(secondid);
+            addNN(vid,firstid);
+            addNN(vid,secondid);
 
             remNN(firstid, secondid);
             addNN(firstid, vid);
             remNN(secondid, firstid);
             addNN(secondid, vid);
 
-            /*
-             * In 3D, refine facets around the edge. Again, this cannot be done during 
-             * element refinement because facets are shared by elements.
-             */
-            if (dim==3){
-                // Find which vertices share this edge.
-                std:: set<index_t> neig_first(_mesh->NNList[firstid].begin(), _mesh->NNList[firstid].end());
-                std:: set<index_t> neig_second(_mesh->NNList[secondid].begin(), _mesh->NNList[secondid].end());
-                std::set<index_t> intersection;
-                std::set_intersection(neig_first.begin(), neig_first.end(),
-                                      neig_second.begin(), neig_second.end(),
-                                      std::inserter(intersection, intersection.begin()));
-
-                for(typename std::set<index_t>::const_iterator ver=intersection.begin(); ver!=intersection.end(); ++ver) {
-                    index_t ngb_vid = *ver;
-                    if (ngb_vid == vid)
-                        continue;
-
-                    // Update NNList with split facet edge
-                    addNN(vid, ngb_vid);
-                    addNN(ngb_vid, vid);
-                }
-            }
-
+//            printf("DEBUG  added NN: %d %d ; %d %d ; %d %d ; %d %d  - removed NN: %d %d ; %d %d\n",
+//                vid, firstid, vid, secondid, firstid, vid, secondid, vid, firstid, secondid, secondid, firstid);
 
             /*
              * Actual element refinement
@@ -856,6 +836,8 @@ private:
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
 
+//        printf("DEBUG  refining element: %d %d %d %d\n", n[0], n[1], n[2], n[3]);
+
         // Edge that is being split
         index_t vid = newVertices[iEdgeSplit].id;
         index_t firstid = newVertices[iEdgeSplit].edge.first;
@@ -866,11 +848,48 @@ private:
             b[n[j]] = boundary[j];
 
         // Find the opposite edge
-        index_t oe[2];
+        index_t oe[2], position[2];
         for (int j=0, pos=0; j<4; j++)
-            if (n[j] != firstid && n[j] != secondid)
+            if (n[j] != firstid && n[j] != secondid){
+                position[pos] = j;
                 oe[pos++] = n[j];
+            }
 
+        // First split the two facets if they belong to me (normal vector pointing to 4th vertex)
+
+        for (int i=0; i<2; ++i){
+            int flag = 0;
+            int facet[3] = {firstid, secondid, oe[i]};
+            std::sort(facet, facet+sizeof(facet)/sizeof(facet[0]));
+
+            if (_mesh->boundary[4*eid+position[(i+1)%2]] > 0 )
+                flag = 1;
+            else {
+                // compute the triple product of 2 vectors of the facet, and a vector going to the 4th vertex
+                // this is a determinant, of which the explicit formula can be found in wikipedia
+                const double * f0 = &_mesh->_coords[facet[0]*3];
+                const double * f1 = &_mesh->_coords[facet[1]*3];
+                const double * f2 = &_mesh->_coords[facet[2]*3];
+                const double * ov = &_mesh->_coords[oe[(i+1)%2]*3];
+                const double f0f1[3] = {f1[0]-f0[0], f1[1]-f0[1], f1[2]-f0[2]};
+                const double f0f2[3] = {f2[0]-f0[0], f2[1]-f0[1], f2[2]-f0[2]};
+                const double f0ov[3] = {ov[0]-f0[0], ov[1]-f0[1], ov[2]-f0[2]};
+                const double det = (f0f1[0]*f0f2[1]*f0ov[2] + f0f2[0]*f0ov[1]*f0f1[2] + f0ov[0]*f0f1[1]*f0f2[2])
+                                 - (f0f1[2]*f0f2[1]*f0ov[0] + f0f2[0]*f0ov[2]*f0f1[1] + f0ov[1]*f0f1[0]*f0f2[2]);
+                assert(fabs(det) > DBL_EPSILON);
+                // If the normal points to this tet, split the facet,
+                if (det > 0)
+                    flag = 1;
+            }
+
+            if (flag) {
+                addNN(vid, oe[i]);
+                addNN(oe[i], vid);
+//                printf("DEBUG  added NN: %d %d ; %d %d\n", vid, oe[i], oe[i], vid);
+            }
+        }
+
+        // Then split element
         // Form and add two new edges.
         const int ele0[] = {firstid, vid, oe[0], oe[1]};
         const int ele1[] = {secondid, vid, oe[0], oe[1]};
