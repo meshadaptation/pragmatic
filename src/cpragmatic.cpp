@@ -280,8 +280,6 @@ extern "C" {
             double alpha = sqrt(2.0)/2.0;
             int stop = 0;
             for(size_t i=0; i<20; i++) {
-
-                printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
@@ -296,9 +294,6 @@ extern "C" {
                     stop = 0;
 
                 L_max = mesh->maximal_edge_length();
-
-//                if(L_max>1.0 && (L_max-L_up)<0.01)
-//                    break;
             }
 
             mesh->defragment();
@@ -335,8 +330,6 @@ extern "C" {
             double alpha = sqrt(2.0)/2.0;
             int stop = 0;
             for(size_t i=0; i<10; i++) {
-
-                printf("DEBUG      ite adapt: %lu\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_split = refine.refine_new(L_ref);
@@ -350,14 +343,7 @@ extern "C" {
                 else
                     stop = 0;
 
-
                 L_max = mesh->maximal_edge_length();
-
-                if((L_max-L_up)<0.01)
-                    break;
-
-                mesh->compute_print_quality();
-                mesh->compute_print_NNodes_global();
 
 #if 0                
                 // TODO HACK CAD
@@ -375,7 +361,6 @@ extern "C" {
                   }
                 }
 #endif
-
             }
 
             mesh->defragment();
