@@ -61,12 +61,17 @@ int main(int argc, char **argv)
     assert(required_thread_support==provided_thread_support);
 
     bool verbose = false;
-    if(argc>1) {
+    bool full = false;
+    if (argc==2) {
         verbose = std::string(argv[1])=="-v";
+        full = std::string(argv[1])=="-f";
+    }
+    if (argc==3) {
+        full = std::string(argv[1])=="-f";
+        verbose = std::string(argv[2])=="-v";
     }
 
 #ifdef HAVE_VTK
-//    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box5x5x5.vtu");
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/cube.vtu");
     mesh->create_boundary();
 
@@ -76,7 +81,7 @@ int main(int argc, char **argv)
 
     double m[6] = {0};
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.05*0.05);
+        double lmax = full ? 1/(0.035*0.035) : 1/(0.1*0.1);
         m[0] = lmax;
         m[3] = lmax;
         m[5] = lmax;
@@ -87,12 +92,10 @@ int main(int argc, char **argv)
     Refine<double,3> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<25; i++) {
+    int ite_max = full ? 60 : 5;
+    for(int i=0; i<ite_max; i++) {
         printf("DEBUG  ===== refine %d\n", i);
-        double nsplits = adapt.refine_new(sqrt(2.0));
-        char name[128];
-        sprintf(name, "../data/refine.%d", i);
-        VTKTools<double>::export_vtu(name, mesh);
+        int nsplits = adapt.refine_new(sqrt(2.0));
         if (nsplits==0) break;
     }
     double toc = get_wtime();
@@ -102,7 +105,7 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
-    VTKTools<double>::export_vtu("../data/test_refine_3d", mesh);
+    VTKTools<double>::export_vtu("../data/test_refine_new_3d", mesh);
 
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();

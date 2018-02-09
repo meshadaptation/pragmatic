@@ -61,9 +61,16 @@ int main(int argc, char **argv)
     assert(required_thread_support==provided_thread_support);
 
     bool verbose = false;
-    if(argc>1) {
+    bool full = false;
+    if (argc==2) {
         verbose = std::string(argv[1])=="-v";
+        full = std::string(argv[1])=="-f";
     }
+    if (argc==3) {
+        full = std::string(argv[1])=="-f";
+        verbose = std::string(argv[2])=="-v";
+    }
+
 
 #ifdef HAVE_VTK
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
@@ -85,8 +92,9 @@ int main(int argc, char **argv)
 
     Refine<double,3> adapt(*mesh);
 
+    int ite_max = full ? 30 : 3;
     double tic = get_wtime();
-    for(int i=0; i<30; i++) {
+    for(int i=0; i<ite_max; i++) {
         int cnt = adapt.refine_new(sqrt(2.0));
         if (cnt < 1)
             break;
