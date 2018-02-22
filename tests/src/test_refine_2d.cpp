@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 
     double tic = get_wtime();
     for(int i=0; i<30; i++) {
-        int cnt = adapt.refine_new(sqrt(2.0));
+        int cnt = adapt.refine(sqrt(2.0));
         if (cnt < 1)
             break;
     }

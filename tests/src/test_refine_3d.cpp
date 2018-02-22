@@ -95,7 +95,7 @@ int main(int argc, char **argv)
     int ite_max = full ? 30 : 3;
     double tic = get_wtime();
     for(int i=0; i<ite_max; i++) {
-        int cnt = adapt.refine_new(sqrt(2.0));
+        int cnt = adapt.refine(sqrt(2.0));
         if (cnt < 1)
             break;
     }

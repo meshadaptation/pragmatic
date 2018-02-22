@@ -106,7 +106,7 @@ public:
      */
 
 
-    double refine_new(double L_max) 
+    double refine(double L_max)
     {
         size_t nbrSplits = 0;
         std::vector<int> state;

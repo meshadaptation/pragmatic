@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     for(size_t i=0; i<20; i++) {
         double L_ref = std::max(alpha*L_max, L_up);
 
-        refine.refine_new(L_ref);
+        refine.refine(L_ref);
         coarsen.coarsen(L_low, L_ref);
 
         L_max = mesh->maximal_edge_length();

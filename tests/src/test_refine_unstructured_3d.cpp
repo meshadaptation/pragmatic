@@ -94,7 +94,7 @@ int main(int argc, char **argv)
     double tic = get_wtime();
     int ite_max = full ? 60 : 5;
     for(int i=0; i<ite_max; i++) {
-        int nsplits = adapt.refine_new(sqrt(2.0));
+        int nsplits = adapt.refine(sqrt(2.0));
         if (nsplits==0) break;
     }
     double toc = get_wtime();
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
-    VTKTools<double>::export_vtu("../data/test_refine_new_3d", mesh);
+    VTKTools<double>::export_vtu("../data/test_refine_unstructured_3d", mesh);
 
     double qmean = mesh->get_qmean();
     double qmin = mesh->get_qmin();

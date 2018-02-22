@@ -187,7 +187,7 @@ int main(int argc, char **argv)
         }
 
         tic = get_wtime();
-        refine.refine_new(L_ref);
+        refine.refine(L_ref);
         time_refine += get_wtime() - tic;
         if(verbose) {
             cout_quality(mesh, "Refine");

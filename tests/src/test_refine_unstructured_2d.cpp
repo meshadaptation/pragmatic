@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 
     double tic = get_wtime();
     for(int i=0; i<15; i++) {
-        adapt.refine_new(sqrt(2.0));
+        adapt.refine(sqrt(2.0));
         char name[128];
         sprintf(name, "../data/refine.%d", i);
         VTKTools<double>::export_vtu(name, mesh);
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
-    VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
+    VTKTools<double>::export_vtu("../data/test_refine_unstructured_2d", mesh);
 
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();

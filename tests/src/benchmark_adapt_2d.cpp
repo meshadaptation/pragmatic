@@ -177,7 +177,7 @@ int main(int argc, char **argv)
                 }
 
                 tic = get_wtime();
-                refine.refine_new(L_ref);
+                refine.refine(L_ref);
                 toc = get_wtime();
                 if(t>0) time_refine += (toc-tic);
                 if(verbose) {
