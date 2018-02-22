@@ -279,7 +279,7 @@ extern "C" {
 
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
-            for(size_t i=0; i<20; i++) {
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
@@ -329,7 +329,9 @@ extern "C" {
 
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
-            for(size_t i=0; i<10; i++) {
+            // give more time to converge with new refinement, but stop before if possible
+            // TODO write a cycle detector and stop if there is a cycle
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_split = refine.refine(L_ref);
