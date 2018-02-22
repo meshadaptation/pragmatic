@@ -1530,7 +1530,7 @@ public:
     /// debug function to print mesh related structures
     void print_mesh(char * text)
     {
-        std::stream filename_stream;
+        std::ostringstream filename_stream;
         filename_stream << "mesh_" << text << "_" << rank;
         std::string filename = filename_stream.str();
         FILE * logfile = fopen(filename.c_str(), "w");
