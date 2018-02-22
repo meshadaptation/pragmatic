@@ -137,20 +137,29 @@ int main(int argc, char **argv)
         tic = get_wtime();
         coarsen.coarsen(L_low, L_up);
         time_coarsen += get_wtime()-tic;
-        if(verbose)
+        if(verbose) {
             cout_quality(mesh, "Coarsen");
+            std::cout<<"INFO: Verify quality after coarsen.\n";
+            mesh->verify();
+        }
 
         tic = get_wtime();
         swapping.swap(0.1);
         time_swap += get_wtime()-tic;
-        if(verbose)
+        if(verbose) {
             cout_quality(mesh, "Swapping");
+            std::cout<<"INFO: Verify quality after swapping.\n";
+            mesh->verify();
+        }
 
         tic = get_wtime();
         smooth.smart_laplacian(1);
         time_smooth += get_wtime()-tic;
-        if(verbose)
-            cout_quality(mesh, "Smart Laplacian");
+        if(verbose) {
+            cout_quality(mesh, "Refine");
+            std::cout<<"INFO: Verify quality after refinement.\n";
+            mesh->verify();
+        }
 
     }
 
@@ -167,20 +176,29 @@ int main(int argc, char **argv)
         tic = get_wtime();
         refine.refine_new(L_ref);
         time_refine += get_wtime()-tic;
-        if(verbose)
+        if(verbose) {
             cout_quality(mesh, "Refine");
+            std::cout<<"INFO: Verify quality after refinement.\n";
+            mesh->verify();
+        }
 
         tic = get_wtime();
         coarsen.coarsen(L_low, L_ref);
         time_coarsen += get_wtime()-tic;
-        if(verbose)
+        if(verbose) {
             cout_quality(mesh, "Coarsen");
+            std::cout<<"INFO: Verify quality after coarsen.\n";
+            mesh->verify();
+        }
 
         tic = get_wtime();
         swapping.swap(0.95);
         time_swap += get_wtime()-tic;
-        if(verbose)
+        if(verbose) {
             cout_quality(mesh, "Swapping");
+            std::cout<<"INFO: Verify quality after swapping.\n";
+            mesh->verify();
+        }
 
         L_max = mesh->maximal_edge_length();
 

@@ -1326,11 +1326,11 @@ public:
                         continue;
                     if(local_NEList[i]!=NEList[i]) {
                         result = "fail (local_NEList["+std::to_string(i)+"]!=NEList["+std::to_string(i)+"])\n";
-                        printf("\nDEBUG  local_NEList: ");
+                        printf("\n  local_NEList: ");
                         for (std::set<index_t>::const_iterator it=local_NEList[i].begin(); it!=local_NEList[i].end(); ++it)
                             printf(" %d ", *it);
                         printf("\n");
-                        printf("DEBUG  NEList: ");
+                        printf("  NEList: ");
                         for (std::set<index_t>::const_iterator it=NEList[i].begin(); it!=NEList[i].end(); ++it)
                             printf(" %d ", *it);
                         printf("\n");
@@ -1530,10 +1530,10 @@ public:
     /// debug function to print mesh related structures
     void print_mesh(char * text)
     {
-
-        char filename[128];
-        sprintf(filename, "mesh_%s_%d", text, rank);
-        FILE * logfile = fopen(filename, "w");
+        std::stream filename_stream;
+        filename_stream << "mesh_" << text << "_" << rank;
+        std::string filename = filename_stream.str();
+        FILE * logfile = fopen(filename.c_str(), "w");
 
         for (int iVer=0; iVer<get_number_nodes(); ++iVer){
             const double * coords = get_coords(iVer);
@@ -1571,7 +1571,7 @@ public:
             fprintf(logfile, "\n");
         }
         fclose(logfile);
-}
+    }
 
 
 

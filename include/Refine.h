@@ -258,6 +258,8 @@ public:
                         }
                     }
                 }
+                // This value of 0.9 is what seems to make it work, but it reduces the interest of the algo...
+                // drawback is: if there is a long edge I can't split, I am stuck with its neighbours too
                 if (lengths[iEdg] < 0.9*max_length_cavity) {
                     state[iEdg] = 0;
                     stop = 0;

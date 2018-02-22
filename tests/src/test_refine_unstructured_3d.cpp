@@ -94,7 +94,6 @@ int main(int argc, char **argv)
     double tic = get_wtime();
     int ite_max = full ? 60 : 5;
     for(int i=0; i<ite_max; i++) {
-        printf("DEBUG  ===== refine %d\n", i);
         int nsplits = adapt.refine_new(sqrt(2.0));
         if (nsplits==0) break;
     }

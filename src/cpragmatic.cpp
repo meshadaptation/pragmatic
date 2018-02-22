@@ -278,7 +278,7 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            int stop = 0;
+            bool stop = false;
             for(size_t i=0; i<20; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
@@ -289,9 +289,9 @@ extern "C" {
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
                 if (cnt_split == 0 && cnt_coars == 0)
-                    stop = 1;
+                    stop = true;
                 else
-                    stop = 0;
+                    stop = false;
 
                 L_max = mesh->maximal_edge_length();
             }
@@ -328,7 +328,7 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            int stop = 0;
+            bool stop = false;
             for(size_t i=0; i<10; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
@@ -339,9 +339,9 @@ extern "C" {
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
                 if (cnt_split == 0 && cnt_coars == 0)
-                    stop = 1;
+                    stop = true;
                 else
-                    stop = 0;
+                    stop = false;
 
                 L_max = mesh->maximal_edge_length();
 
