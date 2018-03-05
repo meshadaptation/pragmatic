@@ -100,7 +100,7 @@ public:
     /*! Perform coarsening.
      * See Figure 15; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
      */
-    void coarsen(real_t L_low, real_t L_max,
+    int coarsen(real_t L_low, real_t L_max,
                  bool enable_surface_coarsening=false,
                  bool enable_delete_slivers=false,
                  bool enable_quality_constrained=false)
@@ -124,6 +124,7 @@ public:
             vLocks.resize(NNodes);
         }
 
+        int ccount_tot = 0;
         #pragma omp parallel
         {
             // Initialize.
@@ -161,6 +162,7 @@ public:
                         if(target>=0) {
                             coarsen_kernel(node, target);
                             ccount[citerations]++;
+                            ccount_tot++;
                         }
                     } else {
                         retry.push_back(node);
@@ -197,6 +199,7 @@ public:
                             if(target>=0) {
                                 coarsen_kernel(node, target);
                                 ccount[citerations]++;
+                                ccount_tot++;
                             }
                         } else {
                             next_retry.push_back(node);
@@ -219,6 +222,8 @@ public:
                 }
             }
         }
+        printf("DEBUG   Number of edge collapse %d\n", ccount_tot);
+        return ccount_tot;
     }
 
 private:

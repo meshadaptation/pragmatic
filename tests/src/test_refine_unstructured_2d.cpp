@@ -69,21 +69,20 @@ int main(int argc, char **argv)
     }
 
 #ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box5x5.vtu");
     mesh->create_boundary();
 
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    double eta = 0.001;
-    std::vector<double> psi(NNodes);
-
-    for(size_t i=0; i<NNodes; i++)
-        psi[i] =
-            pow(mesh->get_coords(i)[0], 2) +
-            pow(mesh->get_coords(i)[1], 2);
-
-    metric_field.add_field(&(psi[0]), eta, 1);
+    
+    double m[6] = {0};
+    for(size_t i=0; i<NNodes; i++) {
+        double lmax = 1/(0.03*0.03);
+        m[0] = lmax;
+        m[2] = lmax;
+        metric_field.set_metric(m, i);
+    }
     metric_field.update_mesh();
 
     VTKTools<double>::export_vtu("../data/test_refine_2d-initial", mesh);
@@ -91,10 +90,11 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<30; i++) {
-        int cnt = adapt.refine(sqrt(2.0));
-        if (cnt < 1)
-            break;
+    for(int i=0; i<15; i++) {
+        adapt.refine(sqrt(2.0));
+        char name[128];
+        sprintf(name, "../data/refine.%d", i);
+        VTKTools<double>::export_vtu(name, mesh);
     }
     double toc = get_wtime();
 
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
-    VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
+    VTKTools<double>::export_vtu("../data/test_refine_unstructured_2d", mesh);
 
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();

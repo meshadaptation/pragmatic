@@ -55,82 +55,82 @@
 
 int main(int argc, char **argv)
 {
-    int rank=0;
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
     bool verbose = false;
-    if(argc>1) {
+    bool full = false;
+    if (argc==2) {
         verbose = std::string(argv[1])=="-v";
+        full = std::string(argv[1])=="-f";
+    }
+    if (argc==3) {
+        full = std::string(argv[1])=="-f";
+        verbose = std::string(argv[2])=="-v";
     }
 
 #ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
+    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/cube.vtu");
     mesh->create_boundary();
 
-    MetricField<double,2> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
-    double eta = 0.001;
-    std::vector<double> psi(NNodes);
 
-    for(size_t i=0; i<NNodes; i++)
-        psi[i] =
-            pow(mesh->get_coords(i)[0], 2) +
-            pow(mesh->get_coords(i)[1], 2);
-
-    metric_field.add_field(&(psi[0]), eta, 1);
+    double m[6] = {0};
+    for(size_t i=0; i<NNodes; i++) {
+        double lmax = full ? 1/(0.035*0.035) : 1/(0.1*0.1);
+        m[0] = lmax;
+        m[3] = lmax;
+        m[5] = lmax;
+        metric_field.set_metric(m, i);
+    }
     metric_field.update_mesh();
 
-    VTKTools<double>::export_vtu("../data/test_refine_2d-initial", mesh);
-
-    Refine<double,2> adapt(*mesh);
+    Refine<double,3> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<30; i++) {
-        int cnt = adapt.refine(sqrt(2.0));
-        if (cnt < 1)
-            break;
+    int ite_max = full ? 60 : 5;
+    for(int i=0; i<ite_max; i++) {
+        int nsplits = adapt.refine(sqrt(2.0));
+        if (nsplits==0) break;
     }
     double toc = get_wtime();
-
 
     if(verbose)
         mesh->verify();
 
     mesh->defragment();
 
-    VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
+    VTKTools<double>::export_vtu("../data/test_refine_unstructured_3d", mesh);
 
-    long double perimeter = mesh->calculate_perimeter();
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+    int nelements = mesh->get_number_elements();
+
+    if(verbose)
+        std::cout<<"Refine loop time:    "<<toc-tic<<std::endl
+                 <<"Number elements:     "<<nelements<<std::endl
+                 <<"Quality mean:        "<<qmean<<std::endl
+                 <<"Quality min:         "<<qmin<<std::endl;
+
     long double area = mesh->calculate_area();
+    long double volume = mesh->calculate_volume();
 
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"Perimeter:            "<<perimeter<<std::endl;;
-    }
+    long double ideal_area(6), ideal_volume(1);
+    std::cout<<"Checking area == 6: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (area="<<area<<")"<<std::endl;
 
-    if(rank==0) {
-        long double ideal_area(1), ideal_perimeter(4);
-        std::cout<<"Expecting perimeter == 4: ";
-        if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-
-        std::cout<<"Expecting area == 1: ";
-        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-    }
+    std::cout<<"Checking volume == 1: ";
+    if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail (volume="<<volume<<")"<<std::endl;
 
     delete mesh;
 #else

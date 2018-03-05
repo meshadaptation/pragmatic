@@ -278,17 +278,22 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            for(size_t i=0; i<20; i++) {
+            bool stop = false;
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
-                refine.refine(L_ref);
+                int cnt_split = refine.refine(L_ref);
+
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
+                    break;
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = true;
+                else
+                    stop = false;
 
                 L_max = mesh->maximal_edge_length();
-
-                if(L_max>1.0 && (L_max-L_up)<0.01)
-                    break;
             }
 
             mesh->defragment();
@@ -323,22 +328,24 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            for(size_t i=0; i<10; i++) {
-
-                printf("DEBUG      ite adapt: %lu\n", i);
+            bool stop = false;
+            // give more time to converge with new refinement, but stop before if possible
+            // TODO write a cycle detector and stop if there is a cycle
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                refine.refine(L_ref);
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_split = refine.refine(L_ref);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
 
-                L_max = mesh->maximal_edge_length();
-
-                if((L_max-L_up)<0.01)
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = true;
+                else
+                    stop = false;
 
-                mesh->compute_print_quality();
-                mesh->compute_print_NNodes_global();
+                L_max = mesh->maximal_edge_length();
 
 #if 0                
                 // TODO HACK CAD
@@ -356,7 +363,6 @@ extern "C" {
                   }
                 }
 #endif
-
             }
 
             mesh->defragment();

@@ -6,7 +6,7 @@ import glob
 import stat
 import subprocess
 
-skip_list = ["test_ugawg_cube"]
+skip_list = ["test_ugawg_cube", "test_uniform_adapt_2d"]
 
 class UnitTest:
     def __init__(self, exe):
