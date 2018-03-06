@@ -412,6 +412,8 @@ public:
     /// Erase an element
     void erase_element(const index_t eid)
     {
+
+        assert(eid < NElements);
         const index_t *n = get_element(eid);
 
         for(size_t i=0; i<nloc; ++i)
@@ -423,6 +425,7 @@ public:
     /// Flip orientation of element.
     void invert_element(size_t eid)
     {
+        assert(eid < NElements);
         int tmp = _ENList[eid*nloc];
         _ENList[eid*nloc] = _ENList[eid*nloc+1];
         _ENList[eid*nloc+1] = tmp;
@@ -431,12 +434,14 @@ public:
     /// Return a pointer to the element-node list.
     inline const index_t *get_element(size_t eid) const
     {
+        assert(eid < NElements);
         return &(_ENList[eid*nloc]);
     }
 
     /// Return copy of element-node list.
     inline void get_element(size_t eid, index_t *ele) const
     {
+        assert(eid < NElements);
         for(size_t i=0; i<nloc; i++)
             ele[i] = _ENList[eid*nloc+i];
     }
@@ -472,12 +477,14 @@ public:
     /// Return positions vector.
     inline const real_t *get_coords(index_t nid) const
     {
+        assert(nid < NNodes);
         return &(_coords[nid*ndims]);
     }
 
     /// Return copy of the coordinate.
     inline void get_coords(index_t nid, real_t *x) const
     {
+        assert(nid < NNodes);
         for(size_t i=0; i<ndims; i++)
             x[i] = _coords[nid*ndims+i];
         return;
@@ -487,6 +494,7 @@ public:
     inline const double *get_metric(index_t nid) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         return &(metric[nid*msize]);
     }
 
@@ -501,6 +509,7 @@ public:
     inline void get_metric(index_t nid, double *m) const
     {
         assert(metric.size()>0);
+        assert(nid < NNodes);
         for(size_t i=0; i<msize; i++)
             m[i] = metric[nid*msize+i];
         return;
@@ -591,6 +600,14 @@ public:
             return lnn2gnn[nid];
         else
             return nid;
+    }
+
+    // multiplies metric tensors by alpha
+    void scale_metric(double alpha)
+    {
+        for (int i=0; i<metric.size(); ++i) {
+            metric[i] *= alpha;
+        }
     }
 
     /// Get the mean edge length metric space.
@@ -949,11 +966,36 @@ public:
         return qmin;
     }
 
+    /// Return the reference length
+    double get_ref_length()
+    {
+        return Lref;
+    }
+
     /// Return the MPI communicator.
     MPI_Comm get_mpi_comm() const
     {
         return _mpi_comm;
     }
+
+#if 0
+    int get_isOnBoundary(int nid) {
+       return isOnBoundary[nid];
+    }
+
+    void set_isOnBoundary(int nid, int val) {
+       if (nid == -1) return;
+       isOnBoundary[nid] = val;
+    }
+
+    void set_isOnBoundarySize() {
+       isOnBoundary.resize(NNodes);
+    }
+
+    index_t * get_ENList(){
+        return &_ENList[0];
+    }
+#endif
 
     /// Return the node id's connected to the specified node_id
     std::set<index_t> get_node_patch(index_t nid) const
@@ -1017,6 +1059,31 @@ public:
             length = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), m);
         }
         return length;
+    }
+    
+    real_t calc_edge_length_log(index_t nid0, index_t nid1) const
+    {
+        double l0, l1;
+        if (ndims==2) {
+            l0 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length2d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
+        else {
+            l0 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid0));
+            l1 = ElementProperty<real_t>::length3d(get_coords(nid0), get_coords(nid1), get_metric(nid1));
+        }
+        
+        if (fabs(l0-l1)<1e-10) {
+            assert(l0>1e-10);
+            return l0;
+        }
+        else {
+            double r = l0/l1;
+            double length = l0 * (r-1)/(r*log(r));
+            assert(l0>1e-10);
+            return length;
+        }
+        
     }
 
     real_t maximal_edge_length() const
@@ -1375,14 +1442,22 @@ public:
             } else {
                 for(size_t i=0; i<NNodes; i++) {
                     if(local_NEList[i].size()!=NEList[i].size()) {
-                        result = "fail (NEList[i].size()!=local_NEList[i].size())\n";
+                        result = "fail (NEList["+std::to_string(i)+"].size()!=local_NEList["+std::to_string(i)+"].size())\n";
                         state = false;
                         break;
                     }
                     if(local_NEList[i].size()==0)
                         continue;
                     if(local_NEList[i]!=NEList[i]) {
-                        result = "fail (local_NEList[i]!=NEList[i])\n";
+                        result = "fail (local_NEList["+std::to_string(i)+"]!=NEList["+std::to_string(i)+"])\n";
+                        printf("\n  local_NEList: ");
+                        for (std::set<index_t>::const_iterator it=local_NEList[i].begin(); it!=local_NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
+                        printf("  NEList: ");
+                        for (std::set<index_t>::const_iterator it=NEList[i].begin(); it!=NEList[i].end(); ++it)
+                            printf(" %d ", *it);
+                        printf("\n");
                         state = false;
                         break;
                     }
@@ -1575,11 +1650,11 @@ public:
     ////    it trims the elements list, converts it to global node numbering, and trims the boundary structure at the same time.
     void remove_overlap_elements() {
         
-        // -- Get rid of gappy global numbering and get contiguous global numbering
-        create_global_node_numbering();
-        
         if (num_processes == 1)
             return;
+
+        // -- Get rid of gappy global numbering and get contiguous global numbering
+        create_global_node_numbering();
             
         int NPNodes = NNodes - recv_halo.size();            
         MPI_Scan(&NPNodes, &gnn_offset, 1, MPI_INT, MPI_SUM, get_mpi_comm());
@@ -1602,6 +1677,52 @@ public:
         }
         NElements = iElm_new;
         
+    }
+
+    /// debug function to print mesh related structures
+    void print_mesh(char * text)
+    {
+        std::ostringstream filename_stream;
+        filename_stream << "mesh_" << text << "_" << rank;
+        std::string filename = filename_stream.str();
+        FILE * logfile = fopen(filename.c_str(), "w");
+
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            const double * coords = get_coords(iVer);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2]);
+            else 
+                fprintf(logfile, "DBG(%d)  vertex[%d (%d)]  %1.2f %1.2f %1.2f owned by: %d  - metric: %1.3f %1.3f %1.3f %1.3f %1.3f %1.3f\n", 
+                   rank, iVer, get_global_numbering(iVer), coords[0], coords[1], coords[2], node_owner[iVer],
+                   metric[msize*iVer], metric[msize*iVer+1], metric[msize*iVer+2], metric[msize*iVer+3], metric[msize*iVer+4], metric[msize*iVer+5]);
+        }
+        for (int iElm=0; iElm<get_number_elements(); ++iElm){
+            const int * elm = get_element(iElm);
+            if (ndims==2) 
+                fprintf(logfile, "DBG(%d)  triangle[%d]  %d %d %d  (gnn: %d %d %d)  quality: %1.2f  boundary: %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], 
+                    quality[iElm], boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2]);
+            else
+                fprintf(logfile, "DBG(%d)  tet[%d]  %d %d %d %d  (gnn: %d %d %d %d)  quality: %1.2f  boundary: %d %d %d %d\n", 
+                    rank, iElm, elm[0], elm[1], elm[2], elm[3], 
+                    lnn2gnn[elm[0]], lnn2gnn[elm[1]], lnn2gnn[elm[2]], lnn2gnn[elm[3]], quality[iElm], 
+                    boundary[nloc*iElm], boundary[nloc*iElm+1], boundary[nloc*iElm+2], boundary[nloc*iElm+3]);
+        }
+
+        fprintf(logfile, "DBG(%d)  Adjacency:\n", rank);
+        for (int iVer=0; iVer<get_number_nodes(); ++iVer){
+            fprintf(logfile, "DBG(%d)  vertex[%d (%d)] ", rank, iVer, lnn2gnn[iVer]);
+            fprintf(logfile, "  Neighboring nodes: ");
+            for (int i=0; i<NNList[iVer].size(); ++i) 
+                fprintf(logfile, "%d (%d) ", NNList[iVer][i], lnn2gnn[NNList[iVer][i]]);
+            fprintf(logfile, "  Neighboring elements: ");
+            for (std::set<index_t>::const_iterator it=NEList[iVer].begin(); it!=NEList[iVer].end(); ++it)
+                fprintf(logfile, " %d ", *it); 
+            fprintf(logfile, "\n");
+        }
+        fclose(logfile);
     }
 
 
@@ -2357,6 +2478,32 @@ public:
     }
 
 
+    void compute_print_quality()
+    {   
+        double qmean = get_qmean();
+        double qmin = get_qmin();
+        if(rank==0) {
+            std::cout<<"INFO: mean quality............"<<qmean<<std::endl;
+            std::cout<<"INFO: min quality............."<<qmin<<std::endl;
+        }
+    }
+
+    void compute_print_NNodes_global()
+    {   
+        int NNodes_loc = 0;
+        for (int iVer=0; iVer<NNodes; ++iVer) {
+            if (node_owner[iVer] == rank)
+                NNodes_loc++;
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &NNodes_loc, 1, MPI_INT, MPI_SUM, get_mpi_comm());
+
+        if(rank==0) {
+            std::cout<<"INFO: num nodes..............."<<NNodes_loc<<std::endl;
+        }
+    }
+
+
 private:
     template<typename _real_t, int _dim> friend class MetricField;
     template<typename _real_t, int _dim> friend class Smooth;
@@ -2588,6 +2735,8 @@ private:
         create_adjacency();
         
         create_global_node_numbering();
+
+        compute_ref_length();
     }
 
     /// Create required adjacency lists.
@@ -2865,6 +3014,49 @@ private:
     }
     
     
+    /// Calculate a domain reference length (1/2 of the diagonal of the bounding box)
+    void compute_ref_length()
+    {
+        // Compute bounding box locally
+        double bbox_loc[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            const double *x = &_coords[iVer];
+
+            bbox_loc[0] = std::min(bbox_loc[0], x[0]);
+            bbox_loc[1] = std::max(bbox_loc[1], x[0]);
+
+            bbox_loc[2] = std::min(bbox_loc[2], x[1]);
+            bbox_loc[3] = std::max(bbox_loc[3], x[1]);
+
+            if (ndims == 3) {
+                bbox_loc[4] = std::min(bbox_loc[4], x[2]);
+                bbox_loc[5] = std::max(bbox_loc[5], x[2]);
+            }
+        }
+
+        // compute global bbopx
+        double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
+        MPI_Allreduce(&bbox_loc[0], &bbox[0], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[1], &bbox[1], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[2], &bbox[2], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+        MPI_Allreduce(&bbox_loc[3], &bbox[3], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        if (ndims == 3) {
+            MPI_Allreduce(&bbox_loc[4], &bbox[4], 1, MPI_DOUBLE, MPI_MAX, _mpi_comm);
+            MPI_Allreduce(&bbox_loc[5], &bbox[5], 1, MPI_DOUBLE, MPI_MIN, _mpi_comm);
+        }
+
+        if (ndims == 2) {
+            Lref = 0.5 * sqrt( (bbox[0]-bbox[1])*(bbox[0]-bbox[1])
+                             + (bbox[2]-bbox[3])*(bbox[2]-bbox[3]));
+        }
+        else {
+            Lref = 0.5 * sqrt( (bbox[0]-bbox[1])*(bbox[0]-bbox[1])
+                             + (bbox[2]-bbox[3])*(bbox[2]-bbox[3])
+                             + (bbox[4]-bbox[5])*(bbox[4]-bbox[5]));
+        }
+        assert(std::isnormal(Lref));
+    }
+
 
     template<int dim>
     inline double calculate_quality(const index_t* n)
@@ -2914,6 +3106,9 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+#if 0
+	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+#endif
 
     // Quality
     std::vector<double> quality;
@@ -2926,6 +3121,9 @@ private:
 
     // Metric tensor field.
     std::vector<double> metric;
+
+    // Reference length of the domain
+    double Lref;
 
     // Parallel support.
     int rank, num_processes, nthreads;

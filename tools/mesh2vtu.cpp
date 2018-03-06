@@ -35,6 +35,7 @@
  *  SUCH DAMAGE.
  */
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -46,98 +47,60 @@
 #ifdef HAVE_VTK
 #include "VTKTools.h"
 #endif
+#ifdef HAVE_LIBMESHB
+#include "GMFTools.h"
+#endif
+
 #include "MetricField.h"
 
+#include "Coarsen.h"
 #include "Refine.h"
+#include "Smooth.h"
+#include "Swapping.h"
 #include "ticker.h"
+#include "cpragmatic.h"
 
+#ifdef HAVE_MPI
 #include <mpi.h>
+#endif
+
+
 
 int main(int argc, char **argv)
 {
+
     int rank=0;
+#ifdef HAVE_MPI
     int required_thread_support=MPI_THREAD_SINGLE;
     int provided_thread_support;
     MPI_Init_thread(&argc, &argv, required_thread_support, &provided_thread_support);
     assert(required_thread_support==provided_thread_support);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    bool verbose = false;
-    if(argc>1) {
-        verbose = std::string(argv[1])=="-v";
-    }
-
-#ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10.vtu");
-    mesh->create_boundary();
-
-    MetricField<double,2> metric_field(*mesh);
-
-    size_t NNodes = mesh->get_number_nodes();
-    double eta = 0.001;
-    std::vector<double> psi(NNodes);
-
-    for(size_t i=0; i<NNodes; i++)
-        psi[i] =
-            pow(mesh->get_coords(i)[0], 2) +
-            pow(mesh->get_coords(i)[1], 2);
-
-    metric_field.add_field(&(psi[0]), eta, 1);
-    metric_field.update_mesh();
-
-    VTKTools<double>::export_vtu("../data/test_refine_2d-initial", mesh);
-
-    Refine<double,2> adapt(*mesh);
-
-    double tic = get_wtime();
-    for(int i=0; i<30; i++) {
-        int cnt = adapt.refine(sqrt(2.0));
-        if (cnt < 1)
-            break;
-    }
-    double toc = get_wtime();
-
-
-    if(verbose)
-        mesh->verify();
-
-    mesh->defragment();
-
-    VTKTools<double>::export_vtu("../data/test_refine_2d", mesh);
-
-    long double perimeter = mesh->calculate_perimeter();
-    long double area = mesh->calculate_area();
-
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"Perimeter:            "<<perimeter<<std::endl;;
-    }
-
-    if(rank==0) {
-        long double ideal_area(1), ideal_perimeter(4);
-        std::cout<<"Expecting perimeter == 4: ";
-        if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-
-        std::cout<<"Expecting area == 1: ";
-        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-    }
-
-    delete mesh;
-#else
-    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
 #endif
 
-    MPI_Finalize();
+	if (argc < 1) exit(1);
+
+#ifdef HAVE_LIBMESHB
+    char * filename_in = argv[1];
+    printf("DEBUG begin mesh import\n");
+    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
+
+    printf("DEBUG mesh imported\n");
+
+    pragmatic_init_light((void*)mesh);
+
+    printf("DEBUG begin mesh export\n");
+
+#ifdef HAVE_VTK
+    VTKTools<double>::export_vtu(filename_in, mesh);
+#else
+    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
+#endif
+
+#else
+    std::cerr<<"Warning: Pragmatic was configured without LIBMESHB support"<<std::endl;
+#endif
 
     return 0;
 }

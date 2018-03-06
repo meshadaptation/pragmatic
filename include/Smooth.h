@@ -836,7 +836,16 @@ private:
             property->lipnikov_grad(loc, x0, x1, x2, m0, grad_w);
 
             double mag = sqrt(grad_w[0]*grad_w[0]+grad_w[1]*grad_w[1]);
-            assert(mag!=0);
+#ifndef NDEBUG
+            if(!std::isnormal(mag)) {
+                std::cout<<"WARNING  mag issues in Linf smoothing"<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<std::endl;
+                std::cout<<"This usually means that the metric field is rubbish\n";
+            }
+#endif
+            // if the gradient is null, the vertex is already in its optimal location
+            if (mag < DBL_EPSILON)
+                return false;
+            assert(std::isnormal(mag));
 
             for(int i=0; i<2; i++)
                 search[i] = grad_w[i]/mag;
@@ -849,13 +858,16 @@ private:
         {
             double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
             for(const auto& it : _mesh->NEList[n0]) {
-                const double *x1 = _mesh->get_coords(it);
+                for (int i=0; i<3; ++i) {
+                    int iVer = _mesh->_ENList[3*it+i];
+                    const double *x1 = _mesh->get_coords(iVer);
 
-                bbox[0] = std::min(bbox[0], x1[0]);
-                bbox[1] = std::max(bbox[1], x1[0]);
+                    bbox[0] = std::min(bbox[0], x1[0]);
+                    bbox[1] = std::max(bbox[1], x1[0]);
 
-                bbox[2] = std::min(bbox[2], x1[1]);
-                bbox[3] = std::max(bbox[3], x1[1]);
+                    bbox[2] = std::min(bbox[2], x1[1]);
+                    bbox[3] = std::max(bbox[3], x1[1]);
+                }
             }
             alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2])/2.0;
         }
@@ -1020,10 +1032,14 @@ private:
             property->lipnikov_grad(loc, x0, x1, x2, x3, m0, grad_w);
 
             double mag = sqrt(grad_w[0]*grad_w[0] + grad_w[1]*grad_w[1] + grad_w[2]*grad_w[2]);
+#ifndef NDEBUG
             if(!std::isnormal(mag)) {
-                std::cout<<"mag issues "<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
+                std::cout<<"WARNING  mag issues in Linf smoothing"<<mag<<", "<<grad_w[0]<<", "<<grad_w[1]<<", "<<grad_w[2]<<std::endl;
                 std::cout<<"This usually means that the metric field is rubbish\n";
             }
+#endif
+            if (mag < DBL_EPSILON)
+                return false;
             assert(std::isnormal(mag));
 
             for(int i=0; i<3; i++)
@@ -1037,16 +1053,19 @@ private:
         {
             double bbox[] = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
             for(const auto& it : _mesh->NEList[n0]) {
-                const double *x1 = _mesh->get_coords(it);
+                for (int i=0; i<4; ++i) {
+                    int iVer = _mesh->_ENList[4*it+i];
+                    const double *x1 = _mesh->get_coords(iVer);
 
-                bbox[0] = std::min(bbox[0], x1[0]);
-                bbox[1] = std::max(bbox[1], x1[0]);
+                    bbox[0] = std::min(bbox[0], x1[0]);
+                    bbox[1] = std::max(bbox[1], x1[0]);
 
-                bbox[2] = std::min(bbox[2], x1[1]);
-                bbox[3] = std::max(bbox[3], x1[1]);
+                    bbox[2] = std::min(bbox[2], x1[1]);
+                    bbox[3] = std::max(bbox[3], x1[1]);
 
-                bbox[4] = std::min(bbox[4], x1[2]);
-                bbox[5] = std::max(bbox[5], x1[2]);
+                    bbox[4] = std::min(bbox[4], x1[2]);
+                    bbox[5] = std::max(bbox[5], x1[2]);
+                }
             }
             alpha = (bbox[1]-bbox[0] + bbox[3]-bbox[2] + bbox[5]-bbox[4])/6.0;
         }

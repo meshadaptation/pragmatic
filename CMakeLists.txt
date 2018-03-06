@@ -122,6 +122,7 @@ file(GLOB CXX_SOURCES src/*.cpp)
 # target_link_library
 add_library(pragmatic SHARED ${C_SOURCES} ${CXX_SOURCES})
 target_link_libraries(pragmatic ${PRAGMATIC_LIBRARIES})
+set (PRAGMATIC_LIBRARIES pragmatic ${PRAGMATIC_LIBRARIES})
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
@@ -134,3 +135,8 @@ TARGET_LINK_LIBRARIES(coarsen_mesh_3d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 ADD_EXECUTABLE(jpeg2mesh ./tools/jpeg2mesh ./src/mpi_tools.cpp ./src/ticker.cpp)
 TARGET_LINK_LIBRARIES(jpeg2mesh ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
+ADD_EXECUTABLE(mesh2vtu ./tools/mesh2vtu)
+TARGET_LINK_LIBRARIES(mesh2vtu ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+
+ADD_EXECUTABLE(vtu2mesh ./tools/vtu2mesh)
+TARGET_LINK_LIBRARIES(vtu2mesh ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})

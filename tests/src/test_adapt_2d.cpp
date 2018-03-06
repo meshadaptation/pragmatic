@@ -57,6 +57,21 @@
 
 #include <mpi.h>
 
+
+
+void cout_quality(const Mesh<double> *mesh, std::string operation)
+{
+    double qmean = mesh->get_qmean();
+    double qmin = mesh->get_qmin();
+
+    int rank=0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if(rank==0)
+        std::cout<<operation<<": step in quality (mean, min): ("<<qmean<<", "<<qmin<<")"<<std::endl;
+}
+
+
 int main(int argc, char **argv)
 {
     int rank=0;
@@ -111,15 +126,53 @@ int main(int argc, char **argv)
 
     time_adapt = get_wtime();
 
+    if(verbose)
+        std::cout<<"Phase I\n";
+
+    for(size_t i=0; i<3; i++) {
+        tic = get_wtime();
+        coarsen.coarsen(L_low, L_up);
+        time_coarsen += get_wtime() - tic;
+        if(verbose) {
+            cout_quality(mesh, "Coarsen");
+            std::cout<<"INFO: Verify quality after coarsen.\n";
+            mesh->verify();
+        }
+
+        tic = get_wtime();
+        swapping.swap(0.1);
+        time_swap += get_wtime() - tic;
+        if(verbose) {
+            cout_quality(mesh, "Swapping");
+            std::cout<<"INFO: Verify quality after swapping.\n";
+            mesh->verify();
+        }
+
+        tic = get_wtime();
+        smooth.smart_laplacian(1);
+        time_smooth += get_wtime()-tic;
+        if(verbose) {
+            cout_quality(mesh, "Smart Laplacian");
+            std::cout<<"INFO: Verify quality after smart laplacian.\n";
+            mesh->verify();
+        }
+    }
+
+    if(verbose)
+        std::cout<<"Phase II\n";
+
     double L_max = mesh->maximal_edge_length();
-    double alpha = sqrt(2.0)/2;
+
+    double alpha = sqrt(2.0)/2.0;
     for(size_t i=0; i<20; i++) {
+
         double L_ref = std::max(alpha*L_max, L_up);
 
         tic = get_wtime();
         coarsen.coarsen(L_low, L_ref);
         time_coarsen += get_wtime() - tic;
         if(verbose) {
+            cout_quality(mesh, "Coarsen");
             std::cout<<"INFO: Verify quality after coarsen.\n";
             mesh->verify();
         }
@@ -128,6 +181,7 @@ int main(int argc, char **argv)
         swapping.swap(0.7);
         time_swap += get_wtime() - tic;
         if(verbose) {
+            cout_quality(mesh, "Swapping");
             std::cout<<"INFO: Verify quality after swapping.\n";
             mesh->verify();
         }
@@ -136,13 +190,14 @@ int main(int argc, char **argv)
         refine.refine(L_ref);
         time_refine += get_wtime() - tic;
         if(verbose) {
+            cout_quality(mesh, "Refine");
             std::cout<<"INFO: Verify quality after refinement.\n";
             mesh->verify();
         }
 
         L_max = mesh->maximal_edge_length();
 
-        if((L_max-L_up)<0.01)
+        if(L_max>1.0 && (L_max-L_up)<0.01)
             break;
     }
 
@@ -159,8 +214,12 @@ int main(int argc, char **argv)
     }
 
     tic = get_wtime();
-    smooth.smart_laplacian(10);
-    smooth.optimisation_linf(10);
+    smooth.smart_laplacian(20);
+    if(verbose)
+            cout_quality(mesh, "Smart Laplacian");
+    smooth.optimisation_linf(20);
+    if(verbose)
+            cout_quality(mesh, "Optimisation Linf");
     time_smooth += get_wtime()-tic;
 
     time_adapt = get_wtime()-time_adapt;
@@ -202,8 +261,8 @@ int main(int argc, char **argv)
                  <<std::setw(10)<<time_adapt<<" "
                  <<std::setw(10)<<time_other<<"\n";
 
-        std::cout<<"Expecting qmean>0.8, qmin>0.2: ";
-        if((qmean>0.8)&&(qmin>0.1))
+        std::cout<<"Expecting qmean>0.85, qmin>0.55: ";
+        if((qmean>0.85)&&(qmin>0.55))
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail (qmean="<<qmean<<", qmin="<<qmin<<")"<<std::endl;

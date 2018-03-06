@@ -61,9 +61,16 @@ int main(int argc, char **argv)
     assert(required_thread_support==provided_thread_support);
 
     bool verbose = false;
-    if(argc>1) {
+    bool full = false;
+    if (argc==2) {
         verbose = std::string(argv[1])=="-v";
+        full = std::string(argv[1])=="-f";
     }
+    if (argc==3) {
+        full = std::string(argv[1])=="-f";
+        verbose = std::string(argv[2])=="-v";
+    }
+
 
 #ifdef HAVE_VTK
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box10x10x10.vtu");
@@ -76,18 +83,22 @@ int main(int argc, char **argv)
     std::vector<double> psi(NNodes);
     for(size_t i=0; i<NNodes; i++)
         psi[i] =
-            pow(mesh->get_coords(i)[0], 4) +
-            pow(mesh->get_coords(i)[1], 4) +
-            pow(mesh->get_coords(i)[2], 4);
+            pow(mesh->get_coords(i)[0], 2) +
+            pow(mesh->get_coords(i)[1], 2) +
+            pow(mesh->get_coords(i)[2], 2);
 
-    metric_field.add_field(&(psi[0]), 0.001);
+    metric_field.add_field(&(psi[0]), 0.01);
     metric_field.update_mesh();
 
     Refine<double,3> adapt(*mesh);
 
+    int ite_max = full ? 30 : 3;
     double tic = get_wtime();
-    for(int i=0; i<2; i++)
-        adapt.refine(sqrt(2.0));
+    for(int i=0; i<ite_max; i++) {
+        int cnt = adapt.refine(sqrt(2.0));
+        if (cnt < 1)
+            break;
+    }
     double toc = get_wtime();
 
     if(verbose)

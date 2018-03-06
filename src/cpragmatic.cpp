@@ -173,6 +173,10 @@ extern "C" {
     }
 #endif
 
+    void pragmatic_init_light(void * mesh){
+        _pragmatic_mesh = mesh;
+    }
+
     /** Add field which should be adapted to.
 
       @param [in] psi Node centred field variable
@@ -277,16 +281,15 @@ extern "C" {
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
+            bool stop = false;
             for(size_t i=0; i<45; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
-                refine.refine(L_ref);
+                int cnt_split = refine.refine(L_ref);
 
-                L_max = mesh->maximal_edge_length();
-
-                if(L_max>1.0 && (L_max-L_up)<0.01)
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
 
                 int ite_red = 9;
@@ -311,6 +314,12 @@ extern "C" {
                     smooth.optimisation_linf(20);
                 }
 
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = true;
+                else
+                    stop = false;
+
+                L_max = mesh->maximal_edge_length();
             }
 
             mesh->defragment();
@@ -323,22 +332,63 @@ extern "C" {
             Refine<double, 3> refine(*mesh);
             Swapping<double, 3> swapping(*mesh);
 
+#if 0
+            // TODO HACK CAD
+            mesh->set_isOnBoundarySize();
+            for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+            int * boundary = mesh->get_boundaryTags();
+            index_t * ENList = mesh->get_ENList();
+            for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+              if (boundary[j] == 5) {
+                int iElem = j/4;
+                int iEdg = j % 4;
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+              }
+            }
+#endif
+
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
 
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
-            for(size_t i=0; i<10; i++) {
+            bool stop = false;
+            // give more time to converge with new refinement, but stop before if possible
+            // TODO write a cycle detector and stop if there is a cycle
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                refine.refine(L_ref);
-                coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_split = refine.refine(L_ref);
+                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
+
+                if (cnt_split == 0 && cnt_coars == 0 && stop)
+                    break;
+                if (cnt_split == 0 && cnt_coars == 0)
+                    stop = true;
+                else
+                    stop = false;
 
                 L_max = mesh->maximal_edge_length();
 
-                if((L_max-L_up)<0.01)
-                    break;
+#if 0                
+                // TODO HACK CAD
+                mesh->set_isOnBoundarySize();
+                for (int j=0; j<mesh->get_number_nodes(); ++j) mesh->set_isOnBoundary(j, 0);
+                int * boundary = mesh->get_boundaryTags();
+                index_t * ENList = mesh->get_ENList();
+                for (int j=0; j<mesh->get_number_elements()*4; ++j) {
+                  if (boundary[j] == 5) {
+                    int iElem = j/4;
+                    int iEdg = j % 4;
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+1)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+2)%4], 1);
+                    mesh->set_isOnBoundary(ENList[4*iElem+(iEdg+3)%4], 1);
+                  }
+                }
+#endif
             }
 
             mesh->defragment();
@@ -346,7 +396,6 @@ extern "C" {
             smooth.smart_laplacian(10);
             smooth.optimisation_linf(10);
         }
-
 
         mesh->remove_overlap_elements();
     }
