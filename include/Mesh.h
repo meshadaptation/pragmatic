@@ -1962,6 +1962,10 @@ public:
         send_metric.resize(num_processes);
         send_boundary.resize(num_processes);
 
+        //==== I. Prepare arrays of data to send
+
+        //---- first send vertices owned by current proc from current owner to new owner
+
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             int new_owner = vertex_new_owner[iVer];
             int gnn = lnn2gnn[iVer];
@@ -1981,12 +1985,17 @@ public:
             }
         }
 
+        //---- Go through elements to:
+        //       * send elements that are not already on other procs (an element is on a proc if the proc owns on of its vertices)
+        //       * send corresponding nodes owned by current proc if not sent already 
+
         for (int iElm = 0; iElm < NElements; ++iElm) {
             if (_ENList[iElm*nloc] < 0) 
                 continue;
             std::set<index_t> new_procs, old_procs;
             int gnnElm[nloc], *bdy;
 
+            int elm_current_owner = num_processes+1;
             for (int i=0; i<nloc; ++i) {
                 int iVer = _ENList[iElm*nloc+i];
                 int new_owner = vertex_new_owner[iVer];
@@ -1996,31 +2005,30 @@ public:
                 elm_current_owner = std::min(elm_current_owner, old_owner);
                 gnnElm[i] = lnn2gnn[iVer];
             }
-            // Only send elements that belong to *this* processor
             for (std::set<index_t>::const_iterator it=new_procs.begin(); it!=new_procs.end(); ++it) {
                 int new_proc = *it;
                 if (new_proc == rank) 
                     continue;
+                // check if element is already on the new proc (ie if one of its vertices belongs to it)
                 if (!(old_procs.count(new_proc))) {
                         // Only send elements that belong to *this* processor
                         if (rank == elm_current_owner) {
                             bdy = &boundary[iElm*nloc];
                             send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
                             send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
-//                    }
                         }
-
+                }
+                // Send nodes to halo on other procs
                 for (int i=0; i<nloc; ++i) {
                     int iVer = _ENList[iElm*nloc+i];
                     int gid = gnnElm[i];
                     int new_owner = vertex_new_owner[iVer];
-                    //if (node_owner[iVer] != rank)
                     if (node_owner[iVer] != rank)
                         // TODO check! 
-                        // I don't need to send nodes from the halo that are my own
+                        // I don't need to send nodes from the halo that are not my own
                         // that makes things easier when reading the received nodes to avoid duplicates
                         continue ; 
-                    if (new_owner != new_proc) { // I check I'm not sending something that belongs to the other proc
+                    if (new_owner != new_proc) { // I'm not sending something that belongs to the other proc (already done before)
                         if (!(send_map[new_proc].count(gid))) {
                             send_nodes[new_proc].push_back(gid);
                             send_nodes[new_proc].push_back(new_owner);
@@ -2033,15 +2041,17 @@ public:
                 }
             }
         }
-        /// fix ownerships
+
+        //---- fix ownerships
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             node_owner[iVer] = vertex_new_owner[iVer];
         }
         
 
-        ///  Actually send the data: for now, one comm / array. TODO; serialize somehow
+        //==== II.  Actually send the data: 
+        //          for now, one comm / array. TODO; serialize somehow ?
 
-        // First send the nodes
+        //---- First send the nodes
         std::vector<std::vector<int>> recv_nodes(num_processes);
         communicate<int>(send_nodes, recv_nodes, MPI_INDEX_T);
         std::vector<std::vector<double>> recv_coords(num_processes);
@@ -2049,7 +2059,7 @@ public:
         std::vector<std::vector<double>> recv_metric(num_processes);
         communicate<double>(send_metric, recv_metric, MPI_REAL_T);
 
-        // Now treat new vertices
+        //---- Then update vertex data structures with the new vertices
         int NNewNodes = NNodes;
         int NOldNodes = NNodes;
         for(int i=0; i<num_processes; i++) 
@@ -2059,14 +2069,14 @@ public:
         node_owner.resize(NNewNodes);
         lnn2gnn.resize(NNewNodes);
 
-
         for(int i=0; i<num_processes; i++) {
             for (int j = 0; j < recv_nodes[i].size(); j+=2){
                 int new_owner = recv_nodes[i][j+1];
                 int gid = recv_nodes[i][j];
                 int jVer = j/2;
                 if (new_owner == rank) {
-                    // if another proc sends me a vertex that belongs to me, it means I don't have it already
+                    // if another proc sends a vertex to a proc who is its new owner, 
+                    // the proc can not have the vertex already
                     node_owner[NNodes] = new_owner;
                     lnn2gnn[NNodes] = gid;
                     gnn2lnn[gid] = NNodes;
@@ -2075,9 +2085,10 @@ public:
                     NNodes++;
                 }
                 else {
-                    // it is a halo node, I got to be careful and check wether it already is there
-                    // it cannot already belong to me but it could be on my halo
-                    if (!(gnn2lnn.count(gid))) {
+                    // if it is a halo vertex (that is not owned by the proc), 
+                    // be careful and check wether it already is there
+                    // it cannot already belong to the proc but it could be on its halo
+                    if (!(gnn2lnn.count(gid))) {  // TODO too slow ?
                         node_owner[NNodes] = new_owner;
                         lnn2gnn[NNodes] = gid;
                         gnn2lnn[gid] = NNodes;
@@ -2096,13 +2107,13 @@ public:
         NEList.resize(NNodes);
         NNList.resize(NNodes);
 
-        // Now send the elements
+        //---- Now send the elements
         std::vector<std::vector<int>> recv_elements(num_processes);
         communicate<int>(send_elements, recv_elements, MPI_INDEX_T);
         std::vector<std::vector<int>> recv_boundary(num_processes);
         communicate<int>(send_boundary, recv_boundary, MPI_INDEX_T);
 
-        // Now treat new elements
+        //---- and update element sutructures with new elements
         int NNewElements = NElements;
         for(int i=0; i<num_processes; i++) 
             NNewElements += recv_elements[i].size()/2;
@@ -2115,11 +2126,16 @@ public:
                 int elm[nloc];
                 for (int k=0; k<nloc; ++k) {
                     // if I receive an element, I should already have all the vertices
-                   assert(gnn2lnn.count(elm_gnn[k])); 
+                    if (!gnn2lnn.count(elm_gnn[k])) {
+                        printf("DEBUG(%d)   %d-th element of [%d %d %d]) received from %d not found\n", rank, k, 
+                            elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
+                    } 
+                    assert(gnn2lnn.count(elm_gnn[k]));
                     elm[k] = gnn2lnn[elm_gnn[k]];
                     assert(elm[k]<NNodes);
                 }
-                // check if element already exists (could have been sent by other proc ? TODO check) 
+                // check if element already exists (could have been sent by other proc ? TODO check) --> seems useless now 
+                // TODO slow, can I improve ?
                 std::set<index_t> intersect1, intersect;
                 std::set_intersection(NEList[elm[0]].begin(), NEList[elm[0]].end(), 
                                       NEList[elm[1]].begin(), NEList[elm[1]].end(),
@@ -2139,6 +2155,7 @@ public:
                                           std::inserter(intersect, intersect.begin()));
                 }
                 if (!intersect.empty()) {
+                    printf("DEBUG I WAS ALREADY THERE BIATCH\n");
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
@@ -2146,7 +2163,8 @@ public:
                     int gid = elm_gnn[k];
                     _ENList[NElements*nloc+k] = iVer;
                     boundary[NElements*nloc+k] = recv_boundary[i][j+k];
-                    NEList[iVer].insert(NElements); // I need to update NEList because this is how I check if elements are already there 
+                    // NEList has to be updated now because this is how I check if elements are already there 
+                    NEList[iVer].insert(NElements);
                     // updte neighbors: useful to know when I need to delete a vertex
                     for (int l=k+1; l<k+nloc; ++l) {
                         int iVerNgb = elm[l%nloc];
@@ -2161,7 +2179,11 @@ public:
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
         
-        // Remove useless vertices
+        //---- Remove vertices too far on the halo 
+        //    (either owned by current proc, 
+        //            sent in the current exchange pass, 
+        //            or neighbor with one vertex owned by current proc)
+        //---- And create new resulting local numbering
         std::vector<int> new_local_numbering(NNodes, -1);
         int count = 0;
         for (int iVer = 0; iVer < NNodes; ++iVer) {
@@ -2171,7 +2193,7 @@ public:
             else if (iVer >= NOldNodes)
                 tag = 1;
             else {
-                for (int ngb=0; ngb < NNList[iVer].size(); ++ngb) {
+                for (int ngb = 0; ngb < NNList[iVer].size(); ++ngb) {
                     int ngb_vid = NNList[iVer][ngb]; // this is the old id because we don't update NNList now
                     int ngb_new_vid = new_local_numbering[ngb_vid];
                     if (ngb_vid > iVer) ngb_new_vid = ngb_vid; // has not yet been treated
@@ -2212,7 +2234,7 @@ public:
         NEList.resize(NNodes);
         NNList.resize(NNodes);
 
-        // fix structures
+        //---- fix structures with new lnn
         for (int i=0; i<_ENList.size(); ++i) {
             if (_ENList[i] >= 0)
                 _ENList[i] = new_local_numbering[_ENList[i]];
@@ -2230,7 +2252,7 @@ public:
         }
         new_local_numbering.clear();
 
-        // Remove dead elements
+        //---- Remove dead elements (those starting with -1)
         std::vector<int> new_elm_numbering(NElements);
         count = 0;
         for (int iElm = 0; iElm < NElements; ++iElm) {
@@ -2249,14 +2271,16 @@ public:
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
         
-        // Fix NEList and NNList by recreating them
+        //---- Fix NEList and NNList by recreating them TODO: do I need to touch at NNList really ?
         create_adjacency();
 
-        ///  Fix halos and global numbering
+
+        //====  III. Fix halos and global numbering
+
         fix_halos();
         create_global_node_numbering();
 
-        // fix structures with gnn
+        //---- fix structures with gnn
         for (int i=0; i<send_map.size(); ++i){
             std::map<index_t,index_t> send_map_new;
             for (std::map<index_t,index_t>::iterator it=send_map[i].begin(); it!=send_map[i].end(); ++it) {
@@ -2274,7 +2298,8 @@ public:
             recv_map[i].swap(recv_map_new);
         }
 
-        /// recompute qualities
+        //==== IV. (re)compute qualities (because I don't exchange them)
+
         quality.resize(NElements);
         for (int iElm=0; iElm<NElements; ++iElm) {
             if (ndims==2)
@@ -2282,6 +2307,9 @@ public:
             else 
                 update_quality<3>(iElm);
         }
+
+
+        //==== V. Communicate owners (why ???)
 
         halo_update<int, 1>(_mpi_comm, send, recv, node_owner);
 
