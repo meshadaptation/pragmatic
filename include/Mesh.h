@@ -1993,6 +1993,7 @@ public:
                 int old_owner = node_owner[iVer];
                 old_procs.insert(old_owner);
                 new_procs.insert(new_owner);
+                elm_current_owner = std::min(elm_current_owner, old_owner);
                 gnnElm[i] = lnn2gnn[iVer];
             }
             // Only send elements that belong to *this* processor
@@ -2001,12 +2002,13 @@ public:
                 if (new_proc == rank) 
                     continue;
                 if (!(old_procs.count(new_proc))) {
-//                    if (*old_procs.begin() == rank) {
-                        bdy = &boundary[iElm*nloc];
-                        send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
-                        send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
+                        // Only send elements that belong to *this* processor
+                        if (rank == elm_current_owner) {
+                            bdy = &boundary[iElm*nloc];
+                            send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
+                            send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
 //                    }
-                }
+                        }
 
                 for (int i=0; i<nloc; ++i) {
                     int iVer = _ENList[iElm*nloc+i];
