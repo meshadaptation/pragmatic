@@ -2157,10 +2157,10 @@ public:
         std::vector<int> new_local_numbering(NNodes, -1);
         int count = 0;
         for (int iVer = 0; iVer < NNodes; ++iVer) {
-            int tag = 0; // tells is vertex should be there
+            int tag = 0; // tells if vertex should be there
             if (node_owner[iVer] == rank)
                 tag = 1;
-            else if (iVer >= NOldNodes)
+            else if (iVer >= NOldNodes) // if current proc just received it
                 tag = 1;
             else {
                 for (int ngb = 0; ngb < NNList[iVer].size(); ++ngb) {
@@ -2226,7 +2226,21 @@ public:
         std::vector<int> new_elm_numbering(NElements);
         count = 0;
         for (int iElm = 0; iElm < NElements; ++iElm) {
-            if (_ENList[iElm*nloc] >= 0) {
+            int isDead = 0;  // = 0 if elm is alive (all vertices exist and 1 vertex belongs to current proc), else = 1
+            for (int k=0; k<nloc; ++k) {
+                if (_ENList[iElm*nloc+k] < 0)
+                    isDead = 1;
+            }
+            if (isDead) {
+                new_elm_numbering[iElm] = -1;
+                continue;
+            }
+            isDead = 1;
+            for (int k=0; k<nloc; ++k) {
+                if (node_owner[_ENList[iElm*nloc+k]] == rank)
+                    isDead = 0;
+            }
+            if (!isDead) {
                 memmove(&_ENList[count*nloc], &_ENList[iElm*nloc], nloc*sizeof(index_t));
                 memmove(&boundary[count*nloc], &boundary[iElm*nloc], nloc*sizeof(int));
                 new_elm_numbering[iElm] = count;
