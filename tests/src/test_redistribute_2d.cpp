@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 
         psi[i] = (50*fabs(x*y) >= 2*M_PI) ? 0.01*sin(50*x*y) : sin(50*x*y);
     }
-    double eta=0.002;
+    double eta=0.0009;
     metric_field.add_field(&(psi[0]), eta, 2);
 #endif
     metric_field.update_mesh();
@@ -102,6 +102,18 @@ int main(int argc, char **argv)
         if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
+        for (int iElm = 0; iElm < mesh->get_number_elements(); ++iElm) {
+            const int *n = mesh->get_element(iElm);
+            int gnnElm[3] = {mesh->get_global_numbering(n[0]), mesh->get_global_numbering(n[1]), mesh->get_global_numbering(n[2])};
+            if (gnnElm[0] == 345675 && gnnElm[1] == 345679 && gnnElm[2] == 345724) {
+                printf("DEBUG(%d)  -- ite %d Wanted element appeared on this proc with iElm: %d\n", rank, i, iElm);
+            }
+        }
+
+        char name[200];
+        sprintf(name, "ite_%d", i);
+        mesh->print_mesh(name);
+        mesh->print_halo(name);
         
         coarsen.coarsen(L_low, L_ref, false);
         swapping.swap(0.7);
@@ -109,12 +121,26 @@ int main(int argc, char **argv)
 
         L_max = mesh->maximal_edge_length();
 
+//        for (int iElm = 0; iElm < mesh->get_number_elements(); ++iElm) {
+//            const int *n = mesh->get_element(iElm);
+//            int gnnElm[3] = {mesh->get_global_numbering(n[0]), mesh->get_global_numbering(n[1]), mesh->get_global_numbering(n[2])};
+//            if (gnnElm[0] == 345675 && gnnElm[1] == 345679 && gnnElm[2] == 345724) {
+//                printf("DEBUG(%d)  ++ ite %d Wanted element appeared on this proc with iElm: %d\n", rank, i, iElm);
+//            }
+//        }
+
         int ite_red = 100;
         //if (i>0 && i%ite_red==0) {
         if (i==1 || i==3 || i==5 || i==10 || i==17 || i==25) {
             if (rank==0) printf("DEBUG(%d)  %lu-th redistribution\n", rank, i/ite_red);
 
+//            mesh->print_mesh("before17");
+//            mesh->print_halo("before17");
+
             mesh->fix_halos();
+
+//            mesh->print_mesh("after17");
+//            mesh->print_halo("after17");
 
 //            int tag = 2*(i%2)-1;
 //            int tag = (i/ite_red)%4 <2 ? 1 : -1;
@@ -134,6 +160,8 @@ int main(int argc, char **argv)
             //smooth.optimisation_linf(20);
             cnt_red++;
         }
+        if (i==17)
+            break;
 //		mesh->compute_print_quality();
 //        mesh->compute_print_NNodes_global();
 

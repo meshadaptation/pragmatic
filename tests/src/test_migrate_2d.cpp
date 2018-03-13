@@ -56,6 +56,11 @@ int main(int argc, char **argv)
         mesh->verify();
     }
 
+//    mesh->print_mesh("before");
+//    mesh->print_halo("before");
+
+    VTKTools<double>::export_vtu("globalnumbering", mesh);
+
     std::vector<int> new_owners;
     new_owners.resize(NNodes);
     for (int iVer=0; iVer<NNodes; ++iVer) {
@@ -88,6 +93,12 @@ int main(int argc, char **argv)
         case 4121:
             new_owners[iVer] = 0;
             break;
+        case 5600:
+            new_owners[iVer] = 0;
+            break;
+        case 5605:
+            new_owners[iVer] = 0;
+            break;
         case 6150:
             new_owners[iVer] = 0;
             break;
@@ -100,6 +111,12 @@ int main(int argc, char **argv)
         case 6172:
             new_owners[iVer] = 0;
             break;
+        case 7792:
+            new_owners[iVer] = 2;
+            break;
+        case 7795:
+            new_owners[iVer] = 2;
+            break;
         case 8342:
             new_owners[iVer] = 0;
             break;
@@ -108,6 +125,19 @@ int main(int argc, char **argv)
             break;
         }
     }
+//    if (rank == 2)
+//        printf("DEBUG(%d) new owner of vertex 7 (%d): %d\n", rank, mesh->get_global_numbering(7), new_owners[7]);
+//    if (rank == 3)
+//        printf("DEBUG(%d) new owner of vertex 4 (%d): %d\n", rank, mesh->get_global_numbering(4), new_owners[4]);
+//    if (rank == 3)
+//        printf("DEBUG(%d) new owner of vertex 5 (%d): %d\n", rank, mesh->get_global_numbering(5), new_owners[5]);
+
+    for (int iVer=0; iVer<NNodes; ++iVer) {
+        int gnn = mesh->get_global_numbering(iVer);
+        if (gnn == 5612 || gnn == 7795 || gnn == 5610)
+            printf("DEBUG(%d)  new owner of %d (%d) is %d\n", rank, iVer, mesh->get_global_numbering(iVer), new_owners[iVer]);
+    }
+
 
     mesh->migrate_mesh(&new_owners[0]); 
 

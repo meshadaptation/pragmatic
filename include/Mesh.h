@@ -1877,7 +1877,33 @@ public:
         send_halo.swap(send_halo_new);
     }
 
+#if 0
+    int test_new_owner_consistency(int * vertex_new_owner) {
 
+        std::vector< std::vector<index_t> > send_nowners(num_processes)
+
+        for (int iProc = 0; iProc < num_processes; ++iProc) {
+
+            for (int i=0; i<send[iProc].size(); ++i) {
+                int lnn = send[iProc][i];
+                int gnn = lnn2gnn(lnn);
+                send_nowners[iProc].push_back(gnn);
+                send_nowners[iProc].push_back(vertex_new_owner[lnn]);
+            }
+
+        }
+
+
+        std::vector<std::vector<int>> recv_nowners(num_processes);
+        communicate<int>(send_nowners, recv_nowners, MPI_INDEX_T);
+
+
+
+
+
+        return 0;
+    }
+#endif
 
 
     /// redistribute the mesh given the list of new owners of the vertices
@@ -1931,6 +1957,8 @@ public:
                 int iVer = _ENList[iElm*nloc+i];
                 int new_owner = vertex_new_owner[iVer];
                 int old_owner = node_owner[iVer];
+                if (iElm==3464 && rank==1) printf("DEBUG(%d) iVer: %d (%d)  old_owner: %d new_owner: %d\n", 
+                                                    rank, iVer, lnn2gnn[iVer], old_owner, new_owner);
                 old_procs.insert(old_owner);
                 new_procs.insert(new_owner);
                 elm_current_owner = std::min(elm_current_owner, old_owner);
@@ -1945,6 +1973,16 @@ public:
                         // Only send elements that belong to *this* processor
                         if (rank == elm_current_owner) {
                             bdy = &boundary[iElm*nloc];
+                            if (gnnElm[0] == 345675 && gnnElm[1] == 345679 && gnnElm[2] == 345724)
+                                printf("DEBUG(%d) =============== THERE, sending the triangle %d (%d %d %d) owned by %d %d %d and new_owner: %d %d %d onto %d\n", 
+                                    rank, iElm,_ENList[iElm*nloc+0], _ENList[iElm*nloc+1], _ENList[iElm*nloc+2], 
+                                    node_owner[_ENList[iElm*nloc+0]],  
+                                    node_owner[_ENList[iElm*nloc+1]],  
+                                    node_owner[_ENList[iElm*nloc+2]], 
+                                    vertex_new_owner[_ENList[iElm*nloc+0]],
+                                    vertex_new_owner[_ENList[iElm*nloc+1]],
+                                    vertex_new_owner[_ENList[iElm*nloc+2]],
+                                    new_proc);
                             send_elements[new_proc].insert(send_elements[new_proc].end(), gnnElm, gnnElm+nloc);
                             send_boundary[new_proc].insert(send_boundary[new_proc].end(), bdy, bdy+nloc);
                         }
@@ -2086,7 +2124,8 @@ public:
                                           std::inserter(intersect, intersect.begin()));
                 }
                 if (!intersect.empty()) {
-                    printf("DEBUG I WAS ALREADY THERE BIATCH\n");
+                    printf("DEBUG(%d) I WAS ALREADY THERE BIATCH. Elm of gnn %d %d %d recieved from proc %d\n",
+                        rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
                     continue;
                 }
                 for (int k=0; k<nloc; ++k) {
