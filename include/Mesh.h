@@ -2106,6 +2106,7 @@ public:
                 // check if element already exists (could have been sent by other proc ? TODO check) --> seems useless now 
                 // TODO slow, can I improve ?
                 std::set<index_t> intersect1, intersect;
+#if 0
                 std::set_intersection(NEList[elm[0]].begin(), NEList[elm[0]].end(), 
                                       NEList[elm[1]].begin(), NEList[elm[1]].end(),
                                       std::inserter(intersect1, intersect1.begin()));
@@ -2123,6 +2124,7 @@ public:
                                           intersect2.begin(), intersect2.end(),
                                           std::inserter(intersect, intersect.begin()));
                 }
+#endif
                 if (!intersect.empty()) {
                     printf("DEBUG(%d) I WAS ALREADY THERE BIATCH. Elm of gnn %d %d %d recieved from proc %d\n",
                         rank, elm_gnn[0], elm_gnn[1], elm_gnn[2], i);
@@ -2197,6 +2199,7 @@ public:
 
         assert(count<=NNodes);
         NNodes = count;
+        printf("DEBUG(%d)  new NNodes: %d\n", rank, NNodes);
         _coords.resize(NNodes*ndims);
         metric.resize(NNodes*msize);
         node_owner.resize(NNodes);
@@ -2252,6 +2255,7 @@ public:
         }
         assert(count<=NElements);
         NElements = count;
+        printf("DEBUG(%d)  new NElements: %d\n", rank, NElements);
         _ENList.resize(NElements*nloc);
         boundary.resize(NElements*nloc);
         
