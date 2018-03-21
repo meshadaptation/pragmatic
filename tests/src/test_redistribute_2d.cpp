@@ -98,7 +98,7 @@ int main(int argc, char **argv)
     double alpha = sqrt(2.0)/2.0;
     size_t i=0;
 	int cnt_red = 0;
-    for(i=0; i<24; i++) {
+    for(i=0; i<28; i++) {
         if (rank==0) printf("DEBUG(%d)  ite adapt: %lu\n", rank, i);
         double L_ref = std::max(alpha*L_max, L_up);
 
@@ -160,8 +160,8 @@ int main(int argc, char **argv)
             //smooth.optimisation_linf(20);
             cnt_red++;
         }
-        if (i==17)
-            break;
+//        if (i==17)
+//            break;
 //		mesh->compute_print_quality();
 //        mesh->compute_print_NNodes_global();
 

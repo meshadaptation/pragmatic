@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     double eta=0.0007;
     metric_field.add_field(&(psi[0]), eta, 2);
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.2*0.2);
+        double lmax = 1/(0.02*0.02);//1/(0.2*0.2);
 		double m[6];
         const double * met=metric_field.get_metric(i);
 		m[0] = met[0];
@@ -97,6 +97,8 @@ int main(int argc, char **argv)
 //    GMFTools<double>::export_gmf_mesh("ex_metric2dV2", mesh);
 //    GMFTools<double>::export_gmf_metric2d("ex_metric2dV2", &metric_field, mesh);
 //    return 0;
+
+    VTKTools<double>::export_vtu("mesh_red3d", mesh);
 
     double L_up = sqrt(2.0);
     double L_low = L_up*0.5;
@@ -134,7 +136,12 @@ int main(int argc, char **argv)
             if (rank==0) printf("DEBUG  resdistribute to %s\n", (tag==1) ? "greater" : "lower");
 			if (num_processes>1) {
 	            mesh->redistribute_halo(tag);
-				mesh->redistribute_halo(tag);
+//				mesh->redistribute_halo(tag);
+
+//                VTKTools<double>::export_vtu("mesh_afterred", mesh);
+//                MPI_Barrier(MPI_COMM_WORLD);
+//                exit(12);
+
 
 	            MetricField<double,3> metric_field_new(*mesh);
     	        metric_field_new.set_metric(mesh->get_metric());
