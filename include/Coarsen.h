@@ -49,7 +49,6 @@
 #endif
 
 #include "ElementProperty.h"
-#include "Lock.h"
 #include "Mesh.h"
 
 /*! \brief Performs 2D/3D mesh coarsening.
@@ -115,111 +114,24 @@ public:
         _L_low = L_low;
         _L_max = L_max;
 
-        std::vector< std::atomic<int> > ccount(100);
-        std::fill(ccount.begin(), ccount.end(), 0);
-
         if(nnodes_reserve<NNodes) {
             nnodes_reserve = NNodes;
-
-            vLocks.resize(NNodes);
         }
 
-        int ccount_tot = 0;
-        #pragma omp parallel
-        {
-            // Initialize.
-            #pragma omp for schedule(static)
-            for(int i=0; i<NNodes; i++) {
-                vLocks[i].unlock();
+        int ccount_ite, ccount_tot = 0;
+        for(int citerations=0; citerations<100; citerations++) {
+            for(index_t node=0; node<NNodes; ++node) { // TODO Need to consider randomising order to avoid mesh artifacts related to numbering.
+
+                ccount_ite = 0;
+                index_t target = coarsen_identify_kernel(node, L_low, L_max);
+                if(target>=0) {
+                    coarsen_kernel(node, target);
+                    ccount_ite++;
+                    ccount_tot++;
+                }
             }
-
-            for(int citerations=0; citerations<100; citerations++) {
-//                printf("DEBUG  citerations: %d\n", citerations);
-                // Vector "retry" is used to store aborted vertices.
-                // Vector "round" is used to store propagated vertices.
-                std::vector<index_t> retry, next_retry;
-                std::vector<index_t> locks_held;
-                #pragma omp for schedule(static) nowait
-                for(index_t node=0; node<NNodes; ++node) { // Need to consider randomising order to avoid mesh artifacts related to numbering.
-                    bool abort = false;
-
-                    if(!vLocks[node].try_lock()) {
-                        retry.push_back(node);
-                        continue;
-                    }
-                    locks_held.push_back(node);
-
-                    for(auto& it : _mesh->NNList[node]) {
-                        if(!vLocks[it].try_lock()) {
-                            abort = true;
-                            break;
-                        }
-                        locks_held.push_back(it);
-                    }
-
-                    if(!abort) {
-                        index_t target = coarsen_identify_kernel(node, L_low, L_max);
-                        if(target>=0) {
-                            coarsen_kernel(node, target);
-                            ccount[citerations]++;
-                            ccount_tot++;
-                        }
-                    } else {
-                        retry.push_back(node);
-                    }
-
-                    for(auto& it : locks_held) {
-                        vLocks[it].unlock();
-                    }
-                    locks_held.clear();
-                }
-
-                for(int iretry=0; iretry<100; iretry++) {
-                    next_retry.clear();
-
-                    for(auto& node : retry) {
-                        bool abort = false;
-
-                        if(!vLocks[node].try_lock()) {
-                            next_retry.push_back(node);
-                            continue;
-                        }
-                        locks_held.push_back(node);
-
-                        for(auto& it : _mesh->NNList[node]) {
-                            if(!vLocks[it].try_lock()) {
-                                abort = true;
-                                break;
-                            }
-                            locks_held.push_back(it);
-                        }
-
-                        if(!abort) {
-                            index_t target = coarsen_identify_kernel(node, L_low, L_max);
-                            if(target>=0) {
-                                coarsen_kernel(node, target);
-                                ccount[citerations]++;
-                                ccount_tot++;
-                            }
-                        } else {
-                            next_retry.push_back(node);
-                        }
-
-                        for(auto& it : locks_held) {
-                            vLocks[it].unlock();
-                        }
-                        locks_held.clear();
-                    }
-
-                    retry.swap(next_retry);
-                    if(retry.empty())
-                        break;
-                }
-
-                #pragma omp barrier
-                if(ccount[citerations]==0) {
-                    break;
-                }
+            if(ccount_ite==0) {
+                break;
             }
         }
         printf("DEBUG   Number of edge collapse %d\n", ccount_tot);
@@ -658,7 +570,6 @@ private:
     ElementProperty<real_t> *property;
 
     size_t nnodes_reserve;
-    std::vector<Lock> vLocks;
 
     real_t _L_low, _L_max;
     bool delete_slivers, surface_coarsening, quality_constrained;
