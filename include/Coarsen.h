@@ -120,9 +120,8 @@ public:
 
         int ccount_ite, ccount_tot = 0;
         for(int citerations=0; citerations<100; citerations++) {
+            ccount_ite = 0;
             for(index_t node=0; node<NNodes; ++node) { // TODO Need to consider randomising order to avoid mesh artifacts related to numbering.
-
-                ccount_ite = 0;
                 index_t target = coarsen_identify_kernel(node, L_low, L_max);
                 if(target>=0) {
                     coarsen_kernel(node, target);
