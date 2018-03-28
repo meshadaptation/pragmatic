@@ -456,7 +456,6 @@ public:
         vtk_min_desired_length->SetNumberOfTuples(NNodes);
         vtk_min_desired_length->SetName("min_desired_edge_length");
 
-        #pragma omp parallel for
         for(index_t i=0; i<NNodes; i++) {
             const real_t *r = mesh->get_coords(i);
             const double *m = mesh->get_metric(i);
