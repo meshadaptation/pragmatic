@@ -38,10 +38,6 @@
 #include <iostream>
 #include <vector>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include "Mesh.h"
 #ifdef HAVE_VTK
 #include "VTKTools.h"

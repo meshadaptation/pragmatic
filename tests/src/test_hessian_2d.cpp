@@ -38,10 +38,6 @@
 #include <iostream>
 #include <vector>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include "Mesh.h"
 #ifdef HAVE_VTK
 #include "VTKTools.h"
@@ -66,12 +62,8 @@ int main(int argc, char **argv)
 
     // Set up field - use first touch policy
     std::vector<double> psi(NNodes);
-    #pragma omp parallel
-    {
-        #pragma omp for schedule(static)
-        for(size_t i=0; i<NNodes; i++)
-            psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
-    }
+    for(size_t i=0; i<NNodes; i++)
+        psi[i] = pow(mesh->get_coords(i)[0]+0.1, 2) + pow(mesh->get_coords(i)[1]+0.1, 2);
 
     MetricField<double,2> metric_field(*mesh);
 

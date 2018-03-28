@@ -40,10 +40,6 @@
 #include <iostream>
 #include <vector>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include "Mesh.h"
 #ifdef HAVE_VTK
 #include "VTKTools.h"
@@ -95,7 +91,6 @@ int main(int argc, char **argv)
 
         MetricField<double,2> metric_field(*mesh);
         std::vector<double> psi(NNodes);
-        #pragma omp parallel for
         for(size_t i=0; i<NNodes; i++) {
             double x = 2*mesh->get_coords(i)[0]-1;
             double y = 2*mesh->get_coords(i)[1]-1;
