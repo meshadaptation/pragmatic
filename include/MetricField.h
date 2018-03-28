@@ -56,9 +56,6 @@
 
 #include <mpi.h>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
 
 /*! \brief Constructs metric tensor field which encodes anisotropic
  *  edge size information.

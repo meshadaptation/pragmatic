@@ -49,10 +49,6 @@
 #include <boost/unordered_map.hpp>
 #endif
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include "mpi_tools.h"
 
 #include "PragmaticTypes.h"
