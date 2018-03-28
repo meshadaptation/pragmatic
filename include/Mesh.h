@@ -56,7 +56,6 @@
 #include "mpi_tools.h"
 
 #include "PragmaticTypes.h"
-#include "PragmaticMinis.h"
 
 #include "ElementProperty.h"
 #include "MetricTensor.h"
@@ -1366,7 +1365,7 @@ public:
                 long double larea = property->area(get_coords(n[0]),
                                                    get_coords(n[1]),
                                                    get_coords(n[2]));
-                if(pragmatic_isnan(larea)) {
+                if(std::isnan(larea)) {
                     std::cerr<<"ERROR: Bad element "<<n[0]<<", "<<n[1]<<", "<<n[2]<<std::endl;
                 }
 
@@ -1686,8 +1685,6 @@ private:
         MPI_INDEX_T = mpi_index_t_wrapper.mpi_type;
         mpi_type_wrapper<real_t> mpi_real_t_wrapper;
         MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
-
-        nthreads = pragmatic_nthreads();
 
         if(z==NULL) {
             nloc = 3;
@@ -2278,7 +2275,7 @@ private:
     double Lref;
 
     // Parallel support.
-    int rank, num_processes, nthreads;
+    int rank, num_processes;
     std::vector< std::vector<index_t> > send, recv;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     std::vector< boost::unordered_map<index_t, index_t> > send_map, recv_map;
