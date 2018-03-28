@@ -44,7 +44,6 @@
 
 #include "Edge.h"
 #include "ElementProperty.h"
-#include "Lock.h"
 #include "Mesh.h"
 
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
@@ -108,240 +107,80 @@ public:
             nnodes_reserve = NNodes;
 
             marked_edges.resize(NNodes);
-
-            vLocks.resize(NNodes);
         }
 
-        #pragma omp parallel
-        {
-            // Vector "retry" is used to store aborted vertices.
-            // Vector "round" is used to store propagated vertices.
-            std::vector<index_t> retry, next_retry;
-            std::vector<index_t> this_round, next_round;
-            std::vector<index_t> locks_held;
-            #pragma omp for schedule(guided) nowait
-            for(index_t node=0; node<NNodes; ++node) {
+        // Vector "retry" is used to store aborted vertices.
+        // Vector "round" is used to store propagated vertices.
+        std::vector<index_t> this_round, next_round;
+        for(index_t node=0; node<NNodes; ++node) {
+            bool abort = false;
+
+            std::set< Edge<index_t> > active_edges;
+            for(auto& ele : _mesh->NEList[node]) {
+                if(_mesh->quality[ele] < min_Q) {
+                    const index_t* n = _mesh->get_element(ele);
+                    for(int i=0; i<nloc; ++i) {
+                        if(node < n[i])
+                            active_edges.insert(Edge<index_t>(node, n[i]));
+                    }
+                }
+            }
+
+            for(auto& edge : active_edges) {
+                marked_edges[edge.edge.first].erase(edge.edge.second);
+                propagation_map pMap;
+                bool swapped = swap_kernel(edge, pMap);
+
+                if(swapped) {
+                    for(auto& entry : pMap) {
+                        for(auto& v : entry.second) {
+                            marked_edges[entry.first].insert(v);
+                            next_round.push_back(entry.first);
+                        }
+                    }
+                }
+            }
+        }
+
+        while(!next_round.empty()) {
+            this_round.swap(next_round);
+            next_round.clear();
+
+            for(auto& node : this_round) {
+                if(marked_edges[node].empty())
+                    continue;
+
                 bool abort = false;
 
-                if(!vLocks[node].try_lock()) {
-                    retry.push_back(node);
-                    continue;
-                }
-                locks_held.push_back(node);
-
-                for(auto& it : _mesh->NNList[node]) {
-                    if(!vLocks[it].try_lock()) {
-                        abort = true;
-                        break;
+                std::set< Edge<index_t> > active_edges;
+                for(auto& ele : _mesh->NEList[node]) {
+                    if(_mesh->quality[ele] < min_Q) {
+                        const index_t* n = _mesh->get_element(ele);
+                        for(int i=0; i<nloc; ++i) {
+                            if(node < n[i])
+                                active_edges.insert(Edge<index_t>(node, n[i]));
+                        }
                     }
-                    locks_held.push_back(it);
                 }
 
-                if(!abort) {
-                    std::set< Edge<index_t> > active_edges;
-                    for(auto& ele : _mesh->NEList[node]) {
-                        if(_mesh->quality[ele] < min_Q) {
-                            const index_t* n = _mesh->get_element(ele);
-                            for(int i=0; i<nloc; ++i) {
-                                if(node < n[i])
-                                    active_edges.insert(Edge<index_t>(node, n[i]));
+                for(auto& edge : active_edges) {
+                    marked_edges[edge.edge.first].erase(edge.edge.second);
+                    propagation_map pMap;
+                    bool swapped = swap_kernel(edge, pMap);
+
+                    if(swapped) {
+                        for(auto& entry : pMap) {
+                            for(auto& v : entry.second) {
+                                marked_edges[entry.first].insert(v);
+                                next_round.push_back(entry.first);
                             }
                         }
                     }
-
-                    for(auto& edge : active_edges) {
-                        marked_edges[edge.edge.first].erase(edge.edge.second);
-                        propagation_map pMap;
-                        bool swapped = swap_kernel(edge, pMap);
-
-                        if(swapped) {
-                            for(auto& entry : pMap) {
-                                for(auto& v : entry.second) {
-                                    marked_edges[entry.first].insert(v);
-                                    next_round.push_back(entry.first);
-                                }
-                            }
-                        }
-                    }
-                } else
-                    retry.push_back(node);
-
-                for(auto& it : locks_held) {
-                    vLocks[it].unlock();
                 }
-                locks_held.clear();
             }
 
-            while(retry.size()>0) {
-                next_retry.clear();
-
-                for(auto& node : retry) {
-                    if(marked_edges[node].empty())
-                        continue;
-
-                    bool abort = false;
-
-                    if(!vLocks[node].try_lock()) {
-                        next_retry.push_back(node);
-                        continue;
-                    }
-                    locks_held.push_back(node);
-
-                    for(auto& it : _mesh->NNList[node]) {
-                        if(!vLocks[it].try_lock()) {
-                            abort = true;
-                            break;
-                        }
-                        locks_held.push_back(it);
-                    }
-
-                    if(!abort) {
-                        std::set<index_t> marked_edges_copy = marked_edges[node];
-                        marked_edges[node].clear();
-
-                        for(auto& target : marked_edges_copy) {
-                            Edge<index_t> edge(node, target);
-                            propagation_map pMap;
-                            marked_edges[edge.edge.first].erase(edge.edge.second);
-                            bool swapped = swap_kernel(edge, pMap);
-
-                            if(swapped) {
-                                for(auto& entry : pMap) {
-                                    for(auto& v : entry.second) {
-                                        marked_edges[entry.first].insert(v);
-                                        next_round.push_back(entry.first);
-                                    }
-                                }
-                            }
-                        }
-                    } else
-                        next_retry.push_back(node);
-
-                    for(auto& it : locks_held) {
-                        vLocks[it].unlock();
-                    }
-                    locks_held.clear();
-                }
-
-                retry.swap(next_retry);
-            }
-
-            while(!next_round.empty()) {
-                this_round.swap(next_round);
-                next_round.clear();
-
-                for(auto& node : this_round) {
-                    if(marked_edges[node].empty())
-                        continue;
-
-                    bool abort = false;
-
-                    if(!vLocks[node].try_lock()) {
-                        retry.push_back(node);
-                        continue;
-                    }
-                    locks_held.push_back(node);
-
-                    for(auto& it : _mesh->NNList[node]) {
-                        if(!vLocks[it].try_lock()) {
-                            abort = true;
-                            break;
-                        }
-                        locks_held.push_back(it);
-                    }
-
-                    if(!abort) {
-                        std::set< Edge<index_t> > active_edges;
-                        for(auto& ele : _mesh->NEList[node]) {
-                            if(_mesh->quality[ele] < min_Q) {
-                                const index_t* n = _mesh->get_element(ele);
-                                for(int i=0; i<nloc; ++i) {
-                                    if(node < n[i])
-                                        active_edges.insert(Edge<index_t>(node, n[i]));
-                                }
-                            }
-                        }
-
-                        for(auto& edge : active_edges) {
-                            marked_edges[edge.edge.first].erase(edge.edge.second);
-                            propagation_map pMap;
-                            bool swapped = swap_kernel(edge, pMap);
-
-                            if(swapped) {
-                                for(auto& entry : pMap) {
-                                    for(auto& v : entry.second) {
-                                        marked_edges[entry.first].insert(v);
-                                        next_round.push_back(entry.first);
-                                    }
-                                }
-                            }
-                        }
-                    } else
-                        retry.push_back(node);
-
-                    for(auto& it : locks_held) {
-                        vLocks[it].unlock();
-                    }
-                    locks_held.clear();
-                }
-
-                while(retry.size()>0) {
-                    next_retry.clear();
-
-                    for(auto& node : retry) {
-                        if(marked_edges[node].empty())
-                            continue;
-
-                        bool abort = false;
-
-                        if(!vLocks[node].try_lock()) {
-                            next_retry.push_back(node);
-                            continue;
-                        }
-                        locks_held.push_back(node);
-
-                        for(auto& it : _mesh->NNList[node]) {
-                            if(!vLocks[it].try_lock()) {
-                                abort = true;
-                                break;
-                            }
-                            locks_held.push_back(it);
-                        }
-
-                        if(!abort) {
-                            std::set<index_t> marked_edges_copy = marked_edges[node];
-                            marked_edges[node].clear();
-
-                            for(auto& target : marked_edges_copy) {
-                                Edge<index_t> edge(node, target);
-                                propagation_map pMap;
-                                marked_edges[edge.edge.first].erase(edge.edge.second);
-                                bool swapped = swap_kernel(edge, pMap);
-
-                                if(swapped) {
-                                    for(auto& entry : pMap) {
-                                        for(auto& v : entry.second) {
-                                            marked_edges[entry.first].insert(v);
-                                            next_round.push_back(entry.first);
-                                        }
-                                    }
-                                }
-                            }
-                        } else
-                            next_retry.push_back(node);
-
-                        for(auto& it : locks_held) {
-                            vLocks[it].unlock();
-                        }
-                        locks_held.clear();
-                    }
-
-                    retry.swap(next_retry);
-                }
-
-                if(next_round.empty()) {
-                    // TODO: Try to steal work
-                }
+            if(next_round.empty()) {
+                // TODO: Try to steal work
             }
         }
     }
@@ -1198,20 +1037,15 @@ private:
         int extra_elements = nelements - neigh_elements.size();
         if(extra_elements > 0) {
             index_t new_eid;
-            #pragma omp atomic capture
-            {
-                new_eid = _mesh->NElements;
-                _mesh->NElements += extra_elements;
-            }
+            new_eid = _mesh->NElements;
+            _mesh->NElements += extra_elements;
 
             if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
-                ENList_lock.lock();
                 if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
                     _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
                     _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
                     _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
                 }
-                ENList_lock.unlock();
             }
 
             for(int i=0; i<extra_elements; ++i)
@@ -1251,8 +1085,6 @@ private:
     ElementProperty<real_t> *property;
 
     size_t nnodes_reserve;
-    Lock ENList_lock;
-    std::vector<Lock> vLocks;
 
     static const size_t ndims=dim;
     static const size_t nloc=dim+1;
