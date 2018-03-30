@@ -39,10 +39,6 @@
 #include <string>
 #include <vector>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include <cfloat>
 
 #include "Mesh.h"

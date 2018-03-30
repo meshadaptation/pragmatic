@@ -56,9 +56,6 @@
 
 #include <mpi.h>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
 
 /*! \brief Constructs metric tensor field which encodes anisotropic
  *  edge size information.
@@ -90,31 +87,27 @@ public:
             bbox[i*2] = DBL_MAX;
             bbox[i*2+1] = -DBL_MAX;
         }
-        #pragma omp parallel
-        {
-            double lbbox[dim*2];
-            for(int i=0; i<dim; i++) {
-                lbbox[i*2] = DBL_MAX;
-                lbbox[i*2+1] = -DBL_MAX;
-            }
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++) {
-                const real_t *x = _mesh->get_coords(i);
 
-                for(int j=0; j<dim; j++) {
-                    lbbox[j*2] = std::min(lbbox[j*2], x[j]);
-                    lbbox[j*2+1] = std::max(lbbox[j*2+1], x[j]);
-                }
-            }
+        double lbbox[dim*2];
+        for(int i=0; i<dim; i++) {
+            lbbox[i*2] = DBL_MAX;
+            lbbox[i*2+1] = -DBL_MAX;
+        }
 
-            #pragma omp critical
-            {
-                for(int j=0; j<dim; j++) {
-                    bbox[j*2] = std::min(lbbox[j*2], bbox[j*2]);
-                    bbox[j*2+1] = std::max(lbbox[j*2+1], bbox[j*2+1]);
-                }
+        for(int i=0; i<_NNodes; i++) {
+            const real_t *x = _mesh->get_coords(i);
+
+            for(int j=0; j<dim; j++) {
+                lbbox[j*2] = std::min(lbbox[j*2], x[j]);
+                lbbox[j*2+1] = std::max(lbbox[j*2+1], x[j]);
             }
         }
+
+        for(int j=0; j<dim; j++) {
+            bbox[j*2] = std::min(lbbox[j*2], bbox[j*2]);
+            bbox[j*2+1] = std::max(lbbox[j*2+1], bbox[j*2+1]);
+        }
+
         double max_extent = bbox[1]-bbox[0];
         for(int j=1; j<dim; j++)
             max_extent = std::max(max_extent, bbox[j*2+1]-bbox[j*2]);
@@ -136,38 +129,30 @@ public:
             _metric = new MetricTensor<real_t,dim>[_NNodes];
 
         if(dim==2) {
-            #pragma omp parallel
+            double alpha = pow(1.0/resolution_scaling_factor, 2);
+            for(int i=0; i<_NNodes; i++)
             {
-                double alpha = pow(1.0/resolution_scaling_factor, 2);
-                #pragma omp for schedule(static)
-                for(int i=0; i<_NNodes; i++)
-                {
-                    real_t m[3];
+                real_t m[3];
 
-                    fit_ellipsoid(i, m);
+                fit_ellipsoid(i, m);
 
-                    for(int j=0; j<3; j++)
-                        m[j]*=alpha;
+                for(int j=0; j<3; j++)
+                    m[j]*=alpha;
 
-                    _metric[i].set_metric(m);
-                }
+                _metric[i].set_metric(m);
             }
         } else {
-            #pragma omp parallel
+            double alpha = pow(1.0/resolution_scaling_factor, 2);
+            for(int i=0; i<_NNodes; i++)
             {
-                double alpha = pow(1.0/resolution_scaling_factor, 2);
-                #pragma omp for schedule(static)
-                for(int i=0; i<_NNodes; i++)
-                {
-                    real_t m[6];
+                real_t m[6];
 
-                    fit_ellipsoid(i, m);
+                fit_ellipsoid(i, m);
 
-                    for(int j=0; j<6; j++)
-                        m[j]*=alpha;
+                for(int j=0; j<6; j++)
+                    m[j]*=alpha;
 
-                    _metric[i].set_metric(m);
-                }
+                _metric[i].set_metric(m);
             }
         }
     }
@@ -388,38 +373,33 @@ public:
             exit(-1);
         } else {
             std::vector<double> SteinerMetricField(_NElements*6);
-            #pragma omp parallel
-            {
-                #pragma omp for schedule(static)
-                for(int i=0; i<_NElements; i++) {
-                    const index_t *n=_mesh->get_element(i);
+            for(int i=0; i<_NElements; i++) {
+                const index_t *n=_mesh->get_element(i);
 
-                    const real_t *x0 = _mesh->get_coords(n[0]);
-                    const real_t *x1 = _mesh->get_coords(n[1]);
-                    const real_t *x2 = _mesh->get_coords(n[2]);
-                    const real_t *x3 = _mesh->get_coords(n[3]);
+                const real_t *x0 = _mesh->get_coords(n[0]);
+                const real_t *x1 = _mesh->get_coords(n[1]);
+                const real_t *x2 = _mesh->get_coords(n[2]);
+                const real_t *x3 = _mesh->get_coords(n[3]);
 
-                    pragmatic::generate_Steiner_ellipse(x0, x1, x2, x3, SteinerMetricField.data()+i*6);
+                pragmatic::generate_Steiner_ellipse(x0, x1, x2, x3, SteinerMetricField.data()+i*6);
+            }
+
+            double alpha = pow(1.0/resolution_scaling_factor, 2);
+            for(int i=0; i<_NNodes; i++) {
+                double sm[6];
+                for(int j=0; j<6; j++)
+                    sm[j] = 0.0;
+
+                for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[i].begin(); ie!=_mesh->NEList[i].end(); ++ie) {
+                    for(int j=0; j<6; j++)
+                        sm[j]+=SteinerMetricField[(*ie)*6+j];
                 }
 
-                double alpha = pow(1.0/resolution_scaling_factor, 2);
-                #pragma omp for schedule(static)
-                for(int i=0; i<_NNodes; i++) {
-                    double sm[6];
-                    for(int j=0; j<6; j++)
-                        sm[j] = 0.0;
+                double scale = alpha/_mesh->NEList[i].size();
+                for(int j=0; j<6; j++)
+                    sm[j]*=scale;
 
-                    for(typename std::set<index_t>::const_iterator ie=_mesh->NEList[i].begin(); ie!=_mesh->NEList[i].end(); ++ie) {
-                        for(int j=0; j<6; j++)
-                            sm[j]+=SteinerMetricField[(*ie)*6+j];
-                    }
-
-                    double scale = alpha/_mesh->NEList[i].size();
-                    for(int j=0; j<6; j++)
-                        sm[j]*=scale;
-
-                    _metric[i].set_metric(sm);
-                }
+                _metric[i].set_metric(sm);
             }
         }
     }
@@ -429,13 +409,8 @@ public:
      */
     void get_metric(real_t* metric)
     {
-        // Enforce first-touch policy.
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++) {
-                _metric[i].get_metric(metric+i*(dim==2?3:6));
-            }
+        for(int i=0; i<_NNodes; i++) {
+            _metric[i].get_metric(metric+i*(dim==2?3:6));
         }
     }
 
@@ -547,17 +522,12 @@ public:
         if(nprocs>1)
             _mesh->create_gappy_global_numbering(pNElements);
 
-        // Enforce first-touch policy
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++) {
-                double M[dim==2?3:6];
-                _metric[i].get_metric(M);
-                for(int j=0; j<(dim==2?3:6); j++)
-                    _mesh->metric[i*(dim==2?3:6)+j] = (1.0-omega)*_mesh->metric[i*(dim==2?3:6)+j] + omega*M[j];
-                MetricTensor<real_t,dim>::positive_definiteness(&(_mesh->metric[i*(dim==2?3:6)]));
-            }
+        for(int i=0; i<_NNodes; i++) {
+            double M[dim==2?3:6];
+            _metric[i].get_metric(M);
+            for(int j=0; j<(dim==2?3:6); j++)
+                _mesh->metric[i*(dim==2?3:6)+j] = (1.0-omega)*_mesh->metric[i*(dim==2?3:6)+j] + omega*M[j];
+            MetricTensor<real_t,dim>::positive_definiteness(&(_mesh->metric[i*(dim==2?3:6)]));
         }
 
         // Halo update if parallel
@@ -605,17 +575,12 @@ public:
         if(nprocs>1)
             _mesh->create_gappy_global_numbering(pNElements);
 
-        // Enforce first-touch policy
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++) {
-                _metric[i].get_metric(&(_mesh->metric[i*(dim==2?3:6)]));
-            }
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NElements; i++) {
-                _mesh->template update_quality<dim>(i);
-            }
+        for(int i=0; i<_NNodes; i++) {
+            _metric[i].get_metric(&(_mesh->metric[i*(dim==2?3:6)]));
+        }
+
+        for(int i=0; i<_NElements; i++) {
+            _mesh->template update_quality<dim>(i);
         }
 
         // Halo update if parallel
@@ -639,77 +604,73 @@ public:
         }
 
         real_t eta = 1.0/target_error;
-        #pragma omp parallel
-        {
-            // Calculate Hessian at each point.
-            double h[dim==2?3:6];
 
-            if(p_norm>0) {
-                #pragma omp for schedule(static) nowait
-                for(int i=0; i<_NNodes; i++) {
-                    hessian_qls_kernel(psi, i, h);
+        // Calculate Hessian at each point.
+        double h[dim==2?3:6];
 
-                    double m_det;
+        if(p_norm>0) {
+            for(int i=0; i<_NNodes; i++) {
+                hessian_qls_kernel(psi, i, h);
+
+                double m_det;
+                if(dim==2) {
+                    /*|h[0] h[1]|
+                      |h[1] h[2]|*/
+                    m_det = fabs(h[0]*h[2]-h[1]*h[1]);
+                } else if(dim==3) {
+                    /*|h[0] h[1] h[2]|
+                      |h[1] h[3] h[4]|
+                      |h[2] h[4] h[5]|
+
+                      sympy
+                      h0,h1,h2,h3,h4,h5 = symbols("h[0], h[1], h[2], h[3], h[4], h[5]")
+                      M = Matrix([[h0, h1, h2],
+                      [h1, h3, h4],
+                      [h2, h4, h5]])
+                      print_ccode(det(M))
+                      */
+                    m_det = fabs(h[0]*h[3]*h[5] - h[0]*pow(h[4], 2) - pow(h[1], 2)*h[5] + 2*h[1]*h[2]*h[4] - pow(h[2], 2)*h[3]);
+                }
+
+                double scaling_factor = eta * pow(m_det+DBL_EPSILON, -1.0 / (2.0 * p_norm + dim));
+
+                if(std::isnormal(scaling_factor)) {
+                    for(int j=0; j<(dim==2?3:6); j++)
+                        h[j] *= scaling_factor;
+                } else {
                     if(dim==2) {
-                        /*|h[0] h[1]|
-                          |h[1] h[2]|*/
-                        m_det = fabs(h[0]*h[2]-h[1]*h[1]);
-                    } else if(dim==3) {
-                        /*|h[0] h[1] h[2]|
-                          |h[1] h[3] h[4]|
-                          |h[2] h[4] h[5]|
-
-                          sympy
-                          h0,h1,h2,h3,h4,h5 = symbols("h[0], h[1], h[2], h[3], h[4], h[5]")
-                          M = Matrix([[h0, h1, h2],
-                          [h1, h3, h4],
-                          [h2, h4, h5]])
-                          print_ccode(det(M))
-                          */
-                        m_det = fabs(h[0]*h[3]*h[5] - h[0]*pow(h[4], 2) - pow(h[1], 2)*h[5] + 2*h[1]*h[2]*h[4] - pow(h[2], 2)*h[3]);
-                    }
-
-                    double scaling_factor = eta * pow(m_det+DBL_EPSILON, -1.0 / (2.0 * p_norm + dim));
-
-                    if(std::isnormal(scaling_factor)) {
-                        for(int j=0; j<(dim==2?3:6); j++)
-                            h[j] *= scaling_factor;
+                        h[0] = min_eigenvalue;
+                        h[1] = 0.0;
+                        h[2] = min_eigenvalue;
                     } else {
-                        if(dim==2) {
-                            h[0] = min_eigenvalue;
-                            h[1] = 0.0;
-                            h[2] = min_eigenvalue;
-                        } else {
-                            h[0] = min_eigenvalue;
-                            h[1] = 0.0;
-                            h[2] = 0.0;
-                            h[3] = min_eigenvalue;
-                            h[4] = 0.0;
-                            h[5] = min_eigenvalue;
-                        }
-                    }
-
-                    if(add_to) {
-                        // Merge this metric with the existing metric field.
-                        _metric[i].constrain(h);
-                    } else {
-                        _metric[i].set_metric(h);
+                        h[0] = min_eigenvalue;
+                        h[1] = 0.0;
+                        h[2] = 0.0;
+                        h[3] = min_eigenvalue;
+                        h[4] = 0.0;
+                        h[5] = min_eigenvalue;
                     }
                 }
-            } else {
-                #pragma omp for schedule(static)
-                for(int i=0; i<_NNodes; i++) {
-                    hessian_qls_kernel(psi, i, h);
 
-                    for(int j=0; j<(dim==2?3:6); j++)
-                        h[j] *= eta;
+                if(add_to) {
+                    // Merge this metric with the existing metric field.
+                    _metric[i].constrain(h);
+                } else {
+                    _metric[i].set_metric(h);
+                }
+            }
+        } else {
+            for(int i=0; i<_NNodes; i++) {
+                hessian_qls_kernel(psi, i, h);
 
-                    if(add_to) {
-                        // Merge this metric with the existing metric field.
-                        _metric[i].constrain(h);
-                    } else {
-                        _metric[i].set_metric(h);
-                    }
+                for(int j=0; j<(dim==2?3:6); j++)
+                    h[j] *= eta;
+
+                if(add_to) {
+                    // Merge this metric with the existing metric field.
+                    _metric[i].constrain(h);
+                } else {
+                    _metric[i].set_metric(h);
                 }
             }
         }
@@ -736,12 +697,8 @@ public:
             M[5] = m;
         }
 
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++)
-                _metric[i].constrain(&(M[0]));
-        }
+        for(int i=0; i<_NNodes; i++)
+            _metric[i].constrain(&(M[0]));
     }
 
     /*! Apply minimum edge length constraint.
@@ -765,12 +722,8 @@ public:
             M[5] = m;
         }
 
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++)
-                _metric[i].constrain(M, false);
-        }
+        for(int i=0; i<_NNodes; i++)
+            _metric[i].constrain(M, false);
     }
 
     /*! Apply minimum edge length constraint.
@@ -778,29 +731,25 @@ public:
      */
     void apply_min_edge_length(const real_t *min_len)
     {
-        #pragma omp parallel
+        real_t M[dim==2?3:6];
+        for(int n=0; n<_NNodes; n++)
         {
-            real_t M[dim==2?3:6];
-            #pragma omp for schedule(static)
-            for(int n=0; n<_NNodes; n++)
-            {
-                double m = 1.0/(min_len[n]*min_len[n]);
+            double m = 1.0/(min_len[n]*min_len[n]);
 
-                if(dim==2) {
-                    M[0] = m;
-                    M[1] = 0.0;
-                    M[2] = m;
-                } else if(dim==3) {
-                    M[0] = m;
-                    M[1] = 0.0;
-                    M[2] = 0.0;
-                    M[3] = m;
-                    M[4] = 0.0;
-                    M[5] = m;
-                }
-
-                _metric[n].constrain(M, false);
+            if(dim==2) {
+                M[0] = m;
+                M[1] = 0.0;
+                M[2] = m;
+            } else if(dim==3) {
+                M[0] = m;
+                M[1] = 0.0;
+                M[2] = 0.0;
+                M[3] = m;
+                M[4] = 0.0;
+                M[5] = m;
             }
+
+            _metric[n].constrain(M, false);
         }
     }
 
@@ -809,12 +758,8 @@ public:
      */
     void apply_max_aspect_ratio(real_t max_aspect_ratio)
     {
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++)
-                _metric[i].limit_aspect_ratio(max_aspect_ratio);
-        }
+        for(int i=0; i<_NNodes; i++)
+            _metric[i].limit_aspect_ratio(max_aspect_ratio);
     }
 
     /*! Apply maximum number of elements constraint.
@@ -846,12 +791,8 @@ public:
         if(dim==3)
             scale_factor = pow(scale_factor, 2.0/3.0);
 
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<_NNodes; i++)
-                _metric[i].scale(scale_factor);
-        }
+        for(int i=0; i<_NNodes; i++)
+            _metric[i].scale(scale_factor);
     }
 
     /*! Predict the number of elements in this partition when mesh satisfies metric tensor field.
@@ -870,7 +811,6 @@ public:
             const real_t *refx2 = _mesh->get_coords(_mesh->get_element(0)[2]);
             ElementProperty<real_t> property(refx0, refx1, refx2);
 
-            #pragma omp parallel for reduction(+:total_area_metric)
             for(int i=0; i<_NElements; i++) {
                 const index_t *n=_mesh->get_element(i);
 
@@ -907,7 +847,6 @@ public:
             const real_t *refx3 = _mesh->get_coords(_mesh->get_element(0)[3]);
             ElementProperty<real_t> property(refx0, refx1, refx2, refx3);
 
-            #pragma omp parallel for reduction(+:total_volume_metric)
             for(int i=0; i<_NElements; i++) {
                 const index_t *n=_mesh->get_element(i);
 

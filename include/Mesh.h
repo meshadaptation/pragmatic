@@ -49,14 +49,9 @@
 #include <boost/unordered_map.hpp>
 #endif
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include "mpi_tools.h"
 
 #include "PragmaticTypes.h"
-#include "PragmaticMinis.h"
 
 #include "ElementProperty.h"
 #include "MetricTensor.h"
@@ -197,75 +192,70 @@ public:
         boundary.resize(NElements*nloc);
         std::fill(boundary.begin(), boundary.end(), -2);
 
-        #pragma omp parallel
-        {
-            if(ndims==2) {
-                // Check neighbourhood of each element
-                #pragma omp for schedule(guided)
-                for(size_t i=0; i<NElements; i++) {
-                    if(_ENList[i*3]==-1)
-                        continue;
+        if(ndims==2) {
+            // Check neighbourhood of each element
+            for(size_t i=0; i<NElements; i++) {
+                if(_ENList[i*3]==-1)
+                    continue;
 
-                    for(int j=0; j<3; j++) {
-                        int n1 = _ENList[i*3+(j+1)%3];
-                        int n2 = _ENList[i*3+(j+2)%3];
+                for(int j=0; j<3; j++) {
+                    int n1 = _ENList[i*3+(j+1)%3];
+                    int n2 = _ENList[i*3+(j+2)%3];
 
-                        if(is_owned_node(n1)||is_owned_node(n2)) {
-                            std::set<int> neighbours;
-                            set_intersection(NEList[n1].begin(), NEList[n1].end(),
-                                             NEList[n2].begin(), NEList[n2].end(),
-                                             inserter(neighbours, neighbours.begin()));
+                    if(is_owned_node(n1)||is_owned_node(n2)) {
+                        std::set<int> neighbours;
+                        set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                                         NEList[n2].begin(), NEList[n2].end(),
+                                         inserter(neighbours, neighbours.begin()));
 
-                            if(neighbours.size()==2) {
-                                if(*neighbours.begin()==(int)i)
-                                    boundary[i*3+j] = *neighbours.rbegin();
-                                else
-                                    boundary[i*3+j] = *neighbours.begin();
-                            }
-                        } else {
-                            // This is a halo facet.
-                            boundary[i*3+j] = -1;
+                        if(neighbours.size()==2) {
+                            if(*neighbours.begin()==(int)i)
+                                boundary[i*3+j] = *neighbours.rbegin();
+                            else
+                                boundary[i*3+j] = *neighbours.begin();
                         }
+                    } else {
+                        // This is a halo facet.
+                        boundary[i*3+j] = -1;
                     }
                 }
-            } else { // ndims==3
-                // Check neighbourhood of each element
-                #pragma omp for schedule(guided)
-                for(size_t i=0; i<NElements; i++) {
-                    if(_ENList[i*4]==-1)
-                        continue;
+            }
+        } else { // ndims==3
+            // Check neighbourhood of each element
+            for(size_t i=0; i<NElements; i++) {
+                if(_ENList[i*4]==-1)
+                    continue;
 
-                    for(int j=0; j<4; j++) {
-                        int n1 = _ENList[i*4+(j+1)%4];
-                        int n2 = _ENList[i*4+(j+2)%4];
-                        int n3 = _ENList[i*4+(j+3)%4];
+                for(int j=0; j<4; j++) {
+                    int n1 = _ENList[i*4+(j+1)%4];
+                    int n2 = _ENList[i*4+(j+2)%4];
+                    int n3 = _ENList[i*4+(j+3)%4];
 
-                        if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)) {
-                            std::set<int> edge_neighbours;
-                            set_intersection(NEList[n1].begin(), NEList[n1].end(),
-                                             NEList[n2].begin(), NEList[n2].end(),
-                                             inserter(edge_neighbours, edge_neighbours.begin()));
+                    if(is_owned_node(n1)||is_owned_node(n2)||is_owned_node(n3)) {
+                        std::set<int> edge_neighbours;
+                        set_intersection(NEList[n1].begin(), NEList[n1].end(),
+                                         NEList[n2].begin(), NEList[n2].end(),
+                                         inserter(edge_neighbours, edge_neighbours.begin()));
 
-                            std::set<int> neighbours;
-                            set_intersection(NEList[n3].begin(), NEList[n3].end(),
-                                             edge_neighbours.begin(), edge_neighbours.end(),
-                                             inserter(neighbours, neighbours.begin()));
+                        std::set<int> neighbours;
+                        set_intersection(NEList[n3].begin(), NEList[n3].end(),
+                                         edge_neighbours.begin(), edge_neighbours.end(),
+                                         inserter(neighbours, neighbours.begin()));
 
-                            if(neighbours.size()==2) {
-                                if(*neighbours.begin()==(int)i)
-                                    boundary[i*4+j] = *neighbours.rbegin();
-                                else
-                                    boundary[i*4+j] = *neighbours.begin();
-                            }
-                        } else {
-                            // This is a halo facet.
-                            boundary[i*4+j] = -1;
+                        if(neighbours.size()==2) {
+                            if(*neighbours.begin()==(int)i)
+                                boundary[i*4+j] = *neighbours.rbegin();
+                            else
+                                boundary[i*4+j] = *neighbours.begin();
                         }
+                    } else {
+                        // This is a halo facet.
+                        boundary[i*4+j] = -1;
                     }
                 }
             }
         }
-
+        
         for(std::vector<int>::iterator it=boundary.begin(); it!=boundary.end(); ++it) {
             if(*it==-2)
                 *it = 1;
@@ -508,7 +498,6 @@ public:
         double total_length=0;
         int nedges=0;
 
-        #pragma omp parallel for reduction(+:total_length,nedges)
         for(int i=0; i<NNodes; i++) {
             if(is_owned_node(i) && (NNList[i].size()>0)) {
                 for(typename std::vector<index_t>::const_iterator it=NNList[i].begin(); it!=NNList[i].end(); ++it) {
@@ -683,7 +672,6 @@ public:
             std::cerr<<"ERROR: Cannot calculate volume in 2D\n";
         } else { // 3D
             if(num_processes>1) {
-                #pragma omp parallel for reduction(+:total_volume)
                 for(int i=0; i<NElements; i++) {
                     const index_t *n=get_element(i);
                     if(n[0] < 0)
@@ -716,7 +704,6 @@ public:
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
 
             } else {
-                #pragma omp parallel for reduction(+:total_volume)
                 for(int i=0; i<NElements; i++) {
                     const index_t *n=get_element(i);
                     if(n[0] < 0)
@@ -752,7 +739,6 @@ public:
         double sum=0;
         int nele=0;
 
-        #pragma omp parallel for reduction(+:sum, nele)
         for(size_t i=0; i<NElements; i++) {
             const index_t *n=get_element(i);
             if(n[0]<0)
@@ -785,26 +771,21 @@ public:
     /// Print out the qualities. Useful if you want to plot a histogram of element qualities.
     void print_quality() const
     {
-        #pragma omp parallel
+        for(size_t i=0; i<NElements; i++)
         {
-            #pragma omp for schedule(static)
-            for(size_t i=0; i<NElements; i++)
-            {
-                const index_t *n=get_element(i);
-                if(n[0]<0)
-                    continue;
+            const index_t *n=get_element(i);
+            if(n[0]<0)
+                continue;
 
-                double q;
-                if(ndims==2) {
-                    q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
-                    get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
-                } else {
-                    q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
-                                           get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
-                }
-                #pragma omp critical
-                std::cout<<"Quality[ele="<<i<<"] = "<<q<<std::endl;
+            double q;
+            if(ndims==2) {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]),
+                get_metric(n[0]), get_metric(n[1]), get_metric(n[2]));
+            } else {
+                q = property->lipnikov(get_coords(n[0]), get_coords(n[1]), get_coords(n[2]), get_coords(n[3]),
+                                       get_metric(n[0]), get_metric(n[1]), get_metric(n[2]), get_metric(n[3]));
             }
+            std::cout<<"Quality[ele="<<i<<"] = "<<q<<std::endl;
         }
     }
 
@@ -821,7 +802,6 @@ public:
     {
         double qmin=1; // Where 1 is ideal.
 
-        #pragma omp parallel for reduction(min:qmin)
         for(size_t i=0; i<NElements; i++) {
             const index_t *n=get_element(i);
             if(n[0]<0)
@@ -841,7 +821,6 @@ public:
     {
         double qmin=1; // Where 1 is ideal.
 
-        #pragma omp parallel for reduction(min:qmin)
         for(size_t i=0; i<NElements; i++) {
             const index_t *n=get_element(i);
             if(n[0]<0)
@@ -981,7 +960,6 @@ public:
     {
         double L_max = 0.0;
 
-        #pragma omp parallel for reduction(max:L_max)
         for(index_t i=0; i<(index_t) NNodes; i++) {
             for(typename std::vector<index_t>::const_iterator it=NNList[i].begin(); it!=NNList[i].end(); ++it) {
                 if(i<*it) { // Ensure that every edge length is only calculated once.
@@ -1004,7 +982,6 @@ public:
         // Discover which vertices and elements are active.
         std::vector<index_t> active_vertex_map(NNodes);
 
-        #pragma omp parallel for schedule(static)
         for(size_t i=0; i<NNodes; i++) {
             active_vertex_map[i] = -1;
             NNList[i].clear();
@@ -1108,19 +1085,14 @@ public:
         std::vector<double> defrag_quality(NElements);
 
         // This first touch is to bind memory locally.
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<(int)NElements; i++) {
-                defrag_ENList[i*nloc] = 0;
-                defrag_boundary[i*nloc] = 0;
-            }
+        for(int i=0; i<(int)NElements; i++) {
+            defrag_ENList[i*nloc] = 0;
+            defrag_boundary[i*nloc] = 0;
+        }
 
-            #pragma omp for schedule(static)
-            for(int i=0; i<(int)NNodes; i++) {
-                defrag_coords[i*ndims] = 0.0;
-                defrag_metric[i*msize] = 0.0;
-            }
+        for(int i=0; i<(int)NNodes; i++) {
+            defrag_coords[i*ndims] = 0.0;
+            defrag_metric[i*msize] = 0.0;
         }
 
         // Second sweep writes elements with new numbering.
@@ -1366,7 +1338,7 @@ public:
                 long double larea = property->area(get_coords(n[0]),
                                                    get_coords(n[1]),
                                                    get_coords(n[2]));
-                if(pragmatic_isnan(larea)) {
+                if(std::isnan(larea)) {
                     std::cerr<<"ERROR: Bad element "<<n[0]<<", "<<n[1]<<", "<<n[2]<<std::endl;
                 }
 
@@ -1687,8 +1659,6 @@ private:
         mpi_type_wrapper<real_t> mpi_real_t_wrapper;
         MPI_REAL_T = mpi_real_t_wrapper.mpi_type;
 
-        nthreads = pragmatic_nthreads();
-
         if(z==NULL) {
             nloc = 3;
             ndims = 2;
@@ -1798,92 +1768,78 @@ private:
 
         // TODO I don't know whether this method makes sense anymore.
         // Enforce first-touch policy
-        #pragma omp parallel
-        {
-            #pragma omp for schedule(static)
-            for(int i=0; i<(int)NElements; i++) {
-                for(size_t j=0; j<nloc; j++) {
-                    _ENList[i*nloc+j] = ENList[i*nloc+j];
-                }
+        for(int i=0; i<(int)NElements; i++) {
+            for(size_t j=0; j<nloc; j++) {
+                _ENList[i*nloc+j] = ENList[i*nloc+j];
             }
-            if(ndims==2) {
-                #pragma omp for schedule(static)
-                for(int i=0; i<(int)NNodes; i++) {
-                    _coords[i*2  ] = x[i];
-                    _coords[i*2+1] = y[i];
-                }
-            } else {
-                #pragma omp for schedule(static)
-                for(int i=0; i<(int)NNodes; i++) {
-                    _coords[i*3  ] = x[i];
-                    _coords[i*3+1] = y[i];
-                    _coords[i*3+2] = z[i];
-                }
+        }
+        if(ndims==2) {
+            for(int i=0; i<(int)NNodes; i++) {
+                _coords[i*2  ] = x[i];
+                _coords[i*2+1] = y[i];
             }
+        } else {
+            for(int i=0; i<(int)NNodes; i++) {
+                _coords[i*3  ] = x[i];
+                _coords[i*3+1] = y[i];
+                _coords[i*3+2] = z[i];
+            }
+        }
 
-            #pragma omp single nowait
-            {
-                if(num_processes>1) {
-                    // Take into account renumbering for halo.
-                    for(int j=0; j<num_processes; j++) {
-                        for(size_t k=0; k<recv[j].size(); k++) {
-                            recv_halo.insert(recv[j][k]);
-                        }
-                        for(size_t k=0; k<send[j].size(); k++) {
-                            send_halo.insert(send[j][k]);
-                        }
-                    }
+        if(num_processes>1) {
+            // Take into account renumbering for halo.
+            for(int j=0; j<num_processes; j++) {
+                for(size_t k=0; k<recv[j].size(); k++) {
+                    recv_halo.insert(recv[j][k]);
+                }
+                for(size_t k=0; k<send[j].size(); k++) {
+                    send_halo.insert(send[j][k]);
                 }
             }
+        }
 
-            // Set the orientation of elements.
-            #pragma omp single
-            {
-                const int *n=get_element(0);
+        // Set the orientation of elements.
+        const int *n=get_element(0);
+        assert(n[0]>=0);
+
+        if(ndims==2)
+            property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                   get_coords(n[1]),
+                                                   get_coords(n[2]));
+        else
+            property = new ElementProperty<real_t>(get_coords(n[0]),
+                                                   get_coords(n[1]),
+                                                   get_coords(n[2]),
+                                                   get_coords(n[3]));
+
+        if(ndims==2) {
+            for(size_t i=0; i<(size_t)NElements; i++) {
+                const int *n=get_element(i);
                 assert(n[0]>=0);
 
-                if(ndims==2)
-                    property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                           get_coords(n[1]),
-                                                           get_coords(n[2]));
-                else
-                    property = new ElementProperty<real_t>(get_coords(n[0]),
-                                                           get_coords(n[1]),
-                                                           get_coords(n[2]),
-                                                           get_coords(n[3]));
+                double volarea = property->area(get_coords(n[0]),
+                                                get_coords(n[1]),
+                                                get_coords(n[2]));
+
+                if(volarea<0)
+                    invert_element(i);
+
+                update_quality<2>(i);
             }
+        } else {
+            for(size_t i=0; i<(size_t)NElements; i++) {
+                const int *n=get_element(i);
+                assert(n[0]>=0);
 
-            if(ndims==2) {
-                #pragma omp for schedule(static)
-                for(size_t i=0; i<(size_t)NElements; i++) {
-                    const int *n=get_element(i);
-                    assert(n[0]>=0);
+                double volarea = property->volume(get_coords(n[0]),
+                                                  get_coords(n[1]),
+                                                  get_coords(n[2]),
+                                                  get_coords(n[3]));
 
-                    double volarea = property->area(get_coords(n[0]),
-                                                    get_coords(n[1]),
-                                                    get_coords(n[2]));
+                if(volarea<0)
+                    invert_element(i);
 
-                    if(volarea<0)
-                        invert_element(i);
-
-                    update_quality<2>(i);
-                }
-            } else {
-                #pragma omp for schedule(static)
-                for(size_t i=0; i<(size_t)NElements; i++) {
-                    const int *n=get_element(i);
-                    assert(n[0]>=0);
-
-                    double volarea = property->volume(get_coords(n[0]),
-                                                      get_coords(n[1]),
-                                                      get_coords(n[2]),
-                                                      get_coords(n[3]));
-
-                    if(volarea<0)
-                        invert_element(i);
-
-                    update_quality<3>(i);
-                }
+                update_quality<3>(i);
             }
         }
 
@@ -2278,7 +2234,7 @@ private:
     double Lref;
 
     // Parallel support.
-    int rank, num_processes, nthreads;
+    int rank, num_processes;
     std::vector< std::vector<index_t> > send, recv;
 #ifdef HAVE_BOOST_UNORDERED_MAP_HPP
     std::vector< boost::unordered_map<index_t, index_t> > send_map, recv_map;

@@ -39,10 +39,6 @@
 #include <vector>
 #include <unistd.h>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include <mpi.h>
 
 #include "Mesh.h"

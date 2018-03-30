@@ -42,10 +42,6 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#ifdef HAVE_OPENMP
-#include <omp.h>
-#endif
-
 #include <mpi.h>
 
 #include "Mesh.h"

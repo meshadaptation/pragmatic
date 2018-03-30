@@ -83,8 +83,8 @@ public:
 
         MPI_Comm comm = _mesh->get_mpi_comm();
 
-        nprocs = pragmatic_nprocesses(comm);
-        rank = pragmatic_process_id(comm);
+        MPI_Comm_size(comm, &nprocs);
+        MPI_Comm_rank(comm, &rank);
         
         def_ops = new DeferredOperations<real_t>(_mesh, 1, defOp_scaling_factor);
     }
@@ -349,7 +349,7 @@ public:
         for(size_t i=0; i<msize; i++) {
             m = m0[i]+weight*(m1[i] - m0[i]);
             newMetric[i] = m;
-            if(pragmatic_isnan(m))
+            if(std::isnan(m))
                 std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                          <<"m0[i] = "<<m0[i]<<std::endl
                          <<"m1[i] = "<<m1[i]<<std::endl
@@ -744,7 +744,7 @@ private:
         for(size_t i=0; i<msize; i++) {
             m = m0[i]+weight*(m1[i] - m0[i]);
             _mesh->metric[(_mesh->NNodes+splitCnt)*msize+i] = m;
-            if(pragmatic_isnan(m))
+            if(std::isnan(m))
                 std::cerr<<"ERROR: metric health is bad in "<<__FILE__<<std::endl
                          <<"m0[i] = "<<m0[i]<<std::endl
                          <<"m1[i] = "<<m1[i]<<std::endl

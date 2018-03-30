@@ -43,8 +43,6 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-#include "PragmaticMinis.h"
-
 template<typename treal_t, int dim> class MetricTensor;
 template<typename treal_t, int dim>
 std::ostream& operator<<(std::ostream& out, const MetricTensor<treal_t,dim>& in);
@@ -195,7 +193,7 @@ public:
     void constrain(const treal_t* M_in, bool perserved_small_edges=true)
     {
         for(size_t i=0; i<(dim==2?3:6); i++) {
-            if(pragmatic_isnan(M_in[i])) {
+            if(std::isnan(M_in[i])) {
                 std::cerr<<"WARNING: encountered NAN in "<<__FILE__<<", "<<__LINE__<<std::endl;
                 return;
             }
