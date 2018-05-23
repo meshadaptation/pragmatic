@@ -47,7 +47,10 @@ if (ENABLE_LIBMESHB)
   TARGET_LINK_LIBRARIES(test_uniform_adapt_2d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
   ADD_EXECUTABLE(test_tohoku ${PRAGMATIC_TEST_SRC}/test_tohoku.cpp ${src_lite})
-  TARGET_LINK_LIBRARIES(test_tohoku ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})  
+  TARGET_LINK_LIBRARIES(test_tohoku ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
+
+  ADD_EXECUTABLE(test_int_regions_2d ${PRAGMATIC_TEST_SRC}/test_int_regions_2d.cpp ${src_lite})
+  TARGET_LINK_LIBRARIES(test_int_regions_2d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
 endif()
 
