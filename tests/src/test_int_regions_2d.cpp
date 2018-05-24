@@ -39,6 +39,9 @@
 #include <vector>
 
 #include "Mesh.h"
+#ifdef HAVE_LIBMESHB
+#include "GMFTools.h"
+#endif
 #ifdef HAVE_VTK
 #include "VTKTools.h"
 #endif
@@ -64,9 +67,8 @@ int main(int argc, char **argv)
         verbose = std::string(argv[1])=="-v";
     }
 
-#ifdef HAVE_VTK
-    Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/box5x5.vtu");
-    mesh->create_boundary();
+#ifdef HAVE_LIBMESHB
+    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square5x5");
 
     MetricField<double,2> metric_field(*mesh);
 
@@ -81,7 +83,7 @@ int main(int argc, char **argv)
     }
     metric_field.update_mesh();
 
-    VTKTools<double>::export_vtu("../data/test_int_regions_2d-initial", mesh);
+    GMFTools<double>::export_gmf_mesh("../data/test_int_regions_2d-initial", mesh);
 
     Refine<double,2> adapt(*mesh);
 
@@ -97,8 +99,12 @@ int main(int argc, char **argv)
 
     mesh->defragment();
 
+    GMFTools<double>::export_gmf_mesh("../data/test_int_regions_2d", mesh);
+#ifdef HAVE_VTK
     VTKTools<double>::export_vtu("../data/test_int_regions_2d", mesh);
-
+#else
+    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
+#endif
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
 
@@ -127,7 +133,7 @@ int main(int argc, char **argv)
 
     delete mesh;
 #else
-    std::cerr<<"Pragmatic was configured without VTK"<<std::endl;
+    std::cerr<<"Pragmatic was configured without libmeshb"<<std::endl;
 #endif
 
     MPI_Finalize();
