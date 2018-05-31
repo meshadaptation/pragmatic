@@ -70,6 +70,19 @@ int main(int argc, char **argv)
 #ifdef HAVE_LIBMESHB
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square5x5");
 
+    int * boundary = mesh->get_boundaryTags();
+
+    for (int i=0; i<5; ++i) {
+        printf("Supposedly updating vertex %d of element %d: (%d %d %d)\n", 1, 2*6*i,
+                 mesh->get_element(2*6*i)[0], mesh->get_element(2*6*i)[1], mesh->get_element(2*6*i)[2]);
+        boundary[3*(2*6*i + 0) + 1] = 4;
+        printf("Supposedly updating vertex %d of element %d: (%d %d %d)\n", 0, 2*6*i+1,
+                 mesh->get_element(2*6*i+1)[0], mesh->get_element(2*6*i+1)[1], mesh->get_element(2*6*i+1)[2]);
+        boundary[3*(2*6*i + 1) + 0] = 4;
+    }
+
+    mesh->set_boundary(boundary) ;
+
     MetricField<double,2> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
