@@ -46,9 +46,9 @@
 #include "VTKTools.h"
 #endif
 #include "MetricField.h"
-
 #include "Refine.h"
 #include "ticker.h"
+#include "cpragmatic.h"
 
 #include <mpi.h>
 
@@ -69,6 +69,8 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square5x5");
+    pragmatic_init_light((void*)mesh);
+
 
     int * boundary = mesh->get_boundaryTags();
 
@@ -81,7 +83,7 @@ int main(int argc, char **argv)
         boundary[3*(2*6*i + 1) + 0] = 4;
     }
 
-    mesh->set_boundary(boundary) ;
+    mesh->set_boundary(boundary);
 
     MetricField<double,2> metric_field(*mesh);
 
@@ -89,9 +91,9 @@ int main(int argc, char **argv)
     
     double m[6] = {0};
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.03*0.03);
+        double lmax = 1/(0.07*0.07);
         m[0] = lmax;
-        m[2] = lmax;
+        m[2] = 0.2*lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();
@@ -101,10 +103,9 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    for(int i=0; i<15; i++) {
-        adapt.refine(sqrt(2.0));
-    }
+    pragmatic_adapt(0);
     double toc = get_wtime();
+
 
 
     if(verbose)
