@@ -170,6 +170,7 @@ public:
         if(_ENList.size() < (NElements+1)*nloc) {
             _ENList.resize(2*NElements*nloc);
             boundary.resize(2*NElements*nloc);
+            regions.resize(2*NElements);
             quality.resize(2*NElements);
         }
 
@@ -301,12 +302,73 @@ public:
     {
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
-	boundary.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
                 boundary[i*nloc+j] = _boundary[i*nloc+j];
             }
         }
+    }
+
+    void set_regions(const int *_regions)
+    {
+        // Sweep through elements and set ids.
+        size_t NElements = get_number_elements();
+        regions.resize(NElements);
+        if (!_regions) {
+            std::fill(regions.begin(), regions.end(), 0);
+        }
+        else {
+            memcopy(&regions[0], _regions, NElements*sizeof(int));
+        }
+    }
+
+    ///  add internal boundary tags if facet is between 2+ regions
+    ///   unless they were already provided ? TODO check consistency
+    void set_internal_boundaries() {
+
+        // loop over edges through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer2][i];
+                if (iVer2 < iVer)
+                    continue;
+
+                std::set<index_t> neighbour_elements;
+                std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                      NEList[iVer2].begin(), NEList[iVer2].end(),
+                                      std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                typename std::set<index_t>::const_iterator elm_it;
+                int region_tag = -10;
+                bool one_region = true;
+                for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                    if (region_tag < 0)
+                        region_tag = regions[*elm_it];
+                    else {
+                        if (region_tag != regions[*elm_it]) {
+                            one_region = false;
+                            break;
+                        }
+                    }
+                }
+                // Now locate the edge in each element and set a boundary tag
+                if (!one_region) {
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        const index_t *elm = get_element(*elm_it);
+                        for (int i=0; i<nloc; ++i) {
+                            if (elm[i]!=iVer && elm[i]!=iVer2) {
+                                boundary[nloc*(*elm_it)+i] = 9999;
+                            }
+                        }
+                        
+                    }
+                }
+            }
+        }
+
+        
+
     }
 
     /// Erase an element
@@ -451,6 +513,12 @@ public:
     inline  int * get_boundaryTags() 
     {
       return boundary.data();
+    }
+
+    /// Return the array of element tags tags
+    inline int * get_elementTags()
+    {
+        return regions.data();
     }
 
     /// Returns true if the node is in any of the partitioned elements.
@@ -2214,6 +2282,7 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+    std::vector<int> regions;
 #if 0
 	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
 #endif
