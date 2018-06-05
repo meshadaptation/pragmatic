@@ -74,16 +74,36 @@ int main(int argc, char **argv)
 
     int * boundary = mesh->get_boundaryTags();
 
+#if 0
     for (int i=0; i<5; ++i) {
-        printf("Supposedly updating vertex %d of element %d: (%d %d %d)\n", 1, 2*6*i,
-                 mesh->get_element(2*6*i)[0], mesh->get_element(2*6*i)[1], mesh->get_element(2*6*i)[2]);
+        //printf("updating vertex %d of element %d: (%d %d %d)\n", 1, 2*6*i,
+        //         mesh->get_element(2*6*i)[0], mesh->get_element(2*6*i)[1], mesh->get_element(2*6*i)[2]);
         boundary[3*(2*6*i + 0) + 1] = 4;
-        printf("Supposedly updating vertex %d of element %d: (%d %d %d)\n", 0, 2*6*i+1,
-                 mesh->get_element(2*6*i+1)[0], mesh->get_element(2*6*i+1)[1], mesh->get_element(2*6*i+1)[2]);
+        //printf("updating vertex %d of element %d: (%d %d %d)\n", 0, 2*6*i+1,
+        //         mesh->get_element(2*6*i+1)[0], mesh->get_element(2*6*i+1)[1], mesh->get_element(2*6*i+1)[2]);
         boundary[3*(2*6*i + 1) + 0] = 4;
     }
-
     mesh->set_boundary(boundary);
+#else
+    int nbrElm = mesh->get_number_elements();
+    std::vector<int> regions;
+    regions.resize(nbrElm);
+    for (int iElm = 0; iElm < nbrElm; ++iElm) {
+        const int * m = mesh->get_element(iElm);
+        double barycenter[2] ={0.,0.};
+        for (int i=0; i<3;++i) {
+            const double * coords = mesh->get_coords(m[i]);
+            for (int j=0; j<2; ++j)
+                barycenter[j] += coords[j];
+        }
+        if (barycenter[0] >= barycenter[1])
+            regions[iElm] = 1;
+        else
+            regions[iElm] = 2;
+    }
+    mesh->set_regions(&regions[0]);
+    mesh->set_internal_boundaries();
+#endif
 
     MetricField<double,2> metric_field(*mesh);
 
