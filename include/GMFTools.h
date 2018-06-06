@@ -495,6 +495,7 @@ private:
         tag = 0;
         for (index_t i=0; i<NElements; i++) {
             tri = mesh->get_element(i);
+            tag = mesh->get_elementTag(i);
             GmfSetLin(meshIndex, GmfTriangles, tri[0]+1, tri[1]+1, tri[2]+1, tag);
         }
 
@@ -536,6 +537,7 @@ private:
         tag = 0;
         for (index_t i=0; i<NElements; i++) {
             tet = mesh->get_element(i);
+            tag = mesh->get_elementTag(i);
             GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1,
                                                 tet[3]+1, tag);
         }

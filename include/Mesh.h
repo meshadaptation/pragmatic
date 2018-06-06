@@ -521,6 +521,12 @@ public:
         return regions.data();
     }
 
+    /// Return the tag of the element
+    inline int get_elementTag(index_t eid)
+    {
+        return regions[eid];
+    }    
+
     /// Returns true if the node is in any of the partitioned elements.
     inline bool is_halo_node(index_t nid) const
     {
