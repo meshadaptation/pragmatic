@@ -1156,12 +1156,14 @@ public:
         std::vector<real_t> defrag_coords(NNodes*ndims);
         std::vector<double> defrag_metric(NNodes*msize);
         std::vector<int> defrag_boundary(NElements*nloc);
+        std::vector<int> defrag_regions(NElements);
         std::vector<double> defrag_quality(NElements);
 
-        // This first touch is to bind memory locally.
+        // This first touch is to bind memory locally. TODO is this still useful ?
         for(int i=0; i<(int)NElements; i++) {
             defrag_ENList[i*nloc] = 0;
             defrag_boundary[i*nloc] = 0;
+            defrag_regions[i] = 0;
         }
 
         for(int i=0; i<(int)NNodes; i++) {
@@ -1179,6 +1181,7 @@ public:
                 defrag_ENList[new_eid*nloc+j] = new_nid;
                 defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
             }
+            defrag_regions[new_eid] = regions[old_eid];
             defrag_quality[new_eid] = quality[old_eid];
         }
 
@@ -1196,6 +1199,7 @@ public:
 
         memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
         memcpy(&boundary[0], &defrag_boundary[0], NElements*nloc*sizeof(int));
+        memcpy(&regions[0], &defrag_regions[0], NElements*sizeof(int));
         memcpy(&quality[0], &defrag_quality[0], NElements*sizeof(double));
         memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
         memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));

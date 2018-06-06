@@ -589,8 +589,6 @@ public:
         }
 
         // Append new elements to the mesh and commit deferred operations
-        printf("DEBUG   origNElements: %d , splitCnt: %d regions size: %d, quality size: %d boundary size/3: %d\n",
-                origNElements, splitCnt, _mesh->regions.size(), _mesh->quality.size(), _mesh->boundary.size()/3);
         memcpy(&_mesh->_ENList[nloc*origNElements], &newElements[0], nloc*splitCnt*sizeof(index_t));
         memcpy(&_mesh->boundary[nloc*origNElements], &newBoundaries[0], nloc*splitCnt*sizeof(int));
         memcpy(&_mesh->regions[origNElements], &newRegions[0], splitCnt*sizeof(int));
