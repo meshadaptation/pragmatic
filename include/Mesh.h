@@ -319,7 +319,7 @@ public:
             std::fill(regions.begin(), regions.end(), 0);
         }
         else {
-            memcopy(&regions[0], _regions, NElements*sizeof(int));
+            memcpy(&regions[0], _regions, NElements*sizeof(int));
         }
     }
 
@@ -330,7 +330,7 @@ public:
         // loop over edges through vertex connectivity
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             for (int i=0; i<NNList[iVer].size(); ++i) {
-                int iVer2 = NNList[iVer2][i];
+                int iVer2 = NNList[iVer][i];
                 if (iVer2 < iVer)
                     continue;
 
