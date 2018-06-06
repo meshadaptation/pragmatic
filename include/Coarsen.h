@@ -187,6 +187,19 @@ private:
             // Assume the best.
             reject_collapse=false;
 
+            // Am I on an internal boundary ? If yes, reject for now
+            for(const auto &element : _mesh->NEList[rm_vertex]) {
+                const int *n=_mesh->get_element(element);
+                for(size_t i=0; i<nloc; i++) {
+                    if(n[i]!=rm_vertex) {
+                        if(_mesh->boundary[element*nloc+i] == 9999) {
+                                reject_collapse = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
             if(surface_coarsening) {
                 std::set<index_t> compromised_boundary;
                 for(const auto &element : _mesh->NEList[rm_vertex]) {

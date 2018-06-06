@@ -384,6 +384,10 @@ private:
             // If this is a surface edge, it cannot be swapped.
             if(loc!=2)
                 return false;
+
+            // If this is an internal edge between two regions, don't swap
+            if (_mesh->regions[intersection[0]] != _mesh->regions[intersection[1]])
+                return false;
         }
 
         index_t eid0 = intersection[0];
