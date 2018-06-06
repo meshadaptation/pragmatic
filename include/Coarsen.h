@@ -428,6 +428,9 @@ private:
      */
     inline void coarsen_kernel(index_t rm_vertex, index_t target_vertex)
     {
+
+        // TODO As we don't coarsen internal boudaries, no need to worry about element tags
+
         std::set<index_t> deleted_elements;
         std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                               _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
