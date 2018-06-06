@@ -518,9 +518,11 @@ public:
         splitCnt = 0;
         newElements.clear();
         newBoundaries.clear();
+        newRegions.clear();
         newQualities.clear();
         newElements.reserve(dim*dim*origNElements);
         newBoundaries.reserve(dim*dim*origNElements);
+        newRegions.reserve(origNElements);
         newQualities.reserve(origNElements);
 
         for(size_t i=0; i<edgeSplitCnt; ++i) {
@@ -582,12 +584,16 @@ public:
         if(_mesh->_ENList.size()<_mesh->NElements*nloc) {
             _mesh->_ENList.resize(_mesh->NElements*nloc);
             _mesh->boundary.resize(_mesh->NElements*nloc);
+            _mesh->regions.resize(_mesh->NElements);
             _mesh->quality.resize(_mesh->NElements);
         }
 
         // Append new elements to the mesh and commit deferred operations
+        printf("DEBUG   origNElements: %d , splitCnt: %d regions size: %d, quality size: %d boundary size/3: %d\n",
+                origNElements, splitCnt, _mesh->regions.size(), _mesh->quality.size(), _mesh->boundary.size()/3);
         memcpy(&_mesh->_ENList[nloc*origNElements], &newElements[0], nloc*splitCnt*sizeof(index_t));
         memcpy(&_mesh->boundary[nloc*origNElements], &newBoundaries[0], nloc*splitCnt*sizeof(int));
+        memcpy(&_mesh->regions[origNElements], &newRegions[0], splitCnt*sizeof(int));
         memcpy(&_mesh->quality[origNElements], &newQualities[0], splitCnt*sizeof(double));
 
         // Update halo.
@@ -775,6 +781,7 @@ private:
 
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
+        const int region = _mesh->regions[eid];
 
         // Edge that is being split
         index_t vid = newVertices[iEdgeSplit].id;
@@ -826,8 +833,8 @@ private:
         assert(ele0[0]>=0 && ele0[1]>=0 && ele0[2]>=0);
         assert(ele1[0]>=0 && ele1[1]>=0 && ele1[2]>=0);
 
-        replace_element(eid, ele0, ele0_boundary);
-        append_element(ele1, ele1_boundary);
+        replace_element(eid, ele0, ele0_boundary, region);
+        append_element(ele1, ele1_boundary, region);
         splitCnt += 1;
     }
 
@@ -835,6 +842,7 @@ private:
     {
         const int *n=_mesh->get_element(eid);
         const int *boundary=&(_mesh->boundary[eid*nloc]);
+        const int region = _mesh->regions[eid];
 
         // Edge that is being split
         index_t vid = newVertices[iEdgeSplit].id;
@@ -908,12 +916,12 @@ private:
         remNE(secondid, eid);
         addNE(secondid, ele1ID+origNElements);
 
-        replace_element(eid, ele0, ele0_boundary);
-        append_element(ele1, ele1_boundary);
+        replace_element(eid, ele0, ele0_boundary, region);
+        append_element(ele1, ele1_boundary, region);
         splitCnt += 1;
     }
 
-    inline void append_element(const index_t *elem, const int *boundary)
+    inline void append_element(const index_t *elem, const int *boundary, const int region)
     {
         if(dim==3) {
             // Fix orientation of new element.
@@ -944,12 +952,13 @@ private:
             newElements.push_back(elem[i]);
             newBoundaries.push_back(boundary[i]);
         }
+        newRegions.push_back(region);
 
         double q = _mesh->template calculate_quality<dim>(elem);
         newQualities.push_back(q);
     }
 
-    inline void replace_element(const index_t eid, const index_t *n, const int *boundary)
+    inline void replace_element(const index_t eid, const index_t *n, const int *boundary, const int region)
     {
         if(dim==3) {
             // Fix orientation of new element.
@@ -980,6 +989,7 @@ private:
             _mesh->_ENList[eid*nloc+i]=n[i];
             _mesh->boundary[eid*nloc+i]=boundary[i];
         }
+        _mesh->regions[eid] = region;
 
         _mesh->template update_quality<dim>(eid);
     }
@@ -1058,6 +1068,7 @@ private:
     std::vector<double>                  newMetric;
     std::vector<index_t>                 newElements;
     std::vector<int>                     newBoundaries;
+    std::vector<int>                     newRegions;
     std::vector<double>                  newQualities;
 
     size_t origNElements;
