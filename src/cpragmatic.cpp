@@ -282,9 +282,10 @@ extern "C" {
             for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars, cnt_split;
+                cnt_coars= coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.7);
-                int cnt_split = refine.refine(L_ref);
+                cnt_split = refine.refine(L_ref);
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
@@ -334,8 +335,9 @@ extern "C" {
             for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                int cnt_split = refine.refine(L_ref);
-                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars, cnt_split;
+                cnt_split = refine.refine(L_ref);
+                cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
                 swapping.swap(0.95);
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
