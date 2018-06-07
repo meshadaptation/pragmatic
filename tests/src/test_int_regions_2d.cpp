@@ -151,7 +151,7 @@ int main(int argc, char **argv)
     }
 
     if(rank==0) {
-        long double ideal_area(1), ideal_perimeter(4);
+        long double ideal_area(1), ideal_perimeter(4+2*sqrt(2)); // the internal boundary is counted twice
         std::cout<<"Expecting perimeter == 4: ";
         if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
