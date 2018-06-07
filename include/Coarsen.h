@@ -188,17 +188,17 @@ private:
             reject_collapse=false;
 
             // Am I on an internal boundary ? If yes, reject for now
-            for(const auto &element : _mesh->NEList[rm_vertex]) {
-                const int *n=_mesh->get_element(element);
-                for(size_t i=0; i<nloc; i++) {
-                    if(n[i]!=rm_vertex) {
-                        if(_mesh->boundary[element*nloc+i] == 9999) {
-                                reject_collapse = true;
-                                break;
-                            }
-                        }
-                    }
-                }
+            //for(const auto &element : _mesh->NEList[rm_vertex]) {
+            //    const int *n=_mesh->get_element(element);
+            //    for(size_t i=0; i<nloc; i++) {
+            //        if(n[i]!=rm_vertex) {
+            //            if(_mesh->boundary[element*nloc+i] == 9999) {
+            //                    reject_collapse = true;
+            //                    break;
+            //                }
+            //            }
+            //        }
+            //    }
 
             if(surface_coarsening) {
                 std::set<index_t> compromised_boundary;
@@ -298,9 +298,13 @@ private:
 
             long double total_old_av=0;
             long double total_new_av=0;
+            std::map<int, long double> total_old_avs;
+            std::map<int, long double> total_new_avs;
+
             bool better=true;
             for(const auto &ee : _mesh->NEList[rm_vertex]) {
                 const int *old_n=_mesh->get_element(ee);
+                int region = _mesh->regions[ee];
 
                 double q_linf = 0.0;
                 if(quality_constrained)
@@ -319,6 +323,7 @@ private:
                                                             _mesh->get_coords(old_n[3]));
 
                     total_old_av+=old_av;
+                    total_old_avs[region] += old_av; // TODO check
                 }
 
                 // Skip checks this element would be deleted under the operation.
@@ -354,6 +359,8 @@ private:
                 }
 
                 total_new_av+=new_av;
+                total_new_avs[region] += new_av; // TODO check
+
 
                 double new_q=0.0;
                 if(quality_constrained) {
@@ -387,6 +394,16 @@ private:
                 if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                     reject_collapse=true;
                     continue;
+                }
+                std::map<int, long double>::const_iterator iReg;
+                for (iReg = total_old_avs.begin(); iReg != total_old_avs.end(); ++iReg) {
+                    int region = iReg->first;
+                    av_var = std::abs(total_new_avs[region]-total_old_avs[region]);
+                    av_var /= std::max(total_new_avs[region], total_old_avs[region]);
+                    if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
+                        reject_collapse=true;
+                        break;
+                    }
                 }
             }
 
