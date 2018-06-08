@@ -68,23 +68,12 @@ int main(int argc, char **argv)
     }
 
 #ifdef HAVE_LIBMESHB
-    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square5x5");
+    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square50x50");
     pragmatic_init_light((void*)mesh);
 
 
     int * boundary = mesh->get_boundaryTags();
 
-#if 0
-    for (int i=0; i<5; ++i) {
-        //printf("updating vertex %d of element %d: (%d %d %d)\n", 1, 2*6*i,
-        //         mesh->get_element(2*6*i)[0], mesh->get_element(2*6*i)[1], mesh->get_element(2*6*i)[2]);
-        boundary[3*(2*6*i + 0) + 1] = 4;
-        //printf("updating vertex %d of element %d: (%d %d %d)\n", 0, 2*6*i+1,
-        //         mesh->get_element(2*6*i+1)[0], mesh->get_element(2*6*i+1)[1], mesh->get_element(2*6*i+1)[2]);
-        boundary[3*(2*6*i + 1) + 0] = 4;
-    }
-    mesh->set_boundary(boundary);
-#else
     int nbrElm = mesh->get_number_elements();
     std::vector<int> regions;
     regions.resize(nbrElm);
@@ -103,7 +92,6 @@ int main(int argc, char **argv)
     }
     mesh->set_regions(&regions[0]);
     mesh->set_internal_boundaries();
-#endif
 
     MetricField<double,2> metric_field(*mesh);
 
@@ -113,7 +101,7 @@ int main(int argc, char **argv)
     for(size_t i=0; i<NNodes; i++) {
         double lmax = 1/(0.07*0.07);
         m[0] = lmax;
-        m[2] = 0.2*lmax;
+        m[2] = 0.07*lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();
