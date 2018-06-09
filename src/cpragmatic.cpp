@@ -257,6 +257,29 @@ extern "C" {
         mesh->set_boundary(*nfacets, facets, ids);
     }
 
+    /** Set the internal regions.
+
+      @param [in] element_tags list of element tags
+      */
+    void pragmatic_set_regions(const int *element_tags)
+    {
+        assert(_pragmatic_mesh!=NULL);
+
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        mesh->set_regions(element_tags);
+    }
+
+    /** Reconstruct internal boundaries separing regions if not provided already
+
+      */
+    void pragmatic_set_internal_boundaries()
+    {
+        assert(_pragmatic_mesh!=NULL);
+
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        mesh->set_internal_boundaries();
+    }
+
     /** Adapt the mesh.
     */
     void pragmatic_adapt(int coarsen_surface)
@@ -537,6 +560,11 @@ extern "C" {
     {
       *tags = ((Mesh<double> *)_pragmatic_mesh)->get_boundaryTags();
     }
+
+    void pragmatic_get_elementTags(int ** regions)
+    {
+      *regions = ((Mesh<double> *)_pragmatic_mesh)->get_elementTags();
+    }    
 
     void pragmatic_finalize()
     {
