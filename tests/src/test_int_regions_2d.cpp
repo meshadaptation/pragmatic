@@ -85,10 +85,15 @@ int main(int argc, char **argv)
             for (int j=0; j<2; ++j)
                 barycenter[j] += coords[j];
         }
-        if (barycenter[0] >= barycenter[1])
+        if (barycenter[0] >= barycenter[1]) {
             regions[iElm] = 1;
-        else
-            regions[iElm] = 2;
+        }
+        else {
+            if (barycenter[0] < 1.5)
+                regions[iElm] = 2;
+            else
+                regions[iElm] = 3;
+        }
     }
     mesh->set_regions(&regions[0]);
     mesh->set_internal_boundaries();
@@ -139,8 +144,8 @@ int main(int argc, char **argv)
     }
 
     if(rank==0) {
-        long double ideal_area(1), ideal_perimeter(4+2*sqrt(2)); // the internal boundary is counted twice
-        std::cout<<"Expecting perimeter == 4: ";
+        long double ideal_area(1), ideal_perimeter(4+2*sqrt(2)+1); // the internal boundary is counted twice
+        std::cout<<"Expecting perimeter == 4+2*sqrt(2)+1: ";
         if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
