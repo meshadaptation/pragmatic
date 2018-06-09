@@ -271,8 +271,9 @@ public:
         assert(boundary.size()==0);
         create_boundary();
 
-        // Create a map of facets to ids.
+        // Create a map of facets to ids and compute max id.
         std::map< std::set<int>, int> facet2id;
+        max_bdry_tag = ids[0];
         for(int i=0; i<nfacets; i++) {
             std::set<int> facet;
             for(int j=0; j<ndims; j++) {
@@ -280,6 +281,8 @@ public:
             }
             assert(facet2id.find(facet)==facet2id.end());
             facet2id[facet] = ids[i];
+            if (ids[i] > max_bdry_tag)
+                max_bdry_tag = ids[i];
         }
 
         // Sweep through boundary and set ids.
@@ -303,9 +306,13 @@ public:
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
         boundary.resize(NElements*nloc);
+        max_bdry_tag = 0;
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
-                boundary[i*nloc+j] = _boundary[i*nloc+j];
+                int b = _boundary[i*nloc+j];
+                boundary[i*nloc+j] = b;
+                if (b > max_bdry_tag)
+                    max_bdry_tag = b;
             }
         }
     }
@@ -358,7 +365,7 @@ public:
                         const index_t *elm = get_element(*elm_it);
                         for (int i=0; i<nloc; ++i) {
                             if (elm[i]!=iVer && elm[i]!=iVer2) {
-                                boundary[nloc*(*elm_it)+i] = 9999;
+                                boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
                             }
                         }
                         
@@ -2292,7 +2299,10 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+    // internal regions labels (element tags)
     std::vector<int> regions;
+    // Max external boundary label : internal bdry labels must be >
+    int max_bdry_tag;
 #if 0
 	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
 #endif
