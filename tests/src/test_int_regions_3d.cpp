@@ -104,10 +104,10 @@ int main(int argc, char **argv)
     
     double m[6] = {0.};
     for(size_t i=0; i<NNodes; i++) {
-        double lmax = 1/(0.2*0.2);
-        m[0] = lmax;
+        double lmax = 1/(0.05*0.05);
+        m[0] = 5*lmax;
         m[3] = lmax;
-        m[5] = lmax;
+        m[5] = 0.1*lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();

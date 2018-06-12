@@ -542,10 +542,12 @@ private:
                 }
             }
 
-            assert(region == -10 || region == _mesh->regions[it]);
-#ifndef NDEBUG
-            region = _mesh->regions[it];
-#endif
+            if (region == -10)
+                region = _mesh->regions[it];
+            else 
+                if (region != _mesh->regions[it])
+                    return false; // trying to swap across internal boundary
+
         }
         region = _mesh->regions[*neigh_elements.begin()];
 
