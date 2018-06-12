@@ -520,6 +520,7 @@ private:
         std::vector<index_t> constrained_edges_unsorted;
         std::map<int, std::map<index_t, int> > b;
         std::vector<int> element_order, e_to_eid;
+        int region = -10;
 
         for(auto& it : neigh_elements) {
             min_quality = std::min(min_quality, _mesh->quality[it]);
@@ -540,7 +541,13 @@ private:
                     b[it][nl] = _mesh->boundary[nloc*(it)+j];
                 }
             }
+
+            assert(region == -10 || region == _mesh->regions[it]);
+#ifndef NDEBUG
+            region = _mesh->regions[it];
+#endif
         }
+        region = _mesh->regions[*neigh_elements.begin()];
 
         size_t nelements = neigh_elements.size();
         assert(nelements*2==constrained_edges_unsorted.size());
@@ -1051,8 +1058,9 @@ private:
             if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
                 if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
                     _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
+                    _mesh->regions.resize(2*(new_eid+extra_elements));
                     _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
-                    _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
+                    _mesh->quality.resize(2*(new_eid+extra_elements)*nloc); // TODO why *nloc ?
                 }
             }
 
@@ -1067,6 +1075,7 @@ private:
                 _mesh->_ENList[eid*nloc+i]=new_elements[best_option][j*4+i];
                 _mesh->boundary[eid*nloc+i]=new_boundaries[best_option][j*4+i];
             }
+            _mesh->regions[eid]=region;
             _mesh->quality[eid]=newq[best_option][j];
 
             for(int p=0; p<nloc; ++p) {
