@@ -332,51 +332,14 @@ public:
 
     ///  add internal boundary tags if facet is between 2+ regions
     ///   unless they were already provided ? TODO check consistency
-    void set_internal_boundaries() {
-
-        // loop over edges through vertex connectivity
-        for (int iVer = 0; iVer < NNodes; ++iVer) {
-            for (int i=0; i<NNList[iVer].size(); ++i) {
-                int iVer2 = NNList[iVer][i];
-                if (iVer2 < iVer)
-                    continue;
-
-                std::set<index_t> neighbour_elements;
-                std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
-                                      NEList[iVer2].begin(), NEList[iVer2].end(),
-                                      std::inserter(neighbour_elements, neighbour_elements.begin()));
-
-                typename std::set<index_t>::const_iterator elm_it;
-                int region_tag = -10;
-                bool one_region = true;
-                for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
-                    if (region_tag < 0)
-                        region_tag = regions[*elm_it];
-                    else {
-                        if (region_tag != regions[*elm_it]) {
-                            one_region = false;
-                            break;
-                        }
-                    }
-                }
-                // Now locate the edge in each element and set a boundary tag
-                if (!one_region) {
-                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
-                        const index_t *elm = get_element(*elm_it);
-                        for (int i=0; i<nloc; ++i) {
-                            if (elm[i]!=iVer && elm[i]!=iVer2) {
-                                boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
-                            }
-                        }
-                        
-                    }
-                }
-            }
-        }
-
-        
-
+    void set_internal_boundaries()
+    {
+        if (ndims == 2)
+            set_internal_boundaries_2d();
+        else
+            set_internal_boundaries_3d();
     }
+
 
     /// Erase an element
     void erase_element(const index_t eid)
@@ -1975,6 +1938,106 @@ private:
             delete nnset;
         }
     }
+
+
+    void set_internal_boundaries_2d()
+    {
+
+        // loop over edges through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer)
+                    continue;
+
+                std::set<index_t> neighbour_elements;
+                std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                      NEList[iVer2].begin(), NEList[iVer2].end(),
+                                      std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                typename std::set<index_t>::const_iterator elm_it;
+                int region_tag = -10;
+                bool one_region = true;
+                for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                    if (region_tag < 0)
+                        region_tag = regions[*elm_it];
+                    else {
+                        if (region_tag != regions[*elm_it]) {
+                            one_region = false;
+                            break;
+                        }
+                    }
+                }
+                // Now locate the edge in each element and set a boundary tag
+                if (!one_region) {
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        const index_t *elm = get_element(*elm_it);
+                        for (int i=0; i<nloc; ++i) {
+                            if (elm[i]!=iVer && elm[i]!=iVer2) {
+                                boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    void set_internal_boundaries_3d()
+    {
+
+        // loop over edges through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer) continue;
+                for (int j=0; j<NNList[iVer].size(); ++j) {
+                    if (i==j) continue;
+                    int iVer3 = NNList[iVer][j];
+                    if (iVer3 < iVer2) continue;
+
+                    std::set<index_t> neighbour_elements1, neighbour_elements2, neighbour_elements;
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer2].begin(), NEList[iVer2].end(),
+                                          std::inserter(neighbour_elements1, neighbour_elements1.begin()));
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer3].begin(), NEList[iVer3].end(),
+                                          std::inserter(neighbour_elements2, neighbour_elements2.begin()));
+                    std::set_intersection(neighbour_elements1.begin(), neighbour_elements1.end(),
+                                          neighbour_elements2.begin(), neighbour_elements2.end(),
+                                          std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                    typename std::set<index_t>::const_iterator elm_it;
+                    int region_tag = -10;
+                    bool one_region = true;
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        if (region_tag < 0)
+                            region_tag = regions[*elm_it];
+                        else {
+                            if (region_tag != regions[*elm_it]) {
+                                one_region = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Now locate the edge in each element and set a boundary tag
+                    if (!one_region) {
+                        for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                            const index_t *elm = get_element(*elm_it);
+                            for (int i=0; i<nloc; ++i) {
+                                if (elm[i]!=iVer && elm[i]!=iVer2 && elm[i]!=iVer3) {
+                                    boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     void trim_halo()
     {
