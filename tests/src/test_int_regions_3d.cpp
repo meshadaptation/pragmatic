@@ -98,24 +98,21 @@ int main(int argc, char **argv)
     mesh->set_regions(&regions[0]);
     mesh->set_internal_boundaries();
 
-    MetricField<double,2> metric_field(*mesh);
+    MetricField<double,3> metric_field(*mesh);
 
     size_t NNodes = mesh->get_number_nodes();
     
-    double m[6] = {0};
+    double m[6] = {0.};
     for(size_t i=0; i<NNodes; i++) {
         double lmax = 1/(0.2*0.2);
         m[0] = lmax;
-        m[2] = 0.2*lmax;
+        m[3] = lmax;
+        m[5] = lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();
 
     GMFTools<double>::export_gmf_mesh("../data/test_int_regions_3d-initial", mesh);
-
-    return(0);
-
-    Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
     pragmatic_adapt(0);
@@ -143,18 +140,19 @@ int main(int argc, char **argv)
         if(rank==0)
             std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
                      <<"Number elements:      "<<nelements<<std::endl
-                     <<"Perimeter:            "<<perimeter<<std::endl;;
+                     <<"area:                 "<<area<<std::endl
+                     <<"volume:               "<<volume<<std::endl;;
     }
 
     if(rank==0) {
-        long double ideal_area(3), ideal_volume(1); // the internal boundary is counted twice
+        long double ideal_area(9), ideal_volume(1); // the internal boundary is counted twice
         std::cout<<"Expecting volume == 1: ";
         if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail"<<std::endl;
 
-        std::cout<<"Expecting area == 3: ";
+        std::cout<<"Expecting area == 9: ";
         if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
