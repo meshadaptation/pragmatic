@@ -202,7 +202,7 @@ int main(int argc, char **argv)
         MetricField<double,3> metric_field(*mesh);
         set_metric(mesh, metric_field, metric_choice, h0);
 
-        pragmatic_adapt(0);
+        pragmatic_adapt(0, 0);
 
 		mesh->compute_print_quality();
 		mesh->compute_print_NNodes_global();

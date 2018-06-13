@@ -86,6 +86,7 @@ public:
         nnodes_reserve = 0;
         delete_slivers = false;
         surface_coarsening = false;
+        internal_surface_coarsening = false;
         quality_constrained = false;
     }
 
@@ -101,11 +102,13 @@ public:
      */
     int coarsen(real_t L_low, real_t L_max,
                  bool enable_surface_coarsening=false,
+                 bool enable_int_surface_coarsening=false,
                  bool enable_delete_slivers=false,
                  bool enable_quality_constrained=false)
     {
 
         surface_coarsening = enable_surface_coarsening;
+        internal_surface_coarsening = enable_int_surface_coarsening;
         delete_slivers = enable_delete_slivers;
         quality_constrained = enable_quality_constrained;
 
@@ -187,7 +190,19 @@ private:
             // Assume the best.
             reject_collapse=false;
 
-            if(surface_coarsening) {
+
+            int region = -10;
+            int num_regions = 0;
+            for(const auto &ee : _mesh->NEList[rm_vertex]) {
+                const int *old_n=_mesh->get_element(ee);
+                if (region != _mesh->regions[ee])
+                    num_regions++;
+                region = _mesh->regions[ee];
+            }
+
+            if ((num_regions == 1 && surface_coarsening) ||
+                (num_regions > 1 && internal_surface_coarsening)) {
+
                 std::set<index_t> compromised_boundary;
                 for(const auto &element : _mesh->NEList[rm_vertex]) {
                     const int *n=_mesh->get_element(element);
@@ -296,7 +311,9 @@ private:
                     q_linf = _mesh->quality[ee];
 
                 long double old_av=0.0;
-                if(!surface_coarsening) {
+                if ((num_regions == 1 && !surface_coarsening) ||
+                    (num_regions > 1 && !internal_surface_coarsening)) {
+
                     if(dim==2)
                         old_av = property->area_precision(_mesh->get_coords(old_n[0]),
                                                           _mesh->get_coords(old_n[1]),
@@ -370,7 +387,9 @@ private:
             if(reject_collapse)
                 continue;
 
-            if(!surface_coarsening) {
+            if ((num_regions == 1 && !surface_coarsening) ||
+                (num_regions > 1 && !internal_surface_coarsening)) {
+
                 // Check we are not removing surface features.
                 std::map<int, long double>::const_iterator iReg;
                 for (iReg = total_old_avs.begin(); iReg != total_old_avs.end(); ++iReg) {
@@ -582,7 +601,7 @@ private:
     size_t nnodes_reserve;
 
     real_t _L_low, _L_max;
-    bool delete_slivers, surface_coarsening, quality_constrained;
+    bool delete_slivers, surface_coarsening, internal_surface_coarsening, quality_constrained;
 
     const static size_t ndims=dim;
     const static size_t nloc=dim+1;

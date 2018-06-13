@@ -115,7 +115,7 @@ int main(int argc, char **argv)
     GMFTools<double>::export_gmf_mesh("../data/test_int_regions_3d-initial", mesh);
 
     double tic = get_wtime();
-    pragmatic_adapt(0);
+    pragmatic_adapt(0, 0);
     double toc = get_wtime();
 
 

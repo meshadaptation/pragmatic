@@ -282,7 +282,7 @@ extern "C" {
 
     /** Adapt the mesh.
     */
-    void pragmatic_adapt(int coarsen_surface)
+    void pragmatic_adapt(int coarsen_surface, int coarsen_int_surface)
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
@@ -306,7 +306,7 @@ extern "C" {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
-                cnt_coars= coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                cnt_coars= coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.7);
                 cnt_split = refine.refine(L_ref);
 
@@ -360,7 +360,7 @@ extern "C" {
 
                 int cnt_coars, cnt_split;
                 cnt_split = refine.refine(L_ref);
-                cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.95);
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
@@ -401,7 +401,7 @@ extern "C" {
 
     /** Coarsen the mesh.
     */
-    void pragmatic_coarsen(int coarsen_surface)
+    void pragmatic_coarsen(int coarsen_surface, int coarsen_int_surface)
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
@@ -414,7 +414,7 @@ extern "C" {
             Swapping<double, 2> swapping(*mesh);
 
             for(size_t i=0; i<5; i++) {
-                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.1);
             }
         } else {
@@ -422,7 +422,7 @@ extern "C" {
             Swapping<double, 3> swapping(*mesh);
 
             for(size_t i=0; i<5; i++) {
-                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.1);
             }
         }

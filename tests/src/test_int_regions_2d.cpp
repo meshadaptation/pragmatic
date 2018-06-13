@@ -116,7 +116,7 @@ int main(int argc, char **argv)
     Refine<double,2> adapt(*mesh);
 
     double tic = get_wtime();
-    pragmatic_adapt(0);
+    pragmatic_adapt(0, 0);
     double toc = get_wtime();
 
 

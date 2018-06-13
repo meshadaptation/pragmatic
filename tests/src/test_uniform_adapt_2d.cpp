@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 
     MetricField<double,2> metric_field(*mesh);
     set_metric(mesh, metric_field);
-    pragmatic_adapt(0);
+    pragmatic_adapt(0, 0);
     printf("pass\n");
 
     double qmean = mesh->get_qmean();
