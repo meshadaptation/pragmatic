@@ -57,6 +57,9 @@ if (ENABLE_LIBMESHB)
     ADD_EXECUTABLE(test_int_regions_3d ${PRAGMATIC_TEST_SRC}/test_int_regions_3d.cpp ${src_lite})
     TARGET_LINK_LIBRARIES(test_int_regions_3d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
+    ADD_EXECUTABLE(test_ballincube ${PRAGMATIC_TEST_SRC}/test_ballincube.cpp ${src_lite})
+    TARGET_LINK_LIBRARIES(test_ballincube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})    
+
   endif()
 
 endif()
