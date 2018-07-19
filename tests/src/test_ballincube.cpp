@@ -79,15 +79,15 @@ int main(int argc, char **argv)
     size_t NNodes = mesh->get_number_nodes();
     
     double m[6] = {0.};
-    double hmax = 1.1;
-    double hmin = 0.01;
+    double hmax = 1.;
+    double hmin = 0.04;
     for(size_t i=0; i<NNodes; i++) {
         double x = mesh->get_coords(i)[0];
-        double h = hmax*fabs(1-exp(-2*fabs(x))) + hmin;
+        double h = hmax*fabs(1-exp(-0.03*fabs(x*x*x))) + hmin;
         double lmax = 1/(hmax*hmax);
-        m[0] = 1/(h*h);
+        m[0] = lmax;//1/(h*h);
         m[3] = lmax;
-        m[5] = lmax;
+        m[5] = lmax;//hmax*hmax/(5*5)*lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
     GMFTools<double>::export_gmf_mesh("../data/test_ballincube-initial", mesh);
 
     double tic = get_wtime();
-    pragmatic_adapt(0, 0);
+    pragmatic_adapt(0, 1);
     double toc = get_wtime();
 
 
