@@ -58,7 +58,10 @@ if (ENABLE_LIBMESHB)
     TARGET_LINK_LIBRARIES(test_int_regions_3d ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})
 
     ADD_EXECUTABLE(test_ballincube ${PRAGMATIC_TEST_SRC}/test_ballincube.cpp ${src_lite})
-    TARGET_LINK_LIBRARIES(test_ballincube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})    
+    TARGET_LINK_LIBRARIES(test_ballincube ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES}) 
+
+    ADD_EXECUTABLE(test_discinsquare ${PRAGMATIC_TEST_SRC}/test_discinsquare.cpp ${src_lite})
+    TARGET_LINK_LIBRARIES(test_discinsquare ${PRAGMATIC_LIBRARIES} ${LIBRT_LIBRARIES})    
 
   endif()
 
