@@ -135,11 +135,97 @@ public:
         _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
 
+//    Mesh(Mesh<real_t> & meshini, int NVer, int * trucs)
+//    {
+//    }
+
+    /// construct minimesh
+    Mesh(Mesh<real_t> & meshini, int NVer, int * ver)
+    {
+        std::set<int> neigbor_elements;
+        for (int i = 0; i < NVer; ++i) {
+            int iVer = ver[i];
+            std::set<index_t>::const_iterator it;
+            for (it= meshini.NEList[iVer].begin(); it!=meshini.NEList[iVer].end(); ++it) {
+                const int * elm = meshini.get_element(*it);
+                const double *x0 = meshini.get_coords(elm[0]);
+                const double *x1 = meshini.get_coords(elm[1]);
+                const double *x2 = meshini.get_coords(elm[2]);
+                const double *x3 = meshini.get_coords(elm[3]);
+                printf("DEBUG  mm:  element[%d] %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f)\n",
+                        *it, elm[0], x0[0], x0[1], x0[2],  elm[1], x1[0], x1[1], x1[2], elm[2], x2[0], x2[1], x2[2],
+                         elm[3], x3[0], x3[1], x3[2]);
+                neigbor_elements.insert(*it);
+            }
+        } 
+
+        printf("DEBUG  HI HERE\n");
+
+        std::vector<int> enlist;
+        std::vector<real_t> x, y, z;
+        std::vector<int> bdry, reg;
+
+        int nelements = neigbor_elements.size();
+        nloc = meshini.nloc;
+        enlist.reserve(nelements*nloc);
+        bdry.reserve(nelements*nloc);
+        x.reserve(nelements*2.5);
+        y.reserve(nelements*2.5);
+        if (meshini.ndims==3)
+            z.reserve(nelements*2.5);
+
+        printf("DEBUG  HI THERE\n");
+
+        std::map<int,int> global2local;
+        const int * bdryini = meshini.get_boundaryTags();
+        const int * regini = meshini.get_elementTags();
+        int count = 0;
+        std::set<index_t>::const_iterator it;
+        for (it=neigbor_elements.begin(); it!=neigbor_elements.end(); ++it){
+            const int * n = meshini.get_element(*it);
+            for (int i=0; i<nloc; ++i) {
+                int newVid;
+                if (!global2local.count(n[i])) {
+                    newVid = count;
+                    global2local[n[i]] = newVid;
+                    printf("DEBUG  mm: g2l %d --> %d\n", n[i], newVid);
+                    const real_t * crd = meshini.get_coords(n[i]);
+                    x.push_back(crd[0]);
+                    y.push_back(crd[1]);
+                    if (meshini.ndims == 3)
+                        z.push_back(crd[2]);
+                    count++;
+                }
+                else {
+                    newVid = global2local[n[i]];
+                }
+                enlist.push_back(newVid);
+                bdry.push_back(bdryini[nloc*(*it)+i]);
+            }
+            reg.push_back(regini[*it]);
+        }
+
+        int nnodes = count;
+        _mpi_comm = MPI_COMM_WORLD;
+        printf("DEBUG  HELLO THERE\n");
+        if (meshini.ndims == 2)
+            _init(nnodes, nelements, &enlist[0], &x[0], &y[0], NULL, NULL, nnodes);
+        else
+            _init(nnodes, nelements, &enlist[0], &x[0], &y[0], &z[0], NULL, nnodes);
+
+        printf("DEBUG  HELLO HERE\n");
+        // apply boundaries
+        set_boundary(&bdry[0]);
+        set_regions(&reg[0]);
+    }
+
     /// Default destructor.
     ~Mesh()
     {
         delete property;
     }
+
+
 
     /// Add a new vertex
     index_t append_vertex(const real_t *x, const double *m)
@@ -341,6 +427,74 @@ public:
     }
 
 
+
+    void check_internal_boundaries_3d()
+    {
+        printf("DEBUG  == checking internal boundaries integrity.\n");
+        printf("DEBUG  NElements: %d\n", NElements);
+        bool ok = true;
+        // loop over facets through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer) continue;
+                for (int j=0; j<NNList[iVer].size(); ++j) {
+                    if (i==j) continue;
+                    int iVer3 = NNList[iVer][j];
+                    if (iVer3 < iVer2) continue;
+
+                    std::set<index_t> neighbour_elements1, neighbour_elements2, neighbour_elements;
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer2].begin(), NEList[iVer2].end(),
+                                          std::inserter(neighbour_elements1, neighbour_elements1.begin()));
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer3].begin(), NEList[iVer3].end(),
+                                          std::inserter(neighbour_elements2, neighbour_elements2.begin()));
+                    std::set_intersection(neighbour_elements1.begin(), neighbour_elements1.end(),
+                                          neighbour_elements2.begin(), neighbour_elements2.end(),
+                                          std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                    typename std::set<index_t>::const_iterator elm_it;
+                    int region_tag = -10;
+                    bool one_region = true;
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        if (_ENList[*elm_it*4]==-1)
+                            continue;
+                        if (region_tag < 0)
+                            region_tag = regions[*elm_it];
+                        else {
+                            if (region_tag != regions[*elm_it]) {
+                                one_region = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Now locate the facet in each element and set a boundary tag
+                    if (!one_region) {
+                        for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                            if (_ENList[*elm_it*4]==-1)
+                                continue;
+                            const index_t *elm = get_element(*elm_it);
+                            for (int i=0; i<nloc; ++i) {
+                                if (elm[i]!=iVer && elm[i]!=iVer2 && elm[i]!=iVer3) {
+                                    if (boundary[nloc*(*elm_it)+i] != max_bdry_tag+1) {
+                                        printf("ERROR   in elm %d (%d %d %d %d) facet %d should me tagged as internal boundary but tag is: %d\n",
+                                            *elm_it, elm[0], elm[1], elm[2], elm[3], i, boundary[nloc*(*elm_it)+i]);
+                                        ok = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (ok)
+            printf("DEBUG  OK!\n");
+    }
+
+
     /// Erase an element
     void erase_element(const index_t eid)
     {
@@ -485,6 +639,11 @@ public:
       return boundary.data();
     }
 
+    inline int get_boundaryTag(int i) 
+    {
+      return boundary[i];
+    }    
+
     /// Return the array of element tags tags
     inline int * get_elementTags()
     {
@@ -495,7 +654,13 @@ public:
     inline int get_elementTag(index_t eid)
     {
         return regions[eid];
-    }    
+    } 
+
+    /// Return true if the boundary tag is in the recorded internal boundaries (for now the max one)
+    inline bool is_internal_boundary(int tag)
+    {
+        return (tag == max_bdry_tag+1) ? true : false;
+    }   
 
     /// Returns true if the node is in any of the partitioned elements.
     inline bool is_halo_node(index_t nid) const
@@ -1987,7 +2152,7 @@ private:
     void set_internal_boundaries_3d()
     {
 
-        // loop over edges through vertex connectivity
+        // loop over facets through vertex connectivity
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             for (int i=0; i<NNList[iVer].size(); ++i) {
                 int iVer2 = NNList[iVer][i];
