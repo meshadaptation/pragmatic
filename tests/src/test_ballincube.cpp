@@ -85,9 +85,9 @@ int main(int argc, char **argv)
         double x = mesh->get_coords(i)[0];
         double h = hmax*fabs(1-exp(-0.03*fabs(x*x*x))) + hmin;
         double lmax = 1/(hmax*hmax);
-        m[0] = lmax; //1/(h*h);
+        m[0] = 1/(h*h);
         m[3] = lmax;
-        m[5] = lmax; //hmax*hmax/(5*5)*lmax;
+        m[5] = hmax*hmax/(5*5)*lmax;
         metric_field.set_metric(m, i);
     }
     metric_field.update_mesh();

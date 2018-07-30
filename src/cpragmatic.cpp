@@ -355,7 +355,7 @@ extern "C" {
             bool stop = false;
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
-            for(size_t i=0; i<0; i++) {
+            for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
