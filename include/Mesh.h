@@ -1415,6 +1415,27 @@ public:
         printf("DEBUG  addr: %p\n", &NNList[378][0]);
         printf("DEBUG  NEList[%d] size: %d, NNList[%d] size: %d\n", rm_vertex,
                 NEList[rm_vertex].size(), rm_vertex, NNList[rm_vertex].size());
+
+        int firstid = 37, secondid = 129;
+        std::set<index_t> elm_around_split_edge;
+        std::set_intersection(NEList[firstid].begin(), NEList[firstid].end(),
+                              NEList[secondid].begin(), NEList[secondid].end(),
+                              std::inserter(elm_around_split_edge, elm_around_split_edge.begin()));
+        if (elm_around_split_edge.size()==0) {
+            printf("DEBUG ========= BIG PROBLEM  firstid: %1.3f %1.3f %1.3f secondid: %1.3f %1.3f %1.3f\n", 
+                _coords[3*firstid], _coords[3*firstid+1], _coords[3*firstid+2],
+                _coords[3*secondid], _coords[3*secondid+1], _coords[3*secondid+2]);
+        }
+                printf("DEBUG  NNList[%d]:", firstid);
+        for (int i=0; i<NNList[firstid].size(); ++i) {
+            printf("  %d", NNList[firstid][i]);
+        }
+        printf("\n");
+        printf("DEBUG  _mesh->NNList[%d]:", secondid);
+        for (int i=0; i<NNList[secondid].size(); ++i) {
+            printf("  %d", NNList[secondid][i]);
+        }
+        printf("\n");
     }
 
     /// This is used to verify that the mesh and its metadata is correct.
