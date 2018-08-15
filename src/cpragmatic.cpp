@@ -286,6 +286,8 @@ extern "C" {
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
+        mesh->verify();
+
         const size_t ndims = mesh->get_number_dimensions();
 
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
@@ -353,15 +355,23 @@ extern "C" {
 
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
+
+            mesh->check();
+
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
             for(size_t i=0; i<30; i++) {
+                printf("DEBUG  i: %d\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
                 cnt_split = refine.refine(L_ref);
+                mesh->check();
                 cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
+                mesh->check();
                 swapping.swap(0.95);
+
+                mesh->check();
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;

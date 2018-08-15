@@ -1409,6 +1409,14 @@ public:
         create_adjacency();
     }
 
+    bool check()
+    {
+        int rm_vertex = 378;
+        printf("DEBUG  addr: %p\n", &NNList[378][0]);
+        printf("DEBUG  NEList[%d] size: %d, NNList[%d] size: %d\n", rm_vertex,
+                NEList[rm_vertex].size(), rm_vertex, NNList[rm_vertex].size());
+    }
+
     /// This is used to verify that the mesh and its metadata is correct.
     bool verify() const
     {

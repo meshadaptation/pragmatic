@@ -161,10 +161,17 @@ private:
             return -1;
 
         std::set<int> regions;
+        if (rm_vertex==378) printf("DEBUG  _mesh->NEList[rm_vertex] size: %d, _mesh->NNList[rm_vertex] size: %d\n", 
+            _mesh->NEList[rm_vertex].size(), _mesh->NNList[rm_vertex].size());
+        if (rm_vertex == 378 && !_mesh->NNList[rm_vertex].empty()) 
+            printf("DEBUG  NNList: %d %d\n", _mesh->NNList[rm_vertex][0], _mesh->NNList[rm_vertex][1]);
         std::set<index_t>::const_iterator ee = _mesh->NEList[rm_vertex].begin();
+        if (rm_vertex==378) printf("DEBUG  *ee: %d\n", *ee);
         double q_linf = _mesh->quality[*ee];
         ee++;
+        if (rm_vertex==378) printf("DEBUG  *ee: %d\n", *ee);
         for (; ee != _mesh->NEList[rm_vertex].end(); ++ee) {
+            if (rm_vertex==378) printf("DEBUG  *ee: %d\n", *ee);
             regions.insert(_mesh->get_elementTag(*ee));
         }
 
