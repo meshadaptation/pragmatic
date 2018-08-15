@@ -1029,7 +1029,8 @@ private:
     inline void addNN(const index_t i, const index_t n)
     {
         
-        _mesh->NNList[i].push_back(n);
+        if (std::find(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), n) == _mesh->NNList[i].end())
+            _mesh->NNList[i].push_back(n);
         if (i==378) printf("DEBUG  ET VOILA\n");
     }
 
