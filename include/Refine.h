@@ -471,7 +471,6 @@ public:
     {
         origNElements = _mesh->get_number_elements();
         size_t origNNodes = _mesh->get_number_nodes();
-        printf("DEBUG  origNNodes: %d\n", origNNodes);
 
         splitCnt = 0;
 
@@ -531,20 +530,6 @@ public:
             index_t firstid = newVertices[i].edge.first;
             index_t secondid = newVertices[i].edge.second;
 
-            if (firstid == 37 && secondid == 129) {
-                printf("DEBUG  *** splitting %d %d --> %d\n", firstid, secondid, vid);
-                printf("DEBUG  _mesh->NNList[%d]:", firstid);
-                for (int i=0; i<_mesh->NNList[firstid].size(); ++i) {
-                    printf("  %d", _mesh->NNList[firstid][i]);
-                }
-                printf("\n");
-                printf("DEBUG  _mesh->NNList[%d]:", secondid);
-                for (int i=0; i<_mesh->NNList[secondid].size(); ++i) {
-                    printf("  %d", _mesh->NNList[secondid][i]);
-                }
-                printf("\n");
-            }
-
             /*
              * Update NNList for newly created vertices. This has to be done here, it cannot be
              * done during element refinement, because a split edge is shared between two elements
@@ -552,14 +537,11 @@ public:
              */
             addNN(vid,firstid);
             addNN(vid,secondid);
-            if (vid == 378) printf("DEBUG   VOILA 1, edge: %d %d\n", firstid, secondid);
 
             remNN(firstid, secondid);
             addNN(firstid, vid);
-            if (firstid == 378) printf("DEBUG   VOILA 2\n");
             remNN(secondid, firstid);
             addNN(secondid, vid);
-            if (secondid == 378) printf("DEBUG   VOILA 3\n");
 
             /*
              * Actual element refinement
@@ -570,16 +552,9 @@ public:
             std::set_intersection(_mesh->NEList[firstid].begin(), _mesh->NEList[firstid].end(),
                                   _mesh->NEList[secondid].begin(), _mesh->NEList[secondid].end(),
                                   std::inserter(elm_around_split_edge, elm_around_split_edge.begin()));
-
-            if (elm_around_split_edge.size()==0) printf("DEBUG ========= BIG PROBLEM\n");
-            if (vid == 378) printf("DEBUG  _mesh->NEList[firstid] size: %d\n", _mesh->NEList[firstid].size());
-            if (vid == 378) printf("DEBUG  _mesh->NEList[secondid] size: %d\n", _mesh->NEList[secondid].size());
-            if (vid == 378) printf("DEBUG  intersection size: %d\n", elm_around_split_edge.size());
             typename std::set<index_t>::const_iterator element;
             for(element=elm_around_split_edge.begin(); element!=elm_around_split_edge.end(); ++element) {
                 index_t eid = *element;
-
-                if (vid == 378) printf("DEBUG  refining elt: %d\n", eid);
                 refine_element(eid, i);
             }
 
@@ -837,10 +812,8 @@ private:
 
         // Add rotated_ele[0] to vertexID's NNList
         addNN(vertexID, rotated_ele[0]);
-        if (vertexID == 378) printf("DEBUG   VOILA 4\n");
         // Add vertexID to rotated_ele[0]'s NNList
         addNN(rotated_ele[0], vertexID);
-        if (rotated_ele[0] == 378) printf("DEBUG   VOILA 5\n");
 
         // Put ele1 in rotated_ele[0]'s NEList
         addNE(rotated_ele[0], ele1ID+origNElements);
@@ -871,12 +844,6 @@ private:
         index_t vid = newVertices[iEdgeSplit].id;
         index_t firstid = newVertices[iEdgeSplit].edge.first;
         index_t secondid = newVertices[iEdgeSplit].edge.second;
-
-        bool test = false; 
-        if (vid==378) {
-            test = true;
-            printf("DEBUG  HELLOOOOOOO\n");
-        }
 
         boundary_t b;
         for (int j=0; j<nloc; ++j)
@@ -919,9 +886,7 @@ private:
 
             if (flag) {
                 addNN(vid, oe[i]);
-                if (vid == 378) printf("DEBUG   VOILA 6\n");
                 addNN(oe[i], vid);
-                if (oe[i] == 378) printf("DEBUG   VOILA 7\n");
             }
         }
 
@@ -942,7 +907,6 @@ private:
         // Put eid and ele1 in newVertex[0]'s NEList
         addNE(vid, eid);
         addNE(vid, ele1ID+origNElements);
-        if (test)  printf("DEBUG   NE were added here: %d %d  and %d %d\n", vid, eid, vid, ele1ID+origNElements);
 
         // Replace eid with ele1 in splitEdges[0].edge.second's NEList
         remNE(secondid, eid);
@@ -1031,7 +995,6 @@ private:
         
         if (std::find(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), n) == _mesh->NNList[i].end())
             _mesh->NNList[i].push_back(n);
-        if (i==378) printf("DEBUG  ET VOILA\n");
     }
 
     inline void remNN(const index_t i, const index_t n)

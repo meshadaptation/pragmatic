@@ -47,9 +47,6 @@
 #ifdef HAVE_VTK
 #include "VTKTools.h"
 #endif
-#ifdef HAVE_LIBMESHB
-#include "GMFTools.h"
-#endif
 
 
 static void *_pragmatic_mesh=NULL;
@@ -352,16 +349,12 @@ extern "C" {
             }
 #endif
 
-            GMFTools<double>::export_gmf_mesh("initial", mesh);
-
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
 
             double L_max = mesh->maximal_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
-
-            mesh->check();
 
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
@@ -371,12 +364,8 @@ extern "C" {
 
                 int cnt_coars, cnt_split;
                 cnt_split = refine.refine(L_ref);
-                mesh->check();
                 cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
-                mesh->check();
                 swapping.swap(0.95);
-
-                mesh->check();
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
@@ -406,7 +395,6 @@ extern "C" {
             }
 
             mesh->defragment();
-            GMFTools<double>::export_gmf_mesh("final", mesh);
 
             smooth.smart_laplacian(10);
             smooth.optimisation_linf(10);
