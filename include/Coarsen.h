@@ -222,11 +222,14 @@ private:
                 short_edges.erase(short_edges.begin());
 
                 if (test) printf("DEBUG         target vertex: %d\n", target_vertex);
+                if (test && target_vertex==20) printf("DEBUG  ***** THERE *****\n");
     
                 // Assume the best.
                 reject_collapse=false;
     
                 int boundary_id = -10;
+                if (test && target_vertex==20) printf("DEBUG  surface_coarsening: %d  internal_surface_coarsening: %d\n", 
+                                                      surface_coarsening?1:0, internal_surface_coarsening?1:0);
                 if(surface_coarsening || internal_surface_coarsening) {
                     std::set<index_t> compromised_boundary;
                     for(const auto &element : _mesh->NEList[rm_vertex]) {
@@ -242,6 +245,8 @@ private:
                             }
                         }
                     }
+
+                    if (test && target_vertex==20) printf("DEBUG    compromised_boundary size: %d\n", compromised_boundary.size());
 
                     if(compromised_boundary.size()>1) {
                         reject_collapse=true;
