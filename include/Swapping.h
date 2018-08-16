@@ -133,6 +133,7 @@ public:
                 bool swapped = swap_kernel(edge, pMap);
 
                 if(swapped) {
+                    printf("DEBUG   swap performed: edge %d %d\n", edge.edge.first, edge.edge.second);
                     for(auto& entry : pMap) {
                         for(auto& v : entry.second) {
                             marked_edges[entry.first].insert(v);
@@ -171,6 +172,7 @@ public:
                     bool swapped = swap_kernel(edge, pMap);
 
                     if(swapped) {
+                        printf("DEBUG   swap performed: edge %d %d\n", edge.edge.first, edge.edge.second);
                         for(auto& entry : pMap) {
                             for(auto& v : entry.second) {
                                 marked_edges[entry.first].insert(v);
