@@ -98,6 +98,7 @@ public:
 
     void swap(real_t quality_tolerance)
     {
+        int nswaps  = 0;
         size_t NNodes = _mesh->get_number_nodes();
         size_t NElements = _mesh->get_number_elements();
 
@@ -138,6 +139,7 @@ public:
                             next_round.push_back(entry.first);
                         }
                     }
+                    nswaps++;
                 }
             }
         }
@@ -175,6 +177,7 @@ public:
                                 next_round.push_back(entry.first);
                             }
                         }
+                        nswaps++;
                     }
                 }
             }
@@ -183,6 +186,7 @@ public:
                 // TODO: Try to steal work
             }
         }
+        printf("DEBUG   Number of swaps: %d\n", nswaps);
     }
 
 private:
