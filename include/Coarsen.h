@@ -477,6 +477,8 @@ private:
         bool test = false;
         const double * rm_crd = _mesh->get_coords(rm_vertex);
 
+        printf("DEBUG    * collapsing %d -> %d\n", rm_vertex, target_vertex);
+
         // TODO As we don't coarsen accross internal boudaries and don't create 
         //  new elements, no need to worry about element tags
 
