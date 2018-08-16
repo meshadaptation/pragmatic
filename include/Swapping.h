@@ -131,6 +131,10 @@ public:
                 marked_edges[edge.edge.first].erase(edge.edge.second);
                 propagation_map pMap;
                 bool swapped = swap_kernel(edge, pMap);
+                if (edge.edge.first == 28) {
+                    printf("DEBUG   = swap tried: %d %d --> %d\n", edge.edge.first, 
+                            edge.edge.second, swapped ? 1 : 0);
+                }
 
                 if(swapped) {
                     printf("DEBUG   swap performed: edge %d %d\n", edge.edge.first, edge.edge.second);
@@ -172,7 +176,7 @@ public:
                     bool swapped = swap_kernel(edge, pMap);
 
                     if(swapped) {
-                        printf("DEBUG   swap performed: edge %d %d\n", edge.edge.first, edge.edge.second);
+                        printf("DEBUG   swap performed+: edge %d %d\n", edge.edge.first, edge.edge.second);
                         for(auto& entry : pMap) {
                             for(auto& v : entry.second) {
                                 marked_edges[entry.first].insert(v);
@@ -503,8 +507,16 @@ private:
         index_t nk = edge.edge.first;
         index_t nl = edge.edge.second;
 
-        if(_mesh->is_halo_node(nk) && _mesh->is_halo_node(nl))
+        bool test = false;
+        if (nk==28 && nl==49) {
+            printf("DEBUG  found\n");
+            test = true;
+        }
+
+        if(_mesh->is_halo_node(nk) && _mesh->is_halo_node(nl)) {
+            if (test) printf("DEBUG   HERE 1\n");
             return false;
+        }
 
         std::set<index_t> neigh_elements;
         set_intersection(_mesh->NEList[nk].begin(), _mesh->NEList[nk].end(),
@@ -519,8 +531,10 @@ private:
             }
         }
 
-        if(abort)
+        if(abort) {
+            if (test) printf("DEBUG   HERE 2\n");
             return false;
+        }
 
         double min_quality = 1.0;
         std::vector<index_t> constrained_edges_unsorted;
@@ -533,6 +547,7 @@ private:
 
             const int *m=_mesh->get_element(it);
             if(m[0]<0) {
+                if (test) printf("DEBUG   HERE 3\n");
                 return false;
             }
 
@@ -551,8 +566,10 @@ private:
             if (region == -10)
                 region = _mesh->regions[it];
             else 
-                if (region != _mesh->regions[it])
+                if (region != _mesh->regions[it]) {
+                    if (test) printf("DEBUG   HERE 4\n");
                     return false; // trying to swap across internal boundary
+                }
 
         }
         region = _mesh->regions[*neigh_elements.begin()];
@@ -588,11 +605,13 @@ private:
         }
 
         if(*constrained_edges.begin() != *constrained_edges.rbegin()) {
+            if (test) printf("DEBUG   HERE 5\n");
             return false;
         }
         // assert(element_order.size() == nelements);
         if(element_order.size() != nelements) {
             std::cerr<<"assert(element_order.size() == nelements) would fail "<<element_order.size()<<", "<<nelements<<std::endl;
+            if (test) printf("DEBUG   HERE 6\n");
             return false;
         }
 
@@ -605,6 +624,7 @@ private:
 
         std::vector< std::vector<index_t> > new_elements;
         std::vector< std::vector<int> > new_boundaries;
+        if (test) printf("DEBUG   nelements %d\n", nelements);
         if(nelements==3) {
             // This is the 3-element to 2-element swap.
             new_elements.resize(1);
@@ -985,6 +1005,7 @@ private:
             new_boundaries[4].push_back(b[element_order[3]][nl]);
             new_boundaries[4].push_back(0);
         } else {
+            if (test) printf("DEBUG   HERE 7\n");
             return false;
         }
         nelements = new_elements[0].size()/4;
@@ -1035,8 +1056,10 @@ private:
             }
         }
 
-        if(new_min_quality[best_option] <= min_quality)
+        if(new_min_quality[best_option] <= min_quality) {
+            if (test) printf("DEBUG   HERE 8\n");
             return false;
+        }
 
         // Update NNList
         std::vector<index_t>::iterator vit = std::find(_mesh->NNList[nk].begin(), _mesh->NNList[nk].end(), nl);
