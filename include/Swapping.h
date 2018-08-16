@@ -523,6 +523,17 @@ private:
                          _mesh->NEList[nl].begin(), _mesh->NEList[nl].end(),
                          inserter(neigh_elements, neigh_elements.begin()));
 
+        if (test) {
+            printf("DEBUG  NEList[%d]:", nk);
+            for (std::set<index_t>::const_iterator it=_mesh->NEList[nk].begin(); it!=_mesh->NEList[nk].end(); ++it)
+                printf("  %d", *it);
+            printf("\n");
+            printf("DEBUG  NEList[%d]:", nl);
+            for (std::set<index_t>::const_iterator it=_mesh->NEList[nl].begin(); it!=_mesh->NEList[nl].end(); ++it)
+                printf("  %d", *it);
+            printf("\n");
+        }
+
         bool abort = true;
         for(auto& e : neigh_elements) {
             if(_mesh->quality[e] < min_Q) {
