@@ -594,6 +594,8 @@ private:
             }
             for(size_t i=0; i<nloc; ++i) {
                 _mesh->NEList[n[i]].erase(eid);
+                if (n[i]==28) printf("DEBUG   touching NEList[%d], erasing %d while collapsing %d -> %d\n", 
+                                     n[i], eid, rm_vertex, target_vertex);
             }
 
             // Remove element from mesh.
