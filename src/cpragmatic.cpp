@@ -348,8 +348,9 @@ extern "C" {
               }
             }
 #endif
-
+            mesh->check();
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
+            mesh->check();
 
             double L_max = mesh->maximal_edge_length();
 
@@ -364,8 +365,11 @@ extern "C" {
 
                 int cnt_coars, cnt_split;
                 cnt_split = refine.refine(L_ref);
+                mesh->check();
                 cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
+                mesh->check();
                 swapping.swap(0.95);
+                mesh->check();
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
