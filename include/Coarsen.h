@@ -151,6 +151,9 @@ private:
     inline int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const
     {
 
+        bool test = false;
+        if (rm_vertex == 15) test = true;
+
         // Cannot delete if already deleted.
         if(_mesh->NNList[rm_vertex].empty()) {
             return -1;
@@ -172,7 +175,9 @@ private:
         index_t target_vertex=-1;
         std::set<index_t>::const_iterator region_it;
         for (region_it = regions.begin(); region_it != regions.end(); ++region_it) {
+
             int region = *region_it;
+            if (test) printf("DEBUG       region: %d\n", region);
             //
             bool delete_with_extreme_prejudice = false;
             if(delete_slivers && dim==3) {
@@ -202,8 +207,10 @@ private:
                 for (int i = 0; i<nloc; ++i) {
                     if (n[i] != rm_vertex) {
                         double length = _mesh->calc_edge_length(rm_vertex, n[i]);
-                        if(length<L_low || delete_with_extreme_prejudice)
+                        if(length<L_low || delete_with_extreme_prejudice) {
                             short_edges.insert(std::pair<real_t, index_t>(length, n[i]));
+                            if (test) printf("DEBUG         short edge inserted: %1.3e %d\n", length, n[i]);
+                        }
                     }
                 }
 
@@ -213,6 +220,8 @@ private:
                 // Get the next shortest edge.
                 target_vertex = short_edges.begin()->second;
                 short_edges.erase(short_edges.begin());
+
+                if (test) printf("DEBUG         target vertex: %d\n", target_vertex);
     
                 // Assume the best.
                 reject_collapse=false;
@@ -236,6 +245,7 @@ private:
 
                     if(compromised_boundary.size()>1) {
                         reject_collapse=true;
+                        if (test && target_vertex==20) printf("DEBUG   POUET 1\n");
                         continue;
                     }
 
@@ -257,6 +267,7 @@ private:
 
                         if(target_boundary.size()==1) {
                             if(*target_boundary.begin() != *compromised_boundary.begin()) {
+                                if (test && target_vertex==20) printf("DEBUG   POUET 2\n");
                                 reject_collapse=true;
                                 continue;
                             }
@@ -312,13 +323,17 @@ private:
                                             scnt++;
                                     }
                                 }
+                                if (test && target_vertex==20) printf("DEBUG   confirm_boundary: %d scnt: %d\n",
+                                    confirm_boundary ? 1 : 0, scnt);
                                 if(!confirm_boundary || scnt>2) {
                                     reject_collapse=true;
+                                    if (test && target_vertex==20) printf("DEBUG   POUET 3\n");
                                     continue;
                                 }
                             }
                         } else {
                             reject_collapse=true;
+                            if (test && target_vertex==20) printf("DEBUG   POUET 4\n");
                             continue;
                         }
                     }
@@ -386,6 +401,7 @@ private:
                     // Reject if there is an inverted element.
                     if(new_av<DBL_EPSILON) {
                         reject_collapse=true;
+                        if (test && target_vertex==20) printf("DEBUG   POUET 5\n");
                         break;
                     }
 
@@ -425,6 +441,7 @@ private:
                     av_var /= std::max(total_new_av, total_old_av);
                     if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                         reject_collapse=true;
+                        if (test && target_vertex==20) printf("DEBUG   POUET 6\n");
                         continue;
                     }
                 }
@@ -436,6 +453,7 @@ private:
                             continue;
     
                         if(_mesh->calc_edge_length(target_vertex, nn)>L_max) {
+                            if (test && target_vertex==20) printf("DEBUG   POUET 7\n");
                             reject_collapse=true;
                             break;
                         }
@@ -446,6 +464,7 @@ private:
 
                 if(quality_constrained) {
                     if(!better) {
+                        if (test && target_vertex==20) printf("DEBUG   POUET 8\n");
                         reject_collapse=false;
                     }
                 }
@@ -462,8 +481,10 @@ private:
         }
 
         // If we've checked all edges and none are collapsible then return.
-        if(reject_collapse)
+        if(reject_collapse) {
+            if (test) printf("DEBUG   pouet :(\n");
             return -2;
+        }
 
         return target_vertex;
     }
