@@ -150,10 +150,6 @@ private:
      */
     inline int coarsen_identify_kernel(index_t rm_vertex, real_t L_low, real_t L_max) const
     {
-
-        bool test = false;
-        if (rm_vertex == 15) test = true;
-
         // Cannot delete if already deleted.
         if(_mesh->NNList[rm_vertex].empty()) {
             return -1;
@@ -177,7 +173,6 @@ private:
         for (region_it = regions.begin(); region_it != regions.end(); ++region_it) {
 
             int region = *region_it;
-            if (test) printf("DEBUG       region: %d\n", region);
             //
             bool delete_with_extreme_prejudice = false;
             if(delete_slivers && dim==3) {
@@ -209,7 +204,6 @@ private:
                         double length = _mesh->calc_edge_length(rm_vertex, n[i]);
                         if(length<L_low || delete_with_extreme_prejudice) {
                             short_edges.insert(std::pair<real_t, index_t>(length, n[i]));
-                            if (test) printf("DEBUG         short edge inserted: %1.3e %d\n", length, n[i]);
                         }
                     }
                 }
@@ -220,16 +214,11 @@ private:
                 // Get the next shortest edge.
                 target_vertex = short_edges.begin()->second;
                 short_edges.erase(short_edges.begin());
-
-                if (test) printf("DEBUG         target vertex: %d\n", target_vertex);
-                if (test && target_vertex==20) printf("DEBUG  ***** THERE *****\n");
     
                 // Assume the best.
                 reject_collapse=false;
     
                 int boundary_id = -10;
-                if (test && target_vertex==20) printf("DEBUG  surface_coarsening: %d  internal_surface_coarsening: %d\n", 
-                                                      surface_coarsening?1:0, internal_surface_coarsening?1:0);
                 if(surface_coarsening || internal_surface_coarsening) {
                     std::set<index_t> compromised_boundary;
                     for(const auto &element : _mesh->NEList[rm_vertex]) {
@@ -246,11 +235,8 @@ private:
                         }
                     }
 
-                    if (test && target_vertex==20) printf("DEBUG    compromised_boundary size: %d\n", compromised_boundary.size());
-
                     if(compromised_boundary.size()>1) {
                         reject_collapse=true;
-                        if (test && target_vertex==20) printf("DEBUG   POUET 1\n");
                         continue;
                     }
 
@@ -272,7 +258,6 @@ private:
 
                         if(target_boundary.size()==1) {
                             if(*target_boundary.begin() != *compromised_boundary.begin()) {
-                                if (test && target_vertex==20) printf("DEBUG   POUET 2\n");
                                 reject_collapse=true;
                                 continue;
                             }
@@ -328,17 +313,13 @@ private:
                                             scnt++;
                                     }
                                 }
-                                if (test && target_vertex==20) printf("DEBUG   confirm_boundary: %d scnt: %d\n",
-                                    confirm_boundary ? 1 : 0, scnt);
                                 if(!confirm_boundary || scnt>2) {
                                     reject_collapse=true;
-                                    if (test && target_vertex==20) printf("DEBUG   POUET 3\n");
                                     continue;
                                 }
                             }
                         } else {
                             reject_collapse=true;
-                            if (test && target_vertex==20) printf("DEBUG   POUET 4\n");
                             continue;
                         }
                     }
@@ -406,7 +387,6 @@ private:
                     // Reject if there is an inverted element.
                     if(new_av<DBL_EPSILON) {
                         reject_collapse=true;
-                        if (test && target_vertex==20) printf("DEBUG   POUET 5\n");
                         break;
                     }
 
@@ -446,7 +426,6 @@ private:
                     av_var /= std::max(total_new_av, total_old_av);
                     if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                         reject_collapse=true;
-                        if (test && target_vertex==20) printf("DEBUG   POUET 6\n");
                         continue;
                     }
                 }
@@ -458,7 +437,6 @@ private:
                             continue;
     
                         if(_mesh->calc_edge_length(target_vertex, nn)>L_max) {
-                            if (test && target_vertex==20) printf("DEBUG   POUET 7\n");
                             reject_collapse=true;
                             break;
                         }
@@ -469,7 +447,6 @@ private:
 
                 if(quality_constrained) {
                     if(!better) {
-                        if (test && target_vertex==20) printf("DEBUG   POUET 8\n");
                         reject_collapse=false;
                     }
                 }
@@ -487,7 +464,6 @@ private:
 
         // If we've checked all edges and none are collapsible then return.
         if(reject_collapse) {
-            if (test) printf("DEBUG   pouet :(\n");
             return -2;
         }
 
@@ -500,10 +476,7 @@ private:
      */
     inline void coarsen_kernel(index_t rm_vertex, index_t target_vertex)
     {
-        bool test = false;
         const double * rm_crd = _mesh->get_coords(rm_vertex);
-
-        printf("DEBUG    * collapsing %d -> %d\n", rm_vertex, target_vertex);
 
         // TODO As we don't coarsen accross internal boudaries and don't create 
         //  new elements, no need to worry about element tags
@@ -622,8 +595,6 @@ private:
             }
             for(size_t i=0; i<nloc; ++i) {
                 _mesh->NEList[n[i]].erase(eid);
-                if (n[i]==28) printf("DEBUG   touching NEList[%d], erasing %d while collapsing %d -> %d\n", 
-                                     n[i], eid, rm_vertex, target_vertex);
             }
 
             // Remove element from mesh.

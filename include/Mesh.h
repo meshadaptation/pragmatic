@@ -1409,15 +1409,6 @@ public:
         create_adjacency();
     }
 
-    bool check()
-    {
-        int nk = 28;
-        printf("DEBUG  NEList[%d]:", nk);
-        for (std::set<index_t>::const_iterator it=NEList[nk].begin(); it!=NEList[nk].end(); ++it)
-            printf("  %d", *it);
-        printf("\n");
-    }
-
 
     /// This is used to verify that the mesh and its metadata is correct.
     bool verify() const

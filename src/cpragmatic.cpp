@@ -348,9 +348,7 @@ extern "C" {
               }
             }
 #endif
-            mesh->check();
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
-            mesh->check();
 
             double L_max = mesh->maximal_edge_length();
 
@@ -359,17 +357,14 @@ extern "C" {
 
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
-            for(size_t i=0; i<1; i++) {
+            for(size_t i=0; i<30; i++) {
                 printf("DEBUG  i: %d\n", i);
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
                 cnt_split = refine.refine(L_ref);
-                mesh->check();
                 cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
-                mesh->check();
                 swapping.swap(0.95);
-                mesh->check();
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
