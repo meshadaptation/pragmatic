@@ -57,6 +57,7 @@ import ctypes, ctypes.util, numpy, scipy.sparse, scipy.sparse.linalg, collection
 from numpy import array, zeros, ones, any, arange, isnan
 from numpy.linalg import eigh as pyeig
 from itertools import combinations
+from time import time
 from dolfin import *
 
 __all__ = ["_libpragmatic",
@@ -126,26 +127,32 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   nvtx = n_xy.shape[1]
   n_mesh = Mesh()
   ed = MeshEditor()
-  ed.open(n_mesh, len(n_xy), len(n_xy))
+  if len(n_xy) == 1:
+      celltype = CellType.Type.interval.name
+  elif len(n_xy) == 2:
+      celltype = CellType.Type.triangle.name
+  else:
+      celltype = CellType.Type.tetrahedron.name
+  ed.open(n_mesh, celltype, len(n_xy), len(n_xy))
   ed.init_vertices(nvtx) #n_NNodes.value
   if len(n_xy) == 1:
    for i in range(nvtx):
     ed.add_vertex(i, n_xy[0,i])
    ed.init_cells(int(len(n_enlist)/2))
    for i in range(int(len(n_enlist)/2)): #n_NElements.value
-    ed.add_cell(i, n_enlist[i * 2], n_enlist[i * 2 + 1])
+    ed.add_cell(i, [n_enlist[i * 2], n_enlist[i * 2 + 1]])
   elif len(n_xy) == 2:
    for i in range(nvtx): #n_NNodes.value
-     ed.add_vertex(i, n_xy[0,i], n_xy[1,i])
+     ed.add_vertex(i, [n_xy[0,i], n_xy[1,i]])
    ed.init_cells(int(len(n_enlist)/3)) #n_NElements.value
    for i in range(int(len(n_enlist)/3)): #n_NElements.value
-     ed.add_cell(i, n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2])
+     ed.add_cell(i, [n_enlist[i * 3], n_enlist[i * 3 + 1], n_enlist[i * 3 + 2]])
   else: #3D
    for i in range(nvtx): #n_NNodes.value
-     ed.add_vertex(i, n_xy[0,i], n_xy[1,i], n_xy[2,i])
+     ed.add_vertex(i, [n_xy[0,i], n_xy[1,i], n_xy[2,i]])
    ed.init_cells(int(len(n_enlist)/4)) #n_NElements.value
    for i in range(int(len(n_enlist)/4)): #n_NElements.value
-     ed.add_cell(i, n_enlist[i * 4], n_enlist[i * 4 + 1], n_enlist[i * 4 + 2], n_enlist[i * 4 + 3])
+     ed.add_cell(i, [n_enlist[i * 4], n_enlist[i * 4 + 1], n_enlist[i * 4 + 2], n_enlist[i * 4 + 3]])
   ed.close()
   info("mesh definition took %0.1fs (not vectorized)" % (time()-startTime))
   if debugon==True and dx is not None:
@@ -174,7 +181,7 @@ def impose_maxN(metric, maxN):
     fak = 1.
     if targetN > maxN:
       fak = (targetN/maxN)**(gdim/2)
-      metric.vector().set_local(metric.vector().array()/fak)
+      metric.vector().set_local(metric.vector().get_local()/fak)
       info('metric coarsened to meet target node number')
     return [metric,fak]
 
@@ -187,48 +194,64 @@ def patchwise_projection(dg_metric, mesh):
     # Implementation in C++ for speed
 
     code = r'''
-    #include <dolfin/mesh/Vertex.h>
-    #include <dolfin/fem/fem_utils.h>
+    #include <dolfin.h>
+    #include <pybind11/pybind11.h>
+    #include <pybind11/numpy.h>
+    #include <pybind11/pytypes.h>
+    #include <pybind11/stl.h>
+    #include <pybind11/cast.h>
+
+    namespace py = pybind11;
     namespace dolfin
     {
-      void project(const Function M, GenericVector& u, const Mesh mesh, const FunctionSpace space)
+      void project(const Function M, PETScVector& u, const Mesh mesh, std::shared_ptr<const FunctionSpace> space)
       {
-        const std::size_t dim = mesh.geometry().dim();
-        const std::vector<int> vertex_map = vertex_to_dof_map(space);
-        double init_vals[dim*dim];
-        memset( init_vals, 0, dim*dim*sizeof(double) );
-        Array<double> vals(dim*dim, init_vals);
-        double denom = 0.0;
-        double volume = 0.0;
-        unsigned count = 0;
-        unsigned len = u.local_size();
-        std::vector<double> values(len,0.0);
-        for (VertexIterator vertex(mesh); !vertex.end(); ++vertex)
-        {
-            for (CellIterator patch_cell(*vertex); !patch_cell.end(); ++patch_cell)
-            {
-                Array<double> p(dim,patch_cell->midpoint().coordinates());
-                M.eval(vals,p);
-                volume = patch_cell->volume();
-                for (unsigned i=0;i<dim*dim;i++)
-                {
-                values[vertex_map[count + i]] += vals[i]*volume;
-                }
-                denom += volume;
-            }
-            for (unsigned i=0;i<dim*dim;i++)
-            {
-            values[vertex_map[count + i]] = values[vertex_map[count + i]]/denom;
-            }
-            denom = 0.0;
-            count += dim*dim;
-        }
-        u.set_local(values);
+	const std::size_t dim = mesh.geometry().dim();
+	const std::vector<int> vertex_map = vertex_to_dof_map(*space);
+	double init_vals[dim*dim];
+	memset( init_vals, 0, dim*dim*sizeof(double) );
+	Array<double> vals(dim*dim, init_vals);
+	double denom = 0.0;
+	double volume = 0.0;
+	unsigned count = 0;
+	unsigned len = u.local_size();
+	std::vector<double> values(len,0.0);
+	for (VertexIterator vertex(mesh); !vertex.end(); ++vertex)
+	{
+	    for (CellIterator patch_cell(*vertex); !patch_cell.end(); ++patch_cell)
+	    {
+		Array<double> p(dim,patch_cell->midpoint().coordinates());
+		M.eval(vals,p);
+		volume = patch_cell->volume();
+		for (unsigned i=0;i<dim*dim;i++)
+		{
+		values[vertex_map[count + i]] += vals[i]*volume;
+		}
+		denom += volume;
+	    }
+	    for (unsigned i=0;i<dim*dim;i++)
+	    {
+	    values[vertex_map[count + i]] = values[vertex_map[count + i]]/denom;
+	    }
+	    denom = 0.0;
+	    count += dim*dim;
+	}
+	u.set_local(values);
       }
-    }'''
+	PYBIND11_MODULE(SIGNATURE, m){
+            m.def("project", [](const py::object M, PETScVector& u, const Mesh mesh, const py::object V)
+	    {
+                auto _M = M.attr("_cpp_object").cast<const Function>();
+		auto _V = V.attr("_cpp_object").cast<std::shared_ptr<const FunctionSpace>>();
+		return project(_M, u, mesh, _V);
+	    });
+
+	}
+    }
+    '''
 
     # compile C++ code
-    project_jit =  compile_extension_module(code=code, cppargs=["-fpermissive"]).project
+    project_jit =  compile_cpp_code(cpp_code=code, cppargs=["-fpermissive"]).project
 
     # define new metric
     CG = TensorFunctionSpace(mesh, 'CG', 1)
@@ -245,7 +268,7 @@ def detect_colinearity(mesh, tol = 30):
     # i.e. if two facets have an angle between them less than tol, they are
     # considered as colinear.
     # This function assigns each colinear group of boundary facets a different
-    # colour. The colouring is stored in a FacetFunction which is returned as an output.
+    # colour. The colouring is stored in a facet MeshFunction which is returned as an output.
     #
     # The colouring is performed by assigning a new colour to an uncoloured boundary facet
     # and by checking if the angle between the facet normal and the normals of
@@ -324,9 +347,9 @@ def detect_colinearity(mesh, tol = 30):
         # update next colour
         next_col += 1
 
-    # define FacetFunction on the original mesh and map the boundary mesh colormap
-    # to the full mesh FacetFunction
-    bfaces_func = FacetFunction("size_t", mesh)
+    # define facet MeshFunction on the original mesh and map the boundary mesh colormap
+    # to the full mesh facet MeshFunction
+    bfaces_func = MeshFunction("size_t", mesh, dim-1)
     bfaces_func.set_all(0)
     for facet in cells(bmesh):
         bfaces_func[bmesh.entity_map(dim-1)[facet.index()]] = colormap[facet.index()]
@@ -342,10 +365,10 @@ def adapt_boundary_regions(original_mesh, adapted_mesh, original_regions):
     #
     # INPUT: original_mesh,    a dolfin mesh object containing the mesh before adaptation
     #        adapted_mesh,     a dolfin mesh object containing the adapted mesh (output of adapt)
-    #        original_regions, a dolfin FacetFunction containing the boundary region IDs of
+    #        original_regions, a dolfin facet MeshFunction containing the boundary region IDs of
     #                          the original_mesh before adaptation.
     #
-    # OUTPUT: adapted_regions, a dolfin FacetFunction containing the adapted boundary region IDs
+    # OUTPUT: adapted_regions, a dolfin facet MeshFunction containing the adapted boundary region IDs
     #                          of the adapted mesh.
     #
     # We loop over all the adapted_mesh boundary facets and compute each facet midpoint.
@@ -355,17 +378,18 @@ def adapt_boundary_regions(original_mesh, adapted_mesh, original_regions):
 
     # compute geometric dimension
     dim = original_mesh.geometry().dim()
+    tdim = original_mesh.topology().dim()
 
     # extract boundary meshes for efficient looping over the facets
     original_bmesh = BoundaryMesh(original_mesh, 'exterior')
     adapted_bmesh = BoundaryMesh(adapted_mesh, 'exterior')
 
-    # use the original_regions FacetFunction to compute the boundary region IDs over the corresponding boundary mesh
+    # use the original_regions facet MeshFunction to compute the boundary region IDs over the corresponding boundary mesh
     original_boundary_regions = numpy.zeros((original_bmesh.num_cells(),), dtype='int32')
     for facet in cells(original_bmesh):
         original_boundary_regions[facet.index()] = original_regions[original_bmesh.entity_map(dim-1)[facet.index()]]
 
-    # initialise adapted_bmesh FacetFunction values
+    # initialise adapted_bmesh facet MeshFunction values
     adapted_boundary_regions = numpy.zeros((adapted_bmesh.num_cells(),), dtype='int32')
 
     # initialise bounding box tree for point search queries
@@ -386,8 +410,8 @@ def adapt_boundary_regions(original_mesh, adapted_mesh, original_regions):
         # assign boundary region ID to the corresponding adapted mesh facet
         adapted_boundary_regions[adapted_facet_ID] = original_boundary_regions[original_facet_ID]
 
-    # create an adapted mesh FacetFunction and assign the relative region ID values from adapted_boundary_regions
-    adapted_regions = FacetFunction('size_t', adapted_mesh)
+    # create an adapted mesh facet MeshFunction and assign the relative region ID values from adapted_boundary_regions
+    adapted_regions = MeshFunction('size_t', adapted_mesh, tdim-1)
     adapted_regions.set_all(0)
     for facet in cells(adapted_bmesh):
         adapted_regions[adapted_bmesh.entity_map(dim-1)[facet.index()]] = adapted_boundary_regions[facet.index()]
@@ -403,7 +427,7 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   #         to calculate a DOLFIN CG1 TENSOR VARIABLE
   # INPUT : bfaces.shape = (n,2) or bfaces.shape = (n,3) is a list of edges or
   #        faces for the mesh boundary. If not specified, it will be calculated.
-  # INPUT : bfaces_func is a FacetFunction that gives each edge and face and ID, so
+  # INPUT : bfaces_func is a facet MeshFunction that gives each edge and face and ID, so
   #         that corners are implicitly specified in 2D and edges in 3D.
   #         All corners can be specified this way in 3D, but it can require
   #         definition of dummy IDs, if the corner is in the middle of face and
@@ -441,7 +465,8 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   if targetN < 1e6:
     info("target mesh has %0.0f nodes" % targetN)
   else:
-    warning("target mesh has %0.0f nodes" % targetN)
+    from warnings import warn
+    warn("target mesh has %0.0f nodes" % targetN)
 
   space = metric.function_space() #FunctionSpace(mesh, "CG", 1)
   element = space.ufl_element()
@@ -489,27 +514,24 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   # |dxx dxy|
   # |dyx dyy|
     ## THE (CG1-)DOF NUMBERS ARE DIFFERENT FROM THE VERTEX NUMBERS (and we wish to work with the former)
-  if dolfin.__version__ != '1.2.0':
-      dof2vtx = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
-  else:
-      dof2vtx = FunctionSpace(mesh,'CG',1).dofmap().vertex_to_dof_map(mesh).argsort()
+  dof2vtx = vertex_to_dof_map(FunctionSpace(mesh, "CG" ,1))
 
-  metric_arr = numpy.empty(metric.vector().array().size, dtype = numpy.float64)
+  metric_arr = numpy.empty(metric.vector().get_local().size, dtype = numpy.float64)
   if gdim == 2:
-    metric_arr[range(0,metric.vector().array().size,4)] = metric.vector().array()[arange(0,metric.vector().array().size,4)[dof2vtx]]
-    metric_arr[range(1,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
-    metric_arr[range(2,metric.vector().array().size,4)] = metric.vector().array()[arange(2,metric.vector().array().size,4)[dof2vtx]]
-    metric_arr[range(3,metric.vector().array().size,4)] = metric.vector().array()[arange(3,metric.vector().array().size,4)[dof2vtx]]
+    metric_arr[range(0,metric.vector().get_local().size,4)] = metric.vector().get_local()[arange(0,metric.vector().get_local().size,4)[dof2vtx]]
+    metric_arr[range(1,metric.vector().get_local().size,4)] = metric.vector().get_local()[arange(2,metric.vector().get_local().size,4)[dof2vtx]]
+    metric_arr[range(2,metric.vector().get_local().size,4)] = metric.vector().get_local()[arange(2,metric.vector().get_local().size,4)[dof2vtx]]
+    metric_arr[range(3,metric.vector().get_local().size,4)] = metric.vector().get_local()[arange(3,metric.vector().get_local().size,4)[dof2vtx]]
   else:
-    metric_arr[range(0,metric.vector().array().size,9)] = metric.vector().array()[arange(0,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(1,metric.vector().array().size,9)] = metric.vector().array()[arange(3,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(2,metric.vector().array().size,9)] = metric.vector().array()[arange(6,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(3,metric.vector().array().size,9)] = metric.vector().array()[arange(3,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(4,metric.vector().array().size,9)] = metric.vector().array()[arange(4,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(5,metric.vector().array().size,9)] = metric.vector().array()[arange(7,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(6,metric.vector().array().size,9)] = metric.vector().array()[arange(6,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(7,metric.vector().array().size,9)] = metric.vector().array()[arange(7,metric.vector().array().size,9)[dof2vtx]]
-    metric_arr[range(8,metric.vector().array().size,9)] = metric.vector().array()[arange(8,metric.vector().array().size,9)[dof2vtx]]
+    metric_arr[range(0,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(0,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(1,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(3,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(2,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(6,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(3,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(3,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(4,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(4,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(5,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(7,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(6,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(6,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(7,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(7,metric.vector().get_local().size,9)[dof2vtx]]
+    metric_arr[range(8,metric.vector().get_local().size,9)] = metric.vector().get_local()[arange(8,metric.vector().get_local().size,9)[dof2vtx]]
   info("Beginning PRAgMaTIc adapt")
   info("Initialising PRAgMaTIc ...")
   NNodes = ctypes.c_int(x.shape[0])
@@ -588,9 +610,9 @@ def adapt(metric, bfaces=None, bfaces_func=None, colinearity_tol = 30, debugon=T
   _libpragmatic.pragmatic_get_boundaryTags(ctypes.byref(ptr))
   boundary_tags = numpy.frombuffer(ptr.contents, dtype = numpy.intc)
 
-  # define a FacetFunction with the boundary tags. We need to loop over all boundary cells
+  # define a facet MeshFunction with the boundary tags. We need to loop over all boundary cells
   # and find which boundary facet is opposite to which vertex.
-  n_bfaces_func = FacetFunction("size_t", n_mesh, 0)
+  n_bfaces_func = MeshFunction("size_t", n_mesh, n_mesh.topology().dim()-1, 0)
   # FIXME: if the mesh is being coarsened, some boundary tags can get lost.
   # Keep track of lost boundary tags in wrong tags.
   wrong_tags = []
@@ -651,7 +673,7 @@ def consistent_interpolation(mesh, fields=[]):
     val = numpy.empty(1)
     coord = numpy.empty(2)
     nx = interpolate(Expression("x[0]"), n_space).vector().array()
-    ny = interpolate(Expression("x[1]"), n_space).vector().array()
+    ny = interpolate(Expression("x[1]"), n_space).vector().get_local()
     n_field_arr = numpy.empty(n_NNodes.value)
     for i in range(n_NNodes.value):
       coord[0] = nx[i]
@@ -713,7 +735,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
         ones_ = Function(S)
         ones_.vector()[:] = 1
         A_diag = A * ones_.vector()
-        A_diag.set_local(1.0/A_diag.array())
+        A_diag.set_local(1.0/A_diag.get_local())
         gradf = Function(S)
         gradf.vector()[:] = b * A_diag
 
@@ -723,7 +745,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
         ones_ = Function(S)
         ones_.vector()[:] = 1
         A_diag = A * ones_.vector()
-        A_diag.set_local(1.0/A_diag.array())
+        A_diag.set_local(1.0/A_diag.get_local())
      elif CG0H == 1:
         S = TensorFunctionSpace(mesh,'DG',0)
         A = assemble(inner(TrialFunction(S), TestFunction(S))*dx)
@@ -731,7 +753,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
         ones_ = Function(S)
         ones_.vector()[:] = 1
         A_diag = A * ones_.vector()
-        A_diag.set_local(1.0/A_diag.array())
+        A_diag.set_local(1.0/A_diag.get_local())
         H = Function(S)
         H.vector()[:] = b * A_diag
      else:
@@ -795,7 +817,7 @@ def metric_pnorm(f, eta, max_edge_length=None, min_edge_length=None, max_edge_ra
   HH = analyt_rot(fulleig(eigL),eigR)
 
   Hfinal = sym2asym(HH)
-  cbig=zeros((H.vector().array()).size)
+  cbig=zeros((H.vector().get_local()).size)
   cbig[cell2dof.flatten()] = Hfinal.transpose().flatten()
   H.vector().set_local(cbig)
   return H
@@ -812,7 +834,7 @@ def metric_ellipse(H1, H2, method='in', qualtesting=False):
   # OUTPUT: H1, DOLFIN SPD TENSOR VARIABLE (CG1 or DG0)
   [HH1,cell2dof] = get_dofs(H1)
   [HH2,cell2dof] = get_dofs(H2)
-  cbig = zeros((H1.vector().array()).size)
+  cbig = zeros((H1.vector().get_local()).size)
 
   # CALCULATE EIGENVALUES using analytic expression numpy._version__>1.8.0 can do this more elegantly
   [eigL1,eigR1] = analytic_eig(HH1)
@@ -854,17 +876,17 @@ def get_dofs(H):
       cell2dof = arange(mesh.num_vertices()*n**2)
       cell2dof = cell2dof.reshape([mesh.num_vertices(),n**2])
   if n == 2:
-   H11 = H.vector().array()[cell2dof[:,0]]
-   H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,2]]
-   H22 = H.vector().array()[cell2dof[:,3]]
+   H11 = H.vector().get_local()[cell2dof[:,0]]
+   H12 = H.vector().get_local()[cell2dof[:,1]] #;H21 = H.vector().get_local()[cell2dof[:,2]]
+   H22 = H.vector().get_local()[cell2dof[:,3]]
    return [array([H11,H12,H22]),cell2dof]
   else: #n==3
-   H11 = H.vector().array()[cell2dof[:,0]]
-   H12 = H.vector().array()[cell2dof[:,1]] #;H21 = H.vector().array()[cell2dof[:,3]]
-   H13 = H.vector().array()[cell2dof[:,2]] #;H31 = H.vector().array()[cell2dof[:,6]]
-   H22 = H.vector().array()[cell2dof[:,4]]
-   H23 = H.vector().array()[cell2dof[:,5]] #H32 = H.vector().array()[cell2dof[:,7]]
-   H33 = H.vector().array()[cell2dof[:,8]]
+   H11 = H.vector().get_local()[cell2dof[:,0]]
+   H12 = H.vector().get_local()[cell2dof[:,1]] #;H21 = H.vector().get_local()[cell2dof[:,3]]
+   H13 = H.vector().get_local()[cell2dof[:,2]] #;H31 = H.vector().get_local()[cell2dof[:,6]]
+   H22 = H.vector().get_local()[cell2dof[:,4]]
+   H23 = H.vector().get_local()[cell2dof[:,5]] #H32 = H.vector().get_local()[cell2dof[:,7]]
+   H33 = H.vector().get_local()[cell2dof[:,8]]
    return [array([H11,H12,H22,H13,H23,H33]),cell2dof]
 
 def transpose_eigR(eigR):
@@ -1274,20 +1296,36 @@ def c_cell_dofs(mesh,V):
   else:
       #returns the degrees of freedom numbers in a cell
       code = """
-      void cell_dofs(boost::shared_ptr<GenericDofMap> dofmap,
-                     const std::vector<std::size_t>& cell_indices,
-                     std::vector<std::size_t>& dofs)
-      {
-        assert(dofmap);
-        std::size_t local_dof_size = dofmap->cell_dofs(0).size();
-        const std::size_t size = cell_indices.size()*local_dof_size;
-        dofs.resize(size);
-        for (std::size_t i=0; i<cell_indices.size(); i++)
-           for (std::size_t j=0; j<local_dof_size;j++)
-               dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
-      }
-      """
-      module = compile_extension_module(code)
+
+	    #include <dolfin/fem/DofMap.h>
+	    #include <pybind11/pybind11.h>
+	    #include <pybind11/numpy.h>
+	    #include <pybind11/pytypes.h>
+	    #include <pybind11/stl.h>
+	    #include <pybind11/cast.h>
+
+	    namespace py = pybind11;
+
+	    namespace dolfin {
+	    void cell_dofs(std::shared_ptr<GenericDofMap> dofmap, const std::vector<std::size_t>& cell_indices, std::vector<std::size_t>& dofs);
+
+	    void cell_dofs(std::shared_ptr<GenericDofMap> dofmap, const std::vector<std::size_t>& cell_indices, std::vector<std::size_t>& dofs)
+	    {
+	    assert(dofmap);
+	    std::size_t local_dof_size = dofmap->cell_dofs(0).size();
+	    const std::size_t size = cell_indices.size()*local_dof_size;
+	    dofs.resize(size);
+	    for (std::size_t i=0; i<cell_indices.size(); i++)
+	       for (std::size_t j=0; j<local_dof_size;j++)
+		   dofs[i*local_dof_size+j] = dofmap->cell_dofs(cell_indices[i])[j];
+	    }
+	    PYBIND11_MODULE(SIGNATURE, m){
+	      m.def("cell_dofs", &cell_dofs);
+	    }
+	    }
+
+	    """
+      module = compile_cpp_code(cpp_code=code)
       return module.cell_dofs(V.dofmap(), arange(mesh.num_cells(), dtype=numpy.uintp))
 
 
