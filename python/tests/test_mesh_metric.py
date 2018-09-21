@@ -13,11 +13,11 @@ import numpy as np
 test_metric = array([[1.0, -0.5], [-0.5, 1.0]])
 
 for n in range(2, 20):
-    mesh = UnitSquareMesh(mpi_comm_world(), n,n)
+    mesh = UnitSquareMesh(MPI.comm_world, n,n)
 
     M = mesh_metric(mesh)
 
-    A = M.vector().array().reshape((mesh.num_cells(),2,2))
+    A = M.vector().get_local().reshape((mesh.num_cells(),2,2))
 
     # the metric should be constant on each element
     if abs(A - A[0,:,:]).max()/A.max() > 1.0e-14:
@@ -39,11 +39,11 @@ exact_metrics = array([[[ 1. , -0.5,  0. ], [-0.5,  1. , -0.5], [ 0. , -0.5,  1.
                        [[ 1. ,-0.5, -0.5 ], [-0.5,  1. ,  0. ], [-0.5,  0. ,  1. ]]])
 
 for n in range(2, 10):
-    mesh = UnitCubeMesh(mpi_comm_world(), n, n, n)
+    mesh = UnitCubeMesh(MPI.comm_world, n, n, n)
 
     M = mesh_metric(mesh)
 
-    A = M.vector().array().reshape((mesh.num_cells(),3,3))
+    A = M.vector().get_local().reshape((mesh.num_cells(),3,3))
 
     # the following checks that all the sorted entries of all the metrics are correct
     if abs(sort(A.flatten()) - sort(A[0,:,:].flatten().repeat(mesh.num_cells()))).max()/A.max() > 1.0e-14:
