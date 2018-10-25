@@ -355,6 +355,8 @@ extern "C" {
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
 
+            int nbrSplits[50], nbrCoars[50];
+
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
             for(size_t i=0; i<30; i++) {
@@ -365,6 +367,18 @@ extern "C" {
                 cnt_split = refine.refine(L_ref);
                 cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.95);
+
+                nbrSplits[i] = cnt_split;
+                nbrCoars[i] = cnt_coars;
+                if (i >5) {
+                    double varSplit1 = fabs(nbrSplits[i]-nbrSplits[i-1])/nbrSplits[i];
+                    double varSplit2 = fabs(nbrSplits[i]-nbrSplits[i-2])/nbrSplits[i];
+                    double varCoars1 = fabs(nbrCoars[i]-nbrCoars[i-1])/nbrCoars[i];
+                    double varCoars2 = fabs(nbrCoars[i]-nbrCoars[i-2])/nbrCoars[i];
+                    if (varSplit1 < 0.01 && varSplit2 < 0.01 && varCoars1 < 0.01 && varCoars2 < 0.01){
+                        break;
+                    }                    
+                }
 
                 if (cnt_split == 0 && cnt_coars == 0 && stop)
                     break;
