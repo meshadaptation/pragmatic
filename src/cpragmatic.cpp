@@ -375,7 +375,8 @@ extern "C" {
                     double varSplit2 = fabs(nbrSplits[i]-nbrSplits[i-2])/nbrSplits[i];
                     double varCoars1 = fabs(nbrCoars[i]-nbrCoars[i-1])/nbrCoars[i];
                     double varCoars2 = fabs(nbrCoars[i]-nbrCoars[i-2])/nbrCoars[i];
-                    if (varSplit1 < 0.01 && varSplit2 < 0.01 && varCoars1 < 0.01 && varCoars2 < 0.01){
+                    double varSpCo = fabs(nbrCoars[i]-nbrSplits[i]);
+                    if (varSpCo < 5 &&  varSplit1 < 0.01 && varSplit2 < 0.01 && varCoars1 < 0.01 && varCoars2 < 0.01){
                         break;
                     }                    
                 }
