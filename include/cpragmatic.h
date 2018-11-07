@@ -24,6 +24,7 @@ void pragmatic_get_coords_2d_mpi(double *x, double *y);
 void pragmatic_get_coords_3d_mpi(double *x, double *y, double *z);
 void pragmatic_get_elements(int *elements);
 void pragmatic_get_boundaryTags(int ** tags);
+void pragmatic_get_elementTags(int ** regions);
 void pragmatic_finalize(void);
 #if defined(__cplusplus)
 }
