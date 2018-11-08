@@ -286,8 +286,6 @@ extern "C" {
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
-        mesh->verify();
-
         const size_t ndims = mesh->get_number_dimensions();
 
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
