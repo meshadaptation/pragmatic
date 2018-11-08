@@ -313,7 +313,7 @@ public:
                 stop = 0;
             }
         }
-        printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
+//        printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
         
         return(cntSplit);
     }

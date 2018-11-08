@@ -152,14 +152,9 @@ public:
                 const double *x1 = meshini.get_coords(elm[1]);
                 const double *x2 = meshini.get_coords(elm[2]);
                 const double *x3 = meshini.get_coords(elm[3]);
-                printf("DEBUG  mm:  element[%d] %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f) %d (% 1.2f % 1.2f % 1.2f)\n",
-                        *it, elm[0], x0[0], x0[1], x0[2],  elm[1], x1[0], x1[1], x1[2], elm[2], x2[0], x2[1], x2[2],
-                         elm[3], x3[0], x3[1], x3[2]);
                 neigbor_elements.insert(*it);
             }
         } 
-
-        printf("DEBUG  HI HERE\n");
 
         std::vector<int> enlist;
         std::vector<real_t> x, y, z;
@@ -174,8 +169,6 @@ public:
         if (meshini.ndims==3)
             z.reserve(nelements*2.5);
 
-        printf("DEBUG  HI THERE\n");
-
         std::map<int,int> global2local;
         const int * bdryini = meshini.get_boundaryTags();
         const int * regini = meshini.get_elementTags();
@@ -188,7 +181,6 @@ public:
                 if (!global2local.count(n[i])) {
                     newVid = count;
                     global2local[n[i]] = newVid;
-                    printf("DEBUG  mm: g2l %d --> %d\n", n[i], newVid);
                     const real_t * crd = meshini.get_coords(n[i]);
                     x.push_back(crd[0]);
                     y.push_back(crd[1]);
@@ -207,13 +199,11 @@ public:
 
         int nnodes = count;
         _mpi_comm = MPI_COMM_WORLD;
-        printf("DEBUG  HELLO THERE\n");
         if (meshini.ndims == 2)
             _init(nnodes, nelements, &enlist[0], &x[0], &y[0], NULL, NULL, nnodes);
         else
             _init(nnodes, nelements, &enlist[0], &x[0], &y[0], &z[0], NULL, nnodes);
 
-        printf("DEBUG  HELLO HERE\n");
         // apply boundaries
         set_boundary(&bdry[0]);
         set_regions(&reg[0]);
@@ -430,9 +420,6 @@ public:
 
     void check_internal_boundaries_3d()
     {
-        printf("DEBUG  == checking internal boundaries integrity.\n");
-        printf("DEBUG  NElements: %d\n", NElements);
-        bool ok = true;
         // loop over facets through vertex connectivity
         for (int iVer = 0; iVer < NNodes; ++iVer) {
             for (int i=0; i<NNList[iVer].size(); ++i) {
@@ -481,7 +468,6 @@ public:
                                     if (boundary[nloc*(*elm_it)+i] != max_bdry_tag+1) {
                                         printf("ERROR   in elm %d (%d %d %d %d) facet %d should me tagged as internal boundary but tag is: %d\n",
                                             *elm_it, elm[0], elm[1], elm[2], elm[3], i, boundary[nloc*(*elm_it)+i]);
-                                        ok = false;
                                     }
                                 }
                             }
@@ -490,8 +476,6 @@ public:
                 }
             }
         }
-        if (ok)
-            printf("DEBUG  OK!\n");
     }
 
 
