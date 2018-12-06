@@ -298,9 +298,15 @@ extern "C" {
             Refine<double, 2> refine(*mesh);
             Swapping<double, 2> swapping(*mesh);
 
-            double L_max = mesh->maximal_edge_length();
+            double L_max = mesh->mean_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
+
+//            for (int i=0; i<1; ++i){
+//              refine.refine(L_max);
+//              L_max = mesh->mean_edge_length();
+//            }
+
             bool stop = false;
             for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
@@ -317,9 +323,8 @@ extern "C" {
                 else
                     stop = false;
 
-                L_max = mesh->maximal_edge_length();
+                L_max = mesh->mean_edge_length();
             }
-
             mesh->defragment();
 
             smooth.smart_laplacian(20);
@@ -354,6 +359,10 @@ extern "C" {
             bool stop = false;
 
             int nbrSplits[50], nbrCoars[50];
+
+            for (int i=0; i<5; ++i){
+              refine.refine(alpha*L_max);
+            }
 
             // give more time to converge with new refinement, but stop before if possible
             // TODO write a cycle detector and stop if there is a cycle
@@ -413,6 +422,7 @@ extern "C" {
         }
 
         mesh->remove_overlap_elements();
+        printf("DEBUG DONE HERE\n");
     }
 
     /** Coarsen the mesh.

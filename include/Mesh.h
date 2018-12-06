@@ -1167,6 +1167,29 @@ public:
         return L_max;
     }
 
+
+    real_t mean_edge_length() const
+    {
+        double L_mean = 0.0;
+        int nbrEdges = 0;
+
+        for(index_t i=0; i<(index_t) NNodes; i++) {
+            for(typename std::vector<index_t>::const_iterator it=NNList[i].begin(); it!=NNList[i].end(); ++it) {
+                if(i<*it) { // Ensure that every edge length is only calculated once.
+                    L_mean += calc_edge_length(i, *it);
+                    nbrEdges++;
+                }
+            }
+        }
+
+        if(num_processes>1) {
+            MPI_Allreduce(MPI_IN_PLACE, &L_mean, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+            MPI_Allreduce(MPI_IN_PLACE, &nbrEdges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+        }
+
+        return L_mean/nbrEdges;
+    }
+
     /*! Defragment mesh. This compresses the storage of internal data
       structures. This is useful if the mesh has been significantly
       coarsened. */
