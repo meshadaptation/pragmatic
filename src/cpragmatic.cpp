@@ -302,11 +302,6 @@ extern "C" {
 
             double alpha = sqrt(2.0)/2.0;
 
-//            for (int i=0; i<1; ++i){
-//              refine.refine(L_max);
-//              L_max = mesh->mean_edge_length();
-//            }
-
             bool stop = false;
             for(size_t i=0; i<30; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
@@ -354,6 +349,7 @@ extern "C" {
             coarsen.coarsen(L_low, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
 
             double L_max = mesh->maximal_edge_length();
+            L_max = mesh->mean_edge_length();
 
             double alpha = sqrt(2.0)/2.0;
             bool stop = false;
@@ -396,6 +392,7 @@ extern "C" {
                     stop = false;
 
                 L_max = mesh->maximal_edge_length();
+                L_max = mesh->mean_edge_length();
 
 #if 0                
                 // TODO HACK CAD
