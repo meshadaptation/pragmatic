@@ -11,6 +11,7 @@ install:
   - sudo apt-get install -qq gcc-5 g++-5
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 90
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
+  - sudo apt-get install -y libmetis-dev
   - sudo apt-get install -y libparmetis-dev
   - hg clone https://bitbucket.org/eigen/eigen/ hg.eigen
   - pushd hg.eigen/
