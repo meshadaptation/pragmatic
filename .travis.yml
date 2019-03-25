@@ -7,7 +7,7 @@ before_install:
 install:
   - CMAKE_URL="http://www.cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.tar.gz"
   - mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
-  - sudo apt-get install -y libvtk5-dev libvtk5.8
+  - sudo apt-get install -y libvtk6-dev libvtk6.2
   - sudo apt-get install -qq gcc-5 g++-5
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 90
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
