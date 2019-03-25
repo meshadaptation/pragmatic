@@ -13,6 +13,7 @@ install:
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
   - sudo apt-get install -y libmetis-dev
   - sudo apt-get install -y libparmetis-dev
+  - sudo apt-get install -y libproj-dev
   - hg clone https://bitbucket.org/eigen/eigen/ hg.eigen
   - pushd hg.eigen/
   - mkdir build
