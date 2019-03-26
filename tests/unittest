@@ -28,7 +28,7 @@ class UnitTest:
             file = open(self.exe+".mpi", "r")
             nprocs = file.readline().strip()
             file.close()
-            args = ["mpiexec", "-n", nprocs] + args
+            args = ["mpiexec", "-mca btl ^openib", "-n", nprocs] + args
        
         self.log("running")
 
