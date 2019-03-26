@@ -38,6 +38,7 @@ compiler:
 env:
   - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release
   - CMAKE_BUILD_TYPE=Release
+  - OMPI_MCA_btl_base_warn_component_unused=0
 script:
   - mkdir build
   - cd build
