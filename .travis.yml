@@ -1,3 +1,4 @@
+dist: xenial
 sudo: required
 language: cpp
 before_install:
@@ -6,10 +7,11 @@ before_install:
 install:
   - CMAKE_URL="http://www.cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.tar.gz"
   - mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
-  - sudo apt-get install -y libvtk5-dev libvtk5.8
+  - sudo apt-get install -y libvtk5-dev libvtk5.10
   - sudo apt-get install -qq gcc-5 g++-5
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 90
   - sudo apt-get install -y openmpi-bin libopenmpi-dev
+  - sudo apt-get install -y libmetis-dev
   - sudo apt-get install -y libparmetis-dev
   - hg clone https://bitbucket.org/eigen/eigen/ hg.eigen
   - pushd hg.eigen/
@@ -33,8 +35,8 @@ compiler:
   - gcc
 # Change this to your needs
 env:
-  - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release
-  - CMAKE_BUILD_TYPE=Release
+  - ENABLE_VTK=FALSE CMAKE_BUILD_TYPE=Release OMPI_MCA_btl_base_warn_component_unused=0
+  - CMAKE_BUILD_TYPE=Release OMPI_MCA_btl_base_warn_component_unused=0
 script:
   - mkdir build
   - cd build
