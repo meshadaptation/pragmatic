@@ -128,11 +128,11 @@ def set_mesh(n_xy, n_enlist, mesh=None, dx=None, debugon=False):
   n_mesh = Mesh()
   ed = MeshEditor()
   if len(n_xy) == 1:
-      celltype = CellType.Type.interval.name
+      celltype = CellType.type2string(CellType.Type.interval)
   elif len(n_xy) == 2:
-      celltype = CellType.Type.triangle.name
+      celltype = CellType.type2string(CellType.Type.triangle)
   else:
-      celltype = CellType.Type.tetrahedron.name
+      celltype = CellType.type2string(CellType.Type.tetrahedron)
   ed.open(n_mesh, celltype, len(n_xy), len(n_xy))
   ed.init_vertices(nvtx) #n_NNodes.value
   if len(n_xy) == 1:
