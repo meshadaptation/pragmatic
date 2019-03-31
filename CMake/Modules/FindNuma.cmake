@@ -1,15 +1,15 @@
 FIND_PATH(NUMA_INCLUDE_DIR numa.h
+  $ENV{NUMA_DIR}/include
   /usr/local/include
   /usr/include
   /usr/include/numa
-  $ENV{NUMA_DIR}/include
   )
 message( STATUS ${NUMA_INCLUDE_DIR} )
 
 FIND_LIBRARY(NUMA_LIBRARY numa
+  $ENV{NUMA_DIR}/lib
   /usr/local/lib
   /usr/lib
-  $ENV{NUMA_DIR}/lib
   )
 
 IF(NUMA_INCLUDE_DIR)

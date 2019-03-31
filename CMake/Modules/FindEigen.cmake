@@ -8,6 +8,8 @@
 # Redistribution and use is allowed according to the terms of the BSD license.
 # For details see the accompanying COPYING-CMAKE-SCRIPTS file.
 
+# modified by N. Barral <n.barral@imperial.ac.uk>
+
 if (EIGEN_INCLUDE_DIR)
 
   # in cache already
@@ -19,7 +21,6 @@ find_path(EIGEN_INCLUDE_DIR NAMES Eigen/Core
      PATH_SUFFIXES eigen3
      HINTS
      ${INCLUDE_INSTALL_DIR}
-     ${KDE4_INCLUDE_DIR}
    )
 
 include(FindPackageHandleStandardArgs)
