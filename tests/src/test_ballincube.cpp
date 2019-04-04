@@ -94,15 +94,9 @@ int main(int argc, char **argv)
 
     GMFTools<double>::export_gmf_mesh("../data/test_ballincube-initial", mesh);
 
-    double tic = get_wtime();
     pragmatic_adapt(0, 0);
-    double toc = get_wtime();
-
-
-
     if(verbose)
         mesh->verify();
-
     mesh->defragment();
 
     GMFTools<double>::export_gmf_mesh("../data/test_ballincube", mesh);
@@ -112,35 +106,22 @@ int main(int argc, char **argv)
     std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
 #endif
 
-#if 0
-    long double area = mesh->calculate_area();
-    long double volume = mesh->calculate_volume();
 
+    long double area = mesh->calculate_area(1,2);
+    long double volume = mesh->calculate_volume(2);
 
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"area:                 "<<area<<std::endl
-                     <<"volume:               "<<volume<<std::endl;;
-    }
+    long double ideal_area(112.3), ideal_volume(111.6);
+    std::cout<<"Expecting volume == 111.6: ";
+    if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<0.03)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail"<<volume<<std::endl;
 
-    if(rank==0) {
-        long double ideal_area(9), ideal_volume(1); // the internal boundary is counted twice
-        std::cout<<"Expecting volume == 1: ";
-        if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-
-        std::cout<<"Expecting area == 9: ";
-        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-    }
-#endif 
+    std::cout<<"Expecting area == 112.3: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<0.03)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail"<<area<<std::endl;
 
     delete mesh;
 #else
