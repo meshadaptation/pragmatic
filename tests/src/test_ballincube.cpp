@@ -79,8 +79,8 @@ int main(int argc, char **argv)
     size_t NNodes = mesh->get_number_nodes();
     
     double m[6] = {0.};
-    double hmax = 1.;
-    double hmin = 0.04;
+    double hmax = 3;
+    double hmin = 0.2;
     for(size_t i=0; i<NNodes; i++) {
         double x = mesh->get_coords(i)[0];
         double h = hmax*fabs(1-exp(-0.03*fabs(x*x*x))) + hmin;
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
     GMFTools<double>::export_gmf_mesh("../data/test_ballincube-initial", mesh);
 
     double tic = get_wtime();
-    pragmatic_adapt(0, 1);
+    pragmatic_adapt(0, 0);
     double toc = get_wtime();
 
 
