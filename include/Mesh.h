@@ -902,7 +902,7 @@ public:
     }
 
 
-    /// Calculate area of a certain region in 2D
+    /// Calculate area of a certain region (in 2D only)
     double calculate_area(int tag_region) const
     {
         if (ndims != 2) {
@@ -961,6 +961,93 @@ public:
         return total_area;
     }
 
+
+    /// Calculate area of surface between two regions (in 3D only).
+    double calculate_area(int tag_region1, int tag_region2) const
+    {
+        int NElements = get_number_elements();
+        long double total_area=0;
+
+        if (ndims != 3) {
+            std::cerr<<"ERROR: calculate_area(int, int) cannot be used for 2D. Use either calculate_area(int) or calculate_perimeter(int, int).\n";
+            return -1;
+        }
+
+        for(int i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0] < 0)
+                continue;
+
+            if (regions[i] != tag_region1)
+                continue;
+
+            for(int j=0; j<4; j++) {
+                if(boundary[i*nloc+j]<=0)
+                    continue;
+
+                int n1 = n[(j+1)%4];
+                int n2 = n[(j+2)%4];
+                int n3 = n[(j+3)%4];
+
+                if(num_processes>1) {
+                    // Don't sum if it's not ours
+                    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+                        continue;
+                }
+
+                // check if opposite tet has the right tag
+                std::set<index_t> neighbours_tmp, neighbours;
+                std::set_intersection(NEList[n1].begin(),NEList[n1].end(),
+                                      NEList[n2].begin(), NEList[n2].end(),
+                                      std::inserter(neighbours_tmp, neighbours_tmp.begin()));
+                std::set_intersection(neighbours_tmp.begin(),neighbours_tmp.end(),
+                                      NEList[n3].begin(), NEList[n3].end(),
+                                      std::inserter(neighbours, neighbours.begin()));
+                std::set<index_t>::const_iterator neigh_it;
+                for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
+                    if (regions[*neigh_it] == tag_region2) {
+                        
+                        const double *x1 = get_coords(n1);
+                        const double *x2 = get_coords(n2);
+                        const double *x3 = get_coords(n3);
+
+                        // Use Heron's Formula
+                        long double a;
+                        {
+                            long double dx = ((long double)x1[0]-(long double)x2[0]);
+                            long double dy = ((long double)x1[1]-(long double)x2[1]);
+                            long double dz = ((long double)x1[2]-(long double)x2[2]);
+                            a = std::sqrt(dx*dx+dy*dy+dz*dz);
+                        }
+                        long double b;
+                        {
+                            long double dx = ((long double)x1[0]-(long double)x3[0]);
+                            long double dy = ((long double)x1[1]-(long double)x3[1]);
+                            long double dz = ((long double)x1[2]-(long double)x3[2]);
+                            b = std::sqrt(dx*dx+dy*dy+dz*dz);
+                        }
+                        long double c;
+                        {
+                            long double dx = ((long double)x2[0]-(long double)x3[0]);
+                            long double dy = ((long double)x2[1]-(long double)x3[1]);
+                            long double dz = ((long double)x2[2]-(long double)x3[2]);
+                            c = std::sqrt(dx*dx+dy*dy+dz*dz);
+                        }
+                        long double s = (a+b+c)/2;
+
+                        total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                    }
+                }
+            }
+        }
+
+        if(num_processes>1)
+            MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+        return total_area;
+    }
+
+
     /// Calculate volume
     double calculate_volume() const
     {
@@ -970,6 +1057,7 @@ public:
         if(ndims==2) {
             std::cerr<<"ERROR: Cannot calculate volume in 2D\n";
         } else { // 3D
+            // TODO Why split the cases here ?
             if(num_processes>1) {
                 for(int i=0; i<NElements; i++) {
                     const index_t *n=get_element(i);
@@ -1006,6 +1094,84 @@ public:
                 for(int i=0; i<NElements; i++) {
                     const index_t *n=get_element(i);
                     if(n[0] < 0)
+                        continue;
+
+                    const double *x0 = get_coords(n[0]);
+                    const double *x1 = get_coords(n[1]);
+                    const double *x2 = get_coords(n[2]);
+                    const double *x3 = get_coords(n[3]);
+
+                    long double x01 = (x0[0] - x1[0]);
+                    long double x02 = (x0[0] - x2[0]);
+                    long double x03 = (x0[0] - x3[0]);
+
+                    long double y01 = (x0[1] - x1[1]);
+                    long double y02 = (x0[1] - x2[1]);
+                    long double y03 = (x0[1] - x3[1]);
+
+                    long double z01 = (x0[2] - x1[2]);
+                    long double z02 = (x0[2] - x2[2]);
+                    long double z03 = (x0[2] - x3[2]);
+
+                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                }
+            }
+        }
+        return total_volume/6;
+    }
+
+
+    /// Calculate volume of a region
+    double calculate_volume(int tag_region) const
+    {
+        int NElements = get_number_elements();
+        long double total_volume=0;
+
+        if(ndims==2) {
+            std::cerr<<"ERROR: Cannot calculate volume in 2D\n";
+        } else { // 3D
+            if(num_processes>1) {
+                for(int i=0; i<NElements; i++) {
+                    const index_t *n=get_element(i);
+                    if(n[0] < 0)
+                        continue;
+
+                    if (regions[i] != tag_region)
+                        continue;
+
+                    // Don't sum if it's not ours
+                    if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
+                        continue;
+
+                    const double *x0 = get_coords(n[0]);
+                    const double *x1 = get_coords(n[1]);
+                    const double *x2 = get_coords(n[2]);
+                    const double *x3 = get_coords(n[3]);
+
+                    long double x01 = (x0[0] - x1[0]);
+                    long double x02 = (x0[0] - x2[0]);
+                    long double x03 = (x0[0] - x3[0]);
+
+                    long double y01 = (x0[1] - x1[1]);
+                    long double y02 = (x0[1] - x2[1]);
+                    long double y03 = (x0[1] - x3[1]);
+
+                    long double z01 = (x0[2] - x1[2]);
+                    long double z02 = (x0[2] - x2[2]);
+                    long double z03 = (x0[2] - x3[2]);
+
+                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                }
+
+                MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+            } else {
+                for(int i=0; i<NElements; i++) {
+                    const index_t *n=get_element(i);
+                    if(n[0] < 0)
+                        continue;
+
+                    if (regions[i] != tag_region)
                         continue;
 
                     const double *x0 = get_coords(n[0]);
