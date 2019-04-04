@@ -95,22 +95,10 @@ int main(int argc, char **argv)
 
     GMFTools<double>::export_gmf_mesh("../data/test_discinsquare-initial", mesh);
 
-    //Coarsen<double, 2> coarsen(*mesh);
-    //Swapping<double, 2> swapping(*mesh);
-
-    double tic = get_wtime();
     pragmatic_adapt(0, 1);
-    //for (int i=0; i<3; ++i) {
-    //    coarsen.coarsen(sqrt(2), sqrt(2), true, true);
-    //    swapping.swap(0.7);
-    //}
-    double toc = get_wtime();
-
-
 
     if(verbose)
         mesh->verify();
-
     mesh->defragment();
 
     GMFTools<double>::export_gmf_mesh("../data/test_discinsquare", mesh);
@@ -120,35 +108,21 @@ int main(int argc, char **argv)
     std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
 #endif
 
-#if 0
-    long double area = mesh->calculate_area();
-    long double volume = mesh->calculate_volume();
+    long double perimeter = mesh->calculate_perimeter(11, 12);
+    long double area = mesh->calculate_area(12);
 
+    long double ideal_perimeter(18.85), ideal_area(28.27); // the internal boundary is counted twice
+    std::cout<<"Expecting perimeter ~= 18.85: ";
+    if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<0.05)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail"<<perimeter<<std::endl;
 
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"area:                 "<<area<<std::endl
-                     <<"volume:               "<<volume<<std::endl;;
-    }
-
-    if(rank==0) {
-        long double ideal_area(9), ideal_volume(1); // the internal boundary is counted twice
-        std::cout<<"Expecting volume == 1: ";
-        if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-
-        std::cout<<"Expecting area == 9: ";
-        if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
-            std::cout<<"pass"<<std::endl;
-        else
-            std::cout<<"fail"<<std::endl;
-    }
-#endif 
+    std::cout<<"Expecting area == 28.27: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<0.05)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail"<<area<<std::endl;
 
     delete mesh;
 #else
