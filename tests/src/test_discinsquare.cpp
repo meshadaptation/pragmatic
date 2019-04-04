@@ -49,8 +49,8 @@
 #include "Refine.h"
 #include "ticker.h"
 #include "cpragmatic.h"
-#include "coarsen.h"
-#include "swapping.h"
+#include "Coarsen.h"
+#include "Swapping.h"
 
 #include <mpi.h>
 
