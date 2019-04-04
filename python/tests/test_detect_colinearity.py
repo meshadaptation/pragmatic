@@ -40,7 +40,7 @@ for N in range(4,21):
 ### Test 2: Unit Cube
 #############################################################################################################
 
-mesh = UnitCubeMesh(mpi_comm_world(), 2, 2, 2)
+mesh = UnitCubeMesh(MPI.comm_world, 2, 2, 2)
 
 markers1 = detect_colinearity(mesh, 89)
 markers2 = detect_colinearity(mesh, 91)
