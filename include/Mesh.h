@@ -746,8 +746,54 @@ public:
         }
     }
 
+    /// Calculate perimeter between two regions
+    double calculate_perimeter(int tag_region1, int tag_region2)
+    {
+        int NElements = get_number_elements();
+        if(ndims==2) {
+            long double total_length=0;
 
-    /// Calculate area - optimise for percision rather than performance as it is only used for verification.
+            for(int i=0; i<NElements; i++) {
+                if(_ENList[i*nloc] < 0)
+                    continue;
+
+                if (regions[i] != tag_region1)
+                    continue;
+
+                for(int j=0; j<3; j++) {
+                    int n1 = _ENList[i*nloc+(j+1)%3];
+                    int n2 = _ENList[i*nloc+(j+2)%3];
+
+                    if (std::min(node_owner[n1], node_owner[n2]) != rank)
+                        continue;
+
+                    std::set<index_t> neighbours;
+                    std::set_intersection(NEList[n1].begin(),NEList[n1].end(),
+                                          NEList[n2].begin(), NEList[n2].end(),
+                                          std::inserter(neighbours, neighbours.begin()));
+                    std::set<index_t>::const_iterator neigh_it;
+                    for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
+                        if (regions[*neigh_it] == tag_region2) {
+                            long double dx = ((long double)_coords[n1*2  ]-(long double)_coords[n2*2  ]);
+                            long double dy = ((long double)_coords[n1*2+1]-(long double)_coords[n2*2+1]);
+                            total_length += std::sqrt(dx*dx+dy*dy);
+                        }
+                    }
+                }
+            }
+
+            if(num_processes>1)
+                MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+            return total_length;
+        } else {
+            std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
+            return -1;
+        }
+    }
+
+
+    /// Calculate area - optimise for precision rather than performance as it is only used for verification.
     double calculate_area() const
     {
         int NElements = get_number_elements();
@@ -852,6 +898,66 @@ public:
                 MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
 
         }
+        return total_area;
+    }
+
+
+    /// Calculate area of a certain region in 2D
+    double calculate_area(int tag_region) const
+    {
+        if (ndims != 2) {
+            std::cerr<<"ERROR: calculate_area(int) cannot be used for 3D. Use either calculate_area(int, int) or calculate_volume(int).\n";
+            return -1;
+        }
+
+        int NElements = get_number_elements();
+        long double total_area=0;
+
+        for(int i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0] < 0)
+                continue;
+
+            if (regions[i] != tag_region)
+                continue;
+
+            if(num_processes>1) {
+                // Don't sum if it's not ours
+                if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
+                    continue;
+            }
+
+            const double *x1 = get_coords(n[0]);
+            const double *x2 = get_coords(n[1]);
+            const double *x3 = get_coords(n[2]);
+
+            // Use Heron's Formula
+            long double a;
+            {
+                long double dx = ((long double)x1[0]-(long double)x2[0]);
+                long double dy = ((long double)x1[1]-(long double)x2[1]);
+                a = std::sqrt(dx*dx+dy*dy);
+            }
+            long double b;
+            {
+                long double dx = ((long double)x1[0]-(long double)x3[0]);
+                long double dy = ((long double)x1[1]-(long double)x3[1]);
+                b = std::sqrt(dx*dx+dy*dy);
+            }
+            long double c;
+            {
+                long double dx = ((long double)x2[0]-(long double)x3[0]);
+                long double dy = ((long double)x2[1]-(long double)x3[1]);
+                c = std::sqrt(dx*dx+dy*dy);
+            }
+            long double s = (a+b+c)/2;
+
+            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+        }
+
+        if(num_processes>1)
+            MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
         return total_area;
     }
 
@@ -2065,7 +2171,7 @@ private:
         }
 
         create_adjacency();
-	    
+        
         create_global_node_numbering();
 
         compute_ref_length();
@@ -2074,10 +2180,10 @@ private:
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	    NNList.clear();
-	    NNList.resize(NNodes);
-	    NEList.clear();
-	    NEList.resize(NNodes);
+        NNList.clear();
+        NNList.resize(NNodes);
+        NEList.clear();
+        NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -2085,12 +2191,12 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-		        assert(nid_j<NNodes);
+                assert(nid_j<NNodes);
                 NEList[nid_j].insert(NEList[nid_j].end(), i);
                 for(size_t k=0; k<nloc; k++) {
                     if(j!=k) {
                         index_t nid_k = _ENList[i*nloc+k];
-	                    assert(nid_k<NNodes);
+                        assert(nid_k<NNodes);
                         NNList[nid_j].push_back(nid_k);
                     }
                 }
@@ -2540,7 +2646,7 @@ private:
     // Max external boundary label : internal bdry labels must be >
     int max_bdry_tag;
 #if 0
-	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+    std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
 #endif
 
     // Quality
