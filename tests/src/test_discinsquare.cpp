@@ -116,13 +116,13 @@ int main(int argc, char **argv)
     if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<0.05)
         std::cout<<"pass"<<std::endl;
     else
-        std::cout<<"fail"<<perimeter<<std::endl;
+        std::cout<<"fail: "<<perimeter<<std::endl;
 
     std::cout<<"Expecting area == 28.27: ";
     if(std::abs(area-ideal_area)/std::max(area, ideal_area)<0.05)
         std::cout<<"pass"<<std::endl;
     else
-        std::cout<<"fail"<<area<<std::endl;
+        std::cout<<"fail: "<<area<<std::endl;
 
     delete mesh;
 #else

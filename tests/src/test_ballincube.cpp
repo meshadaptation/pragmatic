@@ -115,13 +115,13 @@ int main(int argc, char **argv)
     if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<0.03)
         std::cout<<"pass"<<std::endl;
     else
-        std::cout<<"fail"<<volume<<std::endl;
+        std::cout<<"fail: "<<volume<<std::endl;
 
     std::cout<<"Expecting area == 112.3: ";
     if(std::abs(area-ideal_area)/std::max(area, ideal_area)<0.03)
         std::cout<<"pass"<<std::endl;
     else
-        std::cout<<"fail"<<area<<std::endl;
+        std::cout<<"fail: "<<area<<std::endl;
 
     delete mesh;
 #else
