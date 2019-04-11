@@ -217,22 +217,24 @@ private:
                 // Assume the best.
                 reject_collapse=false;
     
+                // Check if deleted vertex is connected to a boundary
                 int boundary_id = -10;
-                if(surface_coarsening || internal_surface_coarsening) {
-                    std::set<index_t> compromised_boundary;
-                    for(const auto &element : _mesh->NEList[rm_vertex]) {
-                        if (_mesh->get_elementTag(element) != region)
-                            continue;
-                        const int *n=_mesh->get_element(element);
-                        for(size_t i=0; i<nloc; i++) {
-                            if(n[i]!=rm_vertex) {
-                                if(_mesh->boundary[element*nloc+i]>0) {
-                                    compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
-                                    boundary_id = _mesh->boundary[element*nloc+i];
-                                }
+                std::set<index_t> compromised_boundary;
+                for(const auto &element : _mesh->NEList[rm_vertex]) {
+                    if (_mesh->get_elementTag(element) != region)
+                        continue;
+                    const int *n=_mesh->get_element(element);
+                    for(size_t i=0; i<nloc; i++) {
+                        if(n[i]!=rm_vertex) {
+                            if(_mesh->boundary[element*nloc+i]>0) {
+                                compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+                                boundary_id = _mesh->boundary[element*nloc+i];
                             }
                         }
                     }
+                }
+
+                if (surface_coarsening || internal_surface_coarsening) {
 
                     if(compromised_boundary.size()>1) {
                         reject_collapse=true;
@@ -418,14 +420,17 @@ private:
                 if(reject_collapse)
                     continue;
 
-                if ((!surface_coarsening && !_mesh->is_internal_boundary(boundary_id)) || 
-                    (!internal_surface_coarsening && _mesh->is_internal_boundary(boundary_id))) {
-                    // Check we are not removing surface features.
-                    double av_var = std::abs(total_new_av-total_old_av);
-                    av_var /= std::max(total_new_av, total_old_av);
-                    if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
-                        reject_collapse=true;
-                        continue;
+
+                if (boundary_id != -10) {
+                    if ((!surface_coarsening && !_mesh->is_internal_boundary(boundary_id)) ||
+                        (!internal_surface_coarsening && _mesh->is_internal_boundary(boundary_id))) {
+                        // Check we are not removing surface features.
+                        double av_var = std::abs(total_new_av-total_old_av);
+                        av_var /= std::max(total_new_av, total_old_av);
+                        if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
+                            reject_collapse=true;
+                            continue;
+                        }
                     }
                 }
 
