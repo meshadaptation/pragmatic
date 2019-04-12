@@ -460,8 +460,8 @@ private:
                     break;
             }
 
-            // If this edge is ok to collapse then break out of loop.
-            if(!reject_collapse)
+            // If this edge is ok to collapse, check other regions, otherwise break and exit.
+            if(reject_collapse)
                 break;
 
         }
