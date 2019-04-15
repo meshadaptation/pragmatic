@@ -159,85 +159,92 @@ private:
             return -1;
 
         std::set<int> regions;
-        std::set<index_t>::const_iterator ee = _mesh->NEList[rm_vertex].begin();
-        double q_linf = _mesh->quality[*ee];
-        ee++;
-        for (; ee != _mesh->NEList[rm_vertex].end(); ++ee) {
+        index_t target_vertex=-1;
+        std::set<index_t>::const_iterator ee;
+        for (ee = _mesh->NEList[rm_vertex].begin(); ee != _mesh->NEList[rm_vertex].end(); ++ee) {
             regions.insert(_mesh->get_elementTag(*ee));
         }
 
-        bool reject_collapse = false;
-        index_t target_vertex=-1;
-        std::set<index_t>::const_iterator region_it;
-        for (region_it = regions.begin(); region_it != regions.end(); ++region_it) {
-
-            int region = *region_it;
-            //
-            bool delete_with_extreme_prejudice = false;
-            if(delete_slivers && dim==3) {
-                std::set<index_t>::const_iterator ee=_mesh->NEList[rm_vertex].begin();
-                double q_linf = _mesh->quality[*ee];
-                ++ee;
+        //
+        bool delete_with_extreme_prejudice = false;
+        if(delete_slivers && dim==3) {
+            std::set<index_t>::const_iterator ee=_mesh->NEList[rm_vertex].begin();
+            double q_linf = _mesh->quality[*ee];
+            ++ee;
     
-                for(; ee!=_mesh->NEList[rm_vertex].end(); ++ee) {
-                    if (_mesh->get_elementTag(*ee) != region)
-                        continue;
-                    q_linf = std::min(q_linf, _mesh->quality[*ee]);
-                }
-    
-                if(q_linf<1.0e-6)
-                    delete_with_extreme_prejudice = true;
+            for(; ee!=_mesh->NEList[rm_vertex].end(); ++ee) {
+                q_linf = std::min(q_linf, _mesh->quality[*ee]);
             }
+ 
+            if(q_linf<1.0e-6)
+                delete_with_extreme_prejudice = true;
+        }
 
-            /* Sort the edges according to length. We want to collapse the
-               shortest. If it is not possible to collapse the edge then move
-               onto the next shortest.*/
-            std::multimap<real_t, index_t> short_edges;
-            std::set<index_t>::const_iterator ee;
-            for(ee = _mesh->NEList[rm_vertex].begin(); ee != _mesh->NEList[rm_vertex].end(); ++ee) {
-                if (_mesh->get_elementTag(*ee) != region)
-                    continue;
-                const int * n = _mesh->get_element(*ee);
-                for (int i = 0; i<nloc; ++i) {
-                    if (n[i] != rm_vertex) {
-                        double length = _mesh->calc_edge_length(rm_vertex, n[i]);
-                        if(length<L_low || delete_with_extreme_prejudice) {
-                            short_edges.insert(std::pair<real_t, index_t>(length, n[i]));
+        /* Sort the edges according to length. We want to collapse the
+           shortest. If it is not possible to collapse the edge then move
+           onto the next shortest.*/
+        std::multimap<real_t, index_t> short_edges;
+        for(const auto &nn : _mesh->NNList[rm_vertex]) {
+            double length = _mesh->calc_edge_length(rm_vertex, nn);
+            if(length<L_low || delete_with_extreme_prejudice)
+                short_edges.insert(std::pair<real_t, index_t>(length, nn));
+        }
+
+        bool reject_collapse = false;
+        bool test = false;
+        while(short_edges.size()) {
+
+            // Get the next shortest edge.
+            target_vertex = short_edges.begin()->second;
+            short_edges.erase(short_edges.begin());
+    
+            // Assume the best.
+            reject_collapse = false;
+            test = false;
+    
+            // Check if deleted vertex is connected to a boundary
+            int boundary_id = -10;
+//            std::set<index_t> compromised_boundary;
+            for (const auto &element : _mesh->NEList[rm_vertex]) {
+                const int *n = _mesh->get_element(element);
+                for (size_t i=0; i<nloc; i++) {
+                    if (n[i]!=rm_vertex) {
+                        if (_mesh->boundary[element*nloc+i]>0) {
+//                            compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+                            boundary_id = _mesh->boundary[element*nloc+i];
                         }
                     }
                 }
-
+            }
+            if (boundary_id == 5) {
+                printf("DEBUG  voilà un sommet frontière  rm_vertex: %d\n", rm_vertex);
+                //test = true;
             }
 
-            while(short_edges.size()) {
-                // Get the next shortest edge.
-                target_vertex = short_edges.begin()->second;
-                short_edges.erase(short_edges.begin());
-    
-                // Assume the best.
-                reject_collapse=false;
-    
-                // Check if deleted vertex is connected to a boundary
-                int boundary_id = -10;
-                std::set<index_t> compromised_boundary;
-                for(const auto &element : _mesh->NEList[rm_vertex]) {
-                    if (_mesh->get_elementTag(element) != region)
-                        continue;
-                    const int *n=_mesh->get_element(element);
-                    for(size_t i=0; i<nloc; i++) {
-                        if(n[i]!=rm_vertex) {
-                            if(_mesh->boundary[element*nloc+i]>0) {
-                                compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
-                                boundary_id = _mesh->boundary[element*nloc+i];
+            std::set<index_t>::const_iterator region_it;
+            for (region_it = regions.begin(); region_it != regions.end(); ++region_it) {
+
+                int region = *region_it;
+
+                if ((surface_coarsening || internal_surface_coarsening) && boundary_id > 0) {
+
+                    std::set<index_t> compromised_boundary;
+                    for(const auto &element : _mesh->NEList[rm_vertex]) {
+                        if (_mesh->get_elementTag(element) != region)
+                            continue;
+                        const int *n=_mesh->get_element(element);
+                        for(size_t i=0; i<nloc; i++) {
+                            if(n[i]!=rm_vertex) {
+                                if(_mesh->boundary[element*nloc+i]>0) {
+                                    compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
+                                }
                             }
                         }
                     }
-                }
-
-                if (surface_coarsening || internal_surface_coarsening) {
 
                     if(compromised_boundary.size()>1) {
-                        reject_collapse=true;
+                        reject_collapse = true;
+                        if (test) printf("DEBUG  ici 0\n");
                         continue;
                     }
 
@@ -260,9 +267,10 @@ private:
                         if(target_boundary.size()==1) {
                             if(*target_boundary.begin() != *compromised_boundary.begin()) {
                                 reject_collapse=true;
+                                if (test) printf("DEBUG  ici 1\n");
                                 continue;
                             }
-
+    
                             std::set<index_t> deleted_elements;
                             std::set_intersection(_mesh->NEList[rm_vertex].begin(), _mesh->NEList[rm_vertex].end(),
                                                   _mesh->NEList[target_vertex].begin(), _mesh->NEList[target_vertex].end(),
@@ -275,10 +283,11 @@ private:
                                 else
                                     el_it++;
                             }
-
+    
                             if(dim==2) {
                                 if(deleted_elements.size()!=1) {
                                     reject_collapse=true;
+                                    if (test) printf("DEBUG  ici 2\n");
                                     continue;
                                 }
                             } else {
@@ -298,7 +307,7 @@ private:
                                    if(reject_collapse)
                                    continue;
                                    */
-
+    
                                 bool confirm_boundary=false;
                                 int scnt=0;
                                 for(const auto& de : deleted_elements) {
@@ -315,16 +324,21 @@ private:
                                     }
                                 }
                                 if(!confirm_boundary || scnt>2) {
+                                    if (test) printf("DEBUG  ici 3\n");
                                     reject_collapse=true;
                                     continue;
                                 }
                             }
                         } else {
                             reject_collapse=true;
+                            if (test) printf("DEBUG  ici 4\n");
                             continue;
                         }
                     }
                 }
+
+
+
 
                 /* Check the properties of new elements. If the
                    new properties are not acceptable then continue. */
@@ -334,30 +348,29 @@ private:
                 bool better=true;
                 for(const auto &ee : _mesh->NEList[rm_vertex]) {
 
-                    const int *old_n=_mesh->get_element(ee);
+                    if (_mesh->get_elementTag(ee) != region)
+                        continue;
+
+                    const int *old_n = _mesh->get_element(ee);
 
                     double q_linf = 0.0;
-                        if(quality_constrained)
-                            q_linf = _mesh->quality[ee];
-                    
-                    if (_mesh->get_elementTag(ee) == region) {
+                    if(quality_constrained)
+                        q_linf = _mesh->quality[ee];
 
-                        long double old_av=0.0;
-                        if(!surface_coarsening) {
-                            if(dim==2)
-                                old_av = property->area_precision(_mesh->get_coords(old_n[0]),
-                                                                  _mesh->get_coords(old_n[1]),
-                                                                  _mesh->get_coords(old_n[2]));
-                            else
-                                old_av = property->volume_precision(_mesh->get_coords(old_n[0]),
-                                                                    _mesh->get_coords(old_n[1]),
-                                                                    _mesh->get_coords(old_n[2]),
-                                                                    _mesh->get_coords(old_n[3]));
-    
-                            total_old_av+=old_av;
-                        }
+                    long double old_av = 0.0;
+                    if (!surface_coarsening || !internal_surface_coarsening) {
+                        if (dim==2)
+                            old_av = property->area_precision(_mesh->get_coords(old_n[0]),
+                                                              _mesh->get_coords(old_n[1]),
+                                                              _mesh->get_coords(old_n[2]));
+                        else
+                            old_av = property->volume_precision(_mesh->get_coords(old_n[0]),
+                                                                _mesh->get_coords(old_n[1]),
+                                                                _mesh->get_coords(old_n[2]),
+                                                                _mesh->get_coords(old_n[3]));
+                        total_old_av+=old_av;
                     }
-
+                    
                     // Skip checks this element would be deleted under the operation.
                     if(_mesh->NEList[target_vertex].find(ee)!=_mesh->NEList[target_vertex].end())
                         continue;
@@ -372,7 +385,6 @@ private:
                             n[i] = nid;
                     }
 
-                    
                     // Check the area/volume of this new element.
                     long double new_av=0.0;
                     if(dim==2)
@@ -388,6 +400,7 @@ private:
                     // Reject if there is an inverted element.
                     if(new_av<DBL_EPSILON) {
                         reject_collapse=true;
+                        if (test) printf("DEBUG  ici 5\n");
                         break;
                     }
 
@@ -418,8 +431,7 @@ private:
                     }
                 }
                 if(reject_collapse)
-                    continue;
-
+                    break;
 
                 if (boundary_id != -10) {
                     if ((!surface_coarsening && !_mesh->is_internal_boundary(boundary_id)) ||
@@ -428,43 +440,46 @@ private:
                         double av_var = std::abs(total_new_av-total_old_av);
                         av_var /= std::max(total_new_av, total_old_av);
                         if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
-                            reject_collapse=true;
-                            continue;
+                            reject_collapse = true;
+                            if (test) printf("DEBUG  ici 6\n");
+                            break;
                         }
                     }
                 }
 
-                if(!delete_with_extreme_prejudice) {
+                if (!delete_with_extreme_prejudice) {
                     // Check if any of the new edges are longer than L_max.
-                    for(const auto &nn : _mesh->NNList[rm_vertex]) {
-                        if(target_vertex==nn)
+                    for (const auto &nn : _mesh->NNList[rm_vertex]) {
+                        if (target_vertex==nn)
                             continue;
-    
-                        if(_mesh->calc_edge_length(target_vertex, nn)>L_max) {
-                            reject_collapse=true;
+                        if (_mesh->calc_edge_length(target_vertex, nn)>L_max) {
+                            reject_collapse = true;
+                            if (test) printf("DEBUG  ici 7\n");
                             break;
                         }
                     }
                     if(reject_collapse)
-                        continue;
+                        break;
                 }
 
                 if(quality_constrained) {
                     if(!better) {
-                        reject_collapse=false;
+                        reject_collapse=false;  // TODO really ?
                     }
                 }
 
-                // If this edge is ok to collapse then break out of loop.
-                if(!reject_collapse)
+                // If this edge is not ok to collapse for one of the region, forget it, break out of loop.
+                if (reject_collapse)
                     break;
             }
 
-            // If this edge is ok to collapse, check other regions, otherwise break and exit.
-            if(reject_collapse)
+            // If this edge is ok to collapse for all the regions, select this one and break out of the loop.
+            if (!reject_collapse)
                 break;
 
         }
+
+        if (test)  exit(2);
 
         // If we've checked all edges and none are collapsible then return.
         if(reject_collapse) {
