@@ -201,15 +201,13 @@ private:
             reject_collapse = false;
     
             int boundary_id = -10;
-            if (surface_coarsening || internal_surface_coarsening) {
-                // Check if deleted vertex is connected to a boundary
-                for (const auto &element : _mesh->NEList[rm_vertex]) {
-                    const int *n = _mesh->get_element(element);
-                    for (size_t i=0; i<nloc; i++) {
-                        if (n[i]!=rm_vertex) {
-                            if (_mesh->boundary[element*nloc+i]>0) {
-                                boundary_id = _mesh->boundary[element*nloc+i];
-                            }
+            // Check if deleted vertex is connected to a boundary
+            for (const auto &element : _mesh->NEList[rm_vertex]) {
+                const int *n = _mesh->get_element(element);
+                for (size_t i=0; i<nloc; i++) {
+                    if (n[i]!=rm_vertex) {
+                        if (_mesh->boundary[element*nloc+i]>0) {
+                            boundary_id = _mesh->boundary[element*nloc+i];
                         }
                     }
                 }
@@ -347,17 +345,20 @@ private:
                         q_linf = _mesh->quality[ee];
 
                     long double old_av = 0.0;
-                    if (!surface_coarsening || !internal_surface_coarsening) {
-                        if (dim==2)
-                            old_av = property->area_precision(_mesh->get_coords(old_n[0]),
-                                                              _mesh->get_coords(old_n[1]),
-                                                              _mesh->get_coords(old_n[2]));
-                        else
-                            old_av = property->volume_precision(_mesh->get_coords(old_n[0]),
-                                                                _mesh->get_coords(old_n[1]),
-                                                                _mesh->get_coords(old_n[2]),
-                                                                _mesh->get_coords(old_n[3]));
-                        total_old_av += old_av;
+                    if (boundary_id != -10) {
+                        if ((!surface_coarsening && !_mesh->is_internal_boundary(boundary_id)) ||
+                            (!internal_surface_coarsening && _mesh->is_internal_boundary(boundary_id))) {
+                            if (dim==2)
+                                old_av = property->area_precision(_mesh->get_coords(old_n[0]),
+                                                                  _mesh->get_coords(old_n[1]),
+                                                                  _mesh->get_coords(old_n[2]));
+                            else
+                                old_av = property->volume_precision(_mesh->get_coords(old_n[0]),
+                                                                    _mesh->get_coords(old_n[1]),
+                                                                    _mesh->get_coords(old_n[2]),
+                                                                    _mesh->get_coords(old_n[3]));
+                            total_old_av += old_av;
+                        }
                     }
                     
                     // Skip checks this element would be deleted under the operation.
