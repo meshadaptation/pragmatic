@@ -339,6 +339,7 @@ public:
             else if(*it>=0)
                 *it = 0;
         }
+        max_bdry_tag = 1;
     }
 
 
