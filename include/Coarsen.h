@@ -191,7 +191,6 @@ private:
         }
 
         bool reject_collapse = false;
-        bool test = false;
         while(short_edges.size()) {
 
             // Get the next shortest edge.
@@ -200,25 +199,20 @@ private:
     
             // Assume the best.
             reject_collapse = false;
-            test = false;
     
-            // Check if deleted vertex is connected to a boundary
             int boundary_id = -10;
-//            std::set<index_t> compromised_boundary;
-            for (const auto &element : _mesh->NEList[rm_vertex]) {
-                const int *n = _mesh->get_element(element);
-                for (size_t i=0; i<nloc; i++) {
-                    if (n[i]!=rm_vertex) {
-                        if (_mesh->boundary[element*nloc+i]>0) {
-//                            compromised_boundary.insert(_mesh->boundary[element*nloc+i]);
-                            boundary_id = _mesh->boundary[element*nloc+i];
+            if (surface_coarsening || internal_surface_coarsening) {
+                // Check if deleted vertex is connected to a boundary
+                for (const auto &element : _mesh->NEList[rm_vertex]) {
+                    const int *n = _mesh->get_element(element);
+                    for (size_t i=0; i<nloc; i++) {
+                        if (n[i]!=rm_vertex) {
+                            if (_mesh->boundary[element*nloc+i]>0) {
+                                boundary_id = _mesh->boundary[element*nloc+i];
+                            }
                         }
                     }
                 }
-            }
-            if (boundary_id == 5) {
-                printf("DEBUG  voilà un sommet frontière  rm_vertex: %d\n", rm_vertex);
-                //test = true;
             }
 
             std::set<index_t>::const_iterator region_it;
@@ -244,7 +238,6 @@ private:
 
                     if(compromised_boundary.size()>1) {
                         reject_collapse = true;
-                        if (test) printf("DEBUG  ici 0\n");
                         continue;
                     }
 
@@ -267,7 +260,6 @@ private:
                         if(target_boundary.size()==1) {
                             if(*target_boundary.begin() != *compromised_boundary.begin()) {
                                 reject_collapse=true;
-                                if (test) printf("DEBUG  ici 1\n");
                                 continue;
                             }
     
@@ -287,7 +279,6 @@ private:
                             if(dim==2) {
                                 if(deleted_elements.size()!=1) {
                                     reject_collapse=true;
-                                    if (test) printf("DEBUG  ici 2\n");
                                     continue;
                                 }
                             } else {
@@ -324,14 +315,12 @@ private:
                                     }
                                 }
                                 if(!confirm_boundary || scnt>2) {
-                                    if (test) printf("DEBUG  ici 3\n");
                                     reject_collapse=true;
                                     continue;
                                 }
                             }
                         } else {
                             reject_collapse=true;
-                            if (test) printf("DEBUG  ici 4\n");
                             continue;
                         }
                     }
@@ -368,7 +357,7 @@ private:
                                                                 _mesh->get_coords(old_n[1]),
                                                                 _mesh->get_coords(old_n[2]),
                                                                 _mesh->get_coords(old_n[3]));
-                        total_old_av+=old_av;
+                        total_old_av += old_av;
                     }
                     
                     // Skip checks this element would be deleted under the operation.
@@ -379,7 +368,7 @@ private:
                     std::vector<int> n(nloc);
                     for(size_t i=0; i<nloc; i++) {
                         int nid = old_n[i];
-                        if(nid==rm_vertex)
+                        if (nid==rm_vertex)
                             n[i] = target_vertex;
                         else
                             n[i] = nid;
@@ -400,14 +389,10 @@ private:
                     // Reject if there is an inverted element.
                     if(new_av<DBL_EPSILON) {
                         reject_collapse=true;
-                        if (test) printf("DEBUG  ici 5\n");
                         break;
                     }
 
-                    if (_mesh->get_elementTag(ee) == region) {
-                        total_new_av+=new_av;
-                    }
-
+                    total_new_av += new_av;
                     double new_q=0.0;
                     if(quality_constrained) {
                         if(dim==2)
@@ -441,7 +426,6 @@ private:
                         av_var /= std::max(total_new_av, total_old_av);
                         if (av_var > std::max(_mesh->get_ref_length(), 1.)*DBL_EPSILON) {
                             reject_collapse = true;
-                            if (test) printf("DEBUG  ici 6\n");
                             break;
                         }
                     }
@@ -454,7 +438,6 @@ private:
                             continue;
                         if (_mesh->calc_edge_length(target_vertex, nn)>L_max) {
                             reject_collapse = true;
-                            if (test) printf("DEBUG  ici 7\n");
                             break;
                         }
                     }
@@ -478,8 +461,6 @@ private:
                 break;
 
         }
-
-        if (test)  exit(2);
 
         // If we've checked all edges and none are collapsible then return.
         if(reject_collapse) {
