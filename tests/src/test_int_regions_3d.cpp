@@ -71,7 +71,6 @@ int main(int argc, char **argv)
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/cube20x20x20");
     pragmatic_init_light((void*)mesh);
 
-
     int * boundary = mesh->get_boundaryTags();
 
     int nbrElm = mesh->get_number_elements();
@@ -114,11 +113,7 @@ int main(int argc, char **argv)
 
     GMFTools<double>::export_gmf_mesh("../data/test_int_regions_3d-initial", mesh);
 
-    double tic = get_wtime();
     pragmatic_adapt(0, 0);
-    double toc = get_wtime();
-
-
 
     if(verbose)
         mesh->verify();
@@ -131,28 +126,36 @@ int main(int argc, char **argv)
 #else
     std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
 #endif
+
     long double area = mesh->calculate_area();
     long double volume = mesh->calculate_volume();
-
-
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"area:                 "<<area<<std::endl
-                     <<"volume:               "<<volume<<std::endl;;
-    }
-
+    long double volume1 = mesh->calculate_volume(1);
+    long double volume2 = mesh->calculate_volume(2);
+    long double volume3 = mesh->calculate_volume(3);
     if(rank==0) {
-        long double ideal_area(9), ideal_volume(1); // the internal boundary is counted twice
-        std::cout<<"Expecting volume == 1: ";
+        long double ideal_area(9), ideal_volume(1), ideal_volume1(0.5), ideal_volume2(0.25), ideal_volume3(0.25); // the internal boundary is counted twice
+        std::cout<<"Expecting total volume == 1:           ";
         if(std::abs(volume-ideal_volume)/std::max(volume, ideal_volume)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting volume for region 1 == 0.5:  ";
+        if(std::abs(volume1-ideal_volume1)/std::max(volume1, ideal_volume1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting volume for region 2 == 0.25: ";
+        if(std::abs(volume2-ideal_volume2)/std::max(volume2, ideal_volume2)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting volume for region 3 == 0.25: ";
+        if(std::abs(volume3-ideal_volume3)/std::max(volume3, ideal_volume3)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
 
-        std::cout<<"Expecting area == 9: ";
+        std::cout<<"Expecting area == 9:                   ";
         if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else

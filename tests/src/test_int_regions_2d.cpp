@@ -71,7 +71,6 @@ int main(int argc, char **argv)
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/square50x50");
     pragmatic_init_light((void*)mesh);
 
-
     int * boundary = mesh->get_boundaryTags();
 
     int nbrElm = mesh->get_number_elements();
@@ -115,11 +114,7 @@ int main(int argc, char **argv)
 
     Refine<double,2> adapt(*mesh);
 
-    double tic = get_wtime();
     pragmatic_adapt(0, 0);
-    double toc = get_wtime();
-
-
 
     if(verbose)
         mesh->verify();
@@ -132,27 +127,37 @@ int main(int argc, char **argv)
 #else
     std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
 #endif
+
     long double perimeter = mesh->calculate_perimeter();
     long double area = mesh->calculate_area();
-
-    if(verbose) {
-        int nelements = mesh->get_number_elements();
-        if(rank==0)
-            std::cout<<"Refine loop time:     "<<toc-tic<<std::endl
-                     <<"Number elements:      "<<nelements<<std::endl
-                     <<"Perimeter:            "<<perimeter<<std::endl;;
-    }
-
+    long double area1 = mesh->calculate_area(1);
+    long double area2 = mesh->calculate_area(2);
+    long double area3 = mesh->calculate_area(3);
     if(rank==0) {
-        long double ideal_area(1), ideal_perimeter(4+2*sqrt(2)+1); // the internal boundary is counted twice
+        long double ideal_perimeter(4+2*sqrt(2)+1), ideal_area(1), ideal_area1(0.5), ideal_area2(0.375), ideal_area3(0.125); // the internal boundary is counted twice
         std::cout<<"Expecting perimeter == 4+2*sqrt(2)+1: ";
         if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail"<<std::endl;
 
-        std::cout<<"Expecting area == 1: ";
+        std::cout<<"Expecting total area == 1:            ";
         if(std::abs(area-ideal_area)/std::max(area, ideal_area)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting area of region 1 == 0.5:    ";
+        if(std::abs(area1-ideal_area1)/std::max(area1, ideal_area1)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting area of region 2 == 0.375:  ";
+        if(std::abs(area2-ideal_area2)/std::max(area2, ideal_area2)<DBL_EPSILON)
+            std::cout<<"pass"<<std::endl;
+        else
+            std::cout<<"fail"<<std::endl;
+        std::cout<<"Expecting area of region 3 == 0.125:  ";
+        if(std::abs(area3-ideal_area3)/std::max(area3, ideal_area3)<DBL_EPSILON)
             std::cout<<"pass"<<std::endl;
         else
             std::cout<<"fail"<<std::endl;
