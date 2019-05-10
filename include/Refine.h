@@ -992,9 +992,10 @@ private:
 
     inline void addNN(const index_t i, const index_t n)
     {
-        
-        if (std::find(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), n) == _mesh->NNList[i].end())
-            _mesh->NNList[i].push_back(n);
+        // In case things start breaking, check here... TODO
+        //if (std::find(_mesh->NNList[i].begin(), _mesh->NNList[i].end(), n) == _mesh->NNList[i].end())
+        //    _mesh->NNList[i].push_back(n);
+        _mesh->NNList[i].push_back(n);
     }
 
     inline void remNN(const index_t i, const index_t n)

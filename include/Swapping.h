@@ -496,8 +496,6 @@ private:
 
     inline bool swap_kernel3d(const Edge<index_t>& edge, propagation_map& pMap)
     {
-        // In 3D, we create some elements so we need to give them the appropriate tag. TODO
-
         index_t nk = edge.edge.first;
         index_t nl = edge.edge.second;
 
