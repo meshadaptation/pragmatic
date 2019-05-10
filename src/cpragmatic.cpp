@@ -288,6 +288,9 @@ extern "C" {
 
         const size_t ndims = mesh->get_number_dimensions();
 
+        int nite_max = 30;
+        int nbrSplits[nite_max], nbrCoars[nite_max];
+
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
         double L_up = sqrt(2.0);
         double L_low = L_up*0.5;
@@ -301,7 +304,7 @@ extern "C" {
             double L_max = mesh->mean_edge_length();
             double alpha = sqrt(2.0)/2.0;
 
-            for(size_t i=0; i<30; i++) {
+            for(size_t i=0; i<nite_max; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
@@ -355,14 +358,12 @@ extern "C" {
             double L_max = mesh->mean_edge_length();
             double alpha = sqrt(2.0)/2.0;
 
-            int nbrSplits[50], nbrCoars[50];
-
             for (int i=0; i<5; ++i){
               refine.refine(alpha*L_max);
             }
 
             // give more time to converge with new refinement, but stop before if possible
-            for(size_t i=0; i<30; i++) {
+            for(size_t i=0; i<nite_max; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
                 int cnt_coars, cnt_split;
