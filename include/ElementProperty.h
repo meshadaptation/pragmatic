@@ -126,6 +126,35 @@ public:
         return orientation*(y02*x01 - y01*x02)/2;
     }
 
+    /*! Calculate (non oriented !) area of 3D triangle.
+     * @param x0 pointer to 3D position for first point in triangle.
+     * @param x1 pointer to 3D position for second point in triangle.
+     * @param x2 pointer to 3D position for third point in triangle.
+     */
+    inline real_t area3d(const real_t *x0, const real_t *x1, const real_t *x2) const
+    {
+        real_t a, b, c, dx, dy, dz;
+
+        dx = (x0[0]-x1[0]);
+        dy = (x0[1]-x1[1]);
+        dz = (x0[2]-x1[2]);
+        a = std::sqrt(dx*dx+dy*dy+dz*dz);
+
+        dx = (x0[0]-x2[0]);
+        dy = (x0[1]-x2[1]);
+        dz = (x0[2]-x2[2]);
+        b = std::sqrt(dx*dx+dy*dy+dz*dz);
+
+        dx = (x1[0]-x2[0]);
+        dy = (x1[1]-x2[1]);
+        dz = (x1[2]-x2[2]);
+        c = std::sqrt(dx*dx+dy*dy+dz*dz);
+
+        long double s = (a+b+c)/2;
+
+        return std::sqrt(s*(s-a)*(s-b)*(s-c));
+    }
+
     /*! Calculate volume of tetrahedron.
      * @param x0 pointer to 3D position for first point in triangle.
      * @param x1 pointer to 3D position for second point in triangle.

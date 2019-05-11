@@ -802,37 +802,10 @@ public:
         const double *x2 = get_coords(n2);
         const double *x3 = get_coords(n3);
 
-        // Use Heron's Formula
-        long double a;
-        {
-            long double dx = ((long double)x1[0]-(long double)x2[0]);
-            long double dy = ((long double)x1[1]-(long double)x2[1]);
-            long double dz = 0;
-            if (ndims==3)
-                dz = ((long double)x1[2]-(long double)x2[2]);
-            a = std::sqrt(dx*dx+dy*dy+dz*dz);
-        }
-        long double b;
-        {
-            long double dx = ((long double)x1[0]-(long double)x3[0]);
-            long double dy = ((long double)x1[1]-(long double)x3[1]);
-            long double dz = 0;
-            if (ndims==3)
-                dz = ((long double)x1[2]-(long double)x3[2]);
-            b = std::sqrt(dx*dx+dy*dy+dz*dz);
-        }
-        long double c;
-        {
-            long double dx = ((long double)x2[0]-(long double)x3[0]);
-            long double dy = ((long double)x2[1]-(long double)x3[1]);
-            long double dz = 0;
-            if (ndims==3)
-                dz = ((long double)x2[2]-(long double)x3[2]);
-            c = std::sqrt(dx*dx+dy*dy+dz*dz);
-        }
-        long double s = (a+b+c)/2;
-
-        return std::sqrt(s*(s-a)*(s-b)*(s-c));
+        if (ndims==2)
+            return fabs(property->area(x1,x2,x3));
+        else
+            return property->area3d(x1,x2,x3);
     }
 
 
@@ -975,7 +948,7 @@ public:
                 for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
                     if (regions[*neigh_it] == tag_region2) {
                         
-                        long double area = triangle_area(n[0], n[1], n[2]);
+                        long double area = triangle_area(n1, n2, n3);
                         total_area += area;
                     }
                 }
@@ -990,24 +963,13 @@ public:
 
     long double tet_volume(index_t n0, index_t n1, index_t n2, index_t n3) const
     {
-        const double *x0 = get_coords(n0);
-        const double *x1 = get_coords(n1);
-        const double *x2 = get_coords(n2);
-        const double *x3 = get_coords(n3);
+        const real_t *x0 = get_coords(n0);
+        const real_t *x1 = get_coords(n1);
+        const real_t *x2 = get_coords(n2);
+        const real_t *x3 = get_coords(n3);
 
-        long double x01 = (x0[0] - x1[0]);
-        long double x02 = (x0[0] - x2[0]);
-        long double x03 = (x0[0] - x3[0]);
-
-        long double y01 = (x0[1] - x1[1]);
-        long double y02 = (x0[1] - x2[1]);
-        long double y03 = (x0[1] - x3[1]);
-
-        long double z01 = (x0[2] - x1[2]);
-        long double z02 = (x0[2] - x2[2]);
-        long double z03 = (x0[2] - x3[2]);
-
-        return (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+        long double vol = fabs(property->volume(x0, x1, x2, x3));
+        return vol;
     }
 
 
@@ -1048,7 +1010,7 @@ public:
                 }
             }
         }
-        return total_volume/6;
+        return total_volume;
     }
 
 
@@ -1094,7 +1056,7 @@ public:
                 }
             }
         }
-        return total_volume/6;
+        return total_volume;
     }
 
     /// Get the element mean quality in metric space.
