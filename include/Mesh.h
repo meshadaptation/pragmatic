@@ -135,11 +135,11 @@ public:
         _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
 
-//    Mesh(Mesh<real_t> & meshini, int NVer, int * trucs)
-//    {
-//    }
 
-    /// construct minimesh
+    /*! construct a minimesh: the mesh of all elements around a list of vertices
+     * @param NVer number of vertices i the list
+     * @param ver array of vertex indices
+     */
     Mesh(Mesh<real_t> & meshini, int NVer, int * ver)
     {
         std::set<int> neigbor_elements;
@@ -394,6 +394,7 @@ public:
         }
     }
 
+    /// update elements regions by copying _regions
     void set_regions(const int *_regions)
     {
         // Sweep through elements and set ids.
@@ -409,6 +410,9 @@ public:
 
     ///  add internal boundary tags if facet is between 2+ regions
     ///   unless they were already provided ? TODO check consistency
+    ///   ==> For now, we do not preserve internal boundaries. In the future, 
+    ///   we could think about a way to differentiate them from external boundaries
+    ///   and try to preserver them.
     void set_internal_boundaries()
     {
         if (ndims == 2)
@@ -418,7 +422,7 @@ public:
     }
 
 
-
+    /// Debug function: check that all facets between 2 differet regions are tagged with the right value
     void check_internal_boundaries_3d()
     {
         // loop over facets through vertex connectivity
@@ -467,7 +471,7 @@ public:
                             for (int i=0; i<nloc; ++i) {
                                 if (elm[i]!=iVer && elm[i]!=iVer2 && elm[i]!=iVer3) {
                                     if (boundary[nloc*(*elm_it)+i] != max_bdry_tag+1) {
-                                        printf("ERROR   in elm %d (%d %d %d %d) facet %d should me tagged as internal boundary but tag is: %d\n",
+                                        printf("ERROR   in elm %d (%d %d %d %d) facet %d should be tagged as internal boundary but tag is: %d\n",
                                             *elm_it, elm[0], elm[1], elm[2], elm[3], i, boundary[nloc*(*elm_it)+i]);
                                     }
                                 }
@@ -731,7 +735,6 @@ public:
                     if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)) {
                         long double dx = ((long double)_coords[n1*2  ]-(long double)_coords[n2*2  ]);
                         long double dy = ((long double)_coords[n1*2+1]-(long double)_coords[n2*2+1]);
-
                         total_length += std::sqrt(dx*dx+dy*dy);
                     }
                 }
@@ -793,6 +796,45 @@ public:
         }
     }
 
+    inline long double triangle_area(index_t n1, index_t n2, index_t n3) const
+    {
+        const double *x1 = get_coords(n1);
+        const double *x2 = get_coords(n2);
+        const double *x3 = get_coords(n3);
+
+        // Use Heron's Formula
+        long double a;
+        {
+            long double dx = ((long double)x1[0]-(long double)x2[0]);
+            long double dy = ((long double)x1[1]-(long double)x2[1]);
+            long double dz = 0;
+            if (ndims==3)
+                dz = ((long double)x1[2]-(long double)x2[2]);
+            a = std::sqrt(dx*dx+dy*dy+dz*dz);
+        }
+        long double b;
+        {
+            long double dx = ((long double)x1[0]-(long double)x3[0]);
+            long double dy = ((long double)x1[1]-(long double)x3[1]);
+            long double dz = 0;
+            if (ndims==3)
+                dz = ((long double)x1[2]-(long double)x3[2]);
+            b = std::sqrt(dx*dx+dy*dy+dz*dz);
+        }
+        long double c;
+        {
+            long double dx = ((long double)x2[0]-(long double)x3[0]);
+            long double dy = ((long double)x2[1]-(long double)x3[1]);
+            long double dz = 0;
+            if (ndims==3)
+                dz = ((long double)x2[2]-(long double)x3[2]);
+            c = std::sqrt(dx*dx+dy*dy+dz*dz);
+        }
+        long double s = (a+b+c)/2;
+
+        return std::sqrt(s*(s-a)*(s-b)*(s-c));
+    }
+
 
     /// Calculate area - optimise for precision rather than performance as it is only used for verification.
     double calculate_area() const
@@ -812,32 +854,8 @@ public:
                         continue;
                 }
 
-                const double *x1 = get_coords(n[0]);
-                const double *x2 = get_coords(n[1]);
-                const double *x3 = get_coords(n[2]);
-
-                // Use Heron's Formula
-                long double a;
-                {
-                    long double dx = ((long double)x1[0]-(long double)x2[0]);
-                    long double dy = ((long double)x1[1]-(long double)x2[1]);
-                    a = std::sqrt(dx*dx+dy*dy);
-                }
-                long double b;
-                {
-                    long double dx = ((long double)x1[0]-(long double)x3[0]);
-                    long double dy = ((long double)x1[1]-(long double)x3[1]);
-                    b = std::sqrt(dx*dx+dy*dy);
-                }
-                long double c;
-                {
-                    long double dx = ((long double)x2[0]-(long double)x3[0]);
-                    long double dy = ((long double)x2[1]-(long double)x3[1]);
-                    c = std::sqrt(dx*dx+dy*dy);
-                }
-                long double s = (a+b+c)/2;
-
-                total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                long double area = triangle_area(n[0], n[1], n[2]);
+                total_area += area;
             }
 
             if(num_processes>1)
@@ -863,35 +881,8 @@ public:
                             continue;
                     }
 
-                    const double *x1 = get_coords(n1);
-                    const double *x2 = get_coords(n2);
-                    const double *x3 = get_coords(n3);
-
-                    // Use Heron's Formula
-                    long double a;
-                    {
-                        long double dx = ((long double)x1[0]-(long double)x2[0]);
-                        long double dy = ((long double)x1[1]-(long double)x2[1]);
-                        long double dz = ((long double)x1[2]-(long double)x2[2]);
-                        a = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double b;
-                    {
-                        long double dx = ((long double)x1[0]-(long double)x3[0]);
-                        long double dy = ((long double)x1[1]-(long double)x3[1]);
-                        long double dz = ((long double)x1[2]-(long double)x3[2]);
-                        b = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double c;
-                    {
-                        long double dx = ((long double)x2[0]-(long double)x3[0]);
-                        long double dy = ((long double)x2[1]-(long double)x3[1]);
-                        long double dz = ((long double)x2[2]-(long double)x3[2]);
-                        c = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double s = (a+b+c)/2;
-
-                    total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                    long double area = triangle_area(n1, n2, n3);
+                    total_area += area;
                 }
             }
 
@@ -928,32 +919,8 @@ public:
                     continue;
             }
 
-            const double *x1 = get_coords(n[0]);
-            const double *x2 = get_coords(n[1]);
-            const double *x3 = get_coords(n[2]);
-
-            // Use Heron's Formula
-            long double a;
-            {
-                long double dx = ((long double)x1[0]-(long double)x2[0]);
-                long double dy = ((long double)x1[1]-(long double)x2[1]);
-                a = std::sqrt(dx*dx+dy*dy);
-            }
-            long double b;
-            {
-                long double dx = ((long double)x1[0]-(long double)x3[0]);
-                long double dy = ((long double)x1[1]-(long double)x3[1]);
-                b = std::sqrt(dx*dx+dy*dy);
-            }
-            long double c;
-            {
-                long double dx = ((long double)x2[0]-(long double)x3[0]);
-                long double dy = ((long double)x2[1]-(long double)x3[1]);
-                c = std::sqrt(dx*dx+dy*dy);
-            }
-            long double s = (a+b+c)/2;
-
-            total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+            long double area = triangle_area(n[0], n[1], n[2]);
+            total_area += area;
         }
 
         if(num_processes>1)
@@ -1008,35 +975,8 @@ public:
                 for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
                     if (regions[*neigh_it] == tag_region2) {
                         
-                        const double *x1 = get_coords(n1);
-                        const double *x2 = get_coords(n2);
-                        const double *x3 = get_coords(n3);
-
-                        // Use Heron's Formula
-                        long double a;
-                        {
-                            long double dx = ((long double)x1[0]-(long double)x2[0]);
-                            long double dy = ((long double)x1[1]-(long double)x2[1]);
-                            long double dz = ((long double)x1[2]-(long double)x2[2]);
-                            a = std::sqrt(dx*dx+dy*dy+dz*dz);
-                        }
-                        long double b;
-                        {
-                            long double dx = ((long double)x1[0]-(long double)x3[0]);
-                            long double dy = ((long double)x1[1]-(long double)x3[1]);
-                            long double dz = ((long double)x1[2]-(long double)x3[2]);
-                            b = std::sqrt(dx*dx+dy*dy+dz*dz);
-                        }
-                        long double c;
-                        {
-                            long double dx = ((long double)x2[0]-(long double)x3[0]);
-                            long double dy = ((long double)x2[1]-(long double)x3[1]);
-                            long double dz = ((long double)x2[2]-(long double)x3[2]);
-                            c = std::sqrt(dx*dx+dy*dy+dz*dz);
-                        }
-                        long double s = (a+b+c)/2;
-
-                        total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                        long double area = triangle_area(n[0], n[1], n[2]);
+                        total_area += area;
                     }
                 }
             }
@@ -1046,6 +986,28 @@ public:
             MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
 
         return total_area;
+    }
+
+    long double tet_volume(index_t n0, index_t n1, index_t n2, index_t n3) const
+    {
+        const double *x0 = get_coords(n0);
+        const double *x1 = get_coords(n1);
+        const double *x2 = get_coords(n2);
+        const double *x3 = get_coords(n3);
+
+        long double x01 = (x0[0] - x1[0]);
+        long double x02 = (x0[0] - x2[0]);
+        long double x03 = (x0[0] - x3[0]);
+
+        long double y01 = (x0[1] - x1[1]);
+        long double y02 = (x0[1] - x2[1]);
+        long double y03 = (x0[1] - x3[1]);
+
+        long double z01 = (x0[2] - x1[2]);
+        long double z02 = (x0[2] - x2[2]);
+        long double z03 = (x0[2] - x3[2]);
+
+        return (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
     }
 
 
@@ -1069,24 +1031,8 @@ public:
                     if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
-
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
 
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
@@ -1097,24 +1043,8 @@ public:
                     if(n[0] < 0)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
-
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
             }
         }
@@ -1144,24 +1074,8 @@ public:
                     if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
-
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
 
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
@@ -1175,24 +1089,8 @@ public:
                     if (regions[i] != tag_region)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
-
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
             }
         }
@@ -1574,12 +1472,12 @@ public:
         std::vector<int> defrag_regions(NElements);
         std::vector<double> defrag_quality(NElements);
 
-        // This first touch is to bind memory locally. TODO is this still useful ?
+        /* // This first touch is to bind memory locally. TODO is this still useful ?
         for(int i=0; i<(int)NElements; i++) {
             defrag_ENList[i*nloc] = 0;
             defrag_boundary[i*nloc] = 0;
             defrag_regions[i] = 0;
-        }
+        } */
 
         for(int i=0; i<(int)NNodes; i++) {
             defrag_coords[i*ndims] = 0.0;
