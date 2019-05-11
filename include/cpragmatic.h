@@ -12,7 +12,9 @@ void pragmatic_init_light(void* mesh);
 void pragmatic_set_boundary(const int *nfacets, const int *facets, const int *ids);
 void pragmatic_set_metric(const double *metric);
 void pragmatic_add_field(const double *psi, const double *error, int *pnorm);
-void pragmatic_adapt(int coarsen_surface);
+void pragmatic_set_regions(const int *element_tags);
+void pragmatic_set_internal_boundaries();
+void pragmatic_adapt(int coarsen_surface, int coarsen_int_surface);
 void pragmatic_coarsen(int coarsen_surface);
 void pragmatic_get_info(int *NNodes, int *NElements);
 void pragmatic_get_coords_2d(double *x, double *y);
@@ -22,6 +24,7 @@ void pragmatic_get_coords_2d_mpi(double *x, double *y);
 void pragmatic_get_coords_3d_mpi(double *x, double *y, double *z);
 void pragmatic_get_elements(int *elements);
 void pragmatic_get_boundaryTags(int ** tags);
+void pragmatic_get_elementTags(int ** regions);
 void pragmatic_finalize(void);
 #if defined(__cplusplus)
 }

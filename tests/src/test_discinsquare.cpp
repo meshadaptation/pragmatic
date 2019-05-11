@@ -35,45 +35,24 @@
  *  SUCH DAMAGE.
  */
 
-#include <cmath>
 #include <iostream>
 #include <vector>
 
 #include "Mesh.h"
-#ifdef HAVE_VTK
-#include "VTKTools.h"
-#endif
 #ifdef HAVE_LIBMESHB
 #include "GMFTools.h"
 #endif
-
+#ifdef HAVE_VTK
+#include "VTKTools.h"
+#endif
 #include "MetricField.h"
-
-#include "Coarsen.h"
 #include "Refine.h"
-#include "Smooth.h"
-#include "Swapping.h"
 #include "ticker.h"
 #include "cpragmatic.h"
+#include "Coarsen.h"
+#include "Swapping.h"
 
 #include <mpi.h>
-
-
-void set_metric(Mesh<double> *mesh, MetricField<double,2> &metric) 
-{    
-    double m[3] = {0};
-
-    size_t NNodes = mesh->get_number_nodes();
-    for(size_t i=0; i<NNodes; i++) {
-        m[0] = 400;
-        m[1] = -200;
-        m[2] = 400;
-        
-        metric.set_metric(m, i);
-    }
-    metric.update_mesh();
-}
-
 
 int main(int argc, char **argv)
 {
@@ -85,30 +64,69 @@ int main(int argc, char **argv)
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    bool verbose = false;
+    if(argc>1) {
+        verbose = std::string(argv[1])=="-v";
+    }
+
 #ifdef HAVE_LIBMESHB
-    char filename_in[256];
-    sprintf(filename_in, "../data/square5x5");
-    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
+    Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh("../data/disc");
     pragmatic_init_light((void*)mesh);
 
+    int * boundary = mesh->get_boundaryTags();
+    mesh->set_internal_boundaries();
+
     MetricField<double,2> metric_field(*mesh);
-    set_metric(mesh, metric_field);
-    pragmatic_adapt(0, 0);
-    printf("pass\n");
 
-    double qmean = mesh->get_qmean();
-    double qmin = mesh->get_qmin();
-    if (qmean > 0.99999999 && qmin > 0.99999999) 
-        printf("pass");
-    else
-        fprintf(stderr, "ERROR qmean: %1.15e  qmin: %1.15e\n", qmean, qmin);
+    size_t NNodes = mesh->get_number_nodes();
+    
+    double m[3] = {0.};
+    double hmax = 1.;
+    double hmin = 0.05;
+    for(size_t i=0; i<NNodes; i++) {
+        double x = mesh->get_coords(i)[0];
+        double h = hmax*fabs(1-exp(-0.03*fabs(x*x*x))) + hmin;
+        double lmax = 1/(hmax*hmax);
+        m[0] = 1/(h*h);
+        m[2] = lmax;
+        metric_field.set_metric(m, i);
+    }
+    metric_field.update_mesh();
 
-    char filename_out[256];
-    sprintf(filename_out, "../data/test_uniform_adapt_2d");
-    GMFTools<double>::export_gmf_mesh(filename_out, mesh);
+    GMFTools<double>::export_gmf_mesh("../data/test_discinsquare-initial", mesh);
 
+    pragmatic_adapt(0, 1);
+
+    if(verbose)
+        mesh->verify();
+    mesh->defragment();
+
+    GMFTools<double>::export_gmf_mesh("../data/test_discinsquare", mesh);
+#ifdef HAVE_VTK
+    VTKTools<double>::export_vtu("../data/test_discinsquare", mesh);
 #else
-    std::cerr<<"Pragmatic was configured without libMeshb support, cannot run this test"<<std::endl;
+    std::cerr<<"Warning: Pragmatic was configured without VTK support"<<std::endl;
+#endif
+
+    long double perimeter = mesh->calculate_perimeter(11, 12);
+    long double area = mesh->calculate_area(12);
+
+    long double ideal_perimeter(18.85), ideal_area(28.27); // the internal boundary is counted twice
+    std::cout<<"Expecting perimeter ~= 18.85: ";
+    if(std::abs(perimeter-ideal_perimeter)/std::max(perimeter, ideal_perimeter)<0.05)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail: "<<perimeter<<std::endl;
+
+    std::cout<<"Expecting area == 28.27: ";
+    if(std::abs(area-ideal_area)/std::max(area, ideal_area)<0.05)
+        std::cout<<"pass"<<std::endl;
+    else
+        std::cout<<"fail: "<<area<<std::endl;
+
+    delete mesh;
+#else
+    std::cerr<<"Pragmatic was configured without libmeshb"<<std::endl;
 #endif
 
     MPI_Finalize();

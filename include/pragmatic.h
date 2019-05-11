@@ -56,7 +56,7 @@ extern "C" {
     void pragmatic_vtk_begin(const char *filename);
     void pragmatic_add_field(const double *psi, const double *error);
     void pragmatic_set_metric(const double *metric, const double *min_length, const double *max_length);
-    void pragmatic_adapt();
+    void pragmatic_adapt(int coarsen_surface, int coarsen_int_surface);
     void pragmatic_get_info(int *NNodes, int *NElements, int *NSElements);
     void pragmatic_get_coords_2d(double *x, double *y);
     void pragmatic_get_coords_3d(double *x, double *y, double *z);

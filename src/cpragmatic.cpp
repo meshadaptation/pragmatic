@@ -257,13 +257,39 @@ extern "C" {
         mesh->set_boundary(*nfacets, facets, ids);
     }
 
+    /** Set the internal regions.
+
+      @param [in] element_tags list of element tags
+      */
+    void pragmatic_set_regions(const int *element_tags)
+    {
+        assert(_pragmatic_mesh!=NULL);
+
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        mesh->set_regions(element_tags);
+    }
+
+    /** Reconstruct internal boundaries separing regions if not provided already
+
+      */
+    void pragmatic_set_internal_boundaries()
+    {
+        assert(_pragmatic_mesh!=NULL);
+
+        Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
+        mesh->set_internal_boundaries();
+    }
+
     /** Adapt the mesh.
     */
-    void pragmatic_adapt(int coarsen_surface)
+    void pragmatic_adapt(int coarsen_surface, int coarsen_int_surface)
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
         const size_t ndims = mesh->get_number_dimensions();
+
+        int nite_max = 30;
+        int nbrSplits[nite_max], nbrCoars[nite_max];
 
         // See Eqn 7; X Li et al, Comp Methods Appl Mech Engrg 194 (2005) 4915-4950
         double L_up = sqrt(2.0);
@@ -275,27 +301,32 @@ extern "C" {
             Refine<double, 2> refine(*mesh);
             Swapping<double, 2> swapping(*mesh);
 
-            double L_max = mesh->maximal_edge_length();
-
+            double L_max = mesh->mean_edge_length();
             double alpha = sqrt(2.0)/2.0;
-            bool stop = false;
-            for(size_t i=0; i<30; i++) {
+
+            for(size_t i=0; i<nite_max; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars, cnt_split;
+                cnt_coars= coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.7);
-                int cnt_split = refine.refine(L_ref);
+                cnt_split = refine.refine(L_ref);
 
-                if (cnt_split == 0 && cnt_coars == 0 && stop)
-                    break;
-                if (cnt_split == 0 && cnt_coars == 0)
-                    stop = true;
-                else
-                    stop = false;
+                nbrSplits[i] = cnt_split;
+                nbrCoars[i] = cnt_coars;
+                if (i >5) {
+                    double varSplit1 = fabs(nbrSplits[i]-nbrSplits[i-1])/nbrSplits[i];
+                    double varSplit2 = fabs(nbrSplits[i]-nbrSplits[i-2])/nbrSplits[i];
+                    double varCoars1 = fabs(nbrCoars[i]-nbrCoars[i-1])/nbrCoars[i];
+                    double varCoars2 = fabs(nbrCoars[i]-nbrCoars[i-2])/nbrCoars[i];
+                    double varSpCo = fabs(nbrCoars[i]-nbrSplits[i]);
+                    if (varSpCo < 5 &&  varSplit1 < 0.01 && varSplit2 < 0.01 && varCoars1 < 0.01 && varCoars2 < 0.01){
+                        break;
+                    }                    
+                }
 
-                L_max = mesh->maximal_edge_length();
+                L_max = mesh->mean_edge_length();
             }
-
             mesh->defragment();
 
             smooth.smart_laplacian(20);
@@ -322,30 +353,38 @@ extern "C" {
               }
             }
 #endif
+            coarsen.coarsen(L_low, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
 
-            coarsen.coarsen(L_low, L_up, (bool) coarsen_surface);
-
-            double L_max = mesh->maximal_edge_length();
-
+            double L_max = mesh->mean_edge_length();
             double alpha = sqrt(2.0)/2.0;
-            bool stop = false;
+
+            for (int i=0; i<5; ++i){
+              refine.refine(alpha*L_max);
+            }
+
             // give more time to converge with new refinement, but stop before if possible
-            // TODO write a cycle detector and stop if there is a cycle
-            for(size_t i=0; i<30; i++) {
+            for(size_t i=0; i<nite_max; i++) {
                 double L_ref = std::max(alpha*L_max, L_up);
 
-                int cnt_split = refine.refine(L_ref);
-                int cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface);
+                int cnt_coars, cnt_split;
+                cnt_split = refine.refine(L_ref);
+                cnt_coars = coarsen.coarsen(L_low, L_ref, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.95);
 
-                if (cnt_split == 0 && cnt_coars == 0 && stop)
-                    break;
-                if (cnt_split == 0 && cnt_coars == 0)
-                    stop = true;
-                else
-                    stop = false;
+                nbrSplits[i] = cnt_split;
+                nbrCoars[i] = cnt_coars;
+                if (i >5) {
+                    double varSplit1 = fabs(nbrSplits[i]-nbrSplits[i-1])/nbrSplits[i];
+                    double varSplit2 = fabs(nbrSplits[i]-nbrSplits[i-2])/nbrSplits[i];
+                    double varCoars1 = fabs(nbrCoars[i]-nbrCoars[i-1])/nbrCoars[i];
+                    double varCoars2 = fabs(nbrCoars[i]-nbrCoars[i-2])/nbrCoars[i];
+                    double varSpCo = fabs(nbrCoars[i]-nbrSplits[i]);
+                    if (varSpCo < 5 &&  varSplit1 < 0.01 && varSplit2 < 0.01 && varCoars1 < 0.01 && varCoars2 < 0.01){
+                        break;
+                    }                    
+                }
 
-                L_max = mesh->maximal_edge_length();
+                L_max = mesh->mean_edge_length();
 
 #if 0                
                 // TODO HACK CAD
@@ -372,11 +411,12 @@ extern "C" {
         }
 
         mesh->remove_overlap_elements();
+        printf("INFO  Pragmatic is done adapting.\n");
     }
 
     /** Coarsen the mesh.
     */
-    void pragmatic_coarsen(int coarsen_surface)
+    void pragmatic_coarsen(int coarsen_surface, int coarsen_int_surface)
     {
         Mesh<double> *mesh = (Mesh<double> *)_pragmatic_mesh;
 
@@ -389,7 +429,7 @@ extern "C" {
             Swapping<double, 2> swapping(*mesh);
 
             for(size_t i=0; i<5; i++) {
-                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.1);
             }
         } else {
@@ -397,7 +437,7 @@ extern "C" {
             Swapping<double, 3> swapping(*mesh);
 
             for(size_t i=0; i<5; i++) {
-                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface);
+                coarsen.coarsen(L_up, L_up, (bool) coarsen_surface, (bool) coarsen_int_surface);
                 swapping.swap(0.1);
             }
         }
@@ -535,6 +575,11 @@ extern "C" {
     {
       *tags = ((Mesh<double> *)_pragmatic_mesh)->get_boundaryTags();
     }
+
+    void pragmatic_get_elementTags(int ** regions)
+    {
+      *regions = ((Mesh<double> *)_pragmatic_mesh)->get_elementTags();
+    }    
 
     void pragmatic_finalize()
     {

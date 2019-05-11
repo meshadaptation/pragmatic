@@ -84,6 +84,7 @@ int main(int argc, char **argv)
 #ifdef HAVE_VTK
     Mesh<double> *mesh=VTKTools<double>::import_vtu("../data/antarctic.vtu");
     mesh->create_boundary();
+    mesh->set_regions(NULL);
     mesh->defragment();
 
     for(int icoarsen=0; icoarsen<10; icoarsen++) {

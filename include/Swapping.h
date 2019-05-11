@@ -98,6 +98,7 @@ public:
 
     void swap(real_t quality_tolerance)
     {
+        int nswaps  = 0;
         size_t NNodes = _mesh->get_number_nodes();
         size_t NElements = _mesh->get_number_elements();
 
@@ -138,6 +139,7 @@ public:
                             next_round.push_back(entry.first);
                         }
                     }
+                    nswaps++;
                 }
             }
         }
@@ -175,6 +177,7 @@ public:
                                 next_round.push_back(entry.first);
                             }
                         }
+                        nswaps++;
                     }
                 }
             }
@@ -183,6 +186,7 @@ public:
                 // TODO: Try to steal work
             }
         }
+        printf("DEBUG   Number of swaps: %d\n", nswaps);
     }
 
 private:
@@ -363,6 +367,8 @@ private:
 
     inline bool swap_kernel2d(const Edge<index_t>& edge, propagation_map& pMap)
     {
+        // In 2D, no new element and we don't swap accross the internal boundaries
+
         index_t i = edge.edge.first;
         index_t j = edge.edge.second;
 
@@ -383,6 +389,10 @@ private:
 
             // If this is a surface edge, it cannot be swapped.
             if(loc!=2)
+                return false;
+
+            // If this is an internal edge between two regions, don't swap
+            if (_mesh->regions[intersection[0]] != _mesh->regions[intersection[1]])
                 return false;
         }
 
@@ -489,8 +499,9 @@ private:
         index_t nk = edge.edge.first;
         index_t nl = edge.edge.second;
 
-        if(_mesh->is_halo_node(nk) && _mesh->is_halo_node(nl))
+        if(_mesh->is_halo_node(nk) && _mesh->is_halo_node(nl)) {
             return false;
+        }
 
         std::set<index_t> neigh_elements;
         set_intersection(_mesh->NEList[nk].begin(), _mesh->NEList[nk].end(),
@@ -505,13 +516,15 @@ private:
             }
         }
 
-        if(abort)
+        if(abort) {
             return false;
+        }
 
         double min_quality = 1.0;
         std::vector<index_t> constrained_edges_unsorted;
         std::map<int, std::map<index_t, int> > b;
         std::vector<int> element_order, e_to_eid;
+        int region = -10;
 
         for(auto& it : neigh_elements) {
             min_quality = std::min(min_quality, _mesh->quality[it]);
@@ -532,7 +545,16 @@ private:
                     b[it][nl] = _mesh->boundary[nloc*(it)+j];
                 }
             }
+
+            if (region == -10)
+                region = _mesh->regions[it];
+            else 
+                if (region != _mesh->regions[it]) {
+                    return false; // trying to swap across internal boundary
+                }
+
         }
+        region = _mesh->regions[*neigh_elements.begin()];
 
         size_t nelements = neigh_elements.size();
         assert(nelements*2==constrained_edges_unsorted.size());
@@ -1012,8 +1034,9 @@ private:
             }
         }
 
-        if(new_min_quality[best_option] <= min_quality)
+        if(new_min_quality[best_option] <= min_quality) {
             return false;
+        }
 
         // Update NNList
         std::vector<index_t>::iterator vit = std::find(_mesh->NNList[nk].begin(), _mesh->NNList[nk].end(), nl);
@@ -1043,8 +1066,9 @@ private:
             if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
                 if(_mesh->_ENList.size() < (new_eid+extra_elements)*nloc) {
                     _mesh->_ENList.resize(2*(new_eid+extra_elements)*nloc);
+                    _mesh->regions.resize(2*(new_eid+extra_elements));
                     _mesh->boundary.resize(2*(new_eid+extra_elements)*nloc);
-                    _mesh->quality.resize(2*(new_eid+extra_elements)*nloc);
+                    _mesh->quality.resize(2*(new_eid+extra_elements)*nloc); // TODO why *nloc ?
                 }
             }
 
@@ -1059,6 +1083,7 @@ private:
                 _mesh->_ENList[eid*nloc+i]=new_elements[best_option][j*4+i];
                 _mesh->boundary[eid*nloc+i]=new_boundaries[best_option][j*4+i];
             }
+            _mesh->regions[eid]=region;
             _mesh->quality[eid]=newq[best_option][j];
 
             for(int p=0; p<nloc; ++p) {

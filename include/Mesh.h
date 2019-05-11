@@ -135,11 +135,87 @@ public:
         _init(NNodes, NElements, ENList, x, y, z, lnn2gnn, NPNodes);
     }
 
+
+    /*! construct a minimesh: the mesh of all elements around a list of vertices
+     * @param NVer number of vertices i the list
+     * @param ver array of vertex indices
+     */
+    Mesh(Mesh<real_t> & meshini, int NVer, int * ver)
+    {
+        std::set<int> neigbor_elements;
+        for (int i = 0; i < NVer; ++i) {
+            int iVer = ver[i];
+            std::set<index_t>::const_iterator it;
+            for (it= meshini.NEList[iVer].begin(); it!=meshini.NEList[iVer].end(); ++it) {
+                const int * elm = meshini.get_element(*it);
+                const double *x0 = meshini.get_coords(elm[0]);
+                const double *x1 = meshini.get_coords(elm[1]);
+                const double *x2 = meshini.get_coords(elm[2]);
+                const double *x3 = meshini.get_coords(elm[3]);
+                neigbor_elements.insert(*it);
+            }
+        } 
+
+        std::vector<int> enlist;
+        std::vector<real_t> x, y, z;
+        std::vector<int> bdry, reg;
+
+        int nelements = neigbor_elements.size();
+        nloc = meshini.nloc;
+        enlist.reserve(nelements*nloc);
+        bdry.reserve(nelements*nloc);
+        x.reserve(nelements*2.5);
+        y.reserve(nelements*2.5);
+        if (meshini.ndims==3)
+            z.reserve(nelements*2.5);
+
+        std::map<int,int> global2local;
+        const int * bdryini = meshini.get_boundaryTags();
+        const int * regini = meshini.get_elementTags();
+        int count = 0;
+        std::set<index_t>::const_iterator it;
+        for (it=neigbor_elements.begin(); it!=neigbor_elements.end(); ++it){
+            const int * n = meshini.get_element(*it);
+            for (int i=0; i<nloc; ++i) {
+                int newVid;
+                if (!global2local.count(n[i])) {
+                    newVid = count;
+                    global2local[n[i]] = newVid;
+                    const real_t * crd = meshini.get_coords(n[i]);
+                    x.push_back(crd[0]);
+                    y.push_back(crd[1]);
+                    if (meshini.ndims == 3)
+                        z.push_back(crd[2]);
+                    count++;
+                }
+                else {
+                    newVid = global2local[n[i]];
+                }
+                enlist.push_back(newVid);
+                bdry.push_back(bdryini[nloc*(*it)+i]);
+            }
+            reg.push_back(regini[*it]);
+        }
+
+        int nnodes = count;
+        _mpi_comm = MPI_COMM_WORLD;
+        if (meshini.ndims == 2)
+            _init(nnodes, nelements, &enlist[0], &x[0], &y[0], NULL, NULL, nnodes);
+        else
+            _init(nnodes, nelements, &enlist[0], &x[0], &y[0], &z[0], NULL, nnodes);
+
+        // apply boundaries
+        set_boundary(&bdry[0]);
+        set_regions(&reg[0]);
+    }
+
     /// Default destructor.
     ~Mesh()
     {
         delete property;
     }
+
+
 
     /// Add a new vertex
     index_t append_vertex(const real_t *x, const double *m)
@@ -170,6 +246,7 @@ public:
         if(_ENList.size() < (NElements+1)*nloc) {
             _ENList.resize(2*NElements*nloc);
             boundary.resize(2*NElements*nloc);
+            regions.resize(2*NElements);
             quality.resize(2*NElements);
         }
 
@@ -262,6 +339,7 @@ public:
             else if(*it>=0)
                 *it = 0;
         }
+        max_bdry_tag = 1;
     }
 
 
@@ -270,8 +348,9 @@ public:
         assert(boundary.size()==0);
         create_boundary();
 
-        // Create a map of facets to ids.
+        // Create a map of facets to ids and compute max id.
         std::map< std::set<int>, int> facet2id;
+        max_bdry_tag = ids[0];
         for(int i=0; i<nfacets; i++) {
             std::set<int> facet;
             for(int j=0; j<ndims; j++) {
@@ -279,6 +358,8 @@ public:
             }
             assert(facet2id.find(facet)==facet2id.end());
             facet2id[facet] = ids[i];
+            if (ids[i] > max_bdry_tag)
+                max_bdry_tag = ids[i];
         }
 
         // Sweep through boundary and set ids.
@@ -301,13 +382,107 @@ public:
     {
         // Sweep through boundary and set ids.
         size_t NElements = get_number_elements();
-	boundary.resize(NElements*nloc);
+        boundary.resize(NElements*nloc);
+        max_bdry_tag = 0;
         for(int i=0; i<NElements; i++) {
             for(int j=0; j<nloc; j++) {
-                boundary[i*nloc+j] = _boundary[i*nloc+j];
+                int b = _boundary[i*nloc+j];
+                boundary[i*nloc+j] = b;
+                if (b > max_bdry_tag)
+                    max_bdry_tag = b;
             }
         }
     }
+
+    /// update elements regions by copying _regions
+    void set_regions(const int *_regions)
+    {
+        // Sweep through elements and set ids.
+        size_t NElements = get_number_elements();
+        regions.resize(NElements);
+        if (!_regions) {
+            std::fill(regions.begin(), regions.end(), 0);
+        }
+        else {
+            memcpy(&regions[0], _regions, NElements*sizeof(int));
+        }
+    }
+
+    ///  add internal boundary tags if facet is between 2+ regions
+    ///   unless they were already provided ? TODO check consistency
+    ///   ==> For now, we do not preserve internal boundaries. In the future, 
+    ///   we could think about a way to differentiate them from external boundaries
+    ///   and try to preserver them.
+    void set_internal_boundaries()
+    {
+        if (ndims == 2)
+            set_internal_boundaries_2d();
+        else
+            set_internal_boundaries_3d();
+    }
+
+
+    /// Debug function: check that all facets between 2 differet regions are tagged with the right value
+    void check_internal_boundaries_3d()
+    {
+        // loop over facets through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer) continue;
+                for (int j=0; j<NNList[iVer].size(); ++j) {
+                    if (i==j) continue;
+                    int iVer3 = NNList[iVer][j];
+                    if (iVer3 < iVer2) continue;
+
+                    std::set<index_t> neighbour_elements1, neighbour_elements2, neighbour_elements;
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer2].begin(), NEList[iVer2].end(),
+                                          std::inserter(neighbour_elements1, neighbour_elements1.begin()));
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer3].begin(), NEList[iVer3].end(),
+                                          std::inserter(neighbour_elements2, neighbour_elements2.begin()));
+                    std::set_intersection(neighbour_elements1.begin(), neighbour_elements1.end(),
+                                          neighbour_elements2.begin(), neighbour_elements2.end(),
+                                          std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                    typename std::set<index_t>::const_iterator elm_it;
+                    int region_tag = -10;
+                    bool one_region = true;
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        if (_ENList[*elm_it*4]==-1)
+                            continue;
+                        if (region_tag < 0)
+                            region_tag = regions[*elm_it];
+                        else {
+                            if (region_tag != regions[*elm_it]) {
+                                one_region = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Now locate the facet in each element and set a boundary tag
+                    if (!one_region) {
+                        for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                            if (_ENList[*elm_it*4]==-1)
+                                continue;
+                            const index_t *elm = get_element(*elm_it);
+                            for (int i=0; i<nloc; ++i) {
+                                if (elm[i]!=iVer && elm[i]!=iVer2 && elm[i]!=iVer3) {
+                                    if (boundary[nloc*(*elm_it)+i] != max_bdry_tag+1) {
+                                        printf("ERROR   in elm %d (%d %d %d %d) facet %d should be tagged as internal boundary but tag is: %d\n",
+                                            *elm_it, elm[0], elm[1], elm[2], elm[3], i, boundary[nloc*(*elm_it)+i]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     /// Erase an element
     void erase_element(const index_t eid)
@@ -453,6 +628,29 @@ public:
       return boundary.data();
     }
 
+    inline int get_boundaryTag(int i) 
+    {
+      return boundary[i];
+    }    
+
+    /// Return the array of element tags tags
+    inline int * get_elementTags()
+    {
+        return regions.data();
+    }
+
+    /// Return the tag of the element
+    inline int get_elementTag(index_t eid)
+    {
+        return regions[eid];
+    } 
+
+    /// Return true if the boundary tag is in the recorded internal boundaries (for now the max one)
+    inline bool is_internal_boundary(int tag)
+    {
+        return (tag == max_bdry_tag+1) ? true : false;
+    }   
+
     /// Returns true if the node is in any of the partitioned elements.
     inline bool is_halo_node(index_t nid) const
     {
@@ -537,7 +735,6 @@ public:
                     if(boundary[i*nloc+j]>0 && (std::min(node_owner[n1], node_owner[n2])==rank)) {
                         long double dx = ((long double)_coords[n1*2  ]-(long double)_coords[n2*2  ]);
                         long double dy = ((long double)_coords[n1*2+1]-(long double)_coords[n2*2+1]);
-
                         total_length += std::sqrt(dx*dx+dy*dy);
                     }
                 }
@@ -553,8 +750,66 @@ public:
         }
     }
 
+    /// Calculate perimeter between two regions
+    double calculate_perimeter(int tag_region1, int tag_region2)
+    {
+        int NElements = get_number_elements();
+        if(ndims==2) {
+            long double total_length=0;
 
-    /// Calculate area - optimise for percision rather than performance as it is only used for verification.
+            for(int i=0; i<NElements; i++) {
+                if(_ENList[i*nloc] < 0)
+                    continue;
+
+                if (regions[i] != tag_region1)
+                    continue;
+
+                for(int j=0; j<3; j++) {
+                    int n1 = _ENList[i*nloc+(j+1)%3];
+                    int n2 = _ENList[i*nloc+(j+2)%3];
+
+                    if (std::min(node_owner[n1], node_owner[n2]) != rank)
+                        continue;
+
+                    std::set<index_t> neighbours;
+                    std::set_intersection(NEList[n1].begin(),NEList[n1].end(),
+                                          NEList[n2].begin(), NEList[n2].end(),
+                                          std::inserter(neighbours, neighbours.begin()));
+                    std::set<index_t>::const_iterator neigh_it;
+                    for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
+                        if (regions[*neigh_it] == tag_region2) {
+                            long double dx = ((long double)_coords[n1*2  ]-(long double)_coords[n2*2  ]);
+                            long double dy = ((long double)_coords[n1*2+1]-(long double)_coords[n2*2+1]);
+                            total_length += std::sqrt(dx*dx+dy*dy);
+                        }
+                    }
+                }
+            }
+
+            if(num_processes>1)
+                MPI_Allreduce(MPI_IN_PLACE, &total_length, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+            return total_length;
+        } else {
+            std::cerr<<"ERROR: calculate_perimeter() cannot be used for 3D. Use calculate_area() instead if you want the total surface area.\n";
+            return -1;
+        }
+    }
+
+    inline long double triangle_area(index_t n1, index_t n2, index_t n3) const
+    {
+        const double *x1 = get_coords(n1);
+        const double *x2 = get_coords(n2);
+        const double *x3 = get_coords(n3);
+
+        if (ndims==2)
+            return fabs(property->area(x1,x2,x3));
+        else
+            return property->area3d(x1,x2,x3);
+    }
+
+
+    /// Calculate area - optimise for precision rather than performance as it is only used for verification.
     double calculate_area() const
     {
         int NElements = get_number_elements();
@@ -572,32 +827,8 @@ public:
                         continue;
                 }
 
-                const double *x1 = get_coords(n[0]);
-                const double *x2 = get_coords(n[1]);
-                const double *x3 = get_coords(n[2]);
-
-                // Use Heron's Formula
-                long double a;
-                {
-                    long double dx = ((long double)x1[0]-(long double)x2[0]);
-                    long double dy = ((long double)x1[1]-(long double)x2[1]);
-                    a = std::sqrt(dx*dx+dy*dy);
-                }
-                long double b;
-                {
-                    long double dx = ((long double)x1[0]-(long double)x3[0]);
-                    long double dy = ((long double)x1[1]-(long double)x3[1]);
-                    b = std::sqrt(dx*dx+dy*dy);
-                }
-                long double c;
-                {
-                    long double dx = ((long double)x2[0]-(long double)x3[0]);
-                    long double dy = ((long double)x2[1]-(long double)x3[1]);
-                    c = std::sqrt(dx*dx+dy*dy);
-                }
-                long double s = (a+b+c)/2;
-
-                total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                long double area = triangle_area(n[0], n[1], n[2]);
+                total_area += area;
             }
 
             if(num_processes>1)
@@ -623,35 +854,8 @@ public:
                             continue;
                     }
 
-                    const double *x1 = get_coords(n1);
-                    const double *x2 = get_coords(n2);
-                    const double *x3 = get_coords(n3);
-
-                    // Use Heron's Formula
-                    long double a;
-                    {
-                        long double dx = ((long double)x1[0]-(long double)x2[0]);
-                        long double dy = ((long double)x1[1]-(long double)x2[1]);
-                        long double dz = ((long double)x1[2]-(long double)x2[2]);
-                        a = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double b;
-                    {
-                        long double dx = ((long double)x1[0]-(long double)x3[0]);
-                        long double dy = ((long double)x1[1]-(long double)x3[1]);
-                        long double dz = ((long double)x1[2]-(long double)x3[2]);
-                        b = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double c;
-                    {
-                        long double dx = ((long double)x2[0]-(long double)x3[0]);
-                        long double dy = ((long double)x2[1]-(long double)x3[1]);
-                        long double dz = ((long double)x2[2]-(long double)x3[2]);
-                        c = std::sqrt(dx*dx+dy*dy+dz*dz);
-                    }
-                    long double s = (a+b+c)/2;
-
-                    total_area += std::sqrt(s*(s-a)*(s-b)*(s-c));
+                    long double area = triangle_area(n1, n2, n3);
+                    total_area += area;
                 }
             }
 
@@ -662,8 +866,156 @@ public:
         return total_area;
     }
 
+
+    /// Calculate area of a certain region (in 2D only)
+    double calculate_area(int tag_region) const
+    {
+        if (ndims != 2) {
+            std::cerr<<"ERROR: calculate_area(int) cannot be used for 3D. Use either calculate_area(int, int) or calculate_volume(int).\n";
+            return -1;
+        }
+
+        int NElements = get_number_elements();
+        long double total_area=0;
+
+        for(int i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0] < 0)
+                continue;
+
+            if (regions[i] != tag_region)
+                continue;
+
+            if(num_processes>1) {
+                // Don't sum if it's not ours
+                if(std::min(node_owner[n[0]], std::min(node_owner[n[1]], node_owner[n[2]]))!=rank)
+                    continue;
+            }
+
+            long double area = triangle_area(n[0], n[1], n[2]);
+            total_area += area;
+        }
+
+        if(num_processes>1)
+            MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+        return total_area;
+    }
+
+
+    /// Calculate area of surface between two regions (in 3D only).
+    double calculate_area(int tag_region1, int tag_region2) const
+    {
+        int NElements = get_number_elements();
+        long double total_area=0;
+
+        if (ndims != 3) {
+            std::cerr<<"ERROR: calculate_area(int, int) cannot be used for 2D. Use either calculate_area(int) or calculate_perimeter(int, int).\n";
+            return -1;
+        }
+
+        for(int i=0; i<NElements; i++) {
+            const index_t *n=get_element(i);
+            if(n[0] < 0)
+                continue;
+
+            if (regions[i] != tag_region1)
+                continue;
+
+            for(int j=0; j<4; j++) {
+                if(boundary[i*nloc+j]<=0)
+                    continue;
+
+                int n1 = n[(j+1)%4];
+                int n2 = n[(j+2)%4];
+                int n3 = n[(j+3)%4];
+
+                if(num_processes>1) {
+                    // Don't sum if it's not ours
+                    if(std::min(node_owner[n1], std::min(node_owner[n2], node_owner[n3]))!=rank)
+                        continue;
+                }
+
+                // check if opposite tet has the right tag
+                std::set<index_t> neighbours_tmp, neighbours;
+                std::set_intersection(NEList[n1].begin(),NEList[n1].end(),
+                                      NEList[n2].begin(), NEList[n2].end(),
+                                      std::inserter(neighbours_tmp, neighbours_tmp.begin()));
+                std::set_intersection(neighbours_tmp.begin(),neighbours_tmp.end(),
+                                      NEList[n3].begin(), NEList[n3].end(),
+                                      std::inserter(neighbours, neighbours.begin()));
+                std::set<index_t>::const_iterator neigh_it;
+                for (neigh_it = neighbours.begin(); neigh_it != neighbours.end(); neigh_it++){
+                    if (regions[*neigh_it] == tag_region2) {
+                        
+                        long double area = triangle_area(n1, n2, n3);
+                        total_area += area;
+                    }
+                }
+            }
+        }
+
+        if(num_processes>1)
+            MPI_Allreduce(MPI_IN_PLACE, &total_area, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+        return total_area;
+    }
+
+    long double tet_volume(index_t n0, index_t n1, index_t n2, index_t n3) const
+    {
+        const real_t *x0 = get_coords(n0);
+        const real_t *x1 = get_coords(n1);
+        const real_t *x2 = get_coords(n2);
+        const real_t *x3 = get_coords(n3);
+
+        long double vol = fabs(property->volume(x0, x1, x2, x3));
+        return vol;
+    }
+
+
     /// Calculate volume
     double calculate_volume() const
+    {
+        int NElements = get_number_elements();
+        long double total_volume=0;
+
+        if(ndims==2) {
+            std::cerr<<"ERROR: Cannot calculate volume in 2D\n";
+        } else { // 3D
+            // TODO Why split the cases here ?
+            if(num_processes>1) {
+                for(int i=0; i<NElements; i++) {
+                    const index_t *n=get_element(i);
+                    if(n[0] < 0)
+                        continue;
+
+                    // Don't sum if it's not ours
+                    if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
+                        continue;
+
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
+                }
+
+                MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
+
+            } else {
+                for(int i=0; i<NElements; i++) {
+                    const index_t *n=get_element(i);
+                    if(n[0] < 0)
+                        continue;
+
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
+                }
+            }
+        }
+        return total_volume;
+    }
+
+
+    /// Calculate volume of a region
+    double calculate_volume(int tag_region) const
     {
         int NElements = get_number_elements();
         long double total_volume=0;
@@ -677,28 +1029,15 @@ public:
                     if(n[0] < 0)
                         continue;
 
+                    if (regions[i] != tag_region)
+                        continue;
+
                     // Don't sum if it's not ours
                     if(std::min(std::min(node_owner[n[0]], node_owner[n[1]]), std::min(node_owner[n[2]], node_owner[n[3]]))!=rank)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
-
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
 
                 MPI_Allreduce(MPI_IN_PLACE, &total_volume, 1, MPI_LONG_DOUBLE, MPI_SUM, _mpi_comm);
@@ -709,28 +1048,15 @@ public:
                     if(n[0] < 0)
                         continue;
 
-                    const double *x0 = get_coords(n[0]);
-                    const double *x1 = get_coords(n[1]);
-                    const double *x2 = get_coords(n[2]);
-                    const double *x3 = get_coords(n[3]);
+                    if (regions[i] != tag_region)
+                        continue;
 
-                    long double x01 = (x0[0] - x1[0]);
-                    long double x02 = (x0[0] - x2[0]);
-                    long double x03 = (x0[0] - x3[0]);
-
-                    long double y01 = (x0[1] - x1[1]);
-                    long double y02 = (x0[1] - x2[1]);
-                    long double y03 = (x0[1] - x3[1]);
-
-                    long double z01 = (x0[2] - x1[2]);
-                    long double z02 = (x0[2] - x2[2]);
-                    long double z03 = (x0[2] - x3[2]);
-
-                    total_volume += (-x03*(z02*y01 - z01*y02) + x02*(z03*y01 - z01*y03) - x01*(z03*y02 - z02*y03));
+                    long double volume = tet_volume(n[0], n[1], n[2], n[3]);
+                    total_volume += volume;
                 }
             }
         }
-        return total_volume/6;
+        return total_volume;
     }
 
     /// Get the element mean quality in metric space.
@@ -974,6 +1300,29 @@ public:
         return L_max;
     }
 
+
+    real_t mean_edge_length() const
+    {
+        double L_mean = 0.0;
+        int nbrEdges = 0;
+
+        for(index_t i=0; i<(index_t) NNodes; i++) {
+            for(typename std::vector<index_t>::const_iterator it=NNList[i].begin(); it!=NNList[i].end(); ++it) {
+                if(i<*it) { // Ensure that every edge length is only calculated once.
+                    L_mean += calc_edge_length(i, *it);
+                    nbrEdges++;
+                }
+            }
+        }
+
+        if(num_processes>1) {
+            MPI_Allreduce(MPI_IN_PLACE, &L_mean, 1, MPI_DOUBLE, MPI_SUM, _mpi_comm);
+            MPI_Allreduce(MPI_IN_PLACE, &nbrEdges, 1, MPI_INT, MPI_SUM, _mpi_comm);
+        }
+
+        return L_mean/nbrEdges;
+    }
+
     /*! Defragment mesh. This compresses the storage of internal data
       structures. This is useful if the mesh has been significantly
       coarsened. */
@@ -1082,13 +1431,15 @@ public:
         std::vector<real_t> defrag_coords(NNodes*ndims);
         std::vector<double> defrag_metric(NNodes*msize);
         std::vector<int> defrag_boundary(NElements*nloc);
+        std::vector<int> defrag_regions(NElements);
         std::vector<double> defrag_quality(NElements);
 
-        // This first touch is to bind memory locally.
+        /* // This first touch is to bind memory locally. TODO is this still useful ?
         for(int i=0; i<(int)NElements; i++) {
             defrag_ENList[i*nloc] = 0;
             defrag_boundary[i*nloc] = 0;
-        }
+            defrag_regions[i] = 0;
+        } */
 
         for(int i=0; i<(int)NNodes; i++) {
             defrag_coords[i*ndims] = 0.0;
@@ -1105,6 +1456,7 @@ public:
                 defrag_ENList[new_eid*nloc+j] = new_nid;
                 defrag_boundary[new_eid*nloc+j] = boundary[old_eid*nloc+j];
             }
+            defrag_regions[new_eid] = regions[old_eid];
             defrag_quality[new_eid] = quality[old_eid];
         }
 
@@ -1122,6 +1474,7 @@ public:
 
         memcpy(&_ENList[0], &defrag_ENList[0], NElements*nloc*sizeof(index_t));
         memcpy(&boundary[0], &defrag_boundary[0], NElements*nloc*sizeof(int));
+        memcpy(&regions[0], &defrag_regions[0], NElements*sizeof(int));
         memcpy(&quality[0], &defrag_quality[0], NElements*sizeof(double));
         memcpy(&_coords[0], &defrag_coords[0], NNodes*ndims*sizeof(real_t));
         memcpy(&metric[0], &defrag_metric[0], NNodes*msize*sizeof(double));
@@ -1195,6 +1548,7 @@ public:
 
         create_adjacency();
     }
+
 
     /// This is used to verify that the mesh and its metadata is correct.
     bool verify() const
@@ -1844,7 +2198,7 @@ private:
         }
 
         create_adjacency();
-	    
+        
         create_global_node_numbering();
 
         compute_ref_length();
@@ -1853,10 +2207,10 @@ private:
     /// Create required adjacency lists.
     void create_adjacency()
     {
-	    NNList.clear();
-	    NNList.resize(NNodes);
-	    NEList.clear();
-	    NEList.resize(NNodes);
+        NNList.clear();
+        NNList.resize(NNodes);
+        NEList.clear();
+        NEList.resize(NNodes);
 
         for(size_t i=0; i<NElements; i++) {
             if(_ENList[i*nloc]<0)
@@ -1864,12 +2218,12 @@ private:
 
             for(size_t j=0; j<nloc; j++) {
                 index_t nid_j = _ENList[i*nloc+j];
-		        assert(nid_j<NNodes);
+                assert(nid_j<NNodes);
                 NEList[nid_j].insert(NEList[nid_j].end(), i);
                 for(size_t k=0; k<nloc; k++) {
                     if(j!=k) {
                         index_t nid_k = _ENList[i*nloc+k];
-	                    assert(nid_k<NNodes);
+                        assert(nid_k<NNodes);
                         NNList[nid_j].push_back(nid_k);
                     }
                 }
@@ -1890,6 +2244,106 @@ private:
             delete nnset;
         }
     }
+
+
+    void set_internal_boundaries_2d()
+    {
+
+        // loop over edges through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer)
+                    continue;
+
+                std::set<index_t> neighbour_elements;
+                std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                      NEList[iVer2].begin(), NEList[iVer2].end(),
+                                      std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                typename std::set<index_t>::const_iterator elm_it;
+                int region_tag = -10;
+                bool one_region = true;
+                for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                    if (region_tag < 0)
+                        region_tag = regions[*elm_it];
+                    else {
+                        if (region_tag != regions[*elm_it]) {
+                            one_region = false;
+                            break;
+                        }
+                    }
+                }
+                // Now locate the edge in each element and set a boundary tag
+                if (!one_region) {
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        const index_t *elm = get_element(*elm_it);
+                        for (int i=0; i<nloc; ++i) {
+                            if (elm[i]!=iVer && elm[i]!=iVer2) {
+                                boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    void set_internal_boundaries_3d()
+    {
+
+        // loop over facets through vertex connectivity
+        for (int iVer = 0; iVer < NNodes; ++iVer) {
+            for (int i=0; i<NNList[iVer].size(); ++i) {
+                int iVer2 = NNList[iVer][i];
+                if (iVer2 < iVer) continue;
+                for (int j=0; j<NNList[iVer].size(); ++j) {
+                    if (i==j) continue;
+                    int iVer3 = NNList[iVer][j];
+                    if (iVer3 < iVer2) continue;
+
+                    std::set<index_t> neighbour_elements1, neighbour_elements2, neighbour_elements;
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer2].begin(), NEList[iVer2].end(),
+                                          std::inserter(neighbour_elements1, neighbour_elements1.begin()));
+                    std::set_intersection(NEList[iVer].begin(), NEList[iVer].end(),
+                                          NEList[iVer3].begin(), NEList[iVer3].end(),
+                                          std::inserter(neighbour_elements2, neighbour_elements2.begin()));
+                    std::set_intersection(neighbour_elements1.begin(), neighbour_elements1.end(),
+                                          neighbour_elements2.begin(), neighbour_elements2.end(),
+                                          std::inserter(neighbour_elements, neighbour_elements.begin()));
+
+                    typename std::set<index_t>::const_iterator elm_it;
+                    int region_tag = -10;
+                    bool one_region = true;
+                    for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                        if (region_tag < 0)
+                            region_tag = regions[*elm_it];
+                        else {
+                            if (region_tag != regions[*elm_it]) {
+                                one_region = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Now locate the edge in each element and set a boundary tag
+                    if (!one_region) {
+                        for(elm_it=neighbour_elements.begin(); elm_it!=neighbour_elements.end(); ++elm_it) {
+                            const index_t *elm = get_element(*elm_it);
+                            for (int i=0; i<nloc; ++i) {
+                                if (elm[i]!=iVer && elm[i]!=iVer2 && elm[i]!=iVer3) {
+                                    boundary[nloc*(*elm_it)+i] = max_bdry_tag+1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     void trim_halo()
     {
@@ -2214,8 +2668,12 @@ private:
 
     // Boundary Label
     std::vector<int> boundary;
+    // internal regions labels (element tags)
+    std::vector<int> regions;
+    // Max external boundary label : internal bdry labels must be >
+    int max_bdry_tag;
 #if 0
-	std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
+    std::vector<int> isOnBoundary;  // TODO hack, tells me if I'm on boundary with CAD description
 #endif
 
     // Quality

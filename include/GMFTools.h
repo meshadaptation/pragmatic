@@ -223,7 +223,7 @@ private:
         std::vector<real_t>  x, y;
         std::vector<int>     ENList;
         index_t              NNodes, NElements, NFacets, bufTri[3], bufFac[2];
-        std::vector<index_t> facets, ids;
+        std::vector<index_t> facets, ids, regions;
         double               bufDbl[2];
         float                bufFlt[2];
         Mesh<real_t>         *mesh=NULL;
@@ -237,6 +237,7 @@ private:
         ENList.reserve(3*NElements);
         facets.reserve(2*NFacets);
         ids.reserve(NFacets);
+        regions.reserve(NElements);
 
         if (NNodes <= 0 ) {
             fprintf(stderr, "####  ERROR  Number of vertices: %d <= 0\n", NNodes);
@@ -266,6 +267,7 @@ private:
             GmfGetLin(meshIndex, GmfTriangles, &bufTri[0], &bufTri[1], &bufTri[2], &tag);
             for(int j=0; j<3; j++)
                 ENList.push_back(bufTri[j]-1);
+            regions.push_back(tag);
         }
 
         GmfGotoKwd(meshIndex, GmfEdges);
@@ -280,6 +282,7 @@ private:
 
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]), &(x[0]), &(y[0]));
         mesh->set_boundary(NFacets, &(facets[0]), &(ids[0]));
+        mesh->set_regions(&regions[0]);
 
         return mesh;
     }
@@ -292,7 +295,7 @@ private:
         std::vector<real_t>  x, y, z;
         std::vector<int>     ENList;
         index_t              NNodes, NElements, NFacets, bufTet[4], bufFac[3];
-        std::vector<index_t> facets, ids;
+        std::vector<index_t> facets, ids, regions;
         double               bufDbl[3];
         float                bufFlt[3];
         Mesh<real_t>         *mesh=NULL;
@@ -307,6 +310,7 @@ private:
         ENList.reserve(3*NElements);
         facets.reserve(3*NFacets);
         ids.reserve(NFacets);
+        regions.reserve(NElements);
 
         if (NNodes <= 0 ) {
             fprintf(stderr, "####  ERROR  Number of vertices: %d <= 0\n", NNodes);
@@ -341,6 +345,7 @@ private:
                       &bufTet[0], &bufTet[1], &bufTet[2], &bufTet[3], &tag);
             for (int j=0; j<4; j++)
                 ENList.push_back(bufTet[j]-1);
+            regions.push_back(tag);
         }
 
         GmfGotoKwd(meshIndex, GmfTriangles);
@@ -356,6 +361,7 @@ private:
         mesh = new Mesh<real_t>(NNodes, NElements, &(ENList[0]),
                                 &(x[0]), &(y[0]), &(z[0]));
         mesh->set_boundary(NFacets, &(facets[0]), &(ids[0]));
+        mesh->set_regions(&regions[0]);
 
         return mesh;
     }
@@ -495,6 +501,7 @@ private:
         tag = 0;
         for (index_t i=0; i<NElements; i++) {
             tri = mesh->get_element(i);
+            tag = mesh->get_elementTag(i);
             GmfSetLin(meshIndex, GmfTriangles, tri[0]+1, tri[1]+1, tri[2]+1, tag);
         }
 
@@ -536,6 +543,7 @@ private:
         tag = 0;
         for (index_t i=0; i<NElements; i++) {
             tet = mesh->get_element(i);
+            tag = mesh->get_elementTag(i);
             GmfSetLin(meshIndex, GmfTetrahedra, tet[0]+1, tet[1]+1, tet[2]+1,
                                                 tet[3]+1, tag);
         }

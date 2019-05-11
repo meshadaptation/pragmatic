@@ -563,6 +563,7 @@ public:
 
         _mesh->_ENList.resize(pNElements*(dim+1));
         _mesh->boundary.resize(pNElements*(dim+1));
+        _mesh->regions.resize(pNElements);
         _mesh->quality.resize(pNElements);
         _mesh->_coords.resize(pNNodes*dim);
         _mesh->metric.resize(pNNodes*(dim==2?3:6));
