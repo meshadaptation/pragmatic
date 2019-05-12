@@ -1,15 +1,15 @@
 FIND_PATH(METIS_INCLUDE_DIR metis.h
+  $ENV{METIS_DIR}/include
   /usr/local/include
   /usr/include
   /usr/include/metis
-  $ENV{METIS_DIR}/include
   )
 message( STATUS ${METIS_INCLUDE_DIR} )
 
 FIND_LIBRARY(METIS_LIBRARY metis
+  $ENV{METIS_DIR}/lib
   /usr/local/lib
   /usr/lib
-  $ENV{METIS_DIR}/lib
   )
 
 IF(METIS_INCLUDE_DIR)

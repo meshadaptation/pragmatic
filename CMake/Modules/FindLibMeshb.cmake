@@ -1,8 +1,10 @@
 FIND_PATH(LIBMESHB_INCLUDE_DIR libmeshb7.h
+  $ENV{LIBMESHB_DIR}/include
   /usr/local/include
   )
 
 FIND_LIBRARY(LIBMESHB_LIBRARY libmeshb.a
+  $ENV{LIBMESHB_DIR}/lib
   /usr/local/lib
   )
 
