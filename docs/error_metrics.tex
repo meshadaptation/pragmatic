@@ -61,12 +61,7 @@ Hessian of the function being interpolated, the tensor field of second
 partial derivatives \citep{dazevedo1991,george1998,frey2005}. The
 Hessian describes the curvature of the solution at each point in every
 direction; using the Hessian as a basis for the metric $M$ results in
-enhanced resolution where the solution field has high curvature. For
-elliptic problems, C\'ea's lemma shows us that the interpolation error
-bounds the discretisation error in the energy norm; in practice,
-minimising the interpolation error in this manner has been found to be
-highly effective at controlling the discretisation error, even for
-non-elliptic problems.
+enhanced resolution where the solution field has high curvature.
 
 For a mesh of triangles in 2D, assume a sufficiently smooth function
 $u\equiv u(\pmb{x})$ is approximated by its piecewise-linear Lagrange
@@ -83,7 +78,7 @@ where $c$ is a constant independent of the mesh, $\pmb{v}$ is a vector
 in $\triangle$, $E_{\triangle}$ is the set of edges of $\triangle$,
 $||\cdot||_{\infty,\triangle}$ is the infinity norm over $\triangle$,
 and $\bar{H}$ is an element-valued Hessian defined such that
-(\ref{highDint}) holds \cite{frey2005}. $|H|$ denotes the positive
+(\ref{highDint}) holds \citep{frey2005}. $|H|$ denotes the positive
 definite metric formed by taking the absolute value of the eigenvalues
 of ${H}$ and reflects the fact that it is the magnitude of the
 curvature that is of interest, rather than the sign of the curvature.
@@ -107,7 +102,7 @@ mesh of equilateral tetrahedra, \ie\ all element edge lengths are
 unity with respect to $M$. It is the element quality that defines how
 close to this requirement of equidistribution each element is.
 
-The third and final $p$--metric, $M_p$ is given by \citep{adaptivity_chen_07}
+The third and final $p$--metric, $M_p$ is given by \citep{chen2007optimal}
 
 \begin{equation}\label{eq:metric_l2}
 M_p({\bf x}) = \frac{1}{\epsilon({\bf x})}(\det(|H({\bf
@@ -167,7 +162,7 @@ decomposition of $M$ above and
 \label{Fig:Transformed_Elements}
 \end{figure}
 
-\cite{george1998} (pg. 350) point out that use of a global error norm
+\citep{george1998} (pg. 350) point out that use of a global error norm
 can in fact alter the error analysis by enhancing the accuracy of
 regions with high solution magnitude where changes are clearer than
 those regions of low magnitude. To overcome this, it is possible to
@@ -203,7 +198,7 @@ their own interpolation errors. A superposition procedure is then
 undertaken so that a single metric results which respects the edge
 length and requirements of each individual metric. The procedure is
 shown graphically in figure \ref{Fig:MergedMetrics} and follows
-\cite{pain2001}, see also \cite{castrodiaz1997,george1998}.
+\citep{pain2001}, see also \citep{castrodiaz1997,george1998}.
 
 \begin{figure}
 \centering
