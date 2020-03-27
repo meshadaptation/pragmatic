@@ -90,6 +90,8 @@ int main(int argc, char **argv)
 
     pragmatic_init_light((void*)mesh);
     mesh->create_boundary();
+    mesh->set_regions(NULL);
+
 
     printf("DEBUG begin mesh export\n");
 

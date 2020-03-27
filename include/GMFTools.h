@@ -214,6 +214,29 @@ public:
     }
 
 
+    static void export_gmf_solutions(const char * solName, int numSol, int *solTypes, std::vector<real_t> &data, Mesh<real_t> *mesh, bool ascii = false, bool B64=true)
+    {
+        int             dim;
+        char            fileName[128];
+        long long       solIndex;
+        int             gmfVersion;
+
+        dim = mesh->get_number_dimensions();
+        strcpy(fileName, solName);
+        if ( ascii ) strcat(fileName, ".sol");
+        else         strcat(fileName, ".solb");
+        if ( B64 ) gmfVersion = GmfDouble;
+        else       gmfVersion = GmfFloat;
+        if ( !(solIndex = GmfOpenMesh(fileName, GmfWrite, gmfVersion, dim)) ) {
+            fprintf(stderr,"####  ERROR: mesh file %s cannot be opened\n", fileName);
+            exit(1);
+        }
+        printf("  %%%% %s opened\n",fileName);
+
+        export_gmf_solutions23d(solIndex, numSol, solTypes, data, mesh);
+    }
+
+
 
 private:
 
@@ -591,6 +614,24 @@ private:
         for (index_t i=0; i<NNodes; i++) {
             met = metric->get_metric(i);
             GmfSetLin(solIndex, GmfSolAtVertices, met);
+        }
+        GmfCloseMesh(solIndex);
+    }
+
+    static void export_gmf_solutions23d(long long solIndex,
+                                     int numSol,
+                                     int *solTypes,
+                                     std::vector<real_t> &data,
+                                     Mesh<real_t> *mesh)
+    {
+        index_t  NNodes;
+        real_t   *dat;
+
+        NNodes = mesh->get_number_nodes();
+        GmfSetKwd(solIndex, GmfSolAtVertices, NNodes, numSol, solTypes);
+        for (index_t i=0; i<NNodes; i++) {
+            dat = &data[i*numSol];
+            GmfSetLin(solIndex, GmfSolAtVertices, dat);
         }
         GmfCloseMesh(solIndex);
     }
