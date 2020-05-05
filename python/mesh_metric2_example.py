@@ -59,7 +59,7 @@ def test_mesh_metric3D():
         H = MpH.vector().gather(ind).reshape(3,3)# H = array([[H[1],H[0]],[H[0],H[2]]])
         [v,w] = linalg.eig(H)
         print('tetrahedron volume: %0.6f, ellipsoid axis product(*sqrt(2)/12): %0.6f' % (det1234,v.prod()*sqrt(2)/12))
-        print v.prod()*sqrt(2)/12/(det1234)
+        print(v.prod()*sqrt(2)/12/(det1234))
 
 if __name__=="__main__":
 # test_mesh_metric()
