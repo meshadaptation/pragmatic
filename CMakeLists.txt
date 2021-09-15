@@ -49,6 +49,10 @@ if (NOT ENABLE_VTK OR NOT VTK_FOUND)
   message(STATUS "Configured without VTK support.")
 endif()
 
+if (DEFINED DEBUG)
+  set(DEBUG 1)
+endif()
+
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
