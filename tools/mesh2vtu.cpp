@@ -83,14 +83,20 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_LIBMESHB
     char * filename_in = argv[1];
+#ifdef DEBUG
     printf("DEBUG begin mesh import\n");
+#endif
     Mesh<double> *mesh=GMFTools<double>::import_gmf_mesh(filename_in);
 
+#ifdef DEBUG
     printf("DEBUG mesh imported\n");
+#endif
 
     pragmatic_init_light((void*)mesh);
 
+#ifdef DEBUG
     printf("DEBUG begin mesh export\n");
+#endif
 
 #ifdef HAVE_VTK
     VTKTools<double>::export_vtu(filename_in, mesh);

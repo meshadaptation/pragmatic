@@ -313,7 +313,9 @@ public:
                 stop = 0;
             }
         }
+#ifdef DEBUG
         printf("DEBUG   Number of splits / total number of edges: %d / %d\n", cntSplit, NEdges);
+#endif
         
         return(cntSplit);
     }
