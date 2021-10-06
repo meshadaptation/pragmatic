@@ -411,7 +411,7 @@ extern "C" {
         }
 
         mesh->remove_overlap_elements();
-        printf("INFO  Pragmatic is done adapting.\n");
+        // printf("INFO  Pragmatic is done adapting.\n");
     }
 
     /** Coarsen the mesh.
