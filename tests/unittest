@@ -17,7 +17,7 @@ class UnitTest:
 
     def log(self, msg):
         if self.verbose and msg != '':
-            print "    %s: %s" % (self.exe.split('/')[-1], msg)
+            print("    %s: %s" % (self.exe.split('/')[-1], msg))
 
     def run(self):
         os.chdir(self.dir)
@@ -36,7 +36,7 @@ class UnitTest:
         self.stdout, self.stderr = p.communicate()
 
         if self.stderr:
-            print self.stderr
+            print(self.stderr)
         p.wait()
         exitStatus = p.returncode
 
@@ -63,7 +63,7 @@ class UnitTest:
             warncount = warncount + 1
 
         if (warncount > 0 or failcount > 0):
-            print self.stdout
+            print(self.stdout)
 
         return (passcount, warncount, failcount)
 
@@ -78,7 +78,7 @@ class UnitTestTimer:
         import time
         for i in range(self.minutes):
             time.sleep(self.waitsec)
-            print "Still running..."
+            print("Still running...")
 
     def start(self):
         self.cp.start()
@@ -122,7 +122,7 @@ class UnitTestHarness:
                 test.log("%d passes" % P)
 
             if (P, W, F) == (0, 0, 0):
-              print "    Warning: no output from test"
+              print("    Warning: no output from test")
               warncount += 1
               warntests.append(test.exe)
 
@@ -133,7 +133,7 @@ class UnitTestHarness:
               failtests.append(test.exe)
 
             if not exitStatus == 0:
-              print "    Failure: non-zero exit code from test"
+              print("    Failure: non-zero exit code from test")
               failcount += 1
               if not test.exe in failtests:
                 failtests.append(test.exe)
@@ -144,16 +144,16 @@ class UnitTestHarness:
 
             UTTimer.terminate()
 
-        print "  RESULTS"
-        print "    Passes:   %d" % passcount
+        print("  RESULTS")
+        print("    Passes:   %d" % passcount)
         if len(warntests) == 0:
-            print "    Warnings: %d" % warncount
+            print("    Warnings: %d" % warncount)
         else:
-            print "    Warnings: %d; tests = %s" % (warncount, warntests)
+            print("    Warnings: %d; tests = %s" % (warncount, warntests))
         if len(failtests) == 0:
-            print "    Failures: %d" % failcount
+            print("    Failures: %d" % failcount)
         else:
-            print "    Failures: %d; tests = %s" % (failcount, failtests)
+            print("    Failures: %d; tests = %s" % (failcount, failtests))
         # Throw exception if any warning or failure occured, such that
         # the script can exit with error code, which is crucial for travis
         if (warncount > 0 or failcount > 0):

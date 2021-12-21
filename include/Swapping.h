@@ -186,7 +186,9 @@ public:
                 // TODO: Try to steal work
             }
         }
+#ifdef DEBUG
         printf("DEBUG   Number of swaps: %d\n", nswaps);
+#endif
     }
 
 private:

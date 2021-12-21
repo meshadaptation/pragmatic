@@ -65,7 +65,9 @@ int main(int argc, char **argv)
 
     char * filename_in = argv[1];
     std::string name(filename_in);
+#ifdef DEBUG
     printf("DEBUG begin mesh import\n");
+#endif
     
     FILE * file_in = fopen(filename_in, "r");
 
@@ -149,18 +151,24 @@ int main(int argc, char **argv)
         }
     }
 
+#ifdef DEBUG
     printf("DEBUG mesh imported\n");
+#endif
 
     Mesh<double> *mesh;
     mesh = new Mesh<double>(nVer, nTri, &ENList[0], &x[0], &y[0]);
 
+#ifdef DEBUG
     printf("DEBUG mesh created\n");
+#endif
 
     pragmatic_init_light((void*)mesh);
     mesh->create_boundary();
     mesh->set_regions(NULL);
 
+#ifdef DEBUG
     printf("DEBUG begin mesh export\n");
+#endif
 
 #ifdef HAVE_LIBMESHB
     std::vector<int> solTypes(nvar);

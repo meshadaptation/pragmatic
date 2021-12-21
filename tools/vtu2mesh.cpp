@@ -83,17 +83,23 @@ int main(int argc, char **argv)
 #ifdef HAVE_VTK
     char * filename_in = argv[1];
     std::string name(filename_in);
+#ifdef DEBUG
     printf("DEBUG begin mesh import\n");
+#endif
     Mesh<double> *mesh=VTKTools<double>::import_vtu(name);
 
+#ifdef DEBUG
     printf("DEBUG mesh imported\n");
+#endif
 
     pragmatic_init_light((void*)mesh);
     mesh->create_boundary();
     mesh->set_regions(NULL);
 
 
+#ifdef DEBUG
     printf("DEBUG begin mesh export\n");
+#endif
 
 #ifdef HAVE_LIBMESHB
     GMFTools<double>::export_gmf_mesh(filename_in, mesh);

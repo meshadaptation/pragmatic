@@ -136,7 +136,9 @@ public:
                 break;
             }
         }
+#ifdef DEBUG
         printf("DEBUG   Number of edge collapse %d\n", ccount_tot);
+#endif
         return ccount_tot;
     }
 
