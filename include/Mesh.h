@@ -2113,6 +2113,7 @@ private:
 
         _ENList.resize(NElements*nloc);
         quality.resize(NElements);
+        regions.resize(NElements);
         _coords.resize(NNodes*ndims);
         metric.resize(NNodes*msize);
         NNList.resize(NNodes);
